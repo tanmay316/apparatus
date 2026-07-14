@@ -6,8 +6,97 @@ let state = { view:'overview', activeDay:null, checks:{}, calMonth:new Date(), c
   swElapsed:0, swRunning:false, swInterval:null,
   cdRemaining:0, cdTotal:300, cdRunning:false, cdInterval:null };
 
+const storage = {
+  get: async (key) => {
+    if (window.storage && typeof window.storage.get === 'function') {
+      try {
+        const res = await window.storage.get(key);
+        if (res && res.value) return res.value;
+      } catch (e) {}
+    }
+    return localStorage.getItem(key);
+  },
+  set: async (key, val) => {
+    if (window.storage && typeof window.storage.set === 'function') {
+      try {
+        await window.storage.set(key, val);
+        return;
+      } catch (e) {}
+    }
+    localStorage.setItem(key, val);
+  }
+};
+
+let currentUser = null;
+let db = null;
+let auth = null;
+let firebaseEnabled = false;
+
+if (typeof firebaseConfig !== 'undefined' && firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    auth = firebase.auth();
+    firebaseEnabled = true;
+  } catch (e) {
+    console.error("Firebase init failed:", e);
+  }
+}
+
+function mergeData(local, remote) {
+  const mergedDayLogs = Object.assign({}, local.dayLogs || {}, remote.dayLogs || {});
+  const mergedExLogs = {};
+  const allExNames = new Set([...Object.keys(local.exerciseLogs || {}), ...Object.keys(remote.exerciseLogs || {})]);
+  allExNames.forEach(name => {
+    const localArr = local.exerciseLogs[name] || [];
+    const remoteArr = remote.exerciseLogs[name] || [];
+    const datesSeen = new Set();
+    const combined = [];
+    [...remoteArr, ...localArr].forEach(entry => {
+      const uniqueKey = entry.dayId !== undefined ? `${entry.date}_${entry.dayId}` : entry.date;
+      if (!datesSeen.has(uniqueKey)) {
+        datesSeen.add(uniqueKey);
+        combined.push(entry);
+      }
+    });
+    mergedExLogs[name] = combined.sort((a,b) => a.date.localeCompare(b.date));
+  });
+
+  const mergedMeasurements = [];
+  const measureDatesSeen = new Set();
+  [...(remote.measurements || []), ...(local.measurements || [])].forEach(m => {
+    if (!measureDatesSeen.has(m.date)) {
+      measureDatesSeen.add(m.date);
+      mergedMeasurements.push(m);
+    }
+  });
+  mergedMeasurements.sort((a,b) => a.date.localeCompare(b.date));
+
+  const xp = Math.max(local.xp || 0, remote.xp || 0);
+  const profileWeight = remote.profileWeight || local.profileWeight || 63.5;
+  const weeklyGoal = remote.weeklyGoal || local.weeklyGoal || 6;
+  const badges = Array.from(new Set([...(local.badges || []), ...(remote.badges || [])]));
+  const prCount = Math.max(local.prCount || 0, remote.prCount || 0);
+  const customProgram = remote.customProgram || local.customProgram;
+
+  return {
+    dayLogs: mergedDayLogs,
+    exerciseLogs: mergedExLogs,
+    profileWeight,
+    xp,
+    badges,
+    prCount,
+    measurements: mergedMeasurements,
+    weeklyGoal,
+    customProgram
+  };
+}
+
 async function loadData(){
-  try{ const r = await window.storage.get(STORE_KEY); if(r && r.value){ DATA = Object.assign(DATA, JSON.parse(r.value)); } }catch(e){}
+  try{
+    const r = await storage.get(STORE_KEY);
+    if(r){ DATA = Object.assign(DATA, JSON.parse(r)); }
+  }catch(e){}
   if (DATA.customProgram) {
     DAYS = DATA.customProgram.DAYS || DAYS;
     WARMUP = DATA.customProgram.WARMUP || WARMUP;
@@ -17,7 +106,73 @@ async function loadData(){
     DATA.customProgram = { DAYS, WARMUP, YOGA_DAY, PRANAYAMA_SHORT };
   }
 }
-async function saveData(){ try{ await window.storage.set(STORE_KEY, JSON.stringify(DATA)); }catch(e){} }
+
+async function saveData(){
+  try{
+    await storage.set(STORE_KEY, JSON.stringify(DATA));
+    if (firebaseEnabled && currentUser) {
+      await db.collection('users').doc(currentUser.uid).set(DATA);
+    }
+  }catch(e){
+    console.error("Save failed:", e);
+  }
+}
+
+async function signInWithGoogle() {
+  if (!firebaseEnabled) {
+    showToast("Firebase not configured. Check the Setup Guide.");
+    return;
+  }
+  const provider = new firebase.auth.GoogleAuthProvider();
+  try {
+    await auth.signInWithPopup(provider);
+    showToast("Logged in successfully!");
+  } catch (e) {
+    console.error("Login failed:", e);
+    showToast("Login failed: " + e.message);
+  }
+}
+
+async function signOutUser() {
+  if (!firebaseEnabled) return;
+  try {
+    await auth.signOut();
+    currentUser = null;
+    showToast("Logged out");
+    DATA = { dayLogs:{}, exerciseLogs:{}, profileWeight:63.5, xp:0, badges:[], prCount:0, measurements:[], weeklyGoal:6 };
+    await loadData();
+    render();
+  } catch (e) {
+    console.error("Logout failed:", e);
+  }
+}
+
+// Add the auth listener if enabled
+if (firebaseEnabled) {
+  auth.onAuthStateChanged(user => {
+    currentUser = user;
+    if (user) {
+      db.collection('users').doc(user.uid).get().then(async (doc) => {
+        if (doc.exists) {
+          DATA = mergeData(DATA, doc.data());
+          await storage.set(STORE_KEY, JSON.stringify(DATA));
+        }
+        await db.collection('users').doc(user.uid).set(DATA);
+        if (DATA.customProgram) {
+          DAYS = DATA.customProgram.DAYS || DAYS;
+          WARMUP = DATA.customProgram.WARMUP || WARMUP;
+          YOGA_DAY = DATA.customProgram.YOGA_DAY || YOGA_DAY;
+          PRANAYAMA_SHORT = DATA.customProgram.PRANAYAMA_SHORT || PRANAYAMA_SHORT;
+        }
+        render();
+      }).catch(err => {
+        console.error("Firestore sync error:", err);
+      });
+    } else {
+      render();
+    }
+  });
+}
 
 function computeStreak(){
   let d = new Date();
@@ -230,7 +385,7 @@ function computeDayMetrics(day, dateKey){
   let durationSec = 0, volume = 0;
   names.forEach(n=>{
     (getHistory(n)||[]).forEach(entry=>{
-      if(entry.date===dateKey){ durationSec += (entry.durationSec||0); if(entry.mode==='reps') volume += sessionScore(entry); }
+      if(entry.date===dateKey && (entry.dayId === undefined || entry.dayId === day.id)){ durationSec += (entry.durationSec||0); if(entry.mode==='reps') volume += sessionScore(entry); }
     });
   });
   if(durationSec===0){ const m = (day.time||'').match(/(\d+)/); durationSec = m? parseInt(m[1])*60 : 3600; }
@@ -270,6 +425,33 @@ function renderSidebar(){
     if(it.section!==lastSection){ sections += `<div class="sidebar-section">${it.section}</div>`; lastSection = it.section; }
     sections += `<button class="sidebar-link ${active===it.id?'active':''}" data-nav="${it.id}"><span class="ic">${it.icon}</span><span>${it.label}</span></button>`;
   });
+
+  let authArea = '';
+  if (!firebaseEnabled) {
+    authArea = `
+      <div style="padding: 10px 14px; border-bottom: 1px solid var(--line); font-size:11px; color:var(--amber); line-height:1.4;">
+        ⚠️ Google Sync inactive. Config required in <span class="mono">js/firebase-config.js</span>
+      </div>`;
+  } else if (!currentUser) {
+    authArea = `
+      <div style="padding: 12px 14px; border-bottom: 1px solid var(--line);">
+        <button id="google-login-btn" style="background:#4285F4; color:#fff; border:none; width:100%; padding:9px; border-radius:4px; font-weight:600; font-size:12px; display:flex; align-items:center; justify-content:center; gap:8px; font-family:inherit; cursor:pointer;">
+          <svg width="14" height="14" viewBox="0 0 18 18"><path fill="#fff" d="M17.64 9.2c0-.63-.06-1.25-.16-1.84H9v3.47h4.84a4.14 4.14 0 0 1-1.8 2.71v2.26h2.91c1.7-1.56 2.69-3.86 2.69-6.6z"/><path fill="#fff" d="M9 18c2.43 0 4.47-.8 5.96-2.2l-2.91-2.26a5.6 5.6 0 0 1-8.51-3.05H.5v2.33A9 9 0 0 0 9 18z"/><path fill="#fff" d="M3.54 10.49a5.39 5.39 0 0 1 0-3.43V4.73H.5a9 9 0 0 0 0 8.54l3.04-2.78z"/><path fill="#fff" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.59A9 9 0 0 0 .5 4.73l3.04 2.33a5.6 5.6 0 0 1 8.51-3.05z"/></svg>
+          Sign in with Google
+        </button>
+      </div>`;
+  } else {
+    authArea = `
+      <div style="padding: 12px 14px; border-bottom: 1px solid var(--line); display:flex; align-items:center; gap:10px;">
+        <img src="${currentUser.photoURL || ''}" style="width:28px; height:28px; border-radius:50%; border:1px solid var(--teal); flex-shrink:0;" referrerPolicy="no-referrer" onerror="this.src='https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'">
+        <div style="flex:1; min-width:0; line-height:1.2;">
+          <div style="font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${currentUser.displayName || 'User'}</div>
+          <div style="font-size:9.5px; color:var(--bone-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${currentUser.email || ''}</div>
+        </div>
+        <button id="google-logout-btn" style="background:none; border:1px solid var(--line); color:var(--red); padding:4px 8px; border-radius:3px; font-size:10px; flex-shrink:0; font-family:inherit; cursor:pointer;">Logout</button>
+      </div>`;
+  }
+
   document.getElementById('sidebar-root').innerHTML = `
     <div class="sidebar-overlay ${state.sidebarOpen?'show':''}" id="sidebarOverlay"></div>
     <div class="sidebar ${state.sidebarOpen?'open':''}" id="sidebar">
@@ -277,9 +459,18 @@ function renderSidebar(){
         <div class="brand"><div class="mark"></div><div class="brand-text" style="font-size:15px;">APPARATUS</div></div>
         <button class="sidebar-close" id="sidebarClose">✕</button>
       </div>
+      ${authArea}
       <div class="sidebar-nav">${sections}</div>
       <div class="sidebar-foot">6-day calisthenics + skills + breath protocol</div>
     </div>`;
+
+  if (firebaseEnabled) {
+    const loginBtn = document.getElementById('google-login-btn');
+    if (loginBtn) loginBtn.addEventListener('click', signInWithGoogle);
+    const logoutBtn = document.getElementById('google-logout-btn');
+    if (logoutBtn) logoutBtn.addEventListener('click', signOutUser);
+  }
+
   document.getElementById('sidebarOverlay').addEventListener('click', ()=>{ state.sidebarOpen=false; renderSidebar(); });
   document.getElementById('sidebarClose').addEventListener('click', ()=>{ state.sidebarOpen=false; renderSidebar(); });
   document.querySelectorAll('.sidebar-link').forEach(b=>b.addEventListener('click', ()=>{
@@ -300,7 +491,7 @@ function renderSidebar(){
 function progressForDay(day){
   const names = allExNames(day);
   let done = 0;
-  names.forEach(n=>{ if(getHistory(n).some(e=>e.date===todayKey())) done++; });
+  names.forEach(n=>{ if(getHistory(n).some(e=>e.date===todayKey() && (e.dayId===undefined || e.dayId===day.id))) done++; });
   return {done, total: names.length, pct: names.length? Math.round(done/names.length*100):0};
 }
 function renderOverview(){
@@ -364,8 +555,8 @@ function renderOverview(){
 }
 
 /* ===================== DAY VIEW ===================== */
-function exCardHtml(e, sectionType, idx){
-  const done = getHistory(e.name).some(x=>x.date===todayKey());
+function exCardHtml(e, sectionType, idx, dayId){
+  const done = getHistory(e.name).some(x=>x.date===todayKey() && (x.dayId===undefined || x.dayId===dayId));
   const last = getLast(e.name);
   let lastTxt = 'No history yet';
   if(last){
@@ -375,7 +566,7 @@ function exCardHtml(e, sectionType, idx){
   }
   return `<div class="ex-card" data-exname="${encodeURIComponent(e.name)}" data-section="${sectionType || ''}" data-idx="${idx != null ? idx : ''}">
     <div class="ex-top">
-      <div class="ex-check ${done?'checked':''}" data-checkname="${encodeURIComponent(e.name)}">${done?'✓':''}</div>
+      <div class="ex-check ${done?'checked':''}" data-checkname="${encodeURIComponent(e.name)}" data-dayid="${dayId}">${done?'✓':''}</div>
       <div class="ex-title">
         <div class="name ${done?'checked-txt':''}">${e.name}</div>
         <div class="sub">${e.sets || ''}${e.tempo?' · tempo '+e.tempo:''}${e.rest?' · rest '+e.rest:''}</div>
@@ -408,35 +599,35 @@ function renderDay(){
     <h4>Before training</h4>
     <button class="add-ex-btn" data-section="pranayama_before" style="margin-left:auto; background:none; border:1px dashed var(--teal); color:var(--teal); font-size:11px; padding:3px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace;">+ Add</button>
   </div>
-  ${PRANAYAMA_SHORT.before.map((e, idx)=>exCardHtml(e, 'pranayama_before', idx)).join('')}
+  ${PRANAYAMA_SHORT.before.map((e, idx)=>exCardHtml(e, 'pranayama_before', idx, day.id)).join('')}
   
   <div class="section-label">
     <div class="tag">WARM-UP</div>
     <h4>${WARMUP.time}</h4>
     <button class="add-ex-btn" data-section="warmup" style="margin-left:auto; background:none; border:1px dashed var(--teal); color:var(--teal); font-size:11px; padding:3px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace;">+ Add</button>
   </div>
-  ${WARMUP.items.map((e, idx)=>exCardHtml(e, 'warmup', idx)).join('')}
+  ${WARMUP.items.map((e, idx)=>exCardHtml(e, 'warmup', idx, day.id)).join('')}
   
   <div class="section-label">
     <div class="tag amber">SKILL — ${day.skill.toUpperCase()}</div>
     <h4>~15 min</h4>
     <button class="add-ex-btn" data-section="skill" style="margin-left:auto; background:none; border:1px dashed var(--teal); color:var(--teal); font-size:11px; padding:3px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace;">+ Add</button>
   </div>
-  ${day.skillWork.map((e, idx)=>exCardHtml(e, 'skill', idx)).join('')}
+  ${day.skillWork.map((e, idx)=>exCardHtml(e, 'skill', idx, day.id)).join('')}
   
   <div class="section-label">
     <div class="tag">STRENGTH</div>
     <h4>Main sets</h4>
     <button class="add-ex-btn" data-section="strength" style="margin-left:auto; background:none; border:1px dashed var(--teal); color:var(--teal); font-size:11px; padding:3px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace;">+ Add</button>
   </div>
-  ${day.strength.map((e, idx)=>exCardHtml(e, 'strength', idx)).join('')}
+  ${day.strength.map((e, idx)=>exCardHtml(e, 'strength', idx, day.id)).join('')}
   
   <div class="section-label">
     <div class="tag amber">BREATH</div>
     <h4>After training</h4>
     <button class="add-ex-btn" data-section="pranayama_after" style="margin-left:auto; background:none; border:1px dashed var(--teal); color:var(--teal); font-size:11px; padding:3px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace;">+ Add</button>
   </div>
-  ${PRANAYAMA_SHORT.after.map((e, idx)=>exCardHtml(e, 'pranayama_after', idx)).join('')}
+  ${PRANAYAMA_SHORT.after.map((e, idx)=>exCardHtml(e, 'pranayama_after', idx, day.id)).join('')}
   
   <button class="log-btn ${loggedToday?'logged':''}" id="logBtn">${loggedToday? '✓ Day Logged — tap to refresh totals' : 'Log This Day Complete'}</button>
   `;
@@ -464,21 +655,21 @@ function renderYogaDay(){
     <h4>15–20 min</h4>
     <button class="add-ex-btn" data-section="yoga_flow" style="margin-left:auto; background:none; border:1px dashed var(--teal); color:var(--teal); font-size:11px; padding:3px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace;">+ Add</button>
   </div>
-  ${YOGA_DAY.flow.map((f, idx)=>exCardHtml(f, 'yoga_flow', idx)).join('')}
+  ${YOGA_DAY.flow.map((f, idx)=>exCardHtml(f, 'yoga_flow', idx, 7)).join('')}
   
   <div class="section-label">
     <div class="tag amber">PRANAYAMA</div>
     <h4>10 min</h4>
     <button class="add-ex-btn" data-section="yoga_pranayama" style="margin-left:auto; background:none; border:1px dashed var(--teal); color:var(--teal); font-size:11px; padding:3px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace;">+ Add</button>
   </div>
-  ${YOGA_DAY.pranayama.map((f, idx)=>exCardHtml(f, 'yoga_pranayama', idx)).join('')}
+  ${YOGA_DAY.pranayama.map((f, idx)=>exCardHtml(f, 'yoga_pranayama', idx, 7)).join('')}
   
   <div class="section-label">
     <div class="tag">MEDITATION</div>
     <h4>15–20 min</h4>
     <button class="add-ex-btn" data-section="yoga_meditation" style="margin-left:auto; background:none; border:1px dashed var(--teal); color:var(--teal); font-size:11px; padding:3px 8px; border-radius:3px; font-family:'JetBrains Mono',monospace;">+ Add</button>
   </div>
-  ${YOGA_DAY.meditation.map((e, idx)=>exCardHtml(e, 'yoga_meditation', idx)).join('')}
+  ${YOGA_DAY.meditation.map((e, idx)=>exCardHtml(e, 'yoga_meditation', idx, 7)).join('')}
   
   <button class="log-btn ${loggedToday?'logged':''}" id="logBtn">${loggedToday? '✓ Day Logged — tap to refresh totals' : 'Log This Day Complete'}</button>
   `;
@@ -520,12 +711,13 @@ function wireCommon(day){
     chk.addEventListener('click', (ev)=>{
       ev.stopPropagation();
       const name = decodeURIComponent(chk.dataset.checkname);
-      const already = getHistory(name).some(x=>x.date===todayKey());
+      const chkDayId = parseInt(chk.dataset.dayid);
+      const already = getHistory(name).some(x=>x.date===todayKey() && (x.dayId===undefined || x.dayId===chkDayId));
       if(already){
-        DATA.exerciseLogs[name] = DATA.exerciseLogs[name].filter(x=>x.date!==todayKey());
+        DATA.exerciseLogs[name] = DATA.exerciseLogs[name].filter(x=> !(x.date===todayKey() && (x.dayId===undefined || x.dayId===chkDayId)) );
       } else {
         DATA.exerciseLogs[name] = DATA.exerciseLogs[name] || [];
-        DATA.exerciseLogs[name].push({date:todayKey(), mode:'freeform', sets:[], durationSec:0, notes:''});
+        DATA.exerciseLogs[name].push({date:todayKey(), mode:'freeform', sets:[], durationSec:0, notes:'', dayId:chkDayId});
       }
       saveData().then(render);
     });
@@ -1025,13 +1217,14 @@ async function saveSession(){
       sets.push(obj);
     });
   }
+  const targetDayId = day ? day.id : 7;
   const durationSec = mode.mode==='freeform' ? state.swElapsed : state.swElapsed;
-  const entry = {date: todayKey(), mode: mode.mode, sets, durationSec, notes};
-  const priorEntries = (DATA.exerciseLogs[e.name]||[]).filter(x=>x.date!==todayKey());
+  const entry = {date: todayKey(), mode: mode.mode, sets, durationSec, notes, dayId: targetDayId};
+  const priorEntries = (DATA.exerciseLogs[e.name]||[]).filter(x=> !(x.date===todayKey() && (x.dayId===undefined || x.dayId===targetDayId)) );
   const hadHistory = priorEntries.length>0;
   const prevBest = hadHistory ? Math.max(...priorEntries.map(x=>sessionScore(x))) : 0;
   DATA.exerciseLogs[e.name] = DATA.exerciseLogs[e.name] || [];
-  const idx = DATA.exerciseLogs[e.name].findIndex(x=>x.date===todayKey());
+  const idx = DATA.exerciseLogs[e.name].findIndex(x=>x.date===todayKey() && (x.dayId===undefined || x.dayId===targetDayId));
   if(idx>=0) DATA.exerciseLogs[e.name][idx] = entry; else DATA.exerciseLogs[e.name].push(entry);
   if(DATA.exerciseLogs[e.name].length>30) DATA.exerciseLogs[e.name] = DATA.exerciseLogs[e.name].slice(-30);
 
