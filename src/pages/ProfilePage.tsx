@@ -54,14 +54,17 @@ export function ProfilePage() {
         // Fetch other user by username
         try {
           const usernameDoc = await getDoc(doc(db, 'usernames', username));
+          let uid = '';
           if (usernameDoc.exists()) {
-            const uid = usernameDoc.data().uid;
-            const profileDoc = await getDoc(doc(db, 'users', uid));
-            const statsDoc = await getDoc(doc(db, 'users', uid, 'stats', 'current'));
-            if (profileDoc.exists()) {
-              setViewProfile({ uid, ...profileDoc.data() } as UserProfile);
-              setViewStats(statsDoc.exists() ? statsDoc.data() as UserStats : null);
-            }
+            uid = usernameDoc.data().uid;
+          } else {
+            uid = username; // Assume direct UID parameter
+          }
+          const profileDoc = await getDoc(doc(db, 'users', uid));
+          const statsDoc = await getDoc(doc(db, 'users', uid, 'stats', 'current'));
+          if (profileDoc.exists()) {
+            setViewProfile({ uid, ...profileDoc.data() } as UserProfile);
+            setViewStats(statsDoc.exists() ? statsDoc.data() as UserStats : null);
           }
           setIsOwnProfile(false);
         } catch (e) {

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
@@ -122,6 +123,7 @@ export function Dashboard() {
   }
 
   const followersActivity = feed.filter((act: any) => act.userId !== profile.uid).slice(0, 3);
+  const [expandedActivity, setExpandedActivity] = useState<Record<string, boolean>>({});
 
   return (
     <motion.div variants={container} initial="hidden" animate="show">
@@ -356,7 +358,7 @@ export function Dashboard() {
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <Link to={activity.username ? `/user/${activity.username}` : `/user/${activity.userId}`} className="font-bold text-xs hover:text-teal transition-colors">
+                        <Link to={activity.username ? `/profile/${activity.username}` : `/profile/${activity.userId}`} className="font-bold text-xs hover:text-teal transition-colors">
                           {activity.userName}
                         </Link>
                         <span className="font-mono text-[9px] text-bone-dim">
@@ -387,17 +389,26 @@ export function Dashboard() {
                         </div>
                       )}
 
-                      {/* Exercises done */}
+                      {/* Exercises done dropdown */}
                       {exercises && exercises.length > 0 && (
-                        <div className="mt-2.5 text-[10px] text-bone-dim">
-                          <span className="font-semibold text-bone font-mono text-[10px]">Exercises completed:</span>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {exercises.map((exName, idx) => (
-                              <span key={idx} className="text-[9px] py-0.5 px-1.5 bg-teal/5 border border-teal/10 rounded text-teal font-mono">
-                                {exName}
-                              </span>
-                            ))}
-                          </div>
+                        <div className="mt-3">
+                          <button
+                            onClick={() => setExpandedActivity(prev => ({ ...prev, [activity.id]: !prev[activity.id] }))}
+                            className="flex items-center gap-1 text-[10px] text-teal font-mono uppercase font-bold hover:underline"
+                          >
+                            <span>{expandedActivity[activity.id] ? 'Hide Exercises' : `Show Exercises (${exercises.length})`}</span>
+                            <span>{expandedActivity[activity.id] ? '▲' : '▼'}</span>
+                          </button>
+
+                          {expandedActivity[activity.id] && (
+                            <div className="flex flex-wrap gap-1 mt-2 p-2 bg-ink-3 rounded border border-line/10">
+                              {exercises.map((exName, idx) => (
+                                <span key={idx} className="text-[9px] py-0.5 px-1.5 bg-teal/5 border border-teal/10 rounded text-teal font-mono">
+                                  {exName}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

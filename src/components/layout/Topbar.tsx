@@ -38,6 +38,8 @@ export function Topbar() {
     }
   };
 
+  const unreadCount = notifications.filter(n => !n.read).length;
+
   return (
     <header className="sticky top-0 z-50 bg-ink/92 backdrop-blur-md border-b border-line">
       {/* Accent banner */}
@@ -78,7 +80,11 @@ export function Topbar() {
                 aria-expanded={notificationsOpen}
               >
                 <Bell size={18} />
-                {notifications.some(notification => !notification.read) && <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-amber border-2 border-ink" />}
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-amber border border-ink text-[9px] font-bold font-mono text-ink flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
                 </button>
                 {notificationsOpen && <div className="absolute right-0 top-10 w-80 max-w-[calc(100vw-2rem)] card shadow-2xl z-[70] p-3">
                   <div className="flex items-center justify-between px-2 pb-2 border-b border-line/50"><span className="font-display text-sm">Notifications</span><span className="font-mono text-[10px] text-bone-dim">{notifications.filter(item => !item.read).length} unread</span></div>
