@@ -1,0 +1,181 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.email == 'tanmay.sharma4334@gmail.com';
+    }
+
+    function isFollower(targetUid) {
+      return isAuthenticated() && exists(
+        /databases/$(database)/documents/followers/$(targetUid)/followers/$(request.auth.uid)
+      );
+    }
+
+    function canReadPlan(planId) {
+      let plan = get(/databases/$(database)/documents/plans/$(planId)).data;
+      return plan.isPublic == true || isOwner(plan.ownerId);
+    }
+
+    function canReadWorkout(workoutId) {
+      let workout = get(/databases/$(database)/documents/workouts/$(workoutId)).data;
+      return workout.visibility == 'public'
+        || isOwner(workout.userId)
+        || (workout.visibility == 'followers' && isFollower(workout.userId));
+    }
+
+    function canReadActivity(activityId) {
+      let activity = get(/databases/$(database)/documents/activities/$(activityId)).data;
+      return activity.visibility == 'public'
+        || isOwner(activity.userId)
+        || (activity.visibility == 'followers' && isFollower(activity.userId));
+    }
+
+    // Profiles are public only when the owner opts in. Stats follow the same rule.
+    match /users/{uid} {
+      allow read: if isAdmin() || isOwner(uid) || resource.data.isPublic == true;
+      allow create: if isOwner(uid) && request.resource.data.uid == uid
+        && (request.resource.data.isAdmin == false || isAdmin());
+      allow update: if isAdmin()
+        || (isOwner(uid) && request.resource.data.uid == uid
+          && request.resource.data.isAdmin == resource.data.isAdmin);
+      allow delete: if isOwner(uid);
+
+      match /stats/{statId} {
+        allow read: if isOwner(uid) || get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
+        allow write: if isOwner(uid);
+      }
+
+      match /measurements/{measurementId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      match /skills/{skillId} {
+        allow read: if isOwner(uid) || get(/databases/$(database)/documents/users/$(uid)).data.isPublic == true;
+        allow write: if isOwner(uid);
+      }
+    }
+
+    match /usernames/{username} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    match /plans/{planId} {
+      allow read: if resource.data.isPublic == true || isOwner(resource.data.ownerId);
+      allow create: if isOwner(request.resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId)
+        && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if isOwner(resource.data.ownerId);
+
+      match /days/{dayId} {
+        allow read: if canReadPlan(planId);
+        allow create, update, delete: if isOwner(
+          get(/databases/$(database)/documents/plans/$(planId)).data.ownerId
+        );
+      }
+    }
+
+    match /samplePlans/{planId} {
+      allow read: if true;
+      allow create, delete: if isAdmin();
+      // Usage is incremented by an authenticated importer. Content remains admin-only.
+      allow update: if isAdmin()
+        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usageCount']));
+
+      match /days/{dayId} {
+        allow read: if true;
+        allow write: if isAdmin();
+      }
+    }
+
+    match /workouts/{workoutId} {
+      allow read: if isAdmin() || resource.data.visibility == 'public'
+        || isOwner(resource.data.userId)
+        || (resource.data.visibility == 'followers' && isFollower(resource.data.userId));
+      allow create: if isOwner(request.resource.data.userId)
+        && request.resource.data.visibility in ['public', 'followers', 'private'];
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner(resource.data.userId);
+
+      match /exercises/{exerciseLogId} {
+        allow read: if canReadWorkout(workoutId);
+        allow write: if isOwner(
+          get(/databases/$(database)/documents/workouts/$(workoutId)).data.userId
+        );
+      }
+    }
+
+    match /followers/{uid}/following/{followedUid} {
+      allow read: if true;
+      allow create, delete: if isOwner(uid) && uid != followedUid;
+    }
+
+    match /followers/{uid}/followers/{followerUid} {
+      allow read: if true;
+      allow create, delete: if isOwner(followerUid) && uid != followerUid;
+    }
+
+    match /activities/{activityId} {
+      allow read: if isAdmin() || resource.data.visibility == 'public'
+        || isOwner(resource.data.userId)
+        || (resource.data.visibility == 'followers' && isFollower(resource.data.userId));
+      allow create: if isOwner(request.resource.data.userId)
+        && request.resource.data.visibility in ['public', 'followers', 'private'];
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId
+        || (isAuthenticated() && canReadActivity(activityId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount']));
+      allow delete: if isOwner(resource.data.userId);
+
+      match /likes/{userId} {
+        allow read: if canReadActivity(activityId);
+        allow create, delete: if isOwner(userId) && canReadActivity(activityId);
+      }
+
+      match /comments/{commentId} {
+        allow read: if canReadActivity(activityId);
+        allow create: if canReadActivity(activityId) && isOwner(request.resource.data.userId);
+        allow update, delete: if isOwner(resource.data.userId);
+      }
+    }
+
+    match /exerciseLibrary/{exerciseId} {
+      allow read: if true;
+      allow create: if isAdmin()
+        || (isAuthenticated() && request.resource.data.isCustom == true && request.resource.data.createdBy == request.auth.uid);
+      allow update, delete: if isAdmin()
+        || (isAuthenticated() && resource.data.isCustom == true && resource.data.createdBy == request.auth.uid);
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
+      allow update: if isAuthenticated()
+        && resource.data.receiverId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
+    }
+
+    match /bans/{uid} {
+      allow read: if isAdmin() || isOwner(uid);
+      allow write: if isAdmin();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin() || isOwner(resource.data.reporterId);
+      allow create: if isAuthenticated() && isOwner(request.resource.data.reporterId);
+      allow update: if isAdmin();
+      allow delete: if isAdmin() || isOwner(resource.data.reporterId);
+    }
+  }
+}
