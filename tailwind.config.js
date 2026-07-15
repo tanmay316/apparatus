@@ -5,29 +5,25 @@ export default {
     extend: {
       colors: {
         ink: {
-          DEFAULT: '#ffffff', // Pure White Canvas
-          2: '#f1f5f9',       // Fog Alt
-          3: '#ebdafd',       // Lavender Field
+          DEFAULT: '#ffffff',
+          2: '#f1f5f9',
+          3: '#ebdafd',
         },
         bone: {
-          DEFAULT: '#111827', // Midnight Ink
-          dim: '#3f4654',     // Graphite
-          slate: '#6b7589',   // Slate
+          DEFAULT: '#111827',
+          dim: '#6b7589',
         },
         teal: {
-          DEFAULT: '#862fe7', // Voltage Violet
-          dim: '#5f259e',     // Ultra Violet
-          light: '#ad6df4',    // Lavender Mist
-          wash: '#bd8ff0',    // Orchid Wash
+          DEFAULT: '#862fe7',
+          dim: '#5f259e',
+          light: '#ad6df4',
         },
         amber: {
-          DEFAULT: '#dc5f05', // Amber Pulse
-          light: '#ff5fe4',   // Magenta Spark
-          ray: '#e22ba4',     // Hot Pink Ray
-          mint: '#d6fcf4',    // Mint Wash
+          DEFAULT: '#dc5f05',
+          light: '#dc5f05',
         },
-        line: '#d8e0ea',      // Mist (Subtle border)
-        danger: '#e22ba4',    // Hot Pink Ray
+        line: '#d8e0ea',
+        danger: '#b5504a',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
