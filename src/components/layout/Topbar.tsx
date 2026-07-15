@@ -1,6 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, Bell } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -12,6 +12,21 @@ export function Topbar() {
   const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const queryClient = useQueryClient();
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
+    }
+    if (notificationsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [notificationsOpen]);
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications', profile?.uid],
     queryFn: () => getNotifications(profile!.uid),
@@ -72,7 +87,7 @@ export function Topbar() {
 
           {profile && (
             <>
-              <div className="relative">
+              <div className="relative" ref={containerRef}>
                 <button
                 onClick={() => setNotificationsOpen(value => !value)}
                 className="relative text-bone-dim hover:text-bone transition-colors p-1"
