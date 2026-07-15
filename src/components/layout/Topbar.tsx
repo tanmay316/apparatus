@@ -86,7 +86,7 @@ export function Topbar() {
                   </span>
                 )}
                 </button>
-                {notificationsOpen && <div className="absolute right-0 top-10 w-80 max-w-[calc(100vw-2rem)] card shadow-2xl z-[70] p-3">
+                 {notificationsOpen && <div className="fixed md:absolute right-4 md:right-0 top-16 md:top-10 w-[calc(100vw-2rem)] md:w-80 card shadow-2xl z-[70] p-3">
                   <div className="flex items-center justify-between px-2 pb-2 border-b border-line/50"><span className="font-display text-sm">Notifications</span><span className="font-mono text-[10px] text-bone-dim">{notifications.filter(item => !item.read).length} unread</span></div>
                   <div className="max-h-72 overflow-y-auto divide-y divide-line/40">{notifications.length === 0 ? <p className="text-xs text-bone-dim text-center py-6">You are all caught up.</p> : notifications.map(notification => <button key={notification.id} onClick={() => handleNotificationClick(notification)} className={`w-full text-left px-2 py-3 hover:bg-ink-3 transition-colors ${!notification.read ? 'bg-teal/5' : ''}`}><div className="text-xs text-bone">{notification.message}</div><div className="font-mono text-[10px] text-bone-dim mt-1">{notification.createdAt?.toDate ? notification.createdAt.toDate().toLocaleDateString() : 'Recently'} · Click to open</div></button>)}</div>
                 </div>}
