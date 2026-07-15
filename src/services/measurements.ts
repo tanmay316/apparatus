@@ -5,8 +5,17 @@ import type { Measurement } from '@/types';
 /** Add a body measurement log */
 export const addMeasurement = async (userId: string, data: Omit<Measurement, 'id'>): Promise<string> => {
   const ref = collection(db, `users/${userId}/measurements`);
+  
+  // Clean undefined values to prevent Firestore from crashing
+  const cleanData = Object.entries(data).reduce((acc, [key, val]) => {
+    if (val !== undefined) {
+      acc[key] = val;
+    }
+    return acc;
+  }, {} as Record<string, any>);
+
   const docRef = await addDoc(ref, {
-    ...data,
+    ...cleanData,
     createdAt: new Date()
   });
   return docRef.id;
