@@ -5,29 +5,33 @@ export default {
     extend: {
       colors: {
         ink: {
-          DEFAULT: '#14151A',
-          2: '#1B1D24',
-          3: '#22242C',
+          DEFAULT: '#ffffff', // Pure White Canvas
+          2: '#f1f5f9',       // Fog Alt
+          3: '#ebdafd',       // Lavender Field
         },
         bone: {
-          DEFAULT: '#EDE9E0',
-          dim: '#A9A69D',
+          DEFAULT: '#111827', // Midnight Ink
+          dim: '#3f4654',     // Graphite
+          slate: '#6b7589',   // Slate
         },
         teal: {
-          DEFAULT: '#4F9E8D',
-          dim: '#3A756A',
-          light: '#5FB09E',
+          DEFAULT: '#862fe7', // Voltage Violet
+          dim: '#5f259e',     // Ultra Violet
+          light: '#ad6df4',    // Lavender Mist
+          wash: '#bd8ff0',    // Orchid Wash
         },
         amber: {
-          DEFAULT: '#C6862F',
-          light: '#D4993F',
+          DEFAULT: '#dc5f05', // Amber Pulse
+          light: '#ff5fe4',   // Magenta Spark
+          ray: '#e22ba4',     // Hot Pink Ray
+          mint: '#d6fcf4',    // Mint Wash
         },
-        line: '#2A2C33',
-        danger: '#B5504A',
+        line: '#d8e0ea',      // Mist (Subtle border)
+        danger: '#e22ba4',    // Hot Pink Ray
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Oswald', 'sans-serif'],
+        display: ['Bricolage Grotesque', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       animation: {

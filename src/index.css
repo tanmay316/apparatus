@@ -7,24 +7,31 @@
     box-sizing: border-box;
   }
 
+  body {
+    background-color: #ffffff;
+    color: #111827;
+    font-family: 'Inter', sans-serif;
+  }
+
   ::selection {
-    background-color: #4F9E8D;
-    color: #14151A;
+    background-color: #862fe7;
+    color: #ffffff;
   }
 
   /* Custom scrollbar */
   ::-webkit-scrollbar {
-    width: 6px;
+    width: 8px;
+    height: 8px;
   }
   ::-webkit-scrollbar-track {
-    background: #14151A;
+    background: #ffffff;
   }
   ::-webkit-scrollbar-thumb {
-    background: #2A2C33;
-    border-radius: 3px;
+    background: #d8e0ea;
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #3A756A;
+    background: #862fe7;
   }
 
   /* Number input spinners */
@@ -40,75 +47,76 @@
 
 @layer components {
   .btn-primary {
-    @apply bg-teal text-ink font-display font-bold uppercase tracking-wider
-           px-5 py-3 rounded-md text-sm
-           hover:bg-teal-light active:scale-[0.98]
+    @apply bg-teal text-white font-sans font-semibold
+           px-5 py-3 rounded-xl text-[15px]
+           shadow-[inset_0_0_0_1px_rgba(11,61,121,0.16)]
+           hover:bg-teal-dim active:scale-[0.98]
            transition-all duration-150 ease-out
            disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply bg-transparent border border-line text-bone-dim font-mono text-xs
-           px-4 py-2.5 rounded-md
-           hover:border-bone-dim hover:text-bone
+    @apply bg-transparent border border-line text-bone font-sans font-medium
+           px-5 py-3 rounded-xl text-[15px]
+           hover:bg-ink-2 active:scale-[0.98]
            transition-all duration-150;
   }
 
   .btn-danger {
-    @apply bg-transparent border border-line text-danger font-mono text-xs
-           px-4 py-2.5 rounded-md
-           hover:border-danger hover:bg-danger/10
+    @apply bg-transparent border border-danger text-danger font-sans font-medium
+           px-5 py-3 rounded-xl text-[15px]
+           hover:bg-danger/10 active:scale-[0.98]
            transition-all duration-150;
   }
 
   .btn-ghost {
     @apply bg-transparent text-bone-dim text-sm
-           px-3 py-2 rounded-md
-           hover:bg-ink-3 hover:text-bone
+           px-3 py-2 rounded-xl
+           hover:bg-ink-2 hover:text-bone
            transition-all duration-150;
   }
 
   .card {
-    @apply bg-ink-2 border border-line rounded-md overflow-hidden
+    @apply bg-white border border-line rounded-[24px] overflow-hidden
            transition-colors duration-150;
   }
 
   .card-hover {
-    @apply card hover:border-teal-dim cursor-pointer
-           hover:-translate-y-0.5 transition-all duration-200;
+    @apply card hover:border-teal/40 cursor-pointer
+           hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200;
   }
 
   .input-field {
-    @apply w-full bg-ink border border-line text-bone rounded-md
+    @apply w-full bg-white border border-line text-bone rounded-xl
            px-3 py-2.5 text-sm font-sans
            focus:outline-none focus:ring-1 focus:ring-teal focus:border-teal
-           placeholder:text-bone-dim/50
+           placeholder:text-bone-dim/40
            transition-all duration-150;
   }
 
   .label {
-    @apply font-mono text-[11px] text-bone-dim tracking-wider uppercase mb-2 block;
+    @apply font-sans text-xs font-semibold text-bone-dim uppercase tracking-wider mb-2 block;
   }
 
   .tag {
-    @apply font-mono text-[11px] tracking-wider font-bold
-           px-2.5 py-1 rounded inline-block;
+    @apply font-sans text-xs tracking-wider font-bold
+           px-3 py-1 rounded-full inline-block;
   }
 
   .tag-teal {
-    @apply tag bg-teal text-ink;
+    @apply tag bg-teal/10 text-teal border border-teal/20;
   }
 
   .tag-amber {
-    @apply tag bg-amber text-ink;
+    @apply tag bg-amber/10 text-amber border border-amber/20;
   }
 
   .stat-pill {
-    @apply card px-4 py-3;
+    @apply card px-4 py-3 rounded-full;
   }
 
   .page-wrap {
-    @apply max-w-[960px] mx-auto px-5 pb-20;
+    @apply max-w-[1200px] mx-auto px-5 pb-20;
   }
 }
 
@@ -118,23 +126,22 @@
   }
 
   .glass {
-    @apply bg-ink-2/80 backdrop-blur-md border border-line/50;
+    @apply bg-white/80 backdrop-blur-md border border-line/50;
   }
 }
 
-/* Light mode keeps the same semantic palette while switching the canvas and
-   surfaces. The preference is local so it applies immediately on this device. */
-[data-theme='light'] body {
-  background: #f4f1eb;
-  color: #1a1b20;
+/* Light / Dark Mode overrides mapped cleanly to sunlit palette */
+[data-theme='light'] body, [data-theme='dark'] body {
+  background-color: #ffffff !important;
+  color: #111827 !important;
 }
 
-[data-theme='light'] .bg-ink { background-color: #f4f1eb !important; }
-[data-theme='light'] .bg-ink-2 { background-color: #fffdf8 !important; }
-[data-theme='light'] .bg-ink-3 { background-color: #ebe7df !important; }
-[data-theme='light'] .text-bone { color: #1a1b20 !important; }
-[data-theme='light'] .text-bone-dim { color: #66645e !important; }
-[data-theme='light'] .border-line { border-color: #d8d2c8 !important; }
-[data-theme='light'] .input-field { background-color: #fffdf8 !important; color: #1a1b20 !important; }
-[data-theme='light'] ::-webkit-scrollbar-track { background: #f4f1eb; }
-[data-theme='light'] ::-webkit-scrollbar-thumb { background: #c7c0b5; }
+[data-theme='light'] .bg-ink, [data-theme='dark'] .bg-ink { background-color: #ffffff !important; }
+[data-theme='light'] .bg-ink-2, [data-theme='dark'] .bg-ink-2 { background-color: #f1f5f9 !important; }
+[data-theme='light'] .bg-ink-3, [data-theme='dark'] .bg-ink-3 { background-color: #ebdafd !important; }
+[data-theme='light'] .text-bone, [data-theme='dark'] .text-bone { color: #111827 !important; }
+[data-theme='light'] .text-bone-dim, [data-theme='dark'] .text-bone-dim { color: #3f4654 !important; }
+[data-theme='light'] .border-line, [data-theme='dark'] .border-line { border-color: #d8e0ea !important; }
+[data-theme='light'] .input-field, [data-theme='dark'] .input-field { background-color: #ffffff !important; color: #111827 !important; }
+[data-theme='light'] ::-webkit-scrollbar-track, [data-theme='dark'] ::-webkit-scrollbar-track { background: #ffffff; }
+[data-theme='light'] ::-webkit-scrollbar-thumb, [data-theme='dark'] ::-webkit-scrollbar-thumb { background: #d8e0ea; }
