@@ -98,12 +98,16 @@ export function Dashboard() {
     queryKey: ['following', profile.uid],
     queryFn: () => getFollowing(profile.uid),
     enabled: !!profile.uid,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const { data: feed = [] } = useQuery({
     queryKey: ['feed', profile.uid, following],
     queryFn: () => getFeed(profile.uid, following),
     enabled: !!profile.uid,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const store = useWorkoutStore();

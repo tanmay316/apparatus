@@ -390,7 +390,10 @@ function FollowButton({ myUid, targetUid }: { myUid: string; targetUid: string }
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['isFollowing', myUid, targetUid] });
       queryClient.invalidateQueries({ queryKey: ['followCounts', targetUid] });
+      queryClient.invalidateQueries({ queryKey: ['followCounts', myUid] });
       queryClient.invalidateQueries({ queryKey: ['following'] });
+      queryClient.invalidateQueries({ queryKey: ['followList'] });
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
       showToast(following ? 'Unfollowed' : 'Following!');
     },
   });

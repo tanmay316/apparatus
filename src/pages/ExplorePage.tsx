@@ -22,6 +22,9 @@ function AthleteCard({ athlete, myUid }: { athlete: any; myUid: string }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['isFollowing', myUid, athlete.uid] });
       queryClient.invalidateQueries({ queryKey: ['following'] });
+      queryClient.invalidateQueries({ queryKey: ['followCounts'] });
+      queryClient.invalidateQueries({ queryKey: ['followList'] });
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
       showToast(following ? 'Unfollowed' : 'Following!');
     },
   });
