@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { TrendingUp, Flame, Zap, Clock, Dumbbell, Trophy } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { getWorkoutsByDateRange, getUserWorkouts } from '@/services/workouts';
+import { getMeasurements } from '@/services/measurements';
 import type { Workout } from '@/types';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
@@ -260,6 +261,12 @@ export function ProgressPage() {
     queryFn: () => getUserWorkouts(profile!.uid, 500),
     enabled: !!profile,
   });
+
+  const { data: measurements = [] } = useQuery({
+    queryKey: ['measurements', profile?.uid],
+    queryFn: () => getMeasurements(profile!.uid, 100),
+    enabled: !!profile,
+  });
   
   if (!profile || !stats) return null;
   
@@ -267,6 +274,9 @@ export function ProgressPage() {
   const level = Math.floor(xp / 500) + 1;
   const levelXp = xp % 500;
   const levelProgress = (levelXp / 500) * 100;
+  const latestMeasurement = measurements[0];
+  const firstMeasurement = measurements[measurements.length - 1];
+  const metricDelta = (key: 'weight' | 'bodyfat' | 'waist') => latestMeasurement?.[key] != null && firstMeasurement?.[key] != null ? Number(latestMeasurement[key]) - Number(firstMeasurement[key]) : null;
   
   return (
     <motion.div variants={container} initial="hidden" animate="show">
@@ -321,6 +331,11 @@ export function ProgressPage() {
           <div className="text-3xl font-bold font-mono text-teal">{stats.longestStreak}</div>
           <div className="font-mono text-[10px] text-bone-dim tracking-wider">LONGEST STREAK</div>
         </div>
+      </motion.div>
+
+      <motion.div variants={item} className="card p-5 mb-6">
+        <div className="flex items-center justify-between gap-3 mb-4"><div><div className="font-mono text-[10px] text-teal tracking-widest">BODY LOG</div><h3 className="font-display text-xl mt-1">Physical progress</h3></div><Trophy size={18} className="text-amber" /></div>
+        {latestMeasurement ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3"><div className="stat-pill"><div className="font-mono text-lg">{latestMeasurement.weight ?? '—'} kg</div><div className="text-[10px] text-bone-dim">WEIGHT {metricDelta('weight') != null ? `(${metricDelta('weight')! > 0 ? '+' : ''}${metricDelta('weight')!.toFixed(1)})` : ''}</div></div><div className="stat-pill"><div className="font-mono text-lg">{latestMeasurement.bodyfat ?? '—'}%</div><div className="text-[10px] text-bone-dim">BODY FAT {metricDelta('bodyfat') != null ? `(${metricDelta('bodyfat')! > 0 ? '+' : ''}${metricDelta('bodyfat')!.toFixed(1)})` : ''}</div></div><div className="stat-pill"><div className="font-mono text-lg">{latestMeasurement.waist ?? '—'} cm</div><div className="text-[10px] text-bone-dim">WAIST {metricDelta('waist') != null ? `(${metricDelta('waist')! > 0 ? '+' : ''}${metricDelta('waist')!.toFixed(1)})` : ''}</div></div><div className="stat-pill"><div className="font-mono text-lg">{measurements.length}</div><div className="text-[10px] text-bone-dim">LOG ENTRIES</div></div></div> : <p className="text-sm text-bone-dim">Add entries in Body Log to see weight, body-fat, waist and trend changes here.</p>}
       </motion.div>
 
       {/* Volume Chart */}

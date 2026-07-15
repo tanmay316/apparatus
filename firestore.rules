@@ -70,15 +70,18 @@ service cloud.firestore {
     }
 
     match /plans/{planId} {
-      allow read: if resource.data.isPublic == true || isOwner(resource.data.ownerId);
+      allow read: if isAdmin() || resource.data.isPublic == true || isOwner(resource.data.ownerId);
       allow create: if isOwner(request.resource.data.ownerId);
-      allow update: if isOwner(resource.data.ownerId)
-        && request.resource.data.ownerId == resource.data.ownerId;
-      allow delete: if isOwner(resource.data.ownerId);
+      allow update: if isAdmin() || (isOwner(resource.data.ownerId)
+        && request.resource.data.ownerId == resource.data.ownerId);
+      allow delete: if isAdmin() || isOwner(resource.data.ownerId);
 
       match /days/{dayId} {
         allow read: if canReadPlan(planId);
-        allow create, update, delete: if isOwner(
+        allow create, update: if isAdmin() || isOwner(
+          getAfter(/databases/$(database)/documents/plans/$(planId)).data.ownerId
+        );
+        allow delete: if isAdmin() || isOwner(
           get(/databases/$(database)/documents/plans/$(planId)).data.ownerId
         );
       }
@@ -117,12 +120,14 @@ service cloud.firestore {
 
     match /followers/{uid}/following/{followedUid} {
       allow read: if true;
-      allow create, delete: if isOwner(uid) && uid != followedUid;
+      allow create: if isOwner(uid) && uid != followedUid;
+      allow delete: if (isOwner(uid) || isOwner(followedUid)) && uid != followedUid;
     }
 
     match /followers/{uid}/followers/{followerUid} {
       allow read: if true;
-      allow create, delete: if isOwner(followerUid) && uid != followerUid;
+      allow create: if isOwner(followerUid) && uid != followerUid;
+      allow delete: if (isOwner(followerUid) || isOwner(uid)) && uid != followerUid;
     }
 
     match /activities/{activityId} {

@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Award, Lock, ShieldCheck, Check, Sparkles, Filter } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { SKILL_ROADMAP, getUserSkills, toggleSkill, SkillItem } from '@/services/skills';
+import { SkillRoadmapModal } from '@/components/ui/SkillRoadmapModal';
 
 const container = {
   hidden: { opacity: 0 },
@@ -19,6 +20,7 @@ export function SkillsPage() {
   const { profile } = useAuthStore();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<'all' | 'push' | 'pull' | 'balance' | 'core'>('all');
+  const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
 
   const { data: masteredSkills = [], isLoading } = useQuery({
     queryKey: ['userSkills', profile?.uid],
@@ -148,7 +150,7 @@ export function SkillsPage() {
                   return (
                     <button
                       key={skill.id}
-                      onClick={() => handleToggle(skill.id)}
+                      onClick={() => setSelectedSkill(skill)}
                       className={`text-left p-4 rounded-lg border transition-all duration-300 relative overflow-hidden group ${
                         isMastered
                           ? 'bg-teal/5 border-teal/40 shadow-[0_0_15px_rgba(79,158,141,0.05)] hover:border-teal/60'
@@ -195,6 +197,13 @@ export function SkillsPage() {
           );
         })}
       </div>
+      <SkillRoadmapModal
+        skill={selectedSkill}
+        isOpen={!!selectedSkill}
+        isMastered={selectedSkill ? masteredSkills.includes(selectedSkill.id) : false}
+        onClose={() => setSelectedSkill(null)}
+        onMarkMastered={() => { if (selectedSkill) handleToggle(selectedSkill.id); }}
+      />
     </motion.div>
   );
 }

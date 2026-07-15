@@ -91,7 +91,7 @@ export function ExplorePage() {
       showToast('Plan added to your account');
       navigate(`/plans/${newPlanId}`);
     },
-    onError: () => showToast('Failed to import plan', 'error'),
+    onError: (error: any) => showToast(error?.message || 'Failed to import plan', 'error'),
   });
 
   const handleClone = (planId: string) => {

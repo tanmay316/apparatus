@@ -1,6 +1,11 @@
 import { collection, doc, setDoc, getDoc, runTransaction, Timestamp, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Workout, UserStats } from '@/types';
+import { isFollowing } from '@/services/social';
+
+function localDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) => {
   const workoutRef = doc(collection(db, 'workouts'));
@@ -35,14 +40,14 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
     const volume = workout.volume || 0;
     
     // Calculate Streak
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDateKey(new Date());
     let newStreak = stats.currentStreak;
     if (stats.lastWorkoutDate !== today) {
        // If it's the very next day, increment
        const last = stats.lastWorkoutDate ? new Date(stats.lastWorkoutDate) : null;
        const yesterday = new Date();
        yesterday.setDate(yesterday.getDate() - 1);
-       const yesterdayStr = yesterday.toISOString().split('T')[0];
+       const yesterdayStr = localDateKey(yesterday);
        
        if (stats.lastWorkoutDate === yesterdayStr) {
          newStreak += 1;
@@ -133,13 +138,41 @@ export const getWorkoutsByDateRange = async (
   startDate: string,
   endDate: string
 ): Promise<Workout[]> => {
-  const q = query(
+  try {
+    const q = query(
+      collection(db, 'workouts'),
+      where('userId', '==', userId),
+      where('date', '>=', startDate),
+      where('date', '<=', endDate)
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs
+      .map(item => ({ id: item.id, ...item.data() } as Workout))
+      .sort((a, b) => b.date.localeCompare(a.date));
+  } catch (error) {
+    console.warn('Date-range workout query failed; using owner-scoped fallback.', error);
+    const snapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)));
+    return snapshot.docs
+      .map(item => ({ id: item.id, ...item.data() } as Workout))
+      .filter(workout => workout.date >= startDate && workout.date <= endDate)
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }
+};
+
+export const getPublicWorkoutsForUser = async (userId: string, viewerId?: string, limitCount = 20): Promise<Workout[]> => {
+  const publicQuery = query(
     collection(db, 'workouts'),
     where('userId', '==', userId),
-    where('date', '>=', startDate),
-    where('date', '<=', endDate),
-    orderBy('date', 'desc')
+    where('visibility', '==', 'public'),
+    orderBy('date', 'desc'),
+    limit(limitCount),
   );
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Workout));
+  const publicSnapshot = await getDocs(publicQuery);
+  const visible = publicSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Workout));
+  if (viewerId && viewerId !== userId && await isFollowing(viewerId, userId)) {
+    const followerQuery = query(collection(db, 'workouts'), where('userId', '==', userId), where('visibility', '==', 'followers'), orderBy('date', 'desc'), limit(limitCount));
+    const followerSnapshot = await getDocs(followerQuery);
+    visible.push(...followerSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Workout)));
+  }
+  return visible.sort((a, b) => b.date.localeCompare(a.date)).slice(0, limitCount);
 };

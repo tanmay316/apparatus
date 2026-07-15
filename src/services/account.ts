@@ -7,6 +7,8 @@ import {
   query,
   where,
   writeBatch,
+  setDoc,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
@@ -102,6 +104,57 @@ export async function deleteAccountData(uid: string, username?: string) {
   const mirroredFollowerRefs = followersSnap.docs.map(item => doc(db, `followers/${item.id}/following`, uid));
   refs.push(...mirroredFollowingRefs, ...mirroredFollowerRefs);
   await deleteRefs(refs);
+}
+
+/** Remove all user-owned application data while keeping the Firebase account and handle. */
+export async function resetUserData(uid: string) {
+  const [plansData, workoutsSnap, measurementsSnap, skillsSnap, activitiesSnap, followingSnap, followersSnap, notificationsSnap, reportsSnap, customExercisesSnap] = await Promise.all([
+    getUserPlanData(uid),
+    getDocs(query(collection(db, 'workouts'), where('userId', '==', uid))),
+    getDocs(collection(db, `users/${uid}/measurements`)),
+    getDocs(collection(db, `users/${uid}/skills`)),
+    getDocs(query(collection(db, 'activities'), where('userId', '==', uid))),
+    getDocs(collection(db, `followers/${uid}/following`)),
+    getDocs(collection(db, `followers/${uid}/followers`)),
+    getDocs(query(collection(db, 'notifications'), where('receiverId', '==', uid))),
+    getDocs(query(collection(db, 'reports'), where('reporterId', '==', uid))),
+    getDocs(query(collection(db, 'exerciseLibrary'), where('createdBy', '==', uid))),
+  ]);
+
+  const refs: ReturnType<typeof doc>[] = [
+    ...plansData.refs,
+    ...workoutsSnap.docs.map(item => item.ref),
+    ...measurementsSnap.docs.map(item => item.ref),
+    ...skillsSnap.docs.map(item => item.ref),
+    ...activitiesSnap.docs.map(item => item.ref),
+    ...notificationsSnap.docs.map(item => item.ref),
+    ...followingSnap.docs.map(item => item.ref),
+    ...followersSnap.docs.map(item => item.ref),
+    ...reportsSnap.docs.map(item => item.ref),
+    ...customExercisesSnap.docs.map(item => item.ref),
+  ];
+  for (const activity of activitiesSnap.docs) {
+    const [likes, comments] = await Promise.all([
+      getDocs(collection(db, `activities/${activity.id}/likes`)),
+      getDocs(collection(db, `activities/${activity.id}/comments`)),
+    ]);
+    refs.push(...likes.docs.filter(item => item.id === uid).map(item => item.ref));
+    refs.push(...comments.docs.filter(item => item.data().userId === uid).map(item => item.ref));
+  }
+  refs.push(...followingSnap.docs.map(item => doc(db, `followers/${item.id}/followers`, uid)));
+  refs.push(...followersSnap.docs.map(item => doc(db, `followers/${item.id}/following`, uid)));
+  await deleteRefs(refs);
+
+  await setDoc(doc(db, 'users', uid, 'stats', 'current'), {
+    totalWorkouts: 0, totalCalories: 0, totalDurationMin: 0, totalVolume: 0,
+    currentStreak: 0, longestStreak: 0, lastWorkoutDate: null, xp: 0,
+    prCount: 0, bestHold: 0, badges: [],
+  });
+  await setDoc(doc(db, 'users', uid), {
+    bio: '', photoURL: '', height: null, weight: null, age: null, gender: '',
+    fitnessGoal: '', experienceLevel: 'beginner', preferredWorkoutType: '',
+    isPublic: true, activePlanId: null, updatedAt: serverTimestamp(),
+  }, { merge: true });
 }
 
 export async function uploadAvatar(uid: string, file: File) {

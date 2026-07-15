@@ -22,10 +22,10 @@ import {
   Wind,
   X,
 } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
-import { getUserSkills, SKILL_ROADMAP, toggleSkill, type SkillItem } from '@/services/skills';
-import { useUIStore } from '@/stores/ui-store';
+import { getUserSkills, SKILL_ROADMAP, type SkillItem } from '@/services/skills';
+import { SkillRoadmapModal } from '@/components/ui/SkillRoadmapModal';
 
 type GuideSection = 'warmup' | 'nutrition' | 'roadmap';
 
@@ -66,6 +66,23 @@ const timingRows = [
   ['After training', 'Eat a balanced meal when convenient. Protein and carbs over the next few hours matter more than a narrow window.'],
 ];
 
+const warmupExercises = [
+  ['Jumping jacks', '60 sec', 'Raise body temperature without tiring yourself.'],
+  ['Wrist rocks', '2 x 10', 'Prepare wrists for push-ups, handstands and floor work.'],
+  ['Scapular push-ups', '2 x 8', 'Switch on the shoulder blades while keeping elbows straight.'],
+  ['Cat-cow', '2 x 8', 'Move the spine slowly and coordinate each movement with breath.'],
+  ['Deep squat pry', '60 sec', 'Open hips and ankles in the range needed for squats and lunges.'],
+];
+
+const vegetarianProteinFoods = [
+  ['Tofu / tempeh', 'Firm, versatile and rich in protein.'],
+  ['Lentils + beans', 'Pair with rice or grains for a complete meal.'],
+  ['Greek yogurt / cottage cheese', 'High-protein dairy for breakfast or snacks.'],
+  ['Eggs', 'An easy whole-food option for any meal.'],
+  ['Edamame / soy chunks', 'Protein-dense choices for bowls and stir-fries.'],
+  ['Seitan', 'Wheat-based protein with a meaty texture.'],
+];
+
 const phaseLabels: Record<number, string> = {
   1: 'Foundation · 0–3 months',
   2: 'Control · 3–6 months',
@@ -88,6 +105,24 @@ function WarmupGuide() {
   const [seconds, setSeconds] = useState(120);
   const [running, setRunning] = useState(false);
   const [breathPhase, setBreathPhase] = useState('Inhale');
+  const [meditationMinutes, setMeditationMinutes] = useState(10);
+  const [meditationSeconds, setMeditationSeconds] = useState(600);
+  const [meditationRunning, setMeditationRunning] = useState(false);
+
+  const playFinishSound = () => {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.frequency.value = 660;
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.2, context.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.8);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.8);
+  };
 
   useEffect(() => {
     localStorage.setItem('apparatus-warmup-checklist', JSON.stringify(completed));
@@ -107,6 +142,19 @@ function WarmupGuide() {
     }, 4000);
     return () => window.clearInterval(timer);
   }, [running]);
+
+  useEffect(() => {
+    if (!meditationRunning || meditationSeconds <= 0) return;
+    const timer = window.setInterval(() => setMeditationSeconds(value => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [meditationRunning, meditationSeconds]);
+
+  useEffect(() => {
+    if (meditationRunning && meditationSeconds === 0) {
+      setMeditationRunning(false);
+      playFinishSound();
+    }
+  }, [meditationSeconds, meditationRunning]);
 
   const completedCount = completed.filter(Boolean).length;
 
@@ -149,6 +197,20 @@ function WarmupGuide() {
         </section>
       </div>
 
+      <section className="card p-5 bg-gradient-to-br from-amber/10 via-ink-2 to-ink-2">
+        <div className="flex items-center justify-between gap-3 mb-4"><div><div className="font-mono text-[10px] text-amber tracking-widest">MEDITATION TIMER</div><h2 className="font-display text-xl mt-1">Finish calm and focused</h2></div><TimerReset className="text-amber" size={22} /></div>
+        <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
+          <label className="flex-1"><span className="label">Custom time (minutes)</span><input className="input-field" type="number" min="1" max="120" value={meditationMinutes} onChange={e => { const value = Math.max(1, Math.min(120, Number(e.target.value) || 1)); setMeditationMinutes(value); if (!meditationRunning) setMeditationSeconds(value * 60); }} /></label>
+          <div className="text-center rounded-xl bg-ink border border-line px-6 py-3"><div className="font-mono text-3xl text-teal tabular-nums">{formatClock(meditationSeconds)}</div><div className="text-[10px] text-bone-dim mt-1">A soft chime plays at the end</div></div>
+          <div className="flex gap-2"><button className="btn-primary py-2.5" onClick={() => setMeditationRunning(value => !value)}>{meditationRunning ? 'Pause' : 'Start'}</button><button className="btn-secondary py-2.5" onClick={() => { setMeditationRunning(false); setMeditationSeconds(meditationMinutes * 60); }}>Reset</button></div>
+        </div>
+      </section>
+
+      <section className="card p-5">
+        <div className="flex items-center justify-between gap-4 mb-4"><div><div className="font-mono text-[10px] text-teal tracking-widest">WARM-UP EXERCISES</div><h2 className="font-display text-xl mt-1">Move through this sequence</h2></div><HeartPulse size={18} className="text-teal" /></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">{warmupExercises.map(([name, duration, detail]) => <div key={name} className="rounded-lg border border-line bg-ink-2 p-3"><div className="font-semibold text-sm">{name}</div><div className="font-mono text-[10px] text-amber mt-2">{duration}</div><p className="text-xs text-bone-dim mt-1 leading-relaxed">{detail}</p></div>)}</div>
+      </section>
+
       <section className="card p-5">
         <div className="flex items-center justify-between gap-4 mb-4"><div><div className="font-mono text-[10px] text-bone-dim tracking-widest">SESSION CHECKLIST</div><h2 className="font-display text-xl mt-1">Arrive prepared</h2></div><span className="font-mono text-xs text-teal">{completedCount}/{warmupSteps.length} complete</span></div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -187,34 +249,24 @@ function NutritionGuide() {
     </div>
 
     <section className="card p-5"><div className="flex items-center gap-2 mb-4"><Utensils size={18} className="text-amber" /><h2 className="font-display text-xl">Build a plate</h2></div><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{['½ colorful plants', '¼ protein', '¼ carbs', 'Add fluids'].map((label, index) => <div key={label} className="bg-ink-2 rounded-lg border border-line/50 p-4"><div className={`w-8 h-8 rounded-full flex items-center justify-center mb-3 ${index === 0 ? 'bg-teal/20 text-teal' : index === 1 ? 'bg-amber/20 text-amber' : 'bg-bone/10 text-bone'}`}><span className="font-mono text-xs">0{index + 1}</span></div><div className="text-sm font-semibold">{label}</div></div>)}</div></section>
+    <section className="card p-5"><div className="flex items-center gap-2 mb-4"><Leaf size={18} className="text-teal" /><h2 className="font-display text-xl">Vegetarian protein foods</h2></div><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{vegetarianProteinFoods.map(([name, detail]) => <div key={name} className="rounded-lg border border-line bg-ink-2 p-4"><div className="font-semibold text-sm">{name}</div><p className="text-xs text-bone-dim mt-1 leading-relaxed">{detail}</p></div>)}</div></section>
   </div>;
 }
 
 function RoadmapGuide() {
   const { profile } = useAuthStore();
-  const { showToast } = useUIStore();
-  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<SkillItem['category'] | 'all'>('all');
+  const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
   const { data: masteredSkills = [], isLoading } = useQuery({ queryKey: ['userSkills', profile?.uid], queryFn: () => getUserSkills(profile!.uid), enabled: !!profile });
   const mastered = useMemo(() => new Set(masteredSkills), [masteredSkills]);
-
-  const toggle = async (skill: SkillItem) => {
-    if (!profile) return;
-    try {
-      await toggleSkill(profile.uid, skill.id, !mastered.has(skill.id));
-      await queryClient.invalidateQueries({ queryKey: ['userSkills', profile.uid] });
-      showToast(mastered.has(skill.id) ? `${skill.name} moved back to practice` : `${skill.name} marked mastered`);
-    } catch (error: any) {
-      showToast(error?.message || 'Could not update skill', 'error');
-    }
-  };
 
   return <div className="space-y-6">
     <section className="card p-6 bg-gradient-to-br from-teal/15 via-ink-2 to-ink-2"><div className="flex flex-col md:flex-row md:items-end justify-between gap-5"><div><div className="tag-teal mb-4">HONEST PROGRESSION</div><h2 className="font-display text-3xl mb-2">One clean rep at a time.</h2><p className="text-sm text-bone-dim leading-relaxed max-w-2xl">Mark a skill only when you can repeat it with control. This roadmap is a guide, not a deadline—tendon strength and quality movement take time.</p></div><Link to="/skills" className="btn-secondary inline-flex items-center gap-2 whitespace-nowrap">Open Skill Tracker <ArrowRight size={14} /></Link></div><div className="mt-6 flex items-center gap-4"><div className="flex-1 h-2 bg-line rounded-full overflow-hidden"><div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.round((masteredSkills.length / SKILL_ROADMAP.length) * 100)}%` }} /></div><span className="font-mono text-xs text-teal whitespace-nowrap">{masteredSkills.length}/{SKILL_ROADMAP.length} mastered</span></div></section>
 
     <div className="flex flex-wrap gap-2">{(['all', 'push', 'pull', 'balance', 'core'] as const).map(value => <button key={value} onClick={() => setFilter(value)} className={`px-3 py-2 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${filter === value ? 'bg-teal text-ink border-teal font-bold' : 'border-line text-bone-dim hover:text-bone hover:border-teal-dim'}`}>{value}</button>)}</div>
 
-    {isLoading ? <div className="card p-12 text-center text-bone-dim">Loading your roadmap...</div> : <div className="space-y-5">{[1, 2, 3, 4].map(phase => { const skills = SKILL_ROADMAP.filter(skill => skill.phase === phase && (filter === 'all' || skill.category === filter)); if (!skills.length) return null; const phaseSkills = SKILL_ROADMAP.filter(skill => skill.phase === phase); const phaseDone = phaseSkills.filter(skill => mastered.has(skill.id)).length; return <section key={phase} className="card p-5"><div className="flex items-start justify-between gap-4 mb-4"><div><div className="font-mono text-[10px] text-amber tracking-widest">PHASE 0{phase}</div><h2 className="font-display text-xl mt-1">{phaseLabels[phase]}</h2></div><span className="font-mono text-xs text-bone-dim">{phaseDone}/{phaseSkills.length}</span></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{skills.map(skill => { const done = mastered.has(skill.id); return <button key={skill.id} onClick={() => toggle(skill)} className={`text-left rounded-lg border p-4 transition-all ${done ? 'bg-teal/10 border-teal/60' : 'bg-ink-2 border-line hover:border-teal-dim'}`}><div className="flex items-start gap-3"><span className={`w-7 h-7 rounded-md flex items-center justify-center flex-none ${done ? 'bg-teal text-ink' : 'bg-ink-3 text-bone-dim'}`}>{done ? <Check size={15} /> : <LockKeyhole size={13} />}</span><span className="min-w-0"><span className={`font-semibold text-sm block ${done ? 'text-teal' : ''}`}>{skill.name}</span><span className="text-xs text-bone-dim leading-relaxed block mt-1">{skill.description}</span><span className="font-mono text-[10px] uppercase text-amber block mt-2">{skill.category}</span></span></div></button>; })}</div></section>; })}</div>}
+    {isLoading ? <div className="card p-12 text-center text-bone-dim">Loading your roadmap...</div> : <div className="space-y-5">{[1, 2, 3, 4].map(phase => { const skills = SKILL_ROADMAP.filter(skill => skill.phase === phase && (filter === 'all' || skill.category === filter)); if (!skills.length) return null; const phaseSkills = SKILL_ROADMAP.filter(skill => skill.phase === phase); const phaseDone = phaseSkills.filter(skill => mastered.has(skill.id)).length; return <section key={phase} className="card p-5"><div className="flex items-start justify-between gap-4 mb-4"><div><div className="font-mono text-[10px] text-amber tracking-widest">PHASE 0{phase}</div><h2 className="font-display text-xl mt-1">{phaseLabels[phase]}</h2></div><span className="font-mono text-xs text-bone-dim">{phaseDone}/{phaseSkills.length}</span></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{skills.map(skill => { const done = mastered.has(skill.id); return <button key={skill.id} onClick={() => setSelectedSkill(skill)} className={`text-left rounded-lg border p-4 transition-all ${done ? 'bg-teal/10 border-teal/60' : 'bg-ink-2 border-line hover:border-teal-dim'}`}><div className="flex items-start gap-3"><span className={`w-7 h-7 rounded-md flex items-center justify-center flex-none ${done ? 'bg-teal text-ink' : 'bg-ink-3 text-bone-dim'}`}>{done ? <Check size={15} /> : <LockKeyhole size={13} />}</span><span className="min-w-0"><span className={`font-semibold text-sm block ${done ? 'text-teal' : ''}`}>{skill.name}</span><span className="text-xs text-bone-dim leading-relaxed block mt-1">{skill.description}</span><span className="font-mono text-[10px] uppercase text-amber block mt-2">Open progression roadmap</span></span></div></button>; })}</div></section>; })}</div>}
+    <SkillRoadmapModal skill={selectedSkill} isOpen={!!selectedSkill} isMastered={selectedSkill ? mastered.has(selectedSkill.id) : false} onClose={() => setSelectedSkill(null)} />
     <div className="flex items-start gap-3 card p-4 border-amber/30"><CircleHelp size={17} className="text-amber flex-none mt-0.5" /><p className="text-xs text-bone-dim leading-relaxed">A mastery check is your own training note, not a certification. If pain persists, regress the movement and seek help from a qualified coach or clinician.</p></div>
   </div>;
 }

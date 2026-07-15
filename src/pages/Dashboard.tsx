@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
-  Flame, TrendingUp, Zap, Calendar, Compass, Plus, Play, ChevronRight
+  Flame, TrendingUp, Zap, Calendar, Compass, Plus, Play, ChevronRight,
+  Users, Clock, Heart, MessageCircle
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
@@ -9,6 +10,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { getPlan, getPlanDays } from '@/services/plans';
 import { getWorkoutsByDateRange } from '@/services/workouts';
+import { getFollowing, getFeed } from '@/services/social';
 
 const QUOTES = [
   "Nobody sees the reps you did alone — your body will.",
@@ -27,6 +29,16 @@ function getTodayQuote() {
   const d = new Date();
   const dayOfYear = Math.floor((d.getTime() - new Date(d.getFullYear(), 0, 0).getTime()) / 86400000);
   return QUOTES[dayOfYear % QUOTES.length];
+}
+
+function timeAgo(seconds: number): string {
+  const now = Date.now() / 1000;
+  const diff = now - seconds;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
+  return `${Math.floor(diff / 604800)}w ago`;
 }
 
 const container = {
@@ -81,6 +93,18 @@ export function Dashboard() {
     enabled: !!profile.uid,
   });
 
+  const { data: following = [] } = useQuery({
+    queryKey: ['following', profile.uid],
+    queryFn: () => getFollowing(profile.uid),
+    enabled: !!profile.uid,
+  });
+
+  const { data: feed = [] } = useQuery({
+    queryKey: ['feed', profile.uid, following],
+    queryFn: () => getFeed(profile.uid, following),
+    enabled: !!profile.uid,
+  });
+
   const store = useWorkoutStore();
   const { showToast } = useUIStore();
 
@@ -96,6 +120,8 @@ export function Dashboard() {
       done,
     });
   }
+
+  const followersActivity = feed.filter((act: any) => act.userId !== profile.uid).slice(0, 3);
 
   return (
     <motion.div variants={container} initial="hidden" animate="show">
@@ -305,6 +331,86 @@ export function Dashboard() {
             <div className="font-mono text-[10px] text-bone-dim tracking-wider">STREAK</div>
           </div>
         </div>
+      </motion.div>
+
+      {/* Followers Activity Feed */}
+      <motion.div variants={item} className="card p-5 mt-6">
+        <div className="flex items-center gap-2 mb-4 pb-2 border-b border-line/30">
+          <Users size={16} className="text-teal" />
+          <h3 className="font-display text-base">Followers Activity</h3>
+        </div>
+
+        {followersActivity.length > 0 ? (
+          <div className="space-y-4">
+            {followersActivity.map((activity: any) => {
+              const details = activity.details;
+              const exercises = details?.exercises as string[] | undefined;
+
+              return (
+                <div key={activity.id} className="p-3 bg-ink-2 rounded border border-line/20 hover:border-teal/20 transition-all">
+                  <div className="flex items-start gap-3">
+                    <img
+                      src={activity.userPhoto || `https://ui-avatars.com/api/?name=${activity.userName}&background=4F9E8D&color=14151A&bold=true`}
+                      alt={activity.userName}
+                      className="w-9 h-9 rounded-full border border-teal/20 object-cover flex-none"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <Link to={activity.username ? `/user/${activity.username}` : `/user/${activity.userId}`} className="font-bold text-xs hover:text-teal transition-colors">
+                          {activity.userName}
+                        </Link>
+                        <span className="font-mono text-[9px] text-bone-dim">
+                          {activity.createdAt?.seconds ? timeAgo(activity.createdAt.seconds) : 'Just now'}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-teal font-mono">@{activity.username || 'athlete'}</div>
+                      
+                      <div className="text-xs text-bone mt-2 font-semibold">
+                        {activity.summary}
+                      </div>
+
+                      {/* Stats row */}
+                      {details && (
+                        <div className="flex flex-wrap gap-3 mt-2 p-1.5 bg-ink-3 rounded border border-line/10">
+                          <span className="flex items-center gap-1 text-[10px] font-mono text-bone-dim">
+                            <Clock size={10} className="text-teal" />
+                            {details.durationMin || 0} min
+                          </span>
+                          <span className="flex items-center gap-1 text-[10px] font-mono text-bone-dim">
+                            <TrendingUp size={10} className="text-amber" />
+                            {(details.volume || 0).toLocaleString()} kg·r
+                          </span>
+                          <span className="flex items-center gap-1 text-[10px] font-mono text-bone-dim">
+                            <Flame size={10} className="text-danger" />
+                            {details.calories || 0} kcal
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Exercises done */}
+                      {exercises && exercises.length > 0 && (
+                        <div className="mt-2.5 text-[10px] text-bone-dim">
+                          <span className="font-semibold text-bone font-mono text-[10px]">Exercises completed:</span>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {exercises.map((exName, idx) => (
+                              <span key={idx} className="text-[9px] py-0.5 px-1.5 bg-teal/5 border border-teal/10 rounded text-teal font-mono">
+                                {exName}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="text-center text-xs text-bone-dim py-4">
+            No recent activity from followed athletes. Find people to follow in the Explore tab!
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

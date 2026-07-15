@@ -46,6 +46,9 @@ export interface Exercise {
   rest: string;
   cues: string[];
   yt: string;
+  caloriesPerRep?: number;
+  caloriesPerSecond?: number;
+  muscleGroup?: string;
 }
 
 export interface PlanDay {
@@ -152,7 +155,7 @@ export interface Comment {
 
 export interface Notification {
   id?: string;
-  type: 'follow' | 'like' | 'comment' | 'achievement';
+  type: 'follow' | 'unfollow' | 'like' | 'comment' | 'activity' | 'achievement';
   senderId: string;
   senderName: string;
   senderPhoto: string;
@@ -186,6 +189,8 @@ export interface LibraryExercise {
   instructions: string[];
   youtubeSearch: string;
   caloriesPerMinEstimate: number;
+  caloriesPerRep?: number;
+  caloriesPerSecond?: number;
   tags: string[];
   isCustom: boolean;
   createdBy: string | null;

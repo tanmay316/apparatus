@@ -28,7 +28,7 @@ export async function followUser(myUid: string, targetUid: string): Promise<void
     senderName: sender.displayName || 'An athlete',
     senderPhoto: sender.photoURL || '',
     message: `${sender.displayName || 'An athlete'} followed you`,
-    targetId: myUid,
+    targetId: sender.username || myUid,
     read: false,
   });
 }
@@ -39,6 +39,17 @@ export async function unfollowUser(myUid: string, targetUid: string): Promise<vo
   
   await deleteDoc(followingRef);
   await deleteDoc(followerRef);
+  const senderSnap = await getDoc(doc(db, 'users', myUid));
+  const sender = senderSnap.exists() ? senderSnap.data() : {};
+  await notify(targetUid, {
+    type: 'unfollow',
+    senderId: myUid,
+    senderName: sender.displayName || 'An athlete',
+    senderPhoto: sender.photoURL || '',
+    message: `${sender.displayName || 'An athlete'} unfollowed you`,
+    targetId: sender.username || myUid,
+    read: false,
+  });
 }
 
 export async function isFollowing(myUid: string, targetUid: string): Promise<boolean> {
@@ -92,13 +103,30 @@ export async function searchUsers(queryStr: string): Promise<any[]> {
   // Prefix queries keep discovery bounded as the user base grows. Profiles created
   // before the indexed fields were introduced can be backfilled by the admin tool.
   const end = `${normalizedQuery}\uf8ff`;
-  const [usernameSnap, displayNameSnap] = await Promise.all([
-    getDocs(query(collection(db, 'users'), where('isPublic', '==', true), where('usernameLower', '>=', normalizedQuery), where('usernameLower', '<=', end), limit(20))),
-    getDocs(query(collection(db, 'users'), where('isPublic', '==', true), where('displayNameLower', '>=', normalizedQuery), where('displayNameLower', '<=', end), limit(20))),
-  ]);
-
   const byUid = new Map<string, any>();
-  [...usernameSnap.docs, ...displayNameSnap.docs].forEach(d => byUid.set(d.id, { uid: d.id, ...d.data() }));
+  try {
+    const [usernameSnap, displayNameSnap] = await Promise.all([
+      getDocs(query(collection(db, 'users'), where('isPublic', '==', true), where('usernameLower', '>=', normalizedQuery), where('usernameLower', '<=', end), limit(20))),
+      getDocs(query(collection(db, 'users'), where('isPublic', '==', true), where('displayNameLower', '>=', normalizedQuery), where('displayNameLower', '<=', end), limit(20))),
+    ]);
+    [...usernameSnap.docs, ...displayNameSnap.docs].forEach(d => byUid.set(d.id, { uid: d.id, ...d.data() }));
+  } catch (error) {
+    console.warn('Indexed user search failed; using public-profile fallback.', error);
+  }
+
+  // Older profiles may not have usernameLower/displayNameLower yet. Keep search
+  // usable while those records are gradually backfilled.
+  if (byUid.size < 20) {
+    const fallbackSnap = await getDocs(query(collection(db, 'users'), where('isPublic', '==', true), limit(100)));
+    fallbackSnap.docs.forEach(d => {
+      const data = d.data();
+      const username = String(data.username || '').toLowerCase();
+      const displayName = String(data.displayName || '').toLowerCase();
+      if (username.startsWith(normalizedQuery) || displayName.startsWith(normalizedQuery) || username.includes(normalizedQuery) || displayName.includes(normalizedQuery)) {
+        byUid.set(d.id, { uid: d.id, ...data });
+      }
+    });
+  }
   return [...byUid.values()].slice(0, 20);
 }
 
@@ -109,7 +137,24 @@ export async function postActivity(activity: Omit<Activity, 'id' | 'createdAt'>)
     ...activity,
     createdAt: serverTimestamp(),
   });
+  if (activity.visibility !== 'private') {
+    const followerUids = await getFollowers(activity.userId);
+    await Promise.allSettled(followerUids.map(receiverId => notify(receiverId, {
+      type: 'activity',
+      senderId: activity.userId,
+      senderName: activity.userName,
+      senderPhoto: activity.userPhoto,
+      message: `${activity.userName} ${activity.summary}`,
+      targetId: docRef.id,
+      read: false,
+    })));
+  }
   return docRef.id;
+}
+
+export async function getActivity(activityId: string): Promise<Activity | null> {
+  const snap = await getDoc(doc(db, 'activities', activityId));
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as Activity) : null;
 }
 
 export async function getFeed(userId: string, followingUids: string[]): Promise<Activity[]> {

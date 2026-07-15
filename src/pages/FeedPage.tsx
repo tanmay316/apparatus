@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, MessageCircle, Send, Clock, TrendingUp, Flame, Users } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { getFeed, getFollowing, getPublicFeed, toggleLike, hasLiked, addComment, getComments } from '@/services/social';
+import { getActivity, getFeed, getFollowing, getPublicFeed, toggleLike, hasLiked, addComment, getComments } from '@/services/social';
 import type { Activity, Comment } from '@/types';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
@@ -22,7 +22,7 @@ function timeAgo(seconds: number): string {
 }
 
 // ─── Activity Card ──────────────────────────────────────
-function ActivityCard({ activity }: { activity: Activity }) {
+function ActivityCard({ activity, highlighted = false }: { activity: Activity; highlighted?: boolean }) {
   const { user, profile } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
@@ -68,7 +68,7 @@ function ActivityCard({ activity }: { activity: Activity }) {
   const profileLink = `/profile/${activity.username || activity.userId}`;
   
   return (
-    <motion.div variants={item} className="card p-5">
+    <motion.div id={`activity-${activity.id}`} variants={item} className={`card p-5 transition-all ${highlighted ? 'ring-2 ring-amber shadow-[0_0_24px_rgba(242,180,72,0.18)]' : ''}`}>
       {/* Header */}
       <div className="flex items-start gap-3 mb-4">
         <Link to={profileLink}>
@@ -202,6 +202,8 @@ function ActivityCard({ activity }: { activity: Activity }) {
 export function FeedPage() {
   const { user, profile } = useAuthStore();
   const [tab, setTab] = useState<'following' | 'global'>('following');
+  const [searchParams] = useSearchParams();
+  const activityId = searchParams.get('activity');
   
   const { data: followingUids = [] } = useQuery({
     queryKey: ['following', user?.uid],
@@ -216,6 +218,21 @@ export function FeedPage() {
       : getPublicFeed(),
     enabled: !!user,
   });
+
+  const { data: linkedActivity } = useQuery({
+    queryKey: ['activity', activityId],
+    queryFn: () => getActivity(activityId!),
+    enabled: !!activityId,
+  });
+
+  const visibleFeedItems = linkedActivity && !feedItems.some(activity => activity.id === linkedActivity.id)
+    ? [linkedActivity, ...feedItems]
+    : feedItems;
+
+  useEffect(() => {
+    if (!activityId || !linkedActivity) return;
+    window.setTimeout(() => document.getElementById(`activity-${activityId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+  }, [activityId, linkedActivity]);
   
   return (
     <motion.div variants={container} initial="hidden" animate="show">
@@ -245,7 +262,7 @@ export function FeedPage() {
         <div className="flex justify-center py-20">
           <div className="w-8 h-8 border-2 border-teal border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : feedItems.length === 0 ? (
+      ) : visibleFeedItems.length === 0 ? (
         <motion.div variants={item} className="text-center py-16 border border-dashed border-line rounded-lg">
           <Users size={48} className="mx-auto text-bone-dim mb-4 opacity-50" />
           <h3 className="font-display text-lg mb-2">No Activity Yet</h3>
@@ -258,8 +275,8 @@ export function FeedPage() {
         </motion.div>
       ) : (
         <div className="space-y-4">
-          {feedItems.map(activity => (
-            <ActivityCard key={activity.id} activity={activity} />
+          {visibleFeedItems.map(activity => (
+            <ActivityCard key={activity.id} activity={activity} highlighted={activity.id === activityId} />
           ))}
         </div>
       )}

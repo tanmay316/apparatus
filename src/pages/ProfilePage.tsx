@@ -13,6 +13,8 @@ import { useUIStore } from '@/stores/ui-store';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, getFollowers, getFollowing, getUsersByUids } from '@/services/social';
 import type { UserProfile, UserStats } from '@/types';
 import { createReport } from '@/services/admin';
+import { getPublicWorkoutsForUser } from '@/services/workouts';
+import { clonePlan, getPublicPlansForUser } from '@/services/plans';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -37,6 +39,9 @@ export function ProfilePage() {
   const [reportReason, setReportReason] = useState('spam');
   const [reportDetails, setReportDetails] = useState('');
   const [reporting, setReporting] = useState(false);
+  const [publicWorkouts, setPublicWorkouts] = useState<any[]>([]);
+  const [publicPlans, setPublicPlans] = useState<any[]>([]);
+  const [importingPlan, setImportingPlan] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -67,6 +72,26 @@ export function ProfilePage() {
     }
     load();
   }, [username, myProfile, myStats]);
+
+  useEffect(() => {
+    if (!viewProfile || isOwnProfile) return;
+    Promise.all([getPublicWorkoutsForUser(viewProfile.uid, myProfile?.uid), getPublicPlansForUser(viewProfile.uid)])
+      .then(([workouts, plans]) => { setPublicWorkouts(workouts); setPublicPlans(plans); })
+      .catch(error => console.error('Failed to load public training data', error));
+  }, [viewProfile, isOwnProfile, myProfile?.uid]);
+
+  const importPublicPlan = async (planId: string) => {
+    if (!myProfile) return;
+    setImportingPlan(planId);
+    try {
+      await clonePlan(planId, 'plans', myProfile.uid, myProfile.username);
+      showToast('Plan imported into your plans');
+    } catch (error: any) {
+      showToast(error?.message || 'Could not import plan', 'error');
+    } finally {
+      setImportingPlan(null);
+    }
+  };
 
   const startEditing = () => {
     if (!viewProfile) return;
@@ -297,7 +322,7 @@ export function ProfilePage() {
       )}
 
       {/* Profile details (view mode) */}
-      {!editing && (
+      {!editing && isOwnProfile && (
         <motion.div variants={item} className="card p-5">
           <h3 className="font-display text-base mb-4">DETAILS</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-3">
@@ -316,6 +341,21 @@ export function ProfilePage() {
               </div>
             ))}
           </div>
+        </motion.div>
+      )}
+
+      {!isOwnProfile && (
+        <motion.div variants={item} className="card p-5 mt-5">
+          <div className="flex items-center justify-between gap-3 mb-4"><div><div className="font-mono text-[10px] text-teal tracking-widest">PUBLIC TRAINING</div><h3 className="font-display text-xl mt-1">Progress you can follow</h3></div><UsersIcon size={20} className="text-teal" /></div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div className="stat-pill"><div className="font-mono text-lg">{publicWorkouts.length}</div><div className="font-mono text-[10px] text-bone-dim">PUBLIC SESSIONS</div></div>
+            <div className="stat-pill"><div className="font-mono text-lg">{publicWorkouts.reduce((sum, workout) => sum + (workout.calories || 0), 0).toLocaleString()}</div><div className="font-mono text-[10px] text-bone-dim">CALORIES</div></div>
+            <div className="stat-pill"><div className="font-mono text-lg">{publicWorkouts.reduce((sum, workout) => sum + (workout.volume || 0), 0).toLocaleString()}</div><div className="font-mono text-[10px] text-bone-dim">VOLUME</div></div>
+            <div className="stat-pill"><div className="font-mono text-lg">{publicWorkouts.reduce((sum, workout) => sum + (workout.durationMin || 0), 0)}m</div><div className="font-mono text-[10px] text-bone-dim">DURATION</div></div>
+          </div>
+          {publicPlans.length > 0 && <div className="mb-5"><h4 className="font-display text-base mb-3">Public plans</h4><div className="space-y-2">{publicPlans.map(plan => <div key={plan.id} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-ink-2 p-3"><div><div className="font-semibold text-sm">{plan.title}</div><div className="text-xs text-bone-dim">{plan.daysPerWeek || 0} days/week · {plan.description || 'Training plan'}</div></div><button className="btn-secondary text-xs" disabled={importingPlan === plan.id} onClick={() => importPublicPlan(plan.id)}>{importingPlan === plan.id ? 'Importing...' : 'Import plan'}</button></div>)}</div></div>}
+          <h4 className="font-display text-base mb-3">Recent completed workouts</h4>
+          {publicWorkouts.length === 0 ? <p className="text-sm text-bone-dim">No public workouts shared yet.</p> : <div className="space-y-3">{publicWorkouts.slice(0, 8).map(workout => <div key={workout.id} className="rounded-lg border border-line bg-ink-2 p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold">{workout.dayTitle || 'Workout'}</div><div className="text-xs text-teal mt-1">{workout.planTitle || 'Personal session'}</div></div><div className="text-xs text-bone-dim">{workout.date}</div></div><div className="flex flex-wrap gap-3 mt-3 text-xs text-bone-dim"><span>{workout.durationMin || 0} min</span><span>{workout.calories || 0} kcal</span><span>{workout.volume || 0} volume</span><span>{workout.exercises?.length || 0} exercises</span></div>{workout.exercises?.length > 0 && <div className="mt-3 pt-3 border-t border-line/60 space-y-1">{workout.exercises.map((exercise: any) => <div key={exercise.name} className="text-xs"><span className="text-bone">{exercise.name}</span><span className="text-bone-dim"> · {exercise.sets?.filter((set: any) => set.completed).map((set: any) => `${set.reps || set.seconds || 0}${set.weight ? ` × ${set.weight}kg` : ''}`).join(', ') || 'logged'}</span></div>)}</div>}</div>)}</div>}
         </motion.div>
       )}
 

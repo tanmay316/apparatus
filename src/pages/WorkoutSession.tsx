@@ -14,6 +14,11 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
 import type { Exercise } from '@/types';
+import { calculateWorkoutCalories } from '@/lib/calories';
+
+function localDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 export function WorkoutSession() {
   const { planId, dayId } = useParams<{ planId: string, dayId: string }>();
@@ -41,7 +46,7 @@ export function WorkoutSession() {
   const { data: todayWorkouts = [] } = useQuery({
     queryKey: ['todayWorkouts', user?.uid],
     queryFn: async () => {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = localDateKey(new Date());
       const q = query(
         collection(db, 'workouts'),
         where('userId', '==', user!.uid),
@@ -87,6 +92,7 @@ export function WorkoutSession() {
   const [addRest, setAddRest] = useState('');
   const [addCues, setAddCues] = useState('');
   const [addYt, setAddYt] = useState('');
+  const [selectedExerciseMeta, setSelectedExerciseMeta] = useState<{ caloriesPerRep?: number; caloriesPerSecond?: number; muscleGroup?: string }>({});
 
   const formatStopwatch = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -107,6 +113,8 @@ export function WorkoutSession() {
         }
       });
     });
+    const allExercises = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown];
+    const calories = calculateWorkoutCalories(allExercises, exLogs, profile?.weight);
 
     try {
       // Award XP celebration values
@@ -121,11 +129,11 @@ export function WorkoutSession() {
         planTitle: store.planTitle,
         dayId: store.dayId!,
         dayTitle: store.dayTitle,
-        date: new Date().toISOString().split('T')[0],
+        date: localDateKey(new Date()),
         startedAt: { seconds: Math.floor(store.startedAt! / 1000), nanoseconds: 0 } as any,
         finishedAt: null, // Set in backend
         durationMin: Math.round(elapsedSec / 60),
-        calories: Math.round((elapsedSec / 60) * 6), // Rough estimate: 6 kcal / min
+        calories,
         volume: totalVol,
         visibility: privacy,
         notes: '',
@@ -150,7 +158,8 @@ export function WorkoutSession() {
             dayTitle: store.dayTitle,
             durationMin: Math.round(elapsedSec / 60),
             volume: totalVol,
-            calories: Math.round((elapsedSec / 60) * 6),
+            calories,
+            exercises: exLogs.map(e => e.name)
           },
           visibility: privacy,
           likesCount: 0,
@@ -205,6 +214,11 @@ export function WorkoutSession() {
   }
 
   const completedWorkoutForDay = todayWorkouts.find((w: any) => w.dayId === dayId);
+  const estimatedCalories = calculateWorkoutCalories(
+    [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown],
+    Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed)),
+    profile?.weight,
+  );
 
   const exMode = (setsStr: string) => {
     if (!setsStr) return 'freeform';
@@ -219,6 +233,7 @@ export function WorkoutSession() {
     setAddName(libEx.name);
     setAddCues(libEx.instructions?.join('\n') || '');
     setAddYt(libEx.youtubeSearch || '');
+    setSelectedExerciseMeta({ caloriesPerRep: libEx.caloriesPerRep, caloriesPerSecond: libEx.caloriesPerSecond, muscleGroup: libEx.muscleGroup });
   };
 
   const handleAddExercise = (e: React.FormEvent) => {
@@ -231,6 +246,7 @@ export function WorkoutSession() {
       rest: addRest.trim(),
       cues: addCues.split('\n').map(c => c.trim()).filter(Boolean),
       yt: addYt.trim()
+      , ...selectedExerciseMeta
     });
     setAddSection(null);
     setAddName('');
@@ -239,6 +255,7 @@ export function WorkoutSession() {
     setAddRest('');
     setAddCues('');
     setAddYt('');
+    setSelectedExerciseMeta({});
     showToast('Exercise added to workout');
   };
 
@@ -350,7 +367,7 @@ export function WorkoutSession() {
           </div>
           <div className="bg-ink-2 border border-line p-4 rounded-lg">
             <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">EST. CALORIES</div>
-            <div className="text-xl font-bold font-mono mt-1 text-bone">{Math.round((elapsedSec / 60) * 6)} kcal</div>
+            <div className="text-xl font-bold font-mono mt-1 text-bone">{estimatedCalories} kcal</div>
           </div>
         </div>
       </div>

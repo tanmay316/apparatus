@@ -19,6 +19,12 @@ export async function getUserPlans(uid: string): Promise<Plan[]> {
     });
 }
 
+export async function getPublicPlansForUser(uid: string): Promise<Plan[]> {
+  const q = query(collection(db, 'plans'), where('ownerId', '==', uid), where('isPublic', '==', true));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Plan)).filter(plan => !plan.isArchived);
+}
+
 /** Get a specific plan by ID */
 export async function getPlan(planId: string): Promise<Plan | null> {
   const snap = await getDoc(doc(db, 'plans', planId));
@@ -109,8 +115,15 @@ export async function deletePlanDay(planId: string, dayId: string): Promise<void
 /** Get all sample plans (for exploration) */
 export async function getSamplePlans(): Promise<Plan[]> {
   const snap = await getDocs(collection(db, 'samplePlans'));
-  return snap.docs
+  const unique = new Map<string, Plan>();
+  snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Plan))
+    .filter(plan => !plan.isArchived)
+    .forEach(plan => {
+      const key = plan.title.trim().toLowerCase();
+      if (!unique.has(key)) unique.set(key, plan);
+    });
+  return Array.from(unique.values())
     .sort((a, b) => {
       const t1 = a.createdAt?.seconds || 0;
       const t2 = b.createdAt?.seconds || 0;
@@ -159,12 +172,16 @@ export async function clonePlan(
     batch.set(newDayRef, dayDoc.data());
   }
   
-  // 6. If it was a sample plan, increment its usage count
-  if (sourceCollection === 'samplePlans') {
-    // Note: We'd normally use increment(), but we'll do it simply here
-    batch.update(doc(db, 'samplePlans', sourcePlanId), { usageCount: increment(1) });
-  }
-  
   await batch.commit();
+
+  // Usage analytics must never make a valid user import fail. The catalog read
+  // and the user's new plan are the actual import; this shared counter is best effort.
+  if (sourceCollection === 'samplePlans') {
+    try {
+      await updateDoc(doc(db, 'samplePlans', sourcePlanId), { usageCount: increment(1) });
+    } catch (error) {
+      console.warn('Sample-plan usage counter was not updated:', error);
+    }
+  }
   return newPlanRef.id;
 }

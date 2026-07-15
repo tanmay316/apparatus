@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Menu, Bell } from 'lucide-react';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +9,7 @@ import { getNotifications, markNotificationRead } from '@/services/social';
 export function Topbar() {
   const { profile } = useAuthStore();
   const { toggleSidebar } = useUIStore();
+  const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const queryClient = useQueryClient();
   const { data: notifications = [] } = useQuery({
@@ -26,6 +27,16 @@ export function Topbar() {
     month: 'short',
     day: 'numeric',
   });
+
+  const handleNotificationClick = async (notification: any) => {
+    if (notification.id && !notification.read) await readMutation.mutateAsync(notification.id);
+    setNotificationsOpen(false);
+    if (notification.type === 'follow' || notification.type === 'unfollow') {
+      navigate(`/profile/${notification.targetId || notification.senderId}`);
+    } else if (notification.targetId) {
+      navigate(`/feed?activity=${notification.targetId}`);
+    }
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-ink/92 backdrop-blur-md border-b border-line">
@@ -71,7 +82,7 @@ export function Topbar() {
                 </button>
                 {notificationsOpen && <div className="absolute right-0 top-10 w-80 max-w-[calc(100vw-2rem)] card shadow-2xl z-[70] p-3">
                   <div className="flex items-center justify-between px-2 pb-2 border-b border-line/50"><span className="font-display text-sm">Notifications</span><span className="font-mono text-[10px] text-bone-dim">{notifications.filter(item => !item.read).length} unread</span></div>
-                  <div className="max-h-72 overflow-y-auto divide-y divide-line/40">{notifications.length === 0 ? <p className="text-xs text-bone-dim text-center py-6">You are all caught up.</p> : notifications.map(notification => <button key={notification.id} onClick={() => notification.id && !notification.read && readMutation.mutate(notification.id)} className={`w-full text-left px-2 py-3 hover:bg-ink-3 transition-colors ${!notification.read ? 'bg-teal/5' : ''}`}><div className="text-xs text-bone">{notification.message}</div><div className="font-mono text-[10px] text-bone-dim mt-1">{notification.createdAt?.toDate ? notification.createdAt.toDate().toLocaleDateString() : 'Recently'}</div></button>)}</div>
+                  <div className="max-h-72 overflow-y-auto divide-y divide-line/40">{notifications.length === 0 ? <p className="text-xs text-bone-dim text-center py-6">You are all caught up.</p> : notifications.map(notification => <button key={notification.id} onClick={() => handleNotificationClick(notification)} className={`w-full text-left px-2 py-3 hover:bg-ink-3 transition-colors ${!notification.read ? 'bg-teal/5' : ''}`}><div className="text-xs text-bone">{notification.message}</div><div className="font-mono text-[10px] text-bone-dim mt-1">{notification.createdAt?.toDate ? notification.createdAt.toDate().toLocaleDateString() : 'Recently'} · Click to open</div></button>)}</div>
                 </div>}
               </div>
 

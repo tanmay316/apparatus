@@ -2246,6 +2246,8 @@ export const seedLibraryExercises = async (): Promise<void> => {
       instructions,
       youtubeSearch,
       caloriesPerMinEstimate: eqEstimate(ex.equipment),
+      caloriesPerRep: repEstimate(ex.name),
+      caloriesPerSecond: holdEstimate(ex.name),
       tags: ex.tags,
       isCustom: false,
       createdBy: null
@@ -2264,4 +2266,17 @@ function eqEstimate(equipment: string): number {
   if (eq.includes('machine')) return 5;
   if (eq.includes('band')) return 3;
   return 6; // bodyweight/default
+}
+
+function repEstimate(name: string): number {
+  const n = name.toLowerCase();
+  if (n.includes('burpee') || n.includes('muscle-up') || n.includes('muscle up')) return 0.65;
+  if (n.includes('squat') || n.includes('lunge') || n.includes('deadlift')) return 0.5;
+  if (n.includes('pull') || n.includes('dip') || n.includes('push')) return 0.42;
+  return 0.35;
+}
+
+function holdEstimate(name: string): number {
+  const n = name.toLowerCase();
+  return n.includes('hold') || n.includes('plank') || n.includes('handstand') || n.includes('lever') ? 0.09 : 0.08;
 }

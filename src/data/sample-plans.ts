@@ -1,5 +1,6 @@
 import type { Plan } from '@/types';
 import { Timestamp } from 'firebase/firestore';
+import { personalCalisthenicsPlan } from '@/data/calisthenics-personal-plan';
 
 function ex(name: string, sets: string, tempo: string, rest: string, cues: string[], yt = name) {
   return { name, sets, tempo, rest, cues, yt };
@@ -638,7 +639,7 @@ export const homeWorkoutPlan: Plan = {
 };
 
 export const SAMPLE_PLANS = [
-  calisthenicsStarterPlan,
+  personalCalisthenicsPlan,
   pushPullLegsPlan,
   upperLowerPlan,
   broSplitPlan,

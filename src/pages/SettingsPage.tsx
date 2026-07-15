@@ -5,8 +5,9 @@ import { Save, LogOut, Check, User, Scale, Eye, Upload, Download, Trash2, Sun, M
 import { deleteUser, reauthenticateWithPopup } from 'firebase/auth';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
+import { useWorkoutStore } from '@/stores/workout-store';
 import { googleProvider } from '@/lib/firebase';
-import { deleteAccountData, deleteAvatar, downloadJson, exportAccountData, uploadAvatar } from '@/services/account';
+import { deleteAccountData, deleteAvatar, downloadJson, exportAccountData, resetUserData, uploadAvatar } from '@/services/account';
 
 const container = {
   hidden: { opacity: 0 },
@@ -41,6 +42,8 @@ export function SettingsPage() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const cancelWorkout = useWorkoutStore(state => state.cancelWorkout);
 
   useEffect(() => {
     if (!profile) return;
@@ -132,6 +135,24 @@ export function SettingsPage() {
       showToast(error?.message || 'Account deletion failed. Please sign in again and retry.', 'error');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleResetData = async () => {
+    if (!user || !profile) return;
+    const confirmed = confirm('Reset all your workouts, plans, measurements, skills, social activity, followers, notifications, custom exercises, and profile details? Your login account and username will remain. This cannot be undone.');
+    if (!confirmed) return;
+    setResetting(true);
+    try {
+      await resetUserData(user.uid);
+      try { await deleteAvatar(user.uid); } catch (avatarError) { console.warn('Avatar cleanup skipped:', avatarError); }
+      cancelWorkout();
+      await useAuthStore.getState().refreshProfile();
+      showToast('All personal data has been reset');
+    } catch (error: any) {
+      showToast(error?.message || 'Data reset failed. Please retry.', 'error');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -433,6 +454,12 @@ export function SettingsPage() {
           <button type="button" onClick={handleDeleteAccount} disabled={deleting} className="btn-danger inline-flex items-center gap-2">
             <Trash2 size={14} /> {deleting ? 'Deleting account...' : 'Delete account permanently'}
           </button>
+          <div className="pt-4 border-t border-danger/20 space-y-3">
+            <div><h4 className="font-semibold text-sm text-amber">Reset personal data</h4><p className="text-xs text-bone-dim leading-relaxed mt-1">Keeps your login and username, but removes your workouts, plans, body logs, skills, social relationships, notifications, custom exercises, and personal profile details.</p></div>
+            <button type="button" onClick={handleResetData} disabled={resetting || deleting} className="btn-secondary border-amber/40 text-amber inline-flex items-center gap-2">
+              <Trash2 size={14} /> {resetting ? 'Resetting data...' : 'Reset all my data'}
+            </button>
+          </div>
         </motion.div>
       </form>
     </motion.div>
