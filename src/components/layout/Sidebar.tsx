@@ -29,7 +29,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'feed', path: '/feed', label: 'Activity Feed', icon: <Users size={18} />, section: 'SOCIAL' },
   { id: 'warmup', path: '/guide/warmup', label: 'Warm-up + Breath', icon: <Wind size={18} />, section: 'GUIDE' },
   { id: 'nutrition', path: '/guide/nutrition', label: 'Nutrition', icon: <Utensils size={18} />, section: 'GUIDE' },
-  { id: 'roadmap', path: '/guide/roadmap', label: 'Skill Roadmap', icon: <Map size={18} />, section: 'GUIDE' },
   { id: 'settings', path: '/settings', label: 'Settings', icon: <Settings size={18} />, section: '' },
 ];
 

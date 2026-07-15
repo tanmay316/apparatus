@@ -24,10 +24,8 @@ import {
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
-import { getUserSkills, SKILL_ROADMAP, type SkillItem } from '@/services/skills';
-import { SkillRoadmapModal } from '@/components/ui/SkillRoadmapModal';
 
-type GuideSection = 'warmup' | 'nutrition' | 'roadmap';
+type GuideSection = 'warmup' | 'nutrition';
 
 const pageMeta: Record<GuideSection, { eyebrow: string; title: string; description: string }> = {
   warmup: {
@@ -39,11 +37,6 @@ const pageMeta: Record<GuideSection, { eyebrow: string; title: string; descripti
     eyebrow: 'FUEL',
     title: 'Nutrition',
     description: 'A simple, repeatable framework for eating around training without turning every meal into a spreadsheet.',
-  },
-  roadmap: {
-    eyebrow: 'PROGRESS',
-    title: 'Skill Roadmap',
-    description: 'Move from foundations to advanced calisthenics skills with clear checkpoints and honest progression.',
   },
 };
 
@@ -75,12 +68,18 @@ const warmupExercises = [
 ];
 
 const vegetarianProteinFoods = [
-  ['Tofu / tempeh', 'Firm, versatile and rich in protein.'],
-  ['Lentils + beans', 'Pair with rice or grains for a complete meal.'],
-  ['Greek yogurt / cottage cheese', 'High-protein dairy for breakfast or snacks.'],
-  ['Eggs', 'An easy whole-food option for any meal.'],
-  ['Edamame / soy chunks', 'Protein-dense choices for bowls and stir-fries.'],
-  ['Seitan', 'Wheat-based protein with a meaty texture.'],
+  ['Seitan', 'Wheat-based protein with a meaty texture. Offers ~75g of protein per 100g.'],
+  ['Soy Chunks / TVP', 'Dehydrated soy protein. Extremely protein-dense (~52g per 100g).'],
+  ['Tofu / Tempeh', 'Firm, versatile soy products. Tempeh offers ~19g/100g; Tofu offers ~15g/100g.'],
+  ['Paneer', 'Indian cottage cheese block. High in casein protein (~18g per 100g).'],
+  ['Greek Yogurt / Cottage Cheese', 'High-protein dairy options. Rich source of slow-digesting protein.'],
+  ['Lentils / Chickpeas / Black Beans', 'Excellent plant protein combined with high fiber and complex carbs.'],
+  ['Edamame', 'Young, green soybeans served in pods. High-protein complete source (~11g/100g).'],
+  ['Hemp Seeds / Pumpkin Seeds', 'Dense protein and healthy fats. Hemp seeds contain ~31g of protein per 100g.'],
+  ['Peanuts / Peanut Butter', 'Calorie-dense whole food option offering ~25g of protein per 100g.'],
+  ['Nutritional Yeast', 'Deactivated yeast with a cheesy flavor. Packed with B-vitamins and ~40g protein/100g.'],
+  ['Quinoa / Amaranth', 'Gluten-free grains that function as complete proteins containing all 9 amino acids.'],
+  ['Mycoprotein', 'Fungi-based whole food protein rich in fiber and amino acids.'],
 ];
 
 const phaseLabels: Record<number, string> = {
@@ -253,33 +252,14 @@ function NutritionGuide() {
   </div>;
 }
 
-function RoadmapGuide() {
-  const { profile } = useAuthStore();
-  const [filter, setFilter] = useState<SkillItem['category'] | 'all'>('all');
-  const [selectedSkill, setSelectedSkill] = useState<SkillItem | null>(null);
-  const { data: masteredSkills = [], isLoading } = useQuery({ queryKey: ['userSkills', profile?.uid], queryFn: () => getUserSkills(profile!.uid), enabled: !!profile });
-  const mastered = useMemo(() => new Set(masteredSkills), [masteredSkills]);
-
-  return <div className="space-y-6">
-    <section className="card p-6 bg-gradient-to-br from-teal/15 via-ink-2 to-ink-2"><div className="flex flex-col md:flex-row md:items-end justify-between gap-5"><div><div className="tag-teal mb-4">HONEST PROGRESSION</div><h2 className="font-display text-3xl mb-2">One clean rep at a time.</h2><p className="text-sm text-bone-dim leading-relaxed max-w-2xl">Mark a skill only when you can repeat it with control. This roadmap is a guide, not a deadline—tendon strength and quality movement take time.</p></div><Link to="/skills" className="btn-secondary inline-flex items-center gap-2 whitespace-nowrap">Open Skill Tracker <ArrowRight size={14} /></Link></div><div className="mt-6 flex items-center gap-4"><div className="flex-1 h-2 bg-line rounded-full overflow-hidden"><div className="h-full bg-teal rounded-full transition-all" style={{ width: `${Math.round((masteredSkills.length / SKILL_ROADMAP.length) * 100)}%` }} /></div><span className="font-mono text-xs text-teal whitespace-nowrap">{masteredSkills.length}/{SKILL_ROADMAP.length} mastered</span></div></section>
-
-    <div className="flex flex-wrap gap-2">{(['all', 'push', 'pull', 'balance', 'core'] as const).map(value => <button key={value} onClick={() => setFilter(value)} className={`px-3 py-2 rounded-md border font-mono text-[11px] uppercase tracking-wider transition-colors ${filter === value ? 'bg-teal text-ink border-teal font-bold' : 'border-line text-bone-dim hover:text-bone hover:border-teal-dim'}`}>{value}</button>)}</div>
-
-    {isLoading ? <div className="card p-12 text-center text-bone-dim">Loading your roadmap...</div> : <div className="space-y-5">{[1, 2, 3, 4].map(phase => { const skills = SKILL_ROADMAP.filter(skill => skill.phase === phase && (filter === 'all' || skill.category === filter)); if (!skills.length) return null; const phaseSkills = SKILL_ROADMAP.filter(skill => skill.phase === phase); const phaseDone = phaseSkills.filter(skill => mastered.has(skill.id)).length; return <section key={phase} className="card p-5"><div className="flex items-start justify-between gap-4 mb-4"><div><div className="font-mono text-[10px] text-amber tracking-widest">PHASE 0{phase}</div><h2 className="font-display text-xl mt-1">{phaseLabels[phase]}</h2></div><span className="font-mono text-xs text-bone-dim">{phaseDone}/{phaseSkills.length}</span></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{skills.map(skill => { const done = mastered.has(skill.id); return <button key={skill.id} onClick={() => setSelectedSkill(skill)} className={`text-left rounded-lg border p-4 transition-all ${done ? 'bg-teal/10 border-teal/60' : 'bg-ink-2 border-line hover:border-teal-dim'}`}><div className="flex items-start gap-3"><span className={`w-7 h-7 rounded-md flex items-center justify-center flex-none ${done ? 'bg-teal text-ink' : 'bg-ink-3 text-bone-dim'}`}>{done ? <Check size={15} /> : <LockKeyhole size={13} />}</span><span className="min-w-0"><span className={`font-semibold text-sm block ${done ? 'text-teal' : ''}`}>{skill.name}</span><span className="text-xs text-bone-dim leading-relaxed block mt-1">{skill.description}</span><span className="font-mono text-[10px] uppercase text-amber block mt-2">Open progression roadmap</span></span></div></button>; })}</div></section>; })}</div>}
-    <SkillRoadmapModal skill={selectedSkill} isOpen={!!selectedSkill} isMastered={selectedSkill ? mastered.has(selectedSkill.id) : false} onClose={() => setSelectedSkill(null)} />
-    <div className="flex items-start gap-3 card p-4 border-amber/30"><CircleHelp size={17} className="text-amber flex-none mt-0.5" /><p className="text-xs text-bone-dim leading-relaxed">A mastery check is your own training note, not a certification. If pain persists, regress the movement and seek help from a qualified coach or clinician.</p></div>
-  </div>;
-}
-
 export function GuidePage() {
   const { section } = useParams<{ section: string }>();
-  const activeSection: GuideSection = section === 'nutrition' || section === 'roadmap' ? section : 'warmup';
+  const activeSection: GuideSection = section === 'nutrition' ? section : 'warmup';
   const meta = pageMeta[activeSection];
 
   return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
     <div className="pb-5 border-b border-line"><div className="font-mono text-amber text-xs tracking-widest mb-1">{meta.eyebrow}</div><h1 className="font-display text-3xl mb-1">{meta.title}</h1><p className="text-bone-dim text-sm max-w-2xl leading-relaxed">{meta.description}</p></div>
     {activeSection === 'warmup' && <WarmupGuide />}
     {activeSection === 'nutrition' && <NutritionGuide />}
-    {activeSection === 'roadmap' && <RoadmapGuide />}
   </motion.div>;
 }
