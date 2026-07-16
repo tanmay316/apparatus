@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, Plus, X, Video, Share2 } from 'lucide-react';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
+import { useUserWeight } from '@/hooks/use-user-weight';
 import { getPlan, getPlanDays } from '@/services/plans';
 import { saveWorkout } from '@/services/workouts';
 import { postActivity } from '@/services/social';
@@ -40,8 +41,9 @@ export function WorkoutSession() {
   const { planId, dayId } = useParams<{ planId: string, dayId: string }>();
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
-  const { showToast } = useUIStore();
+  const { showToast, units } = useUIStore();
   const queryClient = useQueryClient();
+  const userWeight = useUserWeight();
   
   const store = useWorkoutStore();
 
@@ -130,14 +132,49 @@ export function WorkoutSession() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const completedWorkoutForDay = todayWorkouts.find((w: any) => w.dayId === dayId);
+  const historicalLogs = (completedWorkoutForDay?.exercises || []) as any[];
+  const historicalExercises = historicalLogs.map(historicalLogToExercise);
+  const planExercises = [...(currentDay?.warmup || []), ...(currentDay?.skillWork || []), ...(currentDay?.strength || []), ...(currentDay?.cooldown || [])];
+  const missingHistoricalExercises = historicalExercises.filter(exercise => !planExercises.some(item => item.name === exercise.name));
+  const hasPlanExercises = planExercises.length > 0;
+  const displayWarmup = currentDay?.warmup || [];
+  const displaySkillWork = currentDay?.skillWork || [];
+  const displayCooldown = currentDay?.cooldown || [];
+  const displayStrength = hasPlanExercises ? [...(currentDay?.strength || []), ...missingHistoricalExercises] : historicalExercises;
+  const displayExercises = [...displayWarmup, ...displaySkillWork, ...displayStrength, ...displayCooldown];
+  const activeLogs = store.isActive ? Object.values(store.logs) : historicalLogs;
+  const activeExercises = store.isActive
+    ? [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown]
+    : displayExercises;
+  const estimatedCalories = calculateWorkoutCalories(
+    activeExercises,
+    activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)),
+    userWeight,
+    Math.max(1, Math.round(elapsedSec / 60)),
+  );
+  const displayCalories = activeLogs.length > 0
+    ? estimatedCalories
+    : Number(completedWorkoutForDay?.calories || 0);
+  const externalVolume = calculateWorkoutVolume(activeExercises, activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)), userWeight || 70);
+  const bodyweightReps = calculateBodyweightReps(activeLogs);
+
+  const displayWeight = userWeight ? (units === 'imperial' ? Math.round(userWeight * 2.20462) : userWeight) : null;
+  const displayWeightUnit = units === 'imperial' ? 'lb' : 'kg';
+  const bwLabel = displayWeight ? 'reps @ BW' : 'BW reps';
+
+  const volumeDisplay = externalVolume > 0
+    ? `${externalVolume.toLocaleString()} kg·reps${bodyweightReps ? ` · ${bodyweightReps} ${bwLabel}` : ''}`
+    : bodyweightReps > 0 ? `${bodyweightReps} ${bwLabel}` : '0 kg·reps';
+
   const handleFinish = async () => {
     if (!user || !store.isActive) return;
     
     const exLogs = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed));
     const allExercises = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown];
-    const totalVol = calculateWorkoutVolume(allExercises, exLogs, profile?.weight || 70);
+    const totalVol = calculateWorkoutVolume(allExercises, exLogs, userWeight || 70);
     const finalDurationMin = Math.max(1, Math.round(elapsedSec / 60));
-    const calories = calculateWorkoutCalories(allExercises, exLogs, profile?.weight, finalDurationMin);
+    const calories = displayCalories;
 
     try {
       // Award XP celebration values
@@ -158,6 +195,7 @@ export function WorkoutSession() {
         durationMin: finalDurationMin,
         calories,
         volume: totalVol,
+        bodyweight: userWeight || undefined,
         visibility: privacy,
         notes: '',
         mood: '',
@@ -182,6 +220,7 @@ export function WorkoutSession() {
             durationMin: finalDurationMin,
             volume: totalVol,
             calories,
+            bodyweight: userWeight || null,
             exercises: exLogs.map(e => e.name),
             // Preserve completion state so shared anatomy reflects this
             // workout's actual completed sets, not the planned exercises.
@@ -217,7 +256,11 @@ export function WorkoutSession() {
         totalXp: 42
       });
 
-      // Prepare share data for the share card
+      // Prepare share data for the share card - filter out warmup and cooldown exercises
+      const warmupNames = new Set((store.warmup || []).map(e => e.name.toLowerCase()));
+      const cooldownNames = new Set((store.cooldown || []).map(e => e.name.toLowerCase()));
+      const filteredShareExLogs = exLogs.filter(e => !warmupNames.has(e.name.toLowerCase()) && !cooldownNames.has(e.name.toLowerCase()));
+
       setShareData({
         dayTitle: store.dayTitle,
         planTitle: plan!.title,
@@ -225,9 +268,9 @@ export function WorkoutSession() {
         durationMin: finalDurationMin,
         volume: totalVol,
         calories,
-        exerciseNames: exLogs.map(e => e.name),
-        exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets })),
-        bodyweight: profile?.weight || 70,
+        exerciseNames: filteredShareExLogs.map(e => e.name),
+        exerciseLogs: filteredShareExLogs.map(e => ({ name: e.name, sets: e.sets })),
+        bodyweight: userWeight || undefined,
       });
       // End and clear the persisted session immediately. The celebration and
       // share dialogs use the snapshots above and must not keep the stopwatch alive.
@@ -257,35 +300,7 @@ export function WorkoutSession() {
     );
   }
 
-  const completedWorkoutForDay = todayWorkouts.find((w: any) => w.dayId === dayId);
-  const historicalLogs = (completedWorkoutForDay?.exercises || []) as any[];
-  const historicalExercises = historicalLogs.map(historicalLogToExercise);
-  const planExercises = [...(currentDay.warmup || []), ...(currentDay.skillWork || []), ...(currentDay.strength || []), ...(currentDay.cooldown || [])];
-  const missingHistoricalExercises = historicalExercises.filter(exercise => !planExercises.some(item => item.name === exercise.name));
-  const hasPlanExercises = planExercises.length > 0;
-  const displayWarmup = currentDay.warmup || [];
-  const displaySkillWork = currentDay.skillWork || [];
-  const displayCooldown = currentDay.cooldown || [];
-  const displayStrength = hasPlanExercises ? [...(currentDay.strength || []), ...missingHistoricalExercises] : historicalExercises;
-  const displayExercises = [...displayWarmup, ...displaySkillWork, ...displayStrength, ...displayCooldown];
-  const activeLogs = store.isActive ? Object.values(store.logs) : historicalLogs;
-  const activeExercises = store.isActive
-    ? [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown]
-    : displayExercises;
-  const estimatedCalories = calculateWorkoutCalories(
-    activeExercises,
-    activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)),
-    profile?.weight,
-    Math.max(1, Math.round(elapsedSec / 60)),
-  );
-  const displayCalories = activeLogs.length > 0
-    ? estimatedCalories
-    : Number(completedWorkoutForDay?.calories || 0);
-  const externalVolume = calculateWorkoutVolume(activeExercises, activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)), profile?.weight || 70);
-  const bodyweightReps = calculateBodyweightReps(activeLogs);
-  const volumeDisplay = externalVolume > 0
-    ? `${externalVolume.toLocaleString()} kg·reps${bodyweightReps ? ` · ${bodyweightReps} BW reps` : ''}`
-    : bodyweightReps > 0 ? `${bodyweightReps} BW reps` : '0 kg·reps';
+
 
   const exMode = (setsStr: string) => {
     if (!setsStr) return 'freeform';

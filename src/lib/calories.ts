@@ -52,8 +52,13 @@ export function caloriesForExercise(exercise: Exercise | ExerciseLog, log: Exerc
   return activeMinutes * (getExerciseMet(exercise) * 3.5 * bodyWeightKg) / 200;
 }
 
-export function calculateWorkoutCalories(exercises: Exercise[], logs: ExerciseLog[], bodyWeightKg?: number | null, durationMin?: number): number {
-  const byName = new Map(exercises.map(exercise => [exercise.name, exercise]));
+export function calculateWorkoutCalories(
+  exercises: Exercise[] | null | undefined,
+  logs: ExerciseLog[],
+  bodyWeightKg?: number | null,
+  durationMin?: number
+): number {
+  const byName = new Map((exercises || []).map(exercise => [exercise.name, exercise]));
   const completedLogs = logs.filter(log => log.sets.some(isLoggedSet));
   if (completedLogs.length === 0) return 0;
 
@@ -62,7 +67,10 @@ export function calculateWorkoutCalories(exercises: Exercise[], logs: ExerciseLo
     const exercise = byName.get(log.name) || ({ name: log.name } as Exercise);
     return sum + getExerciseMet(exercise) * log.sets.filter(isLoggedSet).length;
   }, 0) / Math.max(1, totalSets);
-  const estimatedDuration = completedLogs.reduce((sum, log) => sum + caloriesForExercise(byName.get(log.name) || ({ name: log.name } as Exercise), log, bodyWeightKg || 70), 0);
+  const estimatedDuration = completedLogs.reduce((sum, log) => {
+    const exercise = byName.get(log.name) || ({ name: log.name } as Exercise);
+    return sum + caloriesForExercise(exercise, log, bodyWeightKg || 70);
+  }, 0);
   const minutes = durationMin && durationMin > 0 ? durationMin : Math.max(1, estimatedDuration / ((weightedMet * 3.5 * (bodyWeightKg || 70)) / 200));
   return Math.max(0, Math.round(minutes * (weightedMet * 3.5 * (bodyWeightKg || 70)) / 200));
 }

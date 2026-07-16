@@ -10,13 +10,15 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
+import { useUserWeight } from '@/hooks/use-user-weight';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, getFollowers, getFollowing, getUsersByUids } from '@/services/social';
 import type { UserProfile, UserStats } from '@/types';
 import { createReport } from '@/services/admin';
 import { getPublicWorkoutsForUser, getUserWorkouts } from '@/services/workouts';
-import { clonePlan, getPublicPlansForUser } from '@/services/plans';
+import { clonePlan, getPublicPlansForUser, getPlanDays } from '@/services/plans';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { calculateBodyweightReps, calculateShareVolume } from '@/lib/muscle-map';
+import { calculateWorkoutCalories } from '@/lib/calories';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -28,12 +30,13 @@ const WORKOUT_TYPES = ['', 'Calisthenics', 'Gym/Weights', 'Bodyweight', 'Mixed',
 
 export function ProfilePage() {
   const { username } = useParams<{ username: string }>();
-  const { profile: myProfile, stats: myStats, updateProfile } = useAuthStore();
-  const { showToast } = useUIStore();
+  const { user: currentUser, profile: myProfile, stats: myStats, updateProfile } = useAuthStore();
+  const { showToast, units } = useUIStore();
 
   const [viewProfile, setViewProfile] = useState<UserProfile | null>(null);
   const [viewStats, setViewStats] = useState<UserStats | null>(null);
   const [isOwnProfile, setIsOwnProfile] = useState(false);
+  const latestWeight = useUserWeight(isOwnProfile ? currentUser?.uid : undefined, viewProfile?.weight || undefined);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState<Partial<UserProfile>>({});
   const [loading, setLoading] = useState(true);
@@ -237,15 +240,27 @@ export function ProfilePage() {
       </motion.div>
 
       {/* Stats strip */}
-      <motion.div variants={item} className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-5">
-        <div className="stat-pill text-center">
-          <div className="text-xl font-bold font-mono">{stats?.totalWorkouts || 0}</div>
-          <div className="font-mono text-[10px] text-bone-dim tracking-wider">WORKOUTS</div>
-        </div>
-        <div className="stat-pill text-center">
-          <div className="text-xl font-bold font-mono">{(stats?.totalCalories || 0).toLocaleString()}</div>
-          <div className="font-mono text-[10px] text-bone-dim tracking-wider">CALORIES</div>
-        </div>
+      {(() => {
+        let displayTotalCalories = stats?.totalCalories || 0;
+        publicWorkouts.forEach((workout: any) => {
+          const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
+          if (rawExLogs.length > 0) {
+            const dynamicCals = calculateWorkoutCalories(null, rawExLogs, workout.bodyweight || viewProfile?.weight || 70, workout.durationMin);
+            const savedCals = workout.calories || 0;
+            displayTotalCalories = displayTotalCalories - savedCals + dynamicCals;
+          }
+        });
+        
+        return (
+          <motion.div variants={item} className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-5">
+            <div className="stat-pill text-center">
+              <div className="text-xl font-bold font-mono">{stats?.totalWorkouts || 0}</div>
+              <div className="font-mono text-[10px] text-bone-dim tracking-wider">WORKOUTS</div>
+            </div>
+            <div className="stat-pill text-center">
+              <div className="text-xl font-bold font-mono">{displayTotalCalories.toLocaleString()}</div>
+              <div className="font-mono text-[10px] text-bone-dim tracking-wider">CALORIES</div>
+            </div>
         <div className="stat-pill text-center">
           <div className="text-xl font-bold font-mono">{Math.round((stats?.totalDurationMin || 0) / 60)}</div>
           <div className="font-mono text-[10px] text-bone-dim tracking-wider">HOURS</div>
@@ -255,7 +270,9 @@ export function ProfilePage() {
           <div className="font-mono text-[10px] text-bone-dim tracking-wider">STREAK</div>
         </div>
         {viewProfile && <FollowCountDisplay uid={viewProfile.uid} />}
-      </motion.div>
+          </motion.div>
+        );
+      })()}
 
       {/* Details (editing mode) */}
       {editing && (
@@ -379,7 +396,13 @@ export function ProfilePage() {
             </div>
             <div className="stat-pill">
               <div className="font-mono text-lg">
-                {publicWorkouts.reduce((sum, workout) => sum + (workout.calories || 0), 0).toLocaleString()}
+                {publicWorkouts.reduce((sum, workout) => {
+                  const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
+                  const c = rawExLogs.length > 0
+                    ? calculateWorkoutCalories(null, rawExLogs, workout.bodyweight || viewProfile?.weight || 70, workout.durationMin)
+                    : workout.calories || 0;
+                  return sum + c;
+                }, 0).toLocaleString()}
               </div>
               <div className="font-mono text-[10px] text-bone-dim">CALORIES</div>
             </div>
@@ -433,19 +456,41 @@ export function ProfilePage() {
                     <div className="flex items-center gap-3 text-xs text-bone-dim font-mono">
                       <button
                         type="button"
-                        onClick={(event) => {
+                        onClick={async (event) => {
                           event.preventDefault();
                           event.stopPropagation();
+                          
+                          const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
+                          let filteredExLogs = [...rawExLogs];
+                          if (workout.planId) {
+                            try {
+                              const planDays = await getPlanDays(workout.planId);
+                              const dayPlan = planDays.find((d: any) => d.id === workout.dayId);
+                              if (dayPlan) {
+                                const warmupNames = new Set((dayPlan.warmup || []).map((e: any) => e.name.toLowerCase()));
+                                const cooldownNames = new Set((dayPlan.cooldown || []).map((e: any) => e.name.toLowerCase()));
+                                filteredExLogs = filteredExLogs.filter((e: any) => !warmupNames.has(e.name.toLowerCase()) && !cooldownNames.has(e.name.toLowerCase()));
+                              }
+                            } catch (e) {
+                              console.error('Failed to load plan days for filtering warmup/cooldown:', e);
+                            }
+                          }
+
+                          const workoutWeight = workout.bodyweight || latestWeight;
+                          const calculatedCalories = rawExLogs.length > 0
+                            ? calculateWorkoutCalories(null, rawExLogs, workoutWeight || 70, workout.durationMin)
+                            : workout.calories || 0;
+
                           setProfileShareData({
                             dayTitle: workout.dayTitle || 'Workout',
                             planTitle: workout.planTitle || 'Personal session',
                             date: workout.date,
                             durationMin: workout.durationMin || 0,
                             volume: workout.volume || 0,
-                            calories: workout.calories || 0,
-                            exerciseNames: workout.exercises?.map((ex: any) => ex.name) || [],
-                            exerciseLogs: workout.exercises?.map((ex: any) => ({ name: ex.name, sets: ex.sets || [] })) || [],
-                            bodyweight: viewProfile.weight || 70,
+                            calories: calculatedCalories,
+                            exerciseNames: filteredExLogs.map((ex: any) => ex.name),
+                            exerciseLogs: filteredExLogs.map((ex: any) => ({ name: ex.name, sets: ex.sets || [] })),
+                            bodyweight: workoutWeight || undefined,
                           });
                         }}
                         className="w-7 h-7 rounded-full bg-ink flex items-center justify-center border border-line/80 text-bone-dim hover:text-amber hover:border-amber/40 transition-colors"
@@ -457,8 +502,34 @@ export function ProfilePage() {
                   </div>
                   <div className="relative mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs text-bone-dim">
                     <span className="rounded-xl border border-line/50 bg-ink/50 px-3 py-2"><b className="block text-bone">{workout.durationMin || 0}</b>min</span>
-                    <span className="rounded-xl border border-line/50 bg-ink/50 px-3 py-2"><b className="block text-bone">{workout.calories || 0}</b>kcal</span>
-                    <span className="rounded-xl border border-line/50 bg-ink/50 px-3 py-2"><b className="block text-bone">{calculateShareVolume(workout.exercises || [], viewProfile.weight || 70) > 0 ? calculateShareVolume(workout.exercises || [], viewProfile.weight || 70).toLocaleString() : calculateBodyweightReps(workout.exercises || []) || '0'}</b>{calculateShareVolume(workout.exercises || [], viewProfile.weight || 70) > 0 ? 'kg·reps' : 'BW reps'}</span>
+                    {(() => {
+                      const workoutWeight = workout.bodyweight || latestWeight;
+                      const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
+                      const calculatedCalories = rawExLogs.length > 0
+                        ? calculateWorkoutCalories(null, rawExLogs, workoutWeight || 70, workout.durationMin)
+                        : workout.calories || 0;
+                      return (
+                        <span className="rounded-xl border border-line/50 bg-ink/50 px-3 py-2">
+                          <b className="block text-bone">{calculatedCalories}</b>kcal
+                        </span>
+                      );
+                    })()}
+                    {(() => {
+                      const workoutWeight = workout.bodyweight || latestWeight;
+                      const displayWeight = workoutWeight ? (units === 'imperial' ? Math.round(workoutWeight * 2.20462) : workoutWeight) : null;
+                      const displayWeightUnit = units === 'imperial' ? 'lb' : 'kg';
+                      const repsLabel = displayWeight ? 'reps @ BW' : 'BW reps';
+                      const shareVolume = calculateShareVolume(workout.exercises || [], workoutWeight || 70);
+                      const hasVolume = shareVolume > 0;
+                      return (
+                        <span className="rounded-xl border border-line/50 bg-ink/50 px-3 py-2">
+                          <b className="block text-bone">
+                            {hasVolume ? shareVolume.toLocaleString() : (calculateBodyweightReps(workout.exercises || []) || '0')}
+                          </b>
+                          {hasVolume ? 'kg·reps' : repsLabel}
+                        </span>
+                      );
+                    })()}
                     <span className="rounded-xl border border-line/50 bg-ink/50 px-3 py-2"><b className="block text-bone">{workout.exercises?.length || 0}</b>exercises</span>
                   </div>
                   {workout.exercises?.length > 0 && (

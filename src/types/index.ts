@@ -121,6 +121,7 @@ export interface Workout {
   durationMin: number;
   calories: number;
   volume: number;
+  bodyweight?: number;
   visibility: 'public' | 'followers' | 'private';
   notes: string;
   mood: string;

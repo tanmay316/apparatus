@@ -40,9 +40,9 @@
 
 @layer components {
   .brand-wordmark {
-    font-family: 'Bodoni Moda', Georgia, serif;
-    font-weight: 700;
-    letter-spacing: 0.1em;
+    font-family: 'Suez One', serif;
+    font-weight: 400;
+    letter-spacing: 0.05em;
     background: linear-gradient(110deg, #f4f0e6 18%, #f2b448 55%, #f4f0e6 88%);
     -webkit-background-clip: text;
     background-clip: text;

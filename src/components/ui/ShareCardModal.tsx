@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Share2, Check, Image as ImageIcon, List } from 'lucide-react';
+import { useUIStore } from '@/stores/ui-store';
 import { getActiveMuscles, getActiveMusclesFromLogs, calculateShareVolume, calculateBodyweightReps, calculateTotalSets } from '@/lib/muscle-map';
+import { calculateWorkoutCalories } from '@/lib/calories';
 import { drawAnatomyOnCanvas, ACTIVE_ORANGE } from '@/components/ui/AnatomySvg';
 import type { MuscleRegion } from '@/lib/muscle-map';
 
@@ -40,9 +42,11 @@ function formatVolume(vol: number): string {
   return `${vol}`;
 }
 
-function formatVolumeStat(vol: number, bodyweightReps: number): string {
+function formatVolumeStat(vol: number, bodyweightReps: number, bodyweight?: number, units?: 'metric' | 'imperial'): string {
   if (vol > 0) return `${formatVolume(vol)} kg`;
-  if (bodyweightReps > 0) return `${bodyweightReps} BW reps`;
+  if (bodyweightReps > 0) {
+    return `${bodyweightReps} reps @ BW`;
+  }
   return 'Bodyweight';
 }
 
@@ -54,7 +58,8 @@ function drawAnatomyCard(
   transparent: boolean,
   volume: number,
   totalSets: number,
-  highlightColor: HighlightColor
+  highlightColor: HighlightColor,
+  units?: 'metric' | 'imperial'
 ) {
   const W = 1080;
   const H = 1920;
@@ -79,7 +84,7 @@ function drawAnatomyCard(
   // ─── Metrics Row ─── (Time | Volume | Sets)
   const stats = [
     { label: 'Time', value: formatDuration(data.durationMin) },
-    { label: 'Volume', value: formatVolumeStat(volume, calculateBodyweightReps(data.exerciseLogs || [])) },
+    { label: 'Volume', value: formatVolumeStat(volume, calculateBodyweightReps(data.exerciseLogs || []), data.bodyweight, units) },
     { label: 'Sets', value: `${totalSets}` },
   ];
 
@@ -95,7 +100,16 @@ function drawAnatomyCard(
     ctx.fillText(stat.label, sx, cursorY);
 
     // Value
-    ctx.font = '700 68px Oswald, sans-serif';
+    const maxValWidth = colW - 20;
+    let fontSize = 68;
+    ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
+    let textWidth = ctx.measureText(stat.value).width;
+    while (textWidth > maxValWidth && fontSize > 24) {
+      fontSize -= 2;
+      ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
+      textWidth = ctx.measureText(stat.value).width;
+    }
+
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(stat.value, sx, cursorY + 66);
   });
@@ -172,7 +186,7 @@ function drawCardHeader(ctx: CanvasRenderingContext2D, W: number, cursorY: numbe
   ctx.textAlign = 'left';
   // Futuristic geometric monospace look with custom letter-spacing
   ctx.letterSpacing = '8px';
-  ctx.font = '700 48px "Bodoni Moda", Georgia, serif';
+  ctx.font = '400 48px "Suez One", serif';
   ctx.fillStyle = '#FFFFFF';
   ctx.fillText('APPARATUS', 80, cursorY);
   ctx.restore();
@@ -254,7 +268,9 @@ function drawExercisesCard(
   transparent: boolean,
   volume: number,
   totalSets: number,
-  highlightColor: HighlightColor
+  highlightColor: HighlightColor,
+  units?: 'metric' | 'imperial',
+  calories?: number
 ) {
   const W = 1080;
   const H = 1920;
@@ -299,20 +315,29 @@ function drawExercisesCard(
   // Metrics (4 Columns)
   const stats = [
     { label: 'TIME', value: formatDuration(data.durationMin) },
-    { label: 'VOLUME', value: formatVolumeStat(volume, calculateBodyweightReps(data.exerciseLogs || [])) },
+    { label: 'VOLUME', value: formatVolumeStat(volume, calculateBodyweightReps(data.exerciseLogs || []), data.bodyweight, units) },
     { label: 'SETS', value: `${totalSets}` },
-    { label: 'KCAL', value: `${data.calories}` },
+    { label: 'KCAL', value: `${calories !== undefined ? calories : data.calories}` },
   ];
 
-  const colW = (W - 160) / 4;
+  const colPositions = [80, 250, 620, 820];
   stats.forEach((stat, i) => {
-    const sx = 80 + i * colW;
+    const sx = colPositions[i];
     ctx.font = '400 22px "JetBrains Mono", monospace';
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.textAlign = 'left';
     ctx.fillText(stat.label, sx, cursorY);
 
-    ctx.font = '700 52px Oswald, sans-serif';
+    const maxValWidth = (colPositions[i + 1] !== undefined ? colPositions[i + 1] : W - 80) - sx - 20;
+    let fontSize = 52;
+    ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
+    let textWidth = ctx.measureText(stat.value).width;
+    while (textWidth > maxValWidth && fontSize > 20) {
+      fontSize -= 2;
+      ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
+      textWidth = ctx.measureText(stat.value).width;
+    }
+
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(stat.value, sx, cursorY + 52);
   });
@@ -395,7 +420,9 @@ function drawCombinedCard(
   transparent: boolean,
   volume: number,
   totalSets: number,
-  highlightColor: HighlightColor
+  highlightColor: HighlightColor,
+  units?: 'metric' | 'imperial',
+  calories?: number
 ) {
   const W = 1080;
   const H = 1920;
@@ -441,21 +468,30 @@ function drawCombinedCard(
   // ─── Metrics Grid (4 columns) ───
   const stats = [
     { label: 'TIME', value: formatDuration(data.durationMin) },
-    { label: 'VOLUME', value: formatVolumeStat(volume, calculateBodyweightReps(data.exerciseLogs || [])) },
+    { label: 'VOLUME', value: formatVolumeStat(volume, calculateBodyweightReps(data.exerciseLogs || []), data.bodyweight, units) },
     { label: 'SETS', value: `${totalSets}` },
-    { label: 'KCAL', value: `${data.calories}` },
+    { label: 'KCAL', value: `${calories !== undefined ? calories : data.calories}` },
   ];
 
-  const colW = (W - 160) / 4;
+  const colPositions = [80, 250, 620, 820];
   stats.forEach((stat, i) => {
-    const sx = 80 + i * colW;
+    const sx = colPositions[i];
     ctx.textAlign = 'left';
 
     ctx.font = '400 20px "JetBrains Mono", monospace';
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.fillText(stat.label, sx, cursorY);
 
-    ctx.font = '700 48px Oswald, sans-serif';
+    const maxValWidth = (colPositions[i + 1] !== undefined ? colPositions[i + 1] : W - 80) - sx - 20;
+    let fontSize = 48;
+    ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
+    let textWidth = ctx.measureText(stat.value).width;
+    while (textWidth > maxValWidth && fontSize > 20) {
+      fontSize -= 2;
+      ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
+      textWidth = ctx.measureText(stat.value).width;
+    }
+
     ctx.fillStyle = '#FFFFFF';
     ctx.fillText(stat.value, sx, cursorY + 48);
   });
@@ -561,6 +597,7 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, maxWid
 // ─── Component ───────────────────────────────────────────────
 export function ShareCardModal({ data, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { units } = useUIStore();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -584,6 +621,11 @@ export function ShareCardModal({ data, onClose }: Props) {
     volume = data.volume;
   }
 
+  // Recalculate calories dynamically using MET formula
+  const calculatedCalories = data.exerciseLogs !== undefined && data.exerciseLogs.length > 0
+    ? calculateWorkoutCalories(null, data.exerciseLogs as any, data.bodyweight || 70, data.durationMin)
+    : data.calories || 0;
+
   // Robust Sets calculation with fallback
   let totalSets = 0;
   if (data.exerciseLogs !== undefined) {
@@ -603,14 +645,14 @@ export function ShareCardModal({ data, onClose }: Props) {
     if (!canvasRef.current) return;
 
     if (variant === 'anatomy') {
-      drawAnatomyCard(canvasRef.current, data, activeMuscles, transparent, volume, totalSets, selectedColor);
+      drawAnatomyCard(canvasRef.current, data, activeMuscles, transparent, volume, totalSets, selectedColor, units);
     } else if (variant === 'exercises') {
-      drawExercisesCard(canvasRef.current, data, transparent, volume, totalSets, selectedColor);
+      drawExercisesCard(canvasRef.current, data, transparent, volume, totalSets, selectedColor, units, calculatedCalories);
     } else {
-      drawCombinedCard(canvasRef.current, data, activeMuscles, transparent, volume, totalSets, selectedColor);
+      drawCombinedCard(canvasRef.current, data, activeMuscles, transparent, volume, totalSets, selectedColor, units, calculatedCalories);
     }
     setPreviewUrl(canvasRef.current.toDataURL('image/png'));
-  }, [data, variant, transparent, volume, totalSets, selectedColor]);
+  }, [data, variant, transparent, volume, totalSets, selectedColor, units, calculatedCalories]);
 
   const getBlob = (): Promise<Blob> => {
     return new Promise((resolve, reject) => {
@@ -792,7 +834,7 @@ export function ShareCardModal({ data, onClose }: Props) {
               {colorDropdownOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setColorDropdownOpen(false)} />
-                  <div className="absolute left-0 right-0 bottom-full mb-1.5 z-50 bg-ink-2 border border-line/30 rounded-xl shadow-2xl max-h-56 overflow-y-auto py-1 backdrop-blur-md">
+                  <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-ink-2 border border-line/30 rounded-xl shadow-2xl max-h-56 overflow-y-auto py-1 backdrop-blur-md">
                     {HIGHLIGHT_COLORS.map((color) => (
                       <button
                         key={color.name}

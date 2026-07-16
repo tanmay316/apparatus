@@ -365,7 +365,7 @@ export function drawAnatomyOnCanvas(
   for (const muscle of muscles) {
     if (activeMuscles.has(muscle.id)) {
       ctx.shadowColor = activeGlow;
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = 0;
       ctx.fillStyle = activeColor;
 
       for (const str of muscle.paths) {

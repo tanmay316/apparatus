@@ -11,9 +11,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
+import { useUserWeight } from '@/hooks/use-user-weight';
 import { getPlan, getPlanDays } from '@/services/plans';
 import { getWorkoutsByDateRange } from '@/services/workouts';
 import { getFollowing, getFeed } from '@/services/social';
+import { calculateWorkoutCalories } from '@/lib/calories';
 
 const QUOTES = [
   "Nobody sees the reps you did alone — your body will.",
@@ -59,13 +61,13 @@ function localDateKey(date: Date) {
 
 export function Dashboard() {
   const { profile, stats } = useAuthStore();
+  const userWeight = useUserWeight();
 
   if (!profile) return null;
 
   const xp = stats?.xp || 0;
   const streak = stats?.currentStreak || 0;
   const totalWorkouts = stats?.totalWorkouts || 0;
-  const totalCalories = stats?.totalCalories || 0;
   const totalHours = Math.round((stats?.totalDurationMin || 0) / 60);
 
   const { data: activePlan, isLoading: planLoading } = useQuery({
@@ -99,6 +101,16 @@ export function Dashboard() {
       return getWorkoutsByDateRange(profile.uid, startDate, endDate);
     },
     enabled: !!profile.uid,
+  });
+
+  let totalCalories = stats?.totalCalories || 0;
+  recentWorkouts.forEach((workout: any) => {
+    const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
+    if (rawExLogs.length > 0) {
+      const dynamicCals = calculateWorkoutCalories(null, rawExLogs, workout.bodyweight || userWeight || 70, workout.durationMin);
+      const savedCals = workout.calories || 0;
+      totalCalories = totalCalories - savedCals + dynamicCals;
+    }
   });
 
   const { data: following = [] } = useQuery({
@@ -281,16 +293,27 @@ export function Dashboard() {
                           e.preventDefault();
                           e.stopPropagation();
                           const todayWorkout = todayWorkouts.find((w: any) => w.dayId === day.id) as any;
+                          const dayPlan = activeDays.find((d: any) => d.id === day.id);
+                          const warmupNames = new Set((dayPlan?.warmup || []).map((e: any) => e.name.toLowerCase()));
+                          const cooldownNames = new Set((dayPlan?.cooldown || []).map((e: any) => e.name.toLowerCase()));
+                          const rawExLogs = (todayWorkout?.exercises || todayWorkout?.details?.exerciseLogs || []) as any[];
+                          const filteredExLogs = rawExLogs.filter(e => !warmupNames.has(e.name.toLowerCase()) && !cooldownNames.has(e.name.toLowerCase()));
+
+                          const workoutWeight = todayWorkout?.bodyweight || userWeight;
+                          const calculatedCalories = rawExLogs.length > 0
+                            ? calculateWorkoutCalories(null, rawExLogs, workoutWeight || 70, todayWorkout?.durationMin)
+                            : todayWorkout?.calories || 0;
+
                           setDashboardShareData({
                             dayTitle: day.title,
                             planTitle: activePlan!.title,
                             date: new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
                             durationMin: todayWorkout?.durationMin || 0,
                             volume: todayWorkout?.volume || 0,
-                            calories: todayWorkout?.calories || 0,
-                            exerciseNames: todayWorkout?.exercises?.map((ex: any) => ex.name) || [],
-                            exerciseLogs: todayWorkout?.exercises?.map((ex: any) => ({ name: ex.name, sets: ex.sets || [] })) || [],
-                            bodyweight: profile.weight || 70,
+                            calories: calculatedCalories,
+                            exerciseNames: filteredExLogs.map((ex: any) => ex.name),
+                            exerciseLogs: filteredExLogs.map((ex: any) => ({ name: ex.name, sets: ex.sets || [] })),
+                            bodyweight: workoutWeight || undefined,
                           });
                         }}
                         className="w-8 h-8 rounded-full bg-teal/10 border border-teal/30 flex items-center justify-center text-teal hover:bg-teal/20 transition-colors"
