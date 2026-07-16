@@ -2,8 +2,10 @@ import type { Plan } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { personalCalisthenicsPlan } from '@/data/calisthenics-personal-plan';
 
-function ex(name: string, sets: string, tempo: string, rest: string, cues: string[], yt = name) {
-  return { name, sets, tempo, rest, cues, yt };
+function ex(name: string, sets: string, tempo: string, rest: string, cues: string[], yt?: string) {
+  const query = yt || name;
+  const ytUrl = query.startsWith('http') ? query : `https://www.youtube.com/results?search_query=${encodeURIComponent(query + ' form tutorial')}`;
+  return { name, sets, tempo, rest, cues, yt: ytUrl };
 }
 
 const now = Timestamp.now();

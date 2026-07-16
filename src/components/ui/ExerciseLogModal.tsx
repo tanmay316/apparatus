@@ -226,7 +226,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
 
               {/* YouTube search button */}
               <a 
-                href={exercise.yt || `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.name + ' correct form calisthenics')}`} 
+                href={exercise.yt?.startsWith('http') ? exercise.yt : `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.yt || (exercise.name + ' correct form'))}`} 
                 target="_blank" 
                 rel="noreferrer"
                 className="btn-secondary py-2 text-xs flex items-center justify-center gap-2 max-w-fit"

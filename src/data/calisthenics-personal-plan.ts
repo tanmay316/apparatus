@@ -1,7 +1,10 @@
 import type { Plan, Exercise, PlanDay } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
-const ex = (name: string, sets: string, tempo = '', rest = '', cues: string[] = []): Exercise => ({ name, sets, tempo, rest, cues, yt: name });
+const ex = (name: string, sets: string, tempo = '', rest = '', cues: string[] = []): Exercise => {
+  const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(name + ' form tutorial')}`;
+  return { name, sets, tempo, rest, cues, yt: ytUrl };
+};
 const warmup = (): Exercise[] => [
   ex('Band shoulder dislocations', '2 x 12'),
   ex('Band pull-aparts', '2 x 12'),

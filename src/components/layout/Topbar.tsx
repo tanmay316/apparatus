@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { getNotifications, markNotificationRead } from '@/services/social';
+import { getNotifications, markNotificationRead, markAllNotificationsRead } from '@/services/social';
 
 export function Topbar() {
   const { profile } = useAuthStore();
@@ -37,6 +37,11 @@ export function Topbar() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications', profile?.uid] }),
   });
 
+  const markAllReadMutation = useMutation({
+    mutationFn: () => markAllNotificationsRead(profile!.uid),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications', profile?.uid] }),
+  });
+
   const today = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'short',
@@ -50,6 +55,14 @@ export function Topbar() {
       navigate(`/profile/${notification.targetId || notification.senderId}`);
     } else if (notification.targetId) {
       navigate(`/feed?activity=${notification.targetId}`);
+    }
+  };
+
+  const handleToggleNotifications = () => {
+    const nextOpen = !notificationsOpen;
+    setNotificationsOpen(nextOpen);
+    if (nextOpen && unreadCount > 0) {
+      markAllReadMutation.mutate();
     }
   };
 
@@ -89,17 +102,17 @@ export function Topbar() {
             <>
               <div className="relative" ref={containerRef}>
                 <button
-                onClick={() => setNotificationsOpen(value => !value)}
-                className="relative text-bone-dim hover:text-bone transition-colors p-1"
-                aria-label="Notifications"
-                aria-expanded={notificationsOpen}
-              >
-                <Bell size={18} />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-amber border border-ink text-[9px] font-bold font-mono text-ink flex items-center justify-center">
-                    {unreadCount}
-                  </span>
-                )}
+                  onClick={handleToggleNotifications}
+                  className="relative text-bone-dim hover:text-bone transition-colors p-1"
+                  aria-label="Notifications"
+                  aria-expanded={notificationsOpen}
+                >
+                  <Bell size={18} />
+                  {unreadCount > 0 && !notificationsOpen && (
+                    <span className="absolute -top-1 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-amber border border-ink text-[9px] font-bold font-mono text-ink flex items-center justify-center">
+                      {unreadCount}
+                    </span>
+                  )}
                 </button>
                  {notificationsOpen && <div className="fixed md:absolute right-4 md:right-0 top-16 md:top-10 w-[calc(100vw-2rem)] md:w-80 card shadow-2xl z-[70] p-3">
                   <div className="flex items-center justify-between px-2 pb-2 border-b border-line/50"><span className="font-display text-sm">Notifications</span><span className="font-mono text-[10px] text-bone-dim">{notifications.filter(item => !item.read).length} unread</span></div>

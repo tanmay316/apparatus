@@ -3,8 +3,9 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
   Flame, TrendingUp, Zap, Calendar, Compass, Plus, Play, ChevronRight,
-  Users, Clock, Heart, MessageCircle
+  Users, Clock, Heart, MessageCircle, Share2
 } from 'lucide-react';
+import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -51,6 +52,10 @@ const item = {
   show: { opacity: 1, y: 0 },
 };
 
+function localDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export function Dashboard() {
   const { profile, stats } = useAuthStore();
 
@@ -77,7 +82,7 @@ export function Dashboard() {
   const { data: todayWorkouts = [] } = useQuery({
     queryKey: ['todayWorkouts', profile.uid],
     queryFn: () => {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = localDateKey(new Date());
       return getWorkoutsByDateRange(profile.uid, todayStr, todayStr);
     },
     enabled: !!profile.uid,
@@ -88,8 +93,9 @@ export function Dashboard() {
     queryFn: () => {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-      const dateStr = sevenDaysAgo.toISOString().split('T')[0];
-      return getWorkoutsByDateRange(profile.uid, dateStr, new Date().toISOString().split('T')[0]);
+      const startDate = localDateKey(sevenDaysAgo);
+      const endDate = localDateKey(new Date());
+      return getWorkoutsByDateRange(profile.uid, startDate, endDate);
     },
     enabled: !!profile.uid,
   });
@@ -118,7 +124,7 @@ export function Dashboard() {
   for (let i = 6; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(now.getDate() - i);
-    const dateKey = d.toISOString().split('T')[0];
+    const dateKey = localDateKey(d);
     const done = recentWorkouts.some((w: any) => w.date === dateKey);
     streakDays.push({
       label: d.toLocaleDateString(undefined, { weekday: 'short' })[0].toUpperCase(),
@@ -126,8 +132,13 @@ export function Dashboard() {
     });
   }
 
+  const completedCount = streakDays.filter(s => s.done).length;
+  const targetDays = activePlan?.daysPerWeek || 6;
+  const progressPct = targetDays ? Math.min(Math.round((completedCount / targetDays) * 100), 100) : 0;
+
   const followersActivity = feed.filter((act: any) => act.userId !== profile.uid).slice(0, 3);
   const [expandedActivity, setExpandedActivity] = useState<Record<string, boolean>>({});
+  const [dashboardShareData, setDashboardShareData] = useState<ShareCardData | null>(null);
 
   return (
     <motion.div variants={container} initial="hidden" animate="show">
@@ -201,7 +212,7 @@ export function Dashboard() {
       <motion.div variants={item} className="mb-8">
         <div className="flex items-center justify-between mb-2">
           <div className="font-mono text-[11px] text-bone-dim tracking-wider uppercase">
-            THIS WEEK — 0 / {activePlan?.daysPerWeek || 6} TRAINING DAYS
+            THIS WEEK — {completedCount} / {targetDays} TRAINING DAYS
           </div>
           {profile.activePlanId && (
             <Link to={`/plans/${profile.activePlanId}`} className="text-[10px] text-teal font-mono hover:underline">
@@ -210,7 +221,7 @@ export function Dashboard() {
           )}
         </div>
         <div className="h-1 w-full bg-ink-2 mb-6 rounded-full overflow-hidden">
-          <div className="h-full bg-teal" style={{ width: '0%' }}></div>
+          <div className="h-full bg-teal transition-all duration-500" style={{ width: `${progressPct}%` }}></div>
         </div>
         
         {!profile.activePlanId ? (
@@ -259,8 +270,34 @@ export function Dashboard() {
                     </div>
                   )}
 
-                  <div className="text-xs font-mono text-amber tracking-wider mt-auto pt-4 uppercase">
-                    {day.type === 'yoga' || day.title.toLowerCase().includes('yoga') ? 'RECOVERY — MOBILITY' : `SKILL — ${day.skill || 'NONE'}`}
+                  <div className="flex items-center justify-between mt-auto pt-4">
+                    <div className="text-xs font-mono text-amber tracking-wider uppercase">
+                      {day.type === 'yoga' || day.title.toLowerCase().includes('yoga') ? 'RECOVERY — MOBILITY' : `SKILL — ${day.skill || 'NONE'}`}
+                    </div>
+                    {wasCompletedToday && (
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const todayWorkout = todayWorkouts.find((w: any) => w.dayId === day.id) as any;
+                          setDashboardShareData({
+                            dayTitle: day.title,
+                            planTitle: activePlan!.title,
+                            date: new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+                            durationMin: todayWorkout?.durationMin || 0,
+                            volume: todayWorkout?.volume || 0,
+                            calories: todayWorkout?.calories || 0,
+                            exerciseNames: todayWorkout?.exercises?.map((ex: any) => ex.name) || [],
+                            exerciseLogs: todayWorkout?.exercises?.map((ex: any) => ({ name: ex.name, sets: ex.sets || [] })) || [],
+                            bodyweight: profile.weight || 70,
+                          });
+                        }}
+                        className="w-8 h-8 rounded-full bg-teal/10 border border-teal/30 flex items-center justify-center text-teal hover:bg-teal/20 transition-colors"
+                        title="Share this workout"
+                      >
+                        <Share2 size={14} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -427,6 +464,13 @@ export function Dashboard() {
           </div>
         )}
       </motion.div>
+
+      {dashboardShareData && (
+        <ShareCardModal
+          data={dashboardShareData}
+          onClose={() => setDashboardShareData(null)}
+        />
+      )}
     </motion.div>
   );
 }

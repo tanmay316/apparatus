@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, increment, limit, orderBy, runTransaction } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, increment, limit, orderBy, runTransaction, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Activity, Comment, Notification as AppNotification } from '@/types';
 
@@ -281,4 +281,17 @@ export async function getNotifications(userId: string): Promise<AppNotification[
 
 export async function markNotificationRead(notificationId: string): Promise<void> {
   await updateDoc(doc(db, 'notifications', notificationId), { read: true });
+}
+
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  const snap = await getDocs(query(
+    collection(db, 'notifications'),
+    where('receiverId', '==', userId),
+    where('read', '==', false)
+  ));
+  const batch = writeBatch(db);
+  snap.docs.forEach(doc => {
+    batch.update(doc.ref, { read: true });
+  });
+  await batch.commit();
 }

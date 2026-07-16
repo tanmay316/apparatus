@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, Plus, X, Video } from 'lucide-react';
+import { ArrowLeft, Clock, Plus, X, Video, Share2 } from 'lucide-react';
+import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { getPlan, getPlanDays } from '@/services/plans';
 import { saveWorkout } from '@/services/workouts';
 import { postActivity } from '@/services/social';
@@ -190,12 +191,26 @@ export function WorkoutSession() {
         ],
         totalXp: 42
       });
+
+      // Prepare share data for the share card
+      setShareData({
+        dayTitle: store.dayTitle,
+        planTitle: plan!.title,
+        date: new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+        durationMin: Math.round(elapsedSec / 60),
+        volume: totalVol,
+        calories,
+        exerciseNames: exLogs.map(e => e.name),
+        exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets })),
+        bodyweight: profile?.weight || 70,
+      });
     } catch (error) {
       showToast('Failed to save workout', 'error');
     }
   };
 
   const [celebrationData, setCelebrationData] = useState<{heading: string, sub: string, xpBreakdown: {label: string, val: number}[], totalXp: number} | null>(null);
+  const [shareData, setShareData] = useState<ShareCardData | null>(null);
 
   if (planLoading || daysLoading) {
     return (
@@ -540,18 +555,38 @@ export function WorkoutSession() {
               </div>
             </div>
 
-            <button 
-              onClick={() => {
-                setCelebrationData(null);
-                store.finishWorkout();
-                navigate('/');
-              }} 
-              className="btn-primary w-full py-3"
-            >
-              Nice – back to it
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={() => {
+                  setCelebrationData(null);
+                  store.finishWorkout();
+                  navigate('/');
+                }} 
+                className="btn-primary py-3"
+              >
+                Nice – back to it
+              </button>
+              <button
+                onClick={() => setCelebrationData(null)}
+                className="flex items-center justify-center gap-2 bg-ink-3 border border-teal/40 text-teal font-display font-bold uppercase tracking-wider py-3 rounded-md text-sm hover:bg-teal/10 active:scale-[0.98] transition-all"
+              >
+                <Share2 size={18} />
+                Share
+              </button>
+            </div>
           </motion.div>
         </div>
+      )}
+      {/* Share Card Modal */}
+      {shareData && !celebrationData && (
+        <ShareCardModal
+          data={shareData}
+          onClose={() => {
+            setShareData(null);
+            store.finishWorkout();
+            navigate('/');
+          }}
+        />
       )}
     </motion.div>
   );

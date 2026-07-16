@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { doc, getDoc } from 'firebase/firestore';
 import {
   MapPin, Calendar as CalendarIcon, Edit3, Save, X,
-  Users as UsersIcon, UserPlus, UserMinus, Flag,
+  Users as UsersIcon, UserPlus, UserMinus, Flag, Share2
 } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -13,8 +13,9 @@ import { useUIStore } from '@/stores/ui-store';
 import { followUser, unfollowUser, isFollowing, getFollowCounts, getFollowers, getFollowing, getUsersByUids } from '@/services/social';
 import type { UserProfile, UserStats } from '@/types';
 import { createReport } from '@/services/admin';
-import { getPublicWorkoutsForUser } from '@/services/workouts';
+import { getPublicWorkoutsForUser, getUserWorkouts } from '@/services/workouts';
 import { clonePlan, getPublicPlansForUser } from '@/services/plans';
+import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -42,6 +43,7 @@ export function ProfilePage() {
   const [publicWorkouts, setPublicWorkouts] = useState<any[]>([]);
   const [publicPlans, setPublicPlans] = useState<any[]>([]);
   const [importingPlan, setImportingPlan] = useState<string | null>(null);
+  const [profileShareData, setProfileShareData] = useState<ShareCardData | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -77,10 +79,16 @@ export function ProfilePage() {
   }, [username, myProfile, myStats]);
 
   useEffect(() => {
-    if (!viewProfile || isOwnProfile) return;
-    Promise.all([getPublicWorkoutsForUser(viewProfile.uid, myProfile?.uid), getPublicPlansForUser(viewProfile.uid)])
-      .then(([workouts, plans]) => { setPublicWorkouts(workouts); setPublicPlans(plans); })
-      .catch(error => console.error('Failed to load public training data', error));
+    if (!viewProfile) return;
+    if (isOwnProfile) {
+      getUserWorkouts(viewProfile.uid, 20)
+        .then((workouts) => setPublicWorkouts(workouts))
+        .catch(error => console.error('Failed to load logged workouts', error));
+    } else {
+      Promise.all([getPublicWorkoutsForUser(viewProfile.uid, myProfile?.uid), getPublicPlansForUser(viewProfile.uid)])
+        .then(([workouts, plans]) => { setPublicWorkouts(workouts); setPublicPlans(plans); })
+        .catch(error => console.error('Failed to load public training data', error));
+    }
   }, [viewProfile, isOwnProfile, myProfile?.uid]);
 
   const importPublicPlan = async (planId: string) => {
@@ -347,18 +355,124 @@ export function ProfilePage() {
         </motion.div>
       )}
 
-      {!isOwnProfile && (
+      {viewProfile && (
         <motion.div variants={item} className="card p-5 mt-5">
-          <div className="flex items-center justify-between gap-3 mb-4"><div><div className="font-mono text-[10px] text-teal tracking-widest">PUBLIC TRAINING</div><h3 className="font-display text-xl mt-1">Progress you can follow</h3></div><UsersIcon size={20} className="text-teal" /></div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            <div className="stat-pill"><div className="font-mono text-lg">{publicWorkouts.length}</div><div className="font-mono text-[10px] text-bone-dim">PUBLIC SESSIONS</div></div>
-            <div className="stat-pill"><div className="font-mono text-lg">{publicWorkouts.reduce((sum, workout) => sum + (workout.calories || 0), 0).toLocaleString()}</div><div className="font-mono text-[10px] text-bone-dim">CALORIES</div></div>
-            <div className="stat-pill"><div className="font-mono text-lg">{publicWorkouts.reduce((sum, workout) => sum + (workout.volume || 0), 0).toLocaleString()}</div><div className="font-mono text-[10px] text-bone-dim">VOLUME</div></div>
-            <div className="stat-pill"><div className="font-mono text-lg">{publicWorkouts.reduce((sum, workout) => sum + (workout.durationMin || 0), 0)}m</div><div className="font-mono text-[10px] text-bone-dim">DURATION</div></div>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <div className="font-mono text-[10px] text-teal tracking-widest uppercase">
+                {isOwnProfile ? 'TRAINING HISTORY' : 'PUBLIC TRAINING'}
+              </div>
+              <h3 className="font-display text-xl mt-1">
+                {isOwnProfile ? 'YOUR LOGGED WORKOUTS' : 'PROGRESS YOU CAN FOLLOW'}
+              </h3>
+            </div>
+            <UsersIcon size={20} className="text-teal" />
           </div>
-          {publicPlans.length > 0 && <div className="mb-5"><h4 className="font-display text-base mb-3">Public plans</h4><div className="space-y-2">{publicPlans.map(plan => <div key={plan.id} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-ink-2 p-3"><div><div className="font-semibold text-sm">{plan.title}</div><div className="text-xs text-bone-dim">{plan.daysPerWeek || 0} days/week · {plan.description || 'Training plan'}</div></div><button className="btn-secondary text-xs" disabled={importingPlan === plan.id} onClick={() => importPublicPlan(plan.id)}>{importingPlan === plan.id ? 'Importing...' : 'Import plan'}</button></div>)}</div></div>}
+          
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            <div className="stat-pill">
+              <div className="font-mono text-lg">{publicWorkouts.length}</div>
+              <div className="font-mono text-[10px] text-bone-dim">
+                {isOwnProfile ? 'TOTAL SESSIONS' : 'PUBLIC SESSIONS'}
+              </div>
+            </div>
+            <div className="stat-pill">
+              <div className="font-mono text-lg">
+                {publicWorkouts.reduce((sum, workout) => sum + (workout.calories || 0), 0).toLocaleString()}
+              </div>
+              <div className="font-mono text-[10px] text-bone-dim">CALORIES</div>
+            </div>
+            <div className="stat-pill">
+              <div className="font-mono text-lg">
+                {publicWorkouts.reduce((sum, workout) => sum + (workout.volume || 0), 0).toLocaleString()}
+              </div>
+              <div className="font-mono text-[10px] text-bone-dim">VOLUME</div>
+            </div>
+            <div className="stat-pill">
+              <div className="font-mono text-lg">
+                {publicWorkouts.reduce((sum, workout) => sum + (workout.durationMin || 0), 0)}m
+              </div>
+              <div className="font-mono text-[10px] text-bone-dim">DURATION</div>
+            </div>
+          </div>
+
+          {!isOwnProfile && publicPlans.length > 0 && (
+            <div className="mb-5">
+              <h4 className="font-display text-base mb-3">Public plans</h4>
+              <div className="space-y-2">
+                {publicPlans.map(plan => (
+                  <div key={plan.id} className="flex items-center justify-between gap-3 rounded-lg border border-line bg-ink-2 p-3">
+                    <div>
+                      <div className="font-semibold text-sm">{plan.title}</div>
+                      <div className="text-xs text-bone-dim">{plan.daysPerWeek || 0} days/week · {plan.description || 'Training plan'}</div>
+                    </div>
+                    <button className="btn-secondary text-xs" disabled={importingPlan === plan.id} onClick={() => importPublicPlan(plan.id)}>
+                      {importingPlan === plan.id ? 'Importing...' : 'Import plan'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <h4 className="font-display text-base mb-3">Recent completed workouts</h4>
-          {publicWorkouts.length === 0 ? <p className="text-sm text-bone-dim">No public workouts shared yet.</p> : <div className="space-y-3">{publicWorkouts.slice(0, 8).map(workout => <div key={workout.id} className="rounded-lg border border-line bg-ink-2 p-4"><div className="flex items-start justify-between gap-3"><div><div className="font-semibold">{workout.dayTitle || 'Workout'}</div><div className="text-xs text-teal mt-1">{workout.planTitle || 'Personal session'}</div></div><div className="text-xs text-bone-dim">{workout.date}</div></div><div className="flex flex-wrap gap-3 mt-3 text-xs text-bone-dim"><span>{workout.durationMin || 0} min</span><span>{workout.calories || 0} kcal</span><span>{workout.volume || 0} volume</span><span>{workout.exercises?.length || 0} exercises</span></div>{workout.exercises?.length > 0 && <div className="mt-3 pt-3 border-t border-line/60 space-y-1">{workout.exercises.map((exercise: any) => <div key={exercise.name} className="text-xs"><span className="text-bone">{exercise.name}</span><span className="text-bone-dim"> · {exercise.sets?.filter((set: any) => set.completed).map((set: any) => `${set.reps || set.seconds || 0}${set.weight ? ` × ${set.weight}kg` : ''}`).join(', ') || 'logged'}</span></div>)}</div>}</div>)}</div>}
+          {publicWorkouts.length === 0 ? (
+            <p className="text-sm text-bone-dim">No workouts logged yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {publicWorkouts.slice(0, 12).map(workout => (
+                <div key={workout.id} className="rounded-lg border border-line bg-ink-2 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold">{workout.dayTitle || 'Workout'}</div>
+                      <div className="text-xs text-teal mt-1">{workout.planTitle || 'Personal session'}</div>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-bone-dim font-mono">
+                      <span>{workout.date}</span>
+                      <button
+                        onClick={() => {
+                          setProfileShareData({
+                            dayTitle: workout.dayTitle || 'Workout',
+                            planTitle: workout.planTitle || 'Personal session',
+                            date: workout.date,
+                            durationMin: workout.durationMin || 0,
+                            volume: workout.volume || 0,
+                            calories: workout.calories || 0,
+                            exerciseNames: workout.exercises?.map((ex: any) => ex.name) || [],
+                            exerciseLogs: workout.exercises?.map((ex: any) => ({ name: ex.name, sets: ex.sets || [] })) || [],
+                            bodyweight: viewProfile.weight || 70,
+                          });
+                        }}
+                        className="w-7 h-7 rounded-full bg-ink flex items-center justify-center border border-line/80 text-bone-dim hover:text-amber hover:border-amber/40 transition-colors"
+                        title="Share workout card"
+                      >
+                        <Share2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3 mt-3 text-xs text-bone-dim">
+                    <span>{workout.durationMin || 0} min</span>
+                    <span>{workout.calories || 0} kcal</span>
+                    <span>{workout.volume || 0} volume</span>
+                    <span>{workout.exercises?.length || 0} exercises</span>
+                  </div>
+                  {workout.exercises?.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-line/60 space-y-1">
+                      {workout.exercises.map((exercise: any) => (
+                        <div key={exercise.name} className="text-xs">
+                          <span className="text-bone">{exercise.name}</span>
+                          <span className="text-bone-dim">
+                            {' '}·{' '}
+                            {exercise.sets?.filter((set: any) => set.completed).map((set: any) => `${set.reps || set.seconds || 0}${set.weight ? ` × ${set.weight}kg` : ''}`).join(', ') || 'logged'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </motion.div>
       )}
 
@@ -370,6 +484,13 @@ export function ProfilePage() {
             <div className="space-y-4"><div><label className="label">Reason</label><select value={reportReason} onChange={event => setReportReason(event.target.value)} className="input-field"><option value="spam">Spam or scam</option><option value="harassment">Harassment</option><option value="unsafe">Unsafe content</option><option value="impersonation">Impersonation</option><option value="other">Other</option></select></div><div><label className="label">Details</label><textarea value={reportDetails} onChange={event => setReportDetails(event.target.value)} className="input-field min-h-24 resize-none" placeholder="What should an admin review?" /></div><button onClick={submitReport} disabled={reporting} className="btn-danger w-full">{reporting ? 'Submitting...' : 'Submit report'}</button></div>
           </div>
         </div>
+      )}
+
+      {profileShareData && (
+        <ShareCardModal
+          data={profileShareData}
+          onClose={() => setProfileShareData(null)}
+        />
       )}
     </motion.div>
   );

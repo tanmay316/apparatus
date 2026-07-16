@@ -155,7 +155,7 @@ export interface Comment {
 
 export interface Notification {
   id?: string;
-  type: 'follow' | 'unfollow' | 'like' | 'comment' | 'activity' | 'achievement';
+  type: 'follow' | 'unfollow' | 'like' | 'comment' | 'activity' | 'achievement' | 'reminder';
   senderId: string;
   senderName: string;
   senderPhoto: string;
@@ -225,4 +225,16 @@ export interface LevelInfo {
   xp: number;
   nextXp: number | null;
   pct: number;
+}
+
+export interface SystemLog {
+  id?: string;
+  userId: string | null;
+  userName: string | null;
+  message: string;
+  stack?: string;
+  context?: string;
+  url: string;
+  userAgent: string;
+  createdAt: any; // Firestore Timestamp
 }

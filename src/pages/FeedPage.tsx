@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Heart, MessageCircle, Send, Clock, TrendingUp, Flame, Users } from 'lucide-react';
+import { Heart, MessageCircle, Send, Clock, TrendingUp, Flame, Users, Share2 } from 'lucide-react';
+import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getActivity, getFeed, getFollowing, getPublicFeed, toggleLike, hasLiked, addComment, getComments } from '@/services/social';
@@ -28,6 +29,7 @@ function ActivityCard({ activity, highlighted = false }: { activity: Activity; h
   const queryClient = useQueryClient();
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [shareData, setShareData] = useState<ShareCardData | null>(null);
   
   const { data: liked = false } = useQuery({
     queryKey: ['liked', activity.id, user?.uid],
@@ -68,6 +70,7 @@ function ActivityCard({ activity, highlighted = false }: { activity: Activity; h
   const profileLink = `/profile/${activity.username || activity.userId}`;
   
   return (
+    <>
     <motion.div id={`activity-${activity.id}`} variants={item} className={`card p-5 transition-all ${highlighted ? 'ring-2 ring-amber shadow-[0_0_24px_rgba(242,180,72,0.18)]' : ''}`}>
       {/* Header */}
       <div className="flex items-start gap-3 mb-4">
@@ -142,6 +145,28 @@ function ActivityCard({ activity, highlighted = false }: { activity: Activity; h
           <MessageCircle size={16} />
           <span>{activity.commentsCount || 0}</span>
         </button>
+        {activity.type === 'workout' && details && (
+          <button
+            onClick={() => {
+              const createdDate = activity.createdAt?.seconds
+                ? new Date(activity.createdAt.seconds * 1000)
+                : new Date();
+              setShareData({
+                dayTitle: details.dayTitle || activity.summary,
+                planTitle: details.planTitle || '',
+                date: createdDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+                durationMin: details.durationMin || 0,
+                volume: details.volume || 0,
+                calories: details.calories || 0,
+                exerciseNames: details.exercises || [],
+              });
+            }}
+            className="flex items-center gap-1.5 text-xs font-mono text-bone-dim hover:text-amber transition-colors ml-auto"
+          >
+            <Share2 size={16} />
+            <span>Share</span>
+          </button>
+        )}
       </div>
       
       {/* Comments section */}
@@ -195,6 +220,15 @@ function ActivityCard({ activity, highlighted = false }: { activity: Activity; h
         )}
       </AnimatePresence>
     </motion.div>
+
+    {/* Share Card Modal for past workouts */}
+    {shareData && (
+      <ShareCardModal
+        data={shareData}
+        onClose={() => setShareData(null)}
+      />
+    )}
+  </>
   );
 }
 

@@ -2,12 +2,14 @@ import { Outlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { ReminderManager } from './ReminderManager';
 
 export function Layout() {
   return (
     <div className="min-h-screen bg-ink">
       <Sidebar />
       <Topbar />
+      <ReminderManager />
 
       <main className="page-wrap pt-5">
         <AnimatePresence mode="wait">

@@ -1,6 +1,6 @@
 import { collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, writeBatch, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { Plan, PlanDay } from '@/types';
+import type { Plan, PlanDay, Exercise } from '@/types';
 
 export async function getUserPlans(uid: string): Promise<Plan[]> {
   const q = query(
@@ -90,13 +90,33 @@ export async function reorderPlanDays(planId: string, dayIds: string[]): Promise
 
 // ─── Plan Days ──────────────────────────────────────────────────
 
+function sanitizeExercise(ex: Exercise): Exercise {
+  let yt = ex.yt || '';
+  if (!yt || (!yt.startsWith('http://') && !yt.startsWith('https://'))) {
+    const queryVal = yt || ex.name;
+    yt = `https://www.youtube.com/results?search_query=${encodeURIComponent(queryVal + ' form tutorial')}`;
+  }
+  return { ...ex, yt };
+}
+
+export function sanitizeDayExercises(day: PlanDay): PlanDay {
+  return {
+    ...day,
+    warmup: (day.warmup || []).map(sanitizeExercise),
+    skillWork: (day.skillWork || []).map(sanitizeExercise),
+    strength: (day.strength || []).map(sanitizeExercise),
+    cooldown: (day.cooldown || []).map(sanitizeExercise),
+  };
+}
+
 /** Add or update a day within a plan */
 export async function savePlanDay(planId: string, day: PlanDay): Promise<string> {
   const dayRef = day.id 
     ? doc(db, `plans/${planId}/days`, day.id)
     : doc(collection(db, `plans/${planId}/days`));
     
-  await setDoc(dayRef, day);
+  const sanitizedDay = sanitizeDayExercises(day);
+  await setDoc(dayRef, sanitizedDay);
   
   // Touch the parent plan
   await updateDoc(doc(db, 'plans', planId), { updatedAt: serverTimestamp() });
@@ -169,7 +189,9 @@ export async function clonePlan(
   // 5. Create new day docs
   for (const dayDoc of daysSnap.docs) {
     const newDayRef = doc(collection(db, `plans/${newPlanRef.id}/days`));
-    batch.set(newDayRef, dayDoc.data());
+    const dayData = dayDoc.data() as PlanDay;
+    const sanitizedDay = sanitizeDayExercises(dayData);
+    batch.set(newDayRef, sanitizedDay);
   }
   
   await batch.commit();
