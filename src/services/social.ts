@@ -11,6 +11,20 @@ async function notify(receiverId: string, notification: Omit<AppNotification, 'i
   });
 }
 
+export async function createSelfNotification(userId: string, message: string, targetId = ''): Promise<void> {
+  await addDoc(collection(db, 'notifications'), {
+    receiverId: userId,
+    senderId: userId,
+    senderName: 'Progress coach',
+    senderPhoto: '',
+    type: 'achievement',
+    message,
+    targetId,
+    read: false,
+    createdAt: serverTimestamp(),
+  });
+}
+
 // ─── Follow System ──────────────────────────────────────────────
 
 export async function followUser(myUid: string, targetUid: string): Promise<void> {

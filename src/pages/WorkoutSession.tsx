@@ -5,9 +5,9 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, Plus, X, Video, Share2 } from 'lucide-react';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { useUserWeight } from '@/hooks/use-user-weight';
-import { getPlan, getPlanDays } from '@/services/plans';
-import { saveWorkout } from '@/services/workouts';
-import { postActivity } from '@/services/social';
+import { getPlan, getPlanDays, savePlanDay } from '@/services/plans';
+import { getUserWorkouts, saveWorkout } from '@/services/workouts';
+import { createSelfNotification, postActivity } from '@/services/social';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
@@ -18,6 +18,7 @@ import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
 import type { Exercise } from '@/types';
 import { calculateWorkoutCalories, calculateWorkoutVolume } from '@/lib/calories';
 import { calculateBodyweightReps } from '@/lib/muscle-map';
+import { compareExerciseProgress } from '@/lib/progressive-overload';
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -61,19 +62,26 @@ export function WorkoutSession() {
     refetchOnWindowFocus: false,
   });
 
+  const todayKey = localDateKey(new Date());
   const { data: todayWorkouts = [], isLoading: todayWorkoutsLoading } = useQuery({
-    queryKey: ['todayWorkouts', user?.uid],
+    queryKey: ['todayWorkouts', user?.uid, todayKey],
     queryFn: async () => {
-      const todayStr = localDateKey(new Date());
       const q = query(
         collection(db, 'workouts'),
         where('userId', '==', user!.uid),
-        where('date', '==', todayStr)
+        where('date', '==', todayKey)
       );
       const snap = await getDocs(q);
       return snap.docs.map(doc => doc.data());
     },
     enabled: !!user,
+  });
+
+  const { data: workoutHistory = [] } = useQuery({
+    queryKey: ['exerciseHistory', user?.uid],
+    queryFn: () => getUserWorkouts(user!.uid, 250),
+    enabled: !!user,
+    staleTime: 30_000,
   });
 
   const currentDay = days.find(d => d.id === dayId);
@@ -177,6 +185,24 @@ export function WorkoutSession() {
     const calories = displayCalories;
 
     try {
+      // Exercises added or edited during a session are part of the user's
+      // plan going forward. The workout document below remains the source of
+      // truth for the actual reps, weights, and completed sets.
+      if (currentDay && store.planId) {
+        try {
+          await savePlanDay(store.planId, {
+            ...currentDay,
+            warmup: store.warmup,
+            skillWork: store.skillWork,
+            strength: store.strength,
+            cooldown: store.cooldown,
+          });
+          queryClient.invalidateQueries({ queryKey: ['planDays', store.planId] });
+        } catch (planError) {
+          console.error('Failed to persist session exercise definitions to plan:', planError);
+        }
+      }
+
       // Award XP celebration values
       const streakBonus = 2; // static for now
       const xpEarned = 100 + Math.round(totalVol / 1000) + Math.round(elapsedSec / 60);
@@ -203,6 +229,15 @@ export function WorkoutSession() {
         likesCount: 0,
         commentsCount: 0
       });
+
+      const savedProgress = (await getUserWorkouts(user.uid, 1))[0]?.progressiveOverload;
+      if (savedProgress) {
+        try {
+          await createSelfNotification(user.uid, savedProgress.message);
+        } catch (notificationError) {
+          console.error('Failed to create progression notification:', notificationError);
+        }
+      }
 
       // Post to activity feed
       try {
@@ -368,6 +403,14 @@ export function WorkoutSession() {
             exercises.map((e, idx) => {
               const log = activeLogs.find(item => item.name === e.name);
               const histLog = completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === e.name);
+              const previousWorkout = workoutHistory.find((workout: any) => workout.dayId === dayId && workout.date !== completedWorkoutForDay?.date && workout.exercises?.some((ex: any) => ex.name === e.name));
+              const previousLog = previousWorkout?.exercises?.find((ex: any) => ex.name === e.name);
+              const comparison = (log || histLog) && previousLog ? compareExerciseProgress((log || histLog) as any, previousLog) : null;
+              const historyLabel = histLog
+                ? `Logged ${histLog.sets?.filter((s: any) => s.completed !== false).length || 0} sets${histLog.sets?.[0]?.weight ? ` @ ${histLog.sets[0].weight} kg` : ''}`
+                : previousLog
+                  ? `Last: ${previousLog.sets?.filter((s: any) => s.completed !== false).length || 0} sets${previousLog.sets?.[0]?.weight ? ` @ ${previousLog.sets[0].weight} kg` : ''}`
+                  : 'No history yet';
               const isDone = wasCompletedToday
                 ? !!(histLog && histLog.sets?.some((s: any) => s.completed))
                 : !!(log && log.sets.some((s: any) => s.completed));
@@ -398,7 +441,9 @@ export function WorkoutSession() {
                       <div className="text-xs text-bone-dim font-mono mt-0.5">
                         {e.sets} {e.tempo ? `· tempo ${e.tempo}` : ''} {e.rest ? `· rest ${e.rest}` : ''}
                       </div>
-                      <div className="text-[10px] text-bone-dim mt-1">No history yet</div>
+                      <div className={`text-[10px] mt-1 ${comparison?.progressed ? 'text-teal' : 'text-bone-dim'}`}>
+                        {comparison?.progressed ? 'Progressive overload detected · ' : ''}{historyLabel}
+                      </div>
                     </div>
                   </div>
                   <div className="text-bone-dim group-hover:text-teal transition-colors">›</div>
@@ -486,7 +531,8 @@ export function WorkoutSession() {
           }
           section={activeExercise.section}
           index={activeExercise.index}
-          historicalLog={wasCompletedToday ? completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === activeExercise.name) : undefined}
+            historicalLog={wasCompletedToday ? completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === activeExercise.name) : undefined}
+            previousLog={workoutHistory.find((workout: any) => workout.dayId === dayId && workout.date !== completedWorkoutForDay?.date && workout.exercises?.some((ex: any) => ex.name === activeExercise.name))?.exercises?.find((ex: any) => ex.name === activeExercise.name)}
         />
       )}
 

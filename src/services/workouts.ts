@@ -1,6 +1,7 @@
 import { collection, doc, setDoc, getDoc, runTransaction, Timestamp, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Workout, UserStats } from '@/types';
+import { summarizeProgressiveOverload } from '@/lib/progressive-overload';
 import { isFollowing } from '@/services/social';
 
 function localDateKey(date: Date) {
@@ -12,6 +13,11 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
   const newWorkoutId = workoutRef.id;
 
   const statsRef = doc(db, 'users', userId, 'stats', 'current');
+  const previousSnapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId), orderBy('startedAt', 'desc'), limit(250)));
+  const previousWorkout = previousSnapshot.docs
+    .map(item => item.data() as Workout)
+    .find(item => item.dayId === workout.dayId && item.date !== workout.date && (item.exercises || []).length > 0) || null;
+  const progressiveOverload = summarizeProgressiveOverload(workout, previousWorkout);
 
   await runTransaction(db, async (transaction) => {
     // 1. Read existing stats
@@ -79,7 +85,7 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
     };
 
     // 4. Write data
-    transaction.set(workoutRef, { ...workout, id: newWorkoutId, finishedAt: Timestamp.now() });
+    transaction.set(workoutRef, { ...workout, progressiveOverload, id: newWorkoutId, finishedAt: Timestamp.now() });
     transaction.set(statsRef, newStats);
   });
 

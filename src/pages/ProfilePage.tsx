@@ -19,6 +19,7 @@ import { clonePlan, getPublicPlansForUser, getPlanDays } from '@/services/plans'
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { calculateBodyweightReps, calculateShareVolume } from '@/lib/muscle-map';
 import { calculateWorkoutCalories } from '@/lib/calories';
+import { summarizeProgressiveOverload } from '@/lib/progressive-overload';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -270,6 +271,47 @@ export function ProfilePage() {
           <div className="font-mono text-[10px] text-bone-dim tracking-wider">STREAK</div>
         </div>
         {viewProfile && <FollowCountDisplay uid={viewProfile.uid} />}
+          </motion.div>
+        );
+      })()}
+
+      {isOwnProfile && publicWorkouts.length > 0 && (() => {
+        const latest = publicWorkouts[0];
+        const previous = publicWorkouts.find(workout => workout.dayId === latest.dayId && workout.date !== latest.date);
+        const progress = latest.progressiveOverload || summarizeProgressiveOverload(latest, previous);
+        const volumeUnit = units === 'imperial' ? 'lb·reps' : 'kg·reps';
+        const latestExercises = (latest.exercises || []).filter((exercise: any) => exercise.sets?.some((set: any) => set.completed !== false));
+        const formatSet = (set: any) => {
+          const reps = Number(set.reps) || Number(set.seconds) || 0;
+          if (set.seconds) return `${reps}s`;
+          const weight = Number(set.weight) || 0;
+          const displayWeight = weight && units === 'imperial' ? Math.round(weight * 2.20462) : weight;
+          return `${reps} reps${displayWeight ? ` @ ${displayWeight}${units === 'imperial' ? ' lb' : ' kg'}` : ' @ BW'}`;
+        };
+        return (
+          <motion.div variants={item} className="card p-5 mb-5 border-teal/30 bg-teal/5">
+            <div className="flex items-start justify-between gap-3">
+              <div><div className="font-mono text-[10px] uppercase tracking-widest text-teal">Progressive overload</div><h3 className="font-display text-lg mt-1">Your latest training signal</h3></div>
+              <span className={`rounded-full px-2 py-1 text-[9px] font-mono uppercase ${progress.status === 'progressed' ? 'bg-teal text-ink' : 'bg-amber/20 text-amber'}`}>{progress.status.replace('_', ' ')}</span>
+            </div>
+            <p className="mt-3 text-sm text-bone-dim">{progress.message}</p>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-xs font-mono">
+              <div className="rounded-lg border border-line/60 bg-ink/40 p-3"><span className="text-bone-dim">LAST SESSION</span><b className="mt-1 block text-bone">{latest.date}</b></div>
+              <div className="rounded-lg border border-line/60 bg-ink/40 p-3"><span className="text-bone-dim">TOTAL TRAINING VOLUME</span><b className="mt-1 block text-bone">{progress.currentVolume.toLocaleString()} {volumeUnit}</b></div>
+            </div>
+            <div className="mt-4 rounded-lg border border-line/60 bg-ink/40 p-3">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-bone-dim">LATEST SET BREAKDOWN</div>
+              <div className="mt-2 space-y-2">
+                {latestExercises.length > 0 ? latestExercises.map((exercise: any) => (
+                  <div key={exercise.name} className="flex items-start justify-between gap-3 text-xs">
+                    <span className="font-semibold text-bone">{exercise.name}</span>
+                    <span className="text-right font-mono text-bone-dim">{exercise.sets.filter((set: any) => set.completed !== false).map(formatSet).join(' · ')}</span>
+                  </div>
+                )) : <span className="text-xs text-bone-dim">No completed set details recorded.</span>}
+              </div>
+              <div className="mt-3 text-[10px] text-bone-dim">Weighted volume = weight × reps. BW sets are shown separately as reps.</div>
+            </div>
+            {progress.exercisesProgressed.length > 0 && <div className="mt-3 text-xs text-teal">Improved: {progress.exercisesProgressed.join(', ')}</div>}
           </motion.div>
         );
       })()}

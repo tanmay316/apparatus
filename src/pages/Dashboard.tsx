@@ -82,12 +82,10 @@ export function Dashboard() {
     enabled: !!profile.activePlanId,
   });
 
+  const todayKey = localDateKey(new Date());
   const { data: todayWorkouts = [] } = useQuery({
-    queryKey: ['todayWorkouts', profile.uid],
-    queryFn: () => {
-      const todayStr = localDateKey(new Date());
-      return getWorkoutsByDateRange(profile.uid, todayStr, todayStr);
-    },
+    queryKey: ['todayWorkouts', profile.uid, todayKey],
+    queryFn: () => getWorkoutsByDateRange(profile.uid, todayKey, todayKey),
     enabled: !!profile.uid,
   });
 
@@ -253,6 +251,7 @@ export function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {activeDays.map((day) => {
               const wasCompletedToday = todayWorkouts.some((w: any) => w.dayId === day.id);
+              const cardExercises = [...(day.warmup || []), ...(day.skillWork || []), ...(day.strength || []), ...(day.cooldown || [])];
               
               // Calculate progress line percentage
               let pct = 0;
@@ -275,6 +274,12 @@ export function Dashboard() {
                   {/* Progress Line */}
                   <div className="h-1 w-full bg-ink mb-3 rounded-full overflow-hidden">
                     <div className="h-full bg-teal transition-all duration-300" style={{ width: `${pct}%` }}></div>
+                  </div>
+
+                  <div className="text-[10px] text-bone-dim font-mono leading-relaxed">
+                    {cardExercises.length > 0
+                      ? `${cardExercises.length} exercises · ${cardExercises.slice(0, 2).map((exercise: any) => exercise.name).join(' · ')}${cardExercises.length > 2 ? ' · …' : ''}`
+                      : 'No exercises added yet'}
                   </div>
                   
                   {wasCompletedToday && (

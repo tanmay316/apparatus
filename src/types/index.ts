@@ -128,6 +128,18 @@ export interface Workout {
   exercises?: ExerciseLog[];
   likesCount: number;
   commentsCount: number;
+  progressiveOverload?: ProgressiveOverloadSummary;
+}
+
+export interface ProgressiveOverloadSummary {
+  status: 'progressed' | 'maintained' | 'regressed' | 'first_session';
+  message: string;
+  previousDate?: string;
+  previousVolume?: number;
+  currentVolume: number;
+  volumeChangePercent?: number;
+  exercisesProgressed: string[];
+  exercisesTracked: number;
 }
 
 // ─── Social ──────────────────────────────────────────────────

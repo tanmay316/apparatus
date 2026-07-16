@@ -11,6 +11,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   historicalLog?: any;
+  previousLog?: any;
 }
 
 function ExerciseMedia({ exercise }: { exercise: Exercise }) {
@@ -89,7 +90,7 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
   );
 }
 
-export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, historicalLog }: Props) {
+export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, historicalLog, previousLog }: Props) {
   const store = useWorkoutStore();
   const log = historicalLog || store.logs[exercise.name] || { name: exercise.name, mode: 'reps', sets: [], notes: '' };
   const isReadOnly = !!historicalLog;
@@ -306,7 +307,12 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
               <div>
                 <div className="text-xs font-mono text-bone-dim tracking-wider mb-2 uppercase">Last Session</div>
                 <div className="bg-ink border border-line/50 p-4 rounded text-sm text-bone-dim">
-                  No previous data yet — this will be your first logged session.
+                  {previousLog ? (
+                    <div className="space-y-1">
+                      <div className="text-bone">{previousLog.sets?.filter((set: any) => set.completed !== false).length || 0} completed sets</div>
+                      <div>{previousLog.sets?.map((set: any) => `${set.reps || set.seconds || 0}${set.seconds ? ' sec' : ' reps'}${set.weight ? ` @ ${set.weight} kg` : ''}`).join(' · ')}</div>
+                    </div>
+                  ) : 'No previous data yet — this will be your first logged session.'}
                 </div>
               </div>
 
