@@ -16,6 +16,7 @@ import { createReport } from '@/services/admin';
 import { getPublicWorkoutsForUser, getUserWorkouts } from '@/services/workouts';
 import { clonePlan, getPublicPlansForUser } from '@/services/plans';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
+import { calculateBodyweightReps, calculateShareVolume } from '@/lib/muscle-map';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -384,7 +385,7 @@ export function ProfilePage() {
             </div>
             <div className="stat-pill">
               <div className="font-mono text-lg">
-                {publicWorkouts.reduce((sum, workout) => sum + (workout.volume || 0), 0).toLocaleString()}
+                {publicWorkouts.reduce((sum, workout) => sum + (workout.exercises ? calculateShareVolume(workout.exercises, viewProfile.weight || 70) : (workout.volume || 0)), 0).toLocaleString()}
               </div>
               <div className="font-mono text-[10px] text-bone-dim">VOLUME</div>
             </div>
@@ -421,16 +422,20 @@ export function ProfilePage() {
           ) : (
             <div className="space-y-3">
               {publicWorkouts.slice(0, 12).map(workout => (
-                <div key={workout.id} className="rounded-lg border border-line bg-ink-2 p-4">
+                <div key={workout.id} className="relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-br from-ink-2 via-ink-2 to-amber/5 p-5 shadow-lg shadow-black/10 transition-all hover:-translate-y-0.5 hover:border-amber/40">
+                  <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-amber/10 blur-3xl pointer-events-none" />
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-semibold">{workout.dayTitle || 'Workout'}</div>
-                      <div className="text-xs text-teal mt-1">{workout.planTitle || 'Personal session'}</div>
+                      <div className="relative flex items-center gap-2"><span className="rounded-full bg-teal/10 px-2 py-1 text-[9px] font-mono uppercase tracking-wider text-teal">Completed</span><span className="text-[10px] font-mono text-bone-dim">{workout.date}</span></div>
+                      <div className="relative mt-3 text-lg font-semibold">{workout.dayTitle || 'Workout'}</div>
+                      <div className="relative mt-1 text-xs text-amber">{workout.planTitle || 'Personal session'}</div>
                     </div>
                     <div className="flex items-center gap-3 text-xs text-bone-dim font-mono">
-                      <span>{workout.date}</span>
                       <button
-                        onClick={() => {
+                        type="button"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
                           setProfileShareData({
                             dayTitle: workout.dayTitle || 'Workout',
                             planTitle: workout.planTitle || 'Personal session',
@@ -450,21 +455,19 @@ export function ProfilePage() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-3 mt-3 text-xs text-bone-dim">
-                    <span>{workout.durationMin || 0} min</span>
-                    <span>{workout.calories || 0} kcal</span>
-                    <span>{workout.volume || 0} volume</span>
-                    <span>{workout.exercises?.length || 0} exercises</span>
+                  <div className="relative mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4 text-xs text-bone-dim">
+                    <span className="rounded-xl border border-line/50 bg-ink/50 px-3 py-2"><b className="block text-bone">{workout.durationMin || 0}</b>min</span>
+                    <span className="rounded-xl border border-line/50 bg-ink/50 px-3 py-2"><b className="block text-bone">{workout.calories || 0}</b>kcal</span>
+                    <span className="rounded-xl border border-line/50 bg-ink/50 px-3 py-2"><b className="block text-bone">{calculateShareVolume(workout.exercises || [], viewProfile.weight || 70) > 0 ? calculateShareVolume(workout.exercises || [], viewProfile.weight || 70).toLocaleString() : calculateBodyweightReps(workout.exercises || []) || '0'}</b>{calculateShareVolume(workout.exercises || [], viewProfile.weight || 70) > 0 ? 'kg·reps' : 'BW reps'}</span>
+                    <span className="rounded-xl border border-line/50 bg-ink/50 px-3 py-2"><b className="block text-bone">{workout.exercises?.length || 0}</b>exercises</span>
                   </div>
                   {workout.exercises?.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-line/60 space-y-1">
-                      {workout.exercises.map((exercise: any) => (
-                        <div key={exercise.name} className="text-xs">
-                          <span className="text-bone">{exercise.name}</span>
-                          <span className="text-bone-dim">
-                            {' '}·{' '}
-                            {exercise.sets?.filter((set: any) => set.completed).map((set: any) => `${set.reps || set.seconds || 0}${set.weight ? ` × ${set.weight}kg` : ''}`).join(', ') || 'logged'}
-                          </span>
+                    <div className="relative mt-4 space-y-1.5 border-t border-line/60 pt-4">
+                      {workout.exercises.map((exercise: any, exerciseIndex: number) => (
+                        <div key={`${exercise.name}-${exerciseIndex}`} className="flex items-center gap-2 rounded-lg border border-line/40 bg-ink/45 px-2.5 py-2 text-xs">
+                          <span className="flex h-5 w-5 items-center justify-center rounded-md bg-amber/10 font-mono text-[10px] text-amber">{String(exerciseIndex + 1).padStart(2, '0')}</span>
+                          <span className="truncate text-bone">{exercise.name}</span>
+                          <span className="ml-auto shrink-0 text-[10px] font-mono text-bone-dim">{exercise.sets?.filter((set: any) => set.completed).length || 0} sets</span>
                         </div>
                       ))}
                     </div>

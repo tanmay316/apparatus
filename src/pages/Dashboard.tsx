@@ -6,6 +6,7 @@ import {
   Users, Clock, Heart, MessageCircle, Share2
 } from 'lucide-react';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
+import { FollowerActivityCard } from '@/components/ui/FollowerActivityCard';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -390,7 +391,9 @@ export function Dashboard() {
               const exercises = details?.exercises as string[] | undefined;
 
               return (
-                <div key={activity.id} className="p-3 bg-ink-2 rounded border border-line/20 hover:border-teal/20 transition-all">
+                <>
+                  <FollowerActivityCard activity={activity} />
+                  <div key={activity.id} className="hidden p-3 bg-ink-2 rounded border border-line/20 hover:border-teal/20 transition-all">
                   <div className="flex items-start gap-3">
                     <img
                       src={activity.userPhoto || `https://ui-avatars.com/api/?name=${activity.userName}&background=4F9E8D&color=14151A&bold=true`}
@@ -455,6 +458,7 @@ export function Dashboard() {
                     </div>
                   </div>
                 </div>
+                </>
               );
             })}
           </div>

@@ -15,10 +15,25 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
 import type { Exercise } from '@/types';
-import { calculateWorkoutCalories } from '@/lib/calories';
+import { calculateWorkoutCalories, calculateWorkoutVolume } from '@/lib/calories';
+import { calculateBodyweightReps } from '@/lib/muscle-map';
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function historicalLogToExercise(log: any): Exercise {
+  const setCount = Math.max(1, log.sets?.length || 1);
+  const isHold = log.mode === 'hold' || log.sets?.some((set: any) => Number(set.seconds) > 0);
+  const target = isHold ? `${log.sets?.[0]?.seconds || 0} sec` : `${log.sets?.[0]?.reps || 0}`;
+  return {
+    name: log.name,
+    sets: `${setCount} x ${target}`,
+    tempo: '',
+    rest: '',
+    cues: [],
+    yt: `https://www.youtube.com/results?search_query=${encodeURIComponent(`${log.name} correct form`)}`,
+  };
 }
 
 export function WorkoutSession() {
@@ -44,7 +59,7 @@ export function WorkoutSession() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: todayWorkouts = [] } = useQuery({
+  const { data: todayWorkouts = [], isLoading: todayWorkoutsLoading } = useQuery({
     queryKey: ['todayWorkouts', user?.uid],
     queryFn: async () => {
       const todayStr = localDateKey(new Date());
@@ -61,26 +76,40 @@ export function WorkoutSession() {
 
   const currentDay = days.find(d => d.id === dayId);
   const wasCompletedToday = todayWorkouts.some((w: any) => w.dayId === dayId);
+  const [sessionFinished, setSessionFinished] = useState(false);
 
   // Initialize workout if not active or if plan/day mismatch
   useEffect(() => {
+    if (todayWorkoutsLoading) return;
     if (plan && currentDay) {
+      if (wasCompletedToday) {
+        if (store.isActive) store.finishWorkout();
+        setSessionFinished(true);
+        return;
+      }
       if (!store.isActive || store.planId !== plan.id || store.dayId !== currentDay.id) {
         store.startWorkout(plan, currentDay);
       }
     }
-  }, [plan, currentDay]); // Only re-run if plan or day changes, don't include store to avoid loops
+  }, [plan, currentDay, wasCompletedToday, todayWorkoutsLoading]); // Only re-run if plan/day/completion changes
 
   // Stopwatch state
   const [elapsedSec, setElapsedSec] = useState(0);
   useEffect(() => {
-    if (store.isActive && store.startedAt) {
+    if (store.isActive && store.startedAt && !sessionFinished) {
       const interval = setInterval(() => {
         setElapsedSec(Math.floor((Date.now() - store.startedAt!) / 1000));
       }, 1000);
       return () => clearInterval(interval);
     }
-  }, [store.isActive, store.startedAt]);
+  }, [store.isActive, store.startedAt, sessionFinished]);
+
+  useEffect(() => {
+    const completedWorkout = todayWorkouts.find((workout: any) => workout.dayId === dayId) as any;
+    if (!todayWorkoutsLoading && completedWorkout) {
+      setElapsedSec(Math.max(0, Number(completedWorkout.durationMin || 0) * 60));
+    }
+  }, [todayWorkoutsLoading, dayId, todayWorkouts]);
 
   const [activeExercise, setActiveExercise] = useState<{name: string, mode: 'reps'|'hold'|'freeform', index: number, section: 'warmup' | 'skillWork' | 'strength' | 'cooldown'} | null>(null);
   const [privacy, setPrivacy] = useState<'public' | 'followers' | 'private'>('followers');
@@ -93,7 +122,7 @@ export function WorkoutSession() {
   const [addRest, setAddRest] = useState('');
   const [addCues, setAddCues] = useState('');
   const [addYt, setAddYt] = useState('');
-  const [selectedExerciseMeta, setSelectedExerciseMeta] = useState<{ caloriesPerRep?: number; caloriesPerSecond?: number; muscleGroup?: string }>({});
+  const [selectedExerciseMeta, setSelectedExerciseMeta] = useState<{ caloriesPerRep?: number; caloriesPerSecond?: number; muscleGroup?: string; equipment?: string; met?: number }>({});
 
   const formatStopwatch = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -104,18 +133,11 @@ export function WorkoutSession() {
   const handleFinish = async () => {
     if (!user || !store.isActive) return;
     
-    // Calculate simple stats
-    let totalVol = 0;
     const exLogs = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed));
-    exLogs.forEach(ex => {
-      ex.sets.forEach(s => {
-        if (s.completed && ex.mode === 'reps') {
-          totalVol += (s.weight || 0) * (s.reps || 0); // Simplified volume math
-        }
-      });
-    });
     const allExercises = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown];
-    const calories = calculateWorkoutCalories(allExercises, exLogs, profile?.weight);
+    const totalVol = calculateWorkoutVolume(allExercises, exLogs, profile?.weight || 70);
+    const finalDurationMin = Math.max(1, Math.round(elapsedSec / 60));
+    const calories = calculateWorkoutCalories(allExercises, exLogs, profile?.weight, finalDurationMin);
 
     try {
       // Award XP celebration values
@@ -133,7 +155,7 @@ export function WorkoutSession() {
         date: localDateKey(new Date()),
         startedAt: { seconds: Math.floor(store.startedAt! / 1000), nanoseconds: 0 } as any,
         finishedAt: null, // Set in backend
-        durationMin: Math.round(elapsedSec / 60),
+        durationMin: finalDurationMin,
         calories,
         volume: totalVol,
         visibility: privacy,
@@ -157,10 +179,13 @@ export function WorkoutSession() {
           details: {
             planTitle: plan!.title,
             dayTitle: store.dayTitle,
-            durationMin: Math.round(elapsedSec / 60),
+            durationMin: finalDurationMin,
             volume: totalVol,
             calories,
-            exercises: exLogs.map(e => e.name)
+            exercises: exLogs.map(e => e.name),
+            // Preserve completion state so shared anatomy reflects this
+            // workout's actual completed sets, not the planned exercises.
+            exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets }))
           },
           visibility: privacy,
           likesCount: 0,
@@ -197,13 +222,17 @@ export function WorkoutSession() {
         dayTitle: store.dayTitle,
         planTitle: plan!.title,
         date: new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
-        durationMin: Math.round(elapsedSec / 60),
+        durationMin: finalDurationMin,
         volume: totalVol,
         calories,
         exerciseNames: exLogs.map(e => e.name),
         exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets })),
         bodyweight: profile?.weight || 70,
       });
+      // End and clear the persisted session immediately. The celebration and
+      // share dialogs use the snapshots above and must not keep the stopwatch alive.
+      setSessionFinished(true);
+      store.finishWorkout();
     } catch (error) {
       showToast('Failed to save workout', 'error');
     }
@@ -220,7 +249,7 @@ export function WorkoutSession() {
     );
   }
 
-  if (!plan || !currentDay || (!store.isActive && !wasCompletedToday)) {
+  if (!plan || !currentDay || (!store.isActive && !wasCompletedToday && !sessionFinished)) {
     return (
       <div className="text-center py-20 text-bone-dim">
         Workout initializing...
@@ -229,11 +258,34 @@ export function WorkoutSession() {
   }
 
   const completedWorkoutForDay = todayWorkouts.find((w: any) => w.dayId === dayId);
+  const historicalLogs = (completedWorkoutForDay?.exercises || []) as any[];
+  const historicalExercises = historicalLogs.map(historicalLogToExercise);
+  const planExercises = [...(currentDay.warmup || []), ...(currentDay.skillWork || []), ...(currentDay.strength || []), ...(currentDay.cooldown || [])];
+  const missingHistoricalExercises = historicalExercises.filter(exercise => !planExercises.some(item => item.name === exercise.name));
+  const hasPlanExercises = planExercises.length > 0;
+  const displayWarmup = currentDay.warmup || [];
+  const displaySkillWork = currentDay.skillWork || [];
+  const displayCooldown = currentDay.cooldown || [];
+  const displayStrength = hasPlanExercises ? [...(currentDay.strength || []), ...missingHistoricalExercises] : historicalExercises;
+  const displayExercises = [...displayWarmup, ...displaySkillWork, ...displayStrength, ...displayCooldown];
+  const activeLogs = store.isActive ? Object.values(store.logs) : historicalLogs;
+  const activeExercises = store.isActive
+    ? [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown]
+    : displayExercises;
   const estimatedCalories = calculateWorkoutCalories(
-    [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown],
-    Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed)),
+    activeExercises,
+    activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)),
     profile?.weight,
+    Math.max(1, Math.round(elapsedSec / 60)),
   );
+  const displayCalories = activeLogs.length > 0
+    ? estimatedCalories
+    : Number(completedWorkoutForDay?.calories || 0);
+  const externalVolume = calculateWorkoutVolume(activeExercises, activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)), profile?.weight || 70);
+  const bodyweightReps = calculateBodyweightReps(activeLogs);
+  const volumeDisplay = externalVolume > 0
+    ? `${externalVolume.toLocaleString()} kg·reps${bodyweightReps ? ` · ${bodyweightReps} BW reps` : ''}`
+    : bodyweightReps > 0 ? `${bodyweightReps} BW reps` : '0 kg·reps';
 
   const exMode = (setsStr: string) => {
     if (!setsStr) return 'freeform';
@@ -248,7 +300,7 @@ export function WorkoutSession() {
     setAddName(libEx.name);
     setAddCues(libEx.instructions?.join('\n') || '');
     setAddYt(libEx.youtubeSearch || '');
-    setSelectedExerciseMeta({ caloriesPerRep: libEx.caloriesPerRep, caloriesPerSecond: libEx.caloriesPerSecond, muscleGroup: libEx.muscleGroup });
+    setSelectedExerciseMeta({ caloriesPerRep: libEx.caloriesPerRep, caloriesPerSecond: libEx.caloriesPerSecond, muscleGroup: libEx.muscleGroup, equipment: libEx.equipment, met: libEx.met });
   };
 
   const handleAddExercise = (e: React.FormEvent) => {
@@ -299,7 +351,7 @@ export function WorkoutSession() {
             </div>
           ) : (
             exercises.map((e, idx) => {
-              const log = store.logs[e.name];
+              const log = activeLogs.find(item => item.name === e.name);
               const histLog = completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === e.name);
               const isDone = wasCompletedToday
                 ? !!(histLog && histLog.sets?.some((s: any) => s.completed))
@@ -317,7 +369,7 @@ export function WorkoutSession() {
                         event.stopPropagation();
                         if (wasCompletedToday) return;
                         const isCurrentlyDone = log && log.sets.some((s: any) => s.completed);
-                        log?.sets.forEach((_, setIdx) => {
+                        log?.sets.forEach((_: any, setIdx: number) => {
                           store.markSetComplete(e.name, setIdx, !isCurrentlyDone);
                         });
                         showToast(`All sets marked ${!isCurrentlyDone ? 'complete' : 'incomplete'}`);
@@ -362,7 +414,7 @@ export function WorkoutSession() {
         </div>
         <h1 className="font-display text-3xl mb-2">{currentDay.title}</h1>
         <div className="text-sm text-bone-dim font-mono">
-          SKILL: <span className="text-bone">{currentDay.skill || 'None'}</span> • PROGRESS: <span className="text-teal">{Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed)).length}/{[...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown].length}</span>
+          SKILL: <span className="text-bone">{currentDay.skill || 'None'}</span> • PROGRESS: <span className="text-teal">{activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length}/{activeExercises.length}</span>
         </div>
         
         {/* Dynamic metrics strip */}
@@ -372,25 +424,20 @@ export function WorkoutSession() {
             <div className="text-xl font-bold font-mono mt-1 text-bone">{Math.round(elapsedSec / 60)} min</div>
           </div>
           <div className="bg-ink-2 border border-line p-4 rounded-lg">
-            <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">VOLUME LIFTED</div>
-            <div className="text-xl font-bold font-mono mt-1 text-bone">
-              {Object.values(store.logs).reduce((total, ex) => {
-                if (ex.mode !== 'reps') return total;
-                return total + ex.sets.reduce((sum, s) => s.completed ? sum + (s.weight || 0) * (s.reps || 0) : sum, 0);
-              }, 0)} kg·reps
-            </div>
+            <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">EXTERNAL VOLUME</div>
+            <div className="text-xl font-bold font-mono mt-1 text-bone">{volumeDisplay}</div>
           </div>
           <div className="bg-ink-2 border border-line p-4 rounded-lg">
             <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">EST. CALORIES</div>
-            <div className="text-xl font-bold font-mono mt-1 text-bone">{estimatedCalories} kcal</div>
+            <div className="text-xl font-bold font-mono mt-1 text-bone">{displayCalories} kcal</div>
           </div>
         </div>
       </div>
 
-      {renderSection(currentDay.time, 'WARM-UP', 'bg-bone text-ink', store.warmup, 'warmup')}
-      {renderSection('~15 min', `SKILL — ${currentDay.skill || 'NONE'}`, 'bg-amber/20 text-amber border border-amber/30', store.skillWork, 'skillWork')}
-      {renderSection('Main sets', 'STRENGTH', 'bg-teal/20 text-teal border border-teal/30', store.strength, 'strength')}
-      {renderSection('5-10 min', 'COOLDOWN', 'bg-bone text-ink', store.cooldown, 'cooldown')}
+      {renderSection(currentDay.time, 'WARM-UP', 'bg-bone text-ink', store.isActive ? store.warmup : displayWarmup, 'warmup')}
+      {renderSection('~15 min', `SKILL — ${currentDay.skill || 'NONE'}`, 'bg-amber/20 text-amber border border-amber/30', store.isActive ? store.skillWork : displaySkillWork, 'skillWork')}
+      {renderSection('Main sets', 'STRENGTH', 'bg-teal/20 text-teal border border-teal/30', store.isActive ? store.strength : displayStrength, 'strength')}
+      {renderSection('5-10 min', 'COOLDOWN', 'bg-bone text-ink', store.isActive ? store.cooldown : displayCooldown, 'cooldown')}
 
       <div className="mt-12 flex flex-col items-center justify-center gap-3 pb-20">
          <div className="flex items-center gap-3 bg-ink-2 p-2 px-4 rounded border border-line">
@@ -407,10 +454,10 @@ export function WorkoutSession() {
          </div>
          <button 
            onClick={handleFinish}
-           disabled={wasCompletedToday}
+           disabled={wasCompletedToday || sessionFinished}
            className={`py-3.5 px-8 text-base w-full max-w-md font-bold tracking-wider rounded-lg transition-all ${wasCompletedToday ? 'bg-line text-bone-dim cursor-not-allowed opacity-50' : 'btn-primary shadow-[0_0_20px_rgba(79,158,141,0.3)]'}`}
          >
-           {wasCompletedToday ? '✓ Day Logged' : 'Finish Workout'}
+           {wasCompletedToday || sessionFinished ? '✓ Day Logged' : 'Finish Workout'}
          </button>
       </div>
 
@@ -420,7 +467,7 @@ export function WorkoutSession() {
           onClose={() => setActiveExercise(null)} 
           exercise={
             (store[activeExercise.section] && store[activeExercise.section][activeExercise.index]) || 
-            ([...currentDay.warmup, ...currentDay.skillWork, ...currentDay.strength, ...currentDay.cooldown].find(e => e.name === activeExercise.name)!)
+            activeExercises.find(e => e.name === activeExercise.name)!
           }
           section={activeExercise.section}
           index={activeExercise.index}

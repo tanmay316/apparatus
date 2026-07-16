@@ -46,8 +46,10 @@ export interface Exercise {
   rest: string;
   cues: string[];
   yt: string;
+  equipment?: string;
   caloriesPerRep?: number;
   caloriesPerSecond?: number;
+  met?: number;
   muscleGroup?: string;
 }
 
@@ -191,6 +193,7 @@ export interface LibraryExercise {
   caloriesPerMinEstimate: number;
   caloriesPerRep?: number;
   caloriesPerSecond?: number;
+  met?: number;
   tags: string[];
   isCustom: boolean;
   createdBy: string | null;

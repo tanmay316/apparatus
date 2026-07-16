@@ -2248,6 +2248,7 @@ export const seedLibraryExercises = async (): Promise<void> => {
       caloriesPerMinEstimate: eqEstimate(ex.equipment),
       caloriesPerRep: repEstimate(ex.name),
       caloriesPerSecond: holdEstimate(ex.name),
+      met: estimateMet(ex.name, ex.equipment),
       tags: ex.tags,
       isCustom: false,
       createdBy: null
@@ -2266,6 +2267,16 @@ function eqEstimate(equipment: string): number {
   if (eq.includes('machine')) return 5;
   if (eq.includes('band')) return 3;
   return 6; // bodyweight/default
+}
+
+function estimateMet(name: string, equipment: string): number {
+  const n = name.toLowerCase();
+  if (/(squat|deadlift|lunge|burpee|muscle|pull-up|chin-up|dip|push-up|row|clean|snatch)/i.test(n)) return 6;
+  if (/(run|jump|sprint|climber)/i.test(n)) return 7;
+  if (/(stretch|mobility|breath|warm-up|dislocation)/i.test(n)) return 2.8;
+  if (/(curl|extension|raise|fly|kickback|hold|plank|crunch)/i.test(n)) return 3.5;
+  if (equipment.toLowerCase().includes('barbell')) return 5.5;
+  return 4.5;
 }
 
 function repEstimate(name: string): number {

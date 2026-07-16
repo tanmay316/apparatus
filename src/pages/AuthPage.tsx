@@ -38,7 +38,7 @@ export function AuthPage() {
             <Dumbbell size={32} className="text-teal" />
           </motion.div>
 
-          <h1 className="font-display text-4xl tracking-wider mb-2">APPARATUS</h1>
+          <h1 className="brand-wordmark text-4xl leading-none mb-3">APPARATUS</h1>
           <p className="text-bone-dim font-mono text-sm tracking-wider">FITNESS PLATFORM</p>
         </div>
 

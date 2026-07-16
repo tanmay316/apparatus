@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { X, Clock, Play, RotateCcw, Video, Plus, Trash2, Edit2 } from 'lucide-react';
+import { X, Clock, RotateCcw, Plus, Trash2, ExternalLink, LoaderCircle } from 'lucide-react';
 import { useWorkoutStore } from '@/stores/workout-store';
 import type { Exercise, SetData } from '@/types';
 
@@ -11,6 +11,82 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   historicalLog?: any;
+}
+
+function ExerciseMedia({ exercise }: { exercise: Exercise }) {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const youtubeId = (() => {
+    const value = exercise.yt || '';
+    const match = value.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/i);
+    return match?.[1] || null;
+  })();
+  const formUrl = exercise.yt?.startsWith('http')
+    ? exercise.yt
+    : `https://www.youtube.com/results?search_query=${encodeURIComponent(`${exercise.name} correct form`)}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (youtubeId) {
+      setImageUrl(`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`);
+      setLoading(false);
+      return () => { cancelled = true; };
+    }
+
+    setLoading(true);
+    fetch('https://wger.de/api/v2/exerciseinfo/?language=2&limit=1000')
+      .then(response => response.ok ? response.json() : null)
+      .then(catalog => {
+        const needle = exercise.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+        const scored = (catalog?.results || []).map((item: any) => {
+          const names = (item.translations || []).map((translation: any) => String(translation.name || '').toLowerCase());
+          const exact = names.some((name: string) => name.replace(/[^a-z0-9]+/g, ' ').trim() === needle);
+          const partial = names.some((name: string) => name.includes(needle) || needle.includes(name));
+          const tokenScore = names.reduce((best: number, name: string) => {
+            const tokens = needle.split(' ').filter(token => token.length > 2);
+            const matches = tokens.filter(token => name.includes(token)).length;
+            return Math.max(best, tokens.length ? matches / tokens.length : 0);
+          }, 0);
+          return { item, score: exact ? 3 : partial ? 2 : tokenScore >= 0.6 ? 1 : 0 };
+        }).filter((entry: any) => entry.score > 0).sort((a: any, b: any) => b.score - a.score)[0]?.item;
+        return scored || null;
+      })
+      .then(details => {
+        if (cancelled) return;
+        const image = details?.images?.find((item: any) => item.image)?.image || null;
+        if (image) {
+          setImageUrl(image);
+          return null;
+        }
+        return fetch(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(`${exercise.name} exercise`)}&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=640&format=json&origin=*`)
+          .then(response => response.ok ? response.json() : null)
+          .then(search => {
+            const page = search?.query?.pages ? Object.values(search.query.pages)[0] as any : null;
+            return page?.imageinfo?.[0]?.thumburl || page?.imageinfo?.[0]?.url || null;
+          });
+      })
+      .then(image => { if (!cancelled && image) setImageUrl(image); })
+      .catch(() => { if (!cancelled) setImageUrl(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [exercise.name, exercise.yt, youtubeId]);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-line/60 bg-ink">
+      {imageUrl ? (
+        <img src={imageUrl} alt={`${exercise.name} correct form`} className="h-48 w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
+      ) : (
+        <div className="flex h-32 items-center justify-center gap-3 px-5 text-center text-xs text-bone-dim">
+          {loading ? <><LoaderCircle size={18} className="animate-spin text-teal" /> Finding an exercise reference…</> : <>No image reference is available for this movement yet.</>}
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-3 border-t border-line/60 px-4 py-3">
+        <div><div className="text-[10px] font-mono uppercase tracking-widest text-teal">Technique reference</div><div className="mt-1 text-xs text-bone-dim">{imageUrl ? 'Exercise-specific media' : 'Open the exercise demo'}</div></div>
+        <a href={formUrl} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-teal/40 px-3 py-1.5 text-[10px] font-bold text-teal hover:bg-teal/10"><ExternalLink size={12} /> Demo</a>
+      </div>
+    </div>
+  );
 }
 
 export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, historicalLog }: Props) {
@@ -212,6 +288,8 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
             </div>
           ) : (
             <>
+              <ExerciseMedia exercise={exercise} />
+
               {/* Form Cues */}
               {exercise.cues && exercise.cues.length > 0 && (
                 <div className="space-y-1 text-xs text-bone-dim leading-relaxed">
@@ -223,16 +301,6 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                   ))}
                 </div>
               )}
-
-              {/* YouTube search button */}
-              <a 
-                href={exercise.yt?.startsWith('http') ? exercise.yt : `https://www.youtube.com/results?search_query=${encodeURIComponent(exercise.yt || (exercise.name + ' correct form'))}`} 
-                target="_blank" 
-                rel="noreferrer"
-                className="btn-secondary py-2 text-xs flex items-center justify-center gap-2 max-w-fit"
-              >
-                <Video size={14} className="text-teal" /> Watch form demo
-              </a>
 
               {/* Last Session History */}
               <div>

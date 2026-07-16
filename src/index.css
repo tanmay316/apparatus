@@ -39,6 +39,26 @@
 }
 
 @layer components {
+  .brand-wordmark {
+    font-family: 'Bodoni Moda', Georgia, serif;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    background: linear-gradient(110deg, #f4f0e6 18%, #f2b448 55%, #f4f0e6 88%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .brand-mark {
+    position: relative;
+    width: 0.72rem;
+    height: 0.72rem;
+    border: 2px solid #4f9e8d;
+    border-radius: 0.22rem;
+    transform: rotate(45deg);
+    box-shadow: 0 0 0 3px rgba(79, 158, 141, 0.08), 0 0 18px rgba(79, 158, 141, 0.25);
+  }
+
   .btn-primary {
     @apply bg-teal text-ink font-display font-bold uppercase tracking-wider
            px-5 py-3 rounded-md text-sm

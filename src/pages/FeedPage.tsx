@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getActivity, getFeed, getFollowing, getPublicFeed, toggleLike, hasLiked, addComment, getComments } from '@/services/social';
 import type { Activity, Comment } from '@/types';
+import { calculateShareVolume } from '@/lib/muscle-map';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -28,6 +29,7 @@ function ActivityCard({ activity, highlighted = false }: { activity: Activity; h
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
   const [showComments, setShowComments] = useState(false);
+  const [showAllExercises, setShowAllExercises] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [shareData, setShareData] = useState<ShareCardData | null>(null);
   
@@ -66,12 +68,16 @@ function ActivityCard({ activity, highlighted = false }: { activity: Activity; h
   });
   
   const details = activity.details as Record<string, any> || {};
+  const displayVolume = Array.isArray(details.exerciseLogs)
+    ? calculateShareVolume(details.exerciseLogs, 70)
+    : Number(details.volume || 0);
   
   const profileLink = `/profile/${activity.username || activity.userId}`;
   
   return (
     <>
-    <motion.div id={`activity-${activity.id}`} variants={item} className={`card p-5 transition-all ${highlighted ? 'ring-2 ring-amber shadow-[0_0_24px_rgba(242,180,72,0.18)]' : ''}`}>
+    <motion.div id={`activity-${activity.id}`} variants={item} className={`relative overflow-hidden rounded-2xl border border-line/70 bg-gradient-to-br from-ink-2 via-ink-2 to-teal/5 p-5 shadow-lg shadow-black/10 transition-all hover:-translate-y-0.5 hover:border-teal/40 ${highlighted ? 'ring-2 ring-amber shadow-[0_0_24px_rgba(242,180,72,0.18)]' : ''}`}>
+      <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-teal/10 blur-3xl pointer-events-none" />
       {/* Header */}
       <div className="flex items-start gap-3 mb-4">
         <Link to={profileLink}>
@@ -129,6 +135,13 @@ function ActivityCard({ activity, highlighted = false }: { activity: Activity; h
         </div>
       )}
       
+      {activity.type === 'workout' && Array.isArray(details.exercises) && details.exercises.length > 0 && (
+        <div className="relative mb-4 space-y-1.5">
+          {(showAllExercises ? details.exercises : details.exercises.slice(0, 6)).map((name: string, index: number) => <div key={`${name}-${index}`} className="flex items-center gap-2 rounded-lg border border-line/40 bg-ink/45 px-2.5 py-2 text-xs"><span className="flex h-5 w-5 items-center justify-center rounded-md bg-teal/10 font-mono text-[10px] text-teal">{String(index + 1).padStart(2, '0')}</span><span className="truncate text-bone">{name}</span><span className="ml-auto text-[10px] font-mono text-bone-dim">completed</span></div>)}
+          {details.exercises.length > 6 && <button onClick={() => setShowAllExercises(value => !value)} className="text-[10px] font-mono font-bold uppercase tracking-wider text-teal hover:underline">{showAllExercises ? 'Show less' : `Show ${details.exercises.length - 6} more exercises`}</button>}
+        </div>
+      )}
+
       {/* Action bar */}
       <div className="flex items-center gap-4 pt-3 border-t border-line/30">
         <button 
@@ -159,6 +172,7 @@ function ActivityCard({ activity, highlighted = false }: { activity: Activity; h
                 volume: details.volume || 0,
                 calories: details.calories || 0,
                 exerciseNames: details.exercises || [],
+                exerciseLogs: details.exerciseLogs || undefined,
               });
             }}
             className="flex items-center gap-1.5 text-xs font-mono text-bone-dim hover:text-amber transition-colors ml-auto"

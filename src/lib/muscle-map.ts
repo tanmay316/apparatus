@@ -54,13 +54,17 @@ const GROUP_TO_REGIONS: Record<string, MuscleRegion[]> = {
   'Shoulder Girdle': ['front_delts', 'rear_delts'],
 };
 
-/** Determine which anatomy regions are activated by a list of exercise names */
+function normalizeExerciseName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+}
+
+/** Determine which anatomy regions are activated by a list of exercise names. */
 export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
   const active = new Set<MuscleRegion>();
-  const libraryByName = new Map(COMPACT_LIBRARY.map(ex => [ex.name.toLowerCase(), ex]));
+  const libraryByName = new Map(COMPACT_LIBRARY.map(ex => [normalizeExerciseName(ex.name), ex]));
 
   for (const name of exerciseNames) {
-    const ex = libraryByName.get(name.toLowerCase());
+    const ex = libraryByName.get(normalizeExerciseName(name));
     if (ex) {
       // Primary muscle group
       const primaryRegions = GROUP_TO_REGIONS[ex.muscleGroup];
@@ -73,7 +77,7 @@ export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
       }
     } else {
       // Fuzzy fallback for custom exercises not in library
-      const n = name.toLowerCase();
+      const n = normalizeExerciseName(name);
       if (n.includes('squat') || n.includes('lunge')) { active.add('quads'); active.add('glutes'); }
       if (n.includes('push') || n.includes('bench') || n.includes('press') || n.includes('fly')) active.add('chest');
       if (n.includes('pull') || n.includes('row') || n.includes('lat')) active.add('lats');
@@ -87,6 +91,22 @@ export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
   }
 
   return active;
+}
+
+/**
+ * Determine activated regions from workout logs. An exercise contributes to
+ * the anatomy only when at least one of its sets was explicitly completed.
+ * This is the source of truth for workout sharing, so skipped/unstarted
+ * exercises cannot appear as highlighted muscles.
+ */
+export function getActiveMusclesFromLogs(
+  exerciseLogs: Array<{ name: string; sets: Array<{ completed?: boolean }> }>
+): Set<MuscleRegion> {
+  const completedExerciseNames = exerciseLogs
+    .filter(log => log.sets.some(set => set.completed === true))
+    .map(log => log.name);
+
+  return getActiveMuscles(completedExerciseNames);
 }
 
 // ─── Bodyweight exercises for volume calculation ─────────────
@@ -105,27 +125,42 @@ const BODYWEIGHT_EXERCISES = new Set([
   'standing calf raise',
 ]);
 
+function isLoggedSet(set: { completed?: boolean; reps?: number; weight?: number; seconds?: number }): boolean {
+  return set.completed === true || Number(set.reps) > 0 || Number(set.weight) > 0 || Number(set.seconds) > 0;
+}
+
 function isBodyweightExercise(name: string): boolean {
   const n = name.toLowerCase();
   if (BODYWEIGHT_EXERCISES.has(n)) return true;
   // Fuzzy: if it has "bodyweight" in the name
-  if (n.includes('bodyweight') || n.includes('body weight')) return true;
+  if (n.includes('bodyweight') || n.includes('body weight') || n.includes('split squat') || n.includes('pistol squat')) return true;
   return false;
 }
 
-/** Calculate total volume including bodyweight for BW exercises */
+/** Reps performed without external resistance, displayed separately from
+ * external kg·reps so bodyweight work is not reported as fake lifted weight. */
+export function calculateBodyweightReps(
+  exerciseLogs: Array<{ name: string; sets: Array<{ completed?: boolean; reps?: number }> }>
+): number {
+  return Math.round(exerciseLogs.reduce((total, log) => {
+    if (!isBodyweightExercise(log.name)) return total;
+    return total + log.sets.filter(isLoggedSet).reduce((sum, set) => sum + (Number(set.reps) || 0), 0);
+  }, 0));
+}
+
+/** Calculate external-load volume for sharing. Bodyweight contributes to
+ * calories, not kg·reps, so the displayed number stays meaningful. */
 export function calculateShareVolume(
   exerciseLogs: Array<{ name: string; sets: Array<{ completed?: boolean; reps?: number; weight?: number; seconds?: number }> }>,
   bodyweightKg: number = 70
 ): number {
   let totalVolume = 0;
   for (const log of exerciseLogs) {
-    const completedSets = log.sets.filter(s => s.completed);
+    const completedSets = log.sets.filter(isLoggedSet);
     for (const set of completedSets) {
       const reps = set.reps || 0;
       if (reps > 0) {
-        const weight = set.weight || (isBodyweightExercise(log.name) ? bodyweightKg : 0);
-        totalVolume += weight * reps;
+        totalVolume += (set.weight || 0) * reps;
       }
     }
   }
@@ -136,5 +171,5 @@ export function calculateShareVolume(
 export function calculateTotalSets(
   exerciseLogs: Array<{ sets: Array<{ completed?: boolean }> }>
 ): number {
-  return exerciseLogs.reduce((total, log) => total + log.sets.filter(s => s.completed).length, 0);
+  return exerciseLogs.reduce((total, log) => total + log.sets.filter(isLoggedSet).length, 0);
 }

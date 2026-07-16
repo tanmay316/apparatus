@@ -85,8 +85,8 @@ export function Sidebar() {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-4 border-b border-line">
           <div className="flex items-baseline gap-2.5">
-            <div className="w-2.5 h-2.5 bg-teal rounded-sm rotate-45 flex-none" />
-            <span className="font-display font-semibold text-[15px] tracking-wider">APPARATUS</span>
+            <div className="brand-mark flex-none" />
+            <span className="brand-wordmark text-[15px]">APPARATUS</span>
           </div>
           <button
             onClick={closeSidebar}

@@ -87,9 +87,9 @@ export function Topbar() {
           </button>
 
           <Link to="/" className="flex items-baseline gap-2.5 group">
-            <div className="w-2.5 h-2.5 bg-teal rounded-sm rotate-45 flex-none group-hover:scale-110 transition-transform" />
+            <div className="brand-mark flex-none group-hover:scale-110 transition-transform" />
             <div>
-              <div className="font-display font-semibold text-xl tracking-wider">APPARATUS</div>
+              <div className="brand-wordmark text-xl leading-none">APPARATUS</div>
               <div className="text-[11px] text-bone-dim font-mono tracking-wider">FITNESS PLATFORM</div>
             </div>
           </Link>
