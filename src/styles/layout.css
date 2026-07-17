@@ -1,0 +1,11 @@
+/* ═══════════════════════════════════════════════════════════════
+   APPARATUS — Layout Styles
+   ═══════════════════════════════════════════════════════════════
+   Page wrappers, sidebar, topbar, grids, and structural layout.
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer components {
+  .page-wrap {
+    @apply max-w-[960px] mx-auto px-5 pb-20;
+  }
+}

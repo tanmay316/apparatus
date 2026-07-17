@@ -1,0 +1,103 @@
+/* ═══════════════════════════════════════════════════════════════
+   APPARATUS — Component Styles
+   ═══════════════════════════════════════════════════════════════
+   Reusable component classes: buttons, cards, inputs, tags, etc.
+   All values reference design tokens from variables.css.
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* ─── Brand ─────────────────────────────────────────────── */
+  .brand-wordmark {
+    font-family: var(--font-brand);
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    background: var(--gradient-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .brand-mark {
+    position: relative;
+    width: 0.72rem;
+    height: 0.72rem;
+    border: 2px solid var(--color-teal);
+    border-radius: 0.22rem;
+    transform: rotate(45deg);
+    box-shadow: var(--shadow-teal-glow);
+  }
+
+  /* ─── Buttons ───────────────────────────────────────────── */
+  .btn-primary {
+    @apply bg-teal text-ink font-display font-bold uppercase tracking-wider
+           px-5 py-3 rounded-md text-sm
+           hover:bg-teal-light active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    transition: all var(--transition-fast);
+  }
+
+  .btn-secondary {
+    @apply bg-transparent border border-line text-bone-dim font-mono text-xs
+           px-4 py-2.5 rounded-md
+           hover:border-bone-dim hover:text-bone;
+    transition: all var(--transition-fast);
+  }
+
+  .btn-danger {
+    @apply bg-transparent border border-line text-danger font-mono text-xs
+           px-4 py-2.5 rounded-md
+           hover:border-danger hover:bg-danger/10;
+    transition: all var(--transition-fast);
+  }
+
+  .btn-ghost {
+    @apply bg-transparent text-bone-dim text-sm
+           px-3 py-2 rounded-md
+           hover:bg-ink-3 hover:text-bone;
+    transition: all var(--transition-fast);
+  }
+
+  /* ─── Cards ─────────────────────────────────────────────── */
+  .card {
+    @apply bg-ink-2 border border-line rounded-md overflow-hidden;
+    transition: color var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .card-hover {
+    @apply card hover:border-teal-dim cursor-pointer
+           hover:-translate-y-0.5;
+    transition: all var(--transition-base);
+  }
+
+  /* ─── Inputs ────────────────────────────────────────────── */
+  .input-field {
+    @apply w-full bg-ink border border-line text-bone rounded-md
+           px-3 py-2.5 text-sm font-sans
+           focus:outline-none focus:ring-1 focus:ring-teal focus:border-teal
+           placeholder:text-bone-dim/50;
+    transition: all var(--transition-fast);
+  }
+
+  .label {
+    @apply font-mono text-[11px] text-bone-dim tracking-wider uppercase mb-2 block;
+  }
+
+  /* ─── Tags ──────────────────────────────────────────────── */
+  .tag {
+    @apply font-mono text-[11px] tracking-wider font-bold
+           px-2.5 py-1 rounded inline-block;
+  }
+
+  .tag-teal {
+    @apply tag bg-teal text-ink;
+  }
+
+  .tag-amber {
+    @apply tag bg-amber text-ink;
+  }
+
+  /* ─── Stat Pills ────────────────────────────────────────── */
+  .stat-pill {
+    @apply card px-4 py-3;
+  }
+}

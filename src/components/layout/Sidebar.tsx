@@ -3,8 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dumbbell, Calendar, TrendingUp, Target, Ruler, Trophy, Compass,
-  Users, Settings, ShieldCheck, Wind, Utensils, Map, BookOpen,
-  X, LogOut, Bell,
+  Users, ShieldCheck, Wind, Utensils, BookOpen, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -18,25 +17,27 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  // Train
   { id: 'dashboard', path: '/', label: 'Dashboard', icon: <Dumbbell size={18} />, section: 'TRAIN' },
-  { id: 'plans', path: '/plans', label: 'My Plans', icon: <BookOpen size={18} />, section: 'TRAIN' },
+  { id: 'plans', path: '/plans', label: 'Plans', icon: <BookOpen size={18} />, section: 'TRAIN' },
   { id: 'calendar', path: '/calendar', label: 'Calendar', icon: <Calendar size={18} />, section: 'TRAIN' },
   { id: 'progress', path: '/progress', label: 'Progress', icon: <TrendingUp size={18} />, section: 'TRAIN' },
-  { id: 'skills', path: '/skills', label: 'Skill Tracker', icon: <Target size={18} />, section: 'TRAIN' },
-  { id: 'measurements', path: '/measurements', label: 'Body Log', icon: <Ruler size={18} />, section: 'TRAIN' },
-  { id: 'achievements', path: '/achievements', label: 'Trophy Room', icon: <Trophy size={18} />, section: 'TRAIN' },
-  { id: 'explore', path: '/explore', label: 'Explore', icon: <Compass size={18} />, section: 'SOCIAL' },
-  { id: 'feed', path: '/feed', label: 'Activity Feed', icon: <Users size={18} />, section: 'SOCIAL' },
-  { id: 'warmup', path: '/guide/warmup', label: 'Warm-up + Breath', icon: <Wind size={18} />, section: 'GUIDE' },
-  { id: 'nutrition', path: '/guide/nutrition', label: 'Nutrition', icon: <Utensils size={18} />, section: 'GUIDE' },
-  { id: 'settings', path: '/settings', label: 'Settings', icon: <Settings size={18} />, section: '' },
+  // Performance
+  { id: 'skills', path: '/skills', label: 'Skills', icon: <Target size={18} />, section: 'PERFORMANCE' },
+  { id: 'measurements', path: '/measurements', label: 'Body Log', icon: <Ruler size={18} />, section: 'PERFORMANCE' },
+  { id: 'achievements', path: '/achievements', label: 'Achievements', icon: <Trophy size={18} />, section: 'PERFORMANCE' },
+  // Community
+  { id: 'explore', path: '/explore', label: 'Explore', icon: <Compass size={18} />, section: 'COMMUNITY' },
+  { id: 'feed', path: '/feed', label: 'Activity', icon: <Users size={18} />, section: 'COMMUNITY' },
+  // Knowledge
+  { id: 'warmup', path: '/guide/warmup', label: 'Warm-up', icon: <Wind size={18} />, section: 'KNOWLEDGE' },
+  { id: 'nutrition', path: '/guide/nutrition', label: 'Nutrition', icon: <Utensils size={18} />, section: 'KNOWLEDGE' },
 ];
 
 export function Sidebar() {
-  const { profile, signOut } = useAuthStore();
+  const { profile } = useAuthStore();
   const { sidebarOpen, closeSidebar } = useUIStore();
   const location = useLocation();
-  const navigate = useNavigate();
 
   // Close sidebar on route change
   useEffect(() => {
@@ -52,12 +53,6 @@ export function Sidebar() {
     return () => window.removeEventListener('keydown', handler);
   }, [closeSidebar]);
 
-  const handleSignOut = async () => {
-    await signOut();
-    navigate('/auth');
-    closeSidebar();
-  };
-
   let lastSection = '';
 
   return (
@@ -66,10 +61,11 @@ export function Sidebar() {
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
-            className="fixed inset-0 bg-black/60 z-[290]"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[290]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
             onClick={closeSidebar}
           />
         )}
@@ -77,20 +73,21 @@ export function Sidebar() {
 
       {/* Sidebar panel */}
       <motion.div
-        className="fixed top-0 left-0 h-screen w-[250px] max-w-[82vw] bg-ink-2 border-r border-line z-[300] flex flex-col shadow-2xl"
+        className="fixed top-0 left-0 h-screen w-[260px] max-w-[82vw] bg-ink-2 border-r border-white/[0.06] z-[300] flex flex-col"
+        style={{ boxShadow: sidebarOpen ? '8px 0 40px rgba(0,0,0,0.5)' : 'none' }}
         initial={false}
         animate={{ x: sidebarOpen ? 0 : '-105%' }}
         transition={{ type: 'spring', stiffness: 400, damping: 35 }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-4 border-b border-line">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <div className="flex items-baseline gap-2.5">
             <div className="brand-mark flex-none" />
             <span className="brand-wordmark text-[15px]">APPARATUS</span>
           </div>
           <button
             onClick={closeSidebar}
-            className="w-7 h-7 rounded-full border border-line text-bone-dim hover:border-danger hover:text-danger flex items-center justify-center transition-colors"
+            className="w-7 h-7 rounded-lg border border-white/[0.06] text-bone-dim hover:border-danger/40 hover:text-danger flex items-center justify-center transition-all duration-200"
           >
             <X size={14} />
           </button>
@@ -98,45 +95,55 @@ export function Sidebar() {
 
         {/* User info */}
         {profile && (
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-line">
+          <Link to={`/profile/${profile.username}`} className="flex items-center gap-3 px-5 py-3.5 border-b border-white/[0.06] hover:bg-white/[0.02] transition-colors" onClick={closeSidebar}>
             <img
               src={profile.photoURL || `https://ui-avatars.com/api/?name=${profile.displayName}&background=4F9E8D&color=14151A&bold=true`}
               alt={profile.displayName}
-              className="w-8 h-8 rounded-full border border-teal flex-shrink-0 object-cover"
+              className="w-9 h-9 rounded-full border-2 border-teal/30 flex-shrink-0 object-cover"
               referrerPolicy="no-referrer"
             />
             <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold truncate">{profile.displayName}</div>
-              <div className="text-[10px] text-bone-dim truncate">@{profile.username}</div>
+              <div className="text-sm font-semibold truncate text-bone">{profile.displayName}</div>
+              <div className="text-[11px] text-teal font-mono truncate">@{profile.username}</div>
             </div>
-          </div>
+          </Link>
         )}
 
         {/* Nav items */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-0.5">
-          {NAV_ITEMS.map((item) => {
-            const showSection = item.section && item.section !== lastSection;
-            if (showSection) lastSection = item.section;
+        <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
+          {NAV_ITEMS.map((navItem) => {
+            const showSection = navItem.section && navItem.section !== lastSection;
+            if (showSection) lastSection = navItem.section;
 
-            const isActive = location.pathname === item.path;
+            const isActive = location.pathname === navItem.path;
 
             return (
-              <div key={item.id}>
+              <div key={navItem.id}>
                 {showSection && (
-                  <div className="font-mono text-[10px] tracking-widest text-bone-dim px-3.5 pt-3 pb-1.5">
-                    {item.section}
+                  <div className="font-mono text-[10px] tracking-[0.15em] text-bone-dim/60 px-3 pt-4 pb-1.5 uppercase">
+                    {navItem.section}
                   </div>
                 )}
                 <Link
-                  to={item.path}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-md font-mono text-[13px] transition-all duration-150 w-full ${
+                  to={navItem.path}
+                  className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl font-mono text-[13px] transition-all duration-200 w-full group ${
                     isActive
-                      ? 'bg-teal text-ink font-bold'
-                      : 'text-bone-dim hover:bg-ink-3 hover:text-bone'
+                      ? 'bg-teal/10 text-teal font-bold'
+                      : 'text-bone-dim hover:bg-white/[0.03] hover:text-bone'
                   }`}
                 >
-                  <span className="flex-none w-5 flex items-center justify-center">{item.icon}</span>
-                  <span>{item.label}</span>
+                  {/* Active indicator bar */}
+                  {isActive && (
+                    <motion.div
+                      layoutId="sidebar-active"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-teal rounded-r-full"
+                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                  <span className={`flex-none w-5 flex items-center justify-center transition-colors ${isActive ? 'text-teal' : 'text-bone-dim group-hover:text-bone'}`}>
+                    {navItem.icon}
+                  </span>
+                  <span>{navItem.label}</span>
                 </Link>
               </div>
             );
@@ -145,35 +152,29 @@ export function Sidebar() {
           {/* Admin link */}
           {profile?.isAdmin && (
             <>
-              <div className="font-mono text-[10px] tracking-widest text-bone-dim px-3.5 pt-3 pb-1.5">
+              <div className="font-mono text-[10px] tracking-[0.15em] text-bone-dim/60 px-3 pt-4 pb-1.5 uppercase">
                 ADMIN
               </div>
               <Link
                 to="/admin"
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-md font-mono text-[13px] transition-all duration-150 w-full ${
+                className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl font-mono text-[13px] transition-all duration-200 w-full group ${
                   location.pathname === '/admin'
-                    ? 'bg-teal text-ink font-bold'
-                    : 'text-bone-dim hover:bg-ink-3 hover:text-bone'
+                    ? 'bg-teal/10 text-teal font-bold'
+                    : 'text-bone-dim hover:bg-white/[0.03] hover:text-bone'
                 }`}
               >
+                {location.pathname === '/admin' && (
+                  <motion.div
+                    layoutId="sidebar-active"
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-teal rounded-r-full"
+                  />
+                )}
                 <ShieldCheck size={18} />
                 <span>Admin Panel</span>
               </Link>
             </>
           )}
         </nav>
-
-        {/* Footer */}
-        <div className="border-t border-line px-3 py-3 flex items-center justify-between">
-          <span className="text-[11px] text-bone-dim font-mono">Multi-sport fitness</span>
-          <button
-            onClick={handleSignOut}
-            className="text-bone-dim hover:text-danger transition-colors p-1"
-            title="Sign out"
-          >
-            <LogOut size={16} />
-          </button>
-        </div>
       </motion.div>
     </>
   );

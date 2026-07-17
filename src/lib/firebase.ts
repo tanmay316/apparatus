@@ -3,14 +3,34 @@ import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
+// ─── Environment Variable Validation ──────────────────────────
+// Fail loudly at startup if any required config is missing, rather
+// than letting the app crash mysteriously on the first Firestore call.
+const requiredEnvVars = [
+  'VITE_FIREBASE_API_KEY',
+  'VITE_FIREBASE_AUTH_DOMAIN',
+  'VITE_FIREBASE_PROJECT_ID',
+  'VITE_FIREBASE_STORAGE_BUCKET',
+  'VITE_FIREBASE_MESSAGING_SENDER_ID',
+  'VITE_FIREBASE_APP_ID',
+] as const;
+
+const missing = requiredEnvVars.filter((key) => !import.meta.env[key]);
+if (missing.length > 0) {
+  throw new Error(
+    `Missing required environment variables:\n  ${missing.join('\n  ')}\n\n` +
+    'Create a .env file in the project root. See .env.example for the template.'
+  );
+}
+
 const firebaseConfig = {
-  apiKey: "AIzaSyD4PfAeIz76YYjNWEWix8xk_COM6mGrVcs",
-  authDomain: "apparatus-46b1b.firebaseapp.com",
-  projectId: "apparatus-46b1b",
-  storageBucket: "apparatus-46b1b.firebasestorage.app",
-  messagingSenderId: "716398124057",
-  appId: "1:716398124057:web:8e8c4c8d31ea073067de88",
-  measurementId: "G-YJB1454STJ",
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId:     import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = initializeApp(firebaseConfig);
@@ -20,5 +40,5 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 
-// Admin email — hardcoded for now
-export const ADMIN_EMAIL = 'tanmay.sharma4334@gmail.com';
+// Admin email — loaded from environment variable for flexibility
+export const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';

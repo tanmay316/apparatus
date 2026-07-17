@@ -2,6 +2,33 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Plan, PlanDay, ExerciseLog, SetData, Exercise } from '@/types';
 
+/** Parse the sets count from a sets string like "3 x 8-12". Shared utility. */
+function parseSetsCount(setsStr: string): number {
+  if (!setsStr) return 1;
+  const m = setsStr.match(/^(\d+)\s*x\s*(.+)$/i);
+  return m ? parseInt(m[1], 10) : 1;
+}
+
+/** Determines the exercise mode from the sets string. */
+function inferMode(setsStr: string): 'hold' | 'reps' {
+  return setsStr.includes('sec') || setsStr.includes('min') ? 'hold' : 'reps';
+}
+
+/** The idle/reset state shape. Used by finishWorkout and cancelWorkout. */
+const IDLE_STATE = {
+  isActive: false,
+  planId: null,
+  dayId: null,
+  planTitle: '',
+  dayTitle: '',
+  startedAt: null,
+  warmup: [] as Exercise[],
+  skillWork: [] as Exercise[],
+  strength: [] as Exercise[],
+  cooldown: [] as Exercise[],
+  logs: {} as Record<string, ExerciseLog>,
+} as const;
+
 interface WorkoutState {
   isActive: boolean;
   planId: string | null;
@@ -35,25 +62,9 @@ interface WorkoutState {
 export const useWorkoutStore = create<WorkoutState>()(
   persist(
     (set, get) => ({
-      isActive: false,
-      planId: null,
-      dayId: null,
-      planTitle: '',
-      dayTitle: '',
-      startedAt: null,
-      warmup: [],
-      skillWork: [],
-      strength: [],
-      cooldown: [],
-      logs: {},
+      ...IDLE_STATE,
 
       startWorkout: (plan, day) => {
-        const parseSetsCount = (setsStr: string): number => {
-          if (!setsStr) return 1;
-          const m = setsStr.match(/^(\d+)\s*x\s*(.+)$/i);
-          return m ? parseInt(m[1], 10) : 1;
-        };
-
         const logs: Record<string, ExerciseLog> = {};
         const allExercises = [
           ...(day.warmup || []),
@@ -64,7 +75,7 @@ export const useWorkoutStore = create<WorkoutState>()(
 
         allExercises.forEach((e) => {
           const count = parseSetsCount(e.sets);
-          const mode = e.sets.includes('sec') || e.sets.includes('min') ? 'hold' : 'reps';
+          const mode = inferMode(e.sets);
           logs[e.name] = {
             name: e.name,
             mode,
@@ -159,35 +170,11 @@ export const useWorkoutStore = create<WorkoutState>()(
       },
 
       finishWorkout: () => {
-        set({
-          isActive: false,
-          planId: null,
-          dayId: null,
-          planTitle: '',
-          dayTitle: '',
-          startedAt: null,
-          warmup: [],
-          skillWork: [],
-          strength: [],
-          cooldown: [],
-          logs: {},
-        });
+        set({ ...IDLE_STATE });
       },
 
       cancelWorkout: () => {
-        set({
-          isActive: false,
-          planId: null,
-          dayId: null,
-          planTitle: '',
-          dayTitle: '',
-          startedAt: null,
-          warmup: [],
-          skillWork: [],
-          strength: [],
-          cooldown: [],
-          logs: {},
-        });
+        set({ ...IDLE_STATE });
       },
 
       editExercise: (section, idx, updated) => {
@@ -227,7 +214,7 @@ export const useWorkoutStore = create<WorkoutState>()(
 
           const list = [...state[section], exercise];
           const count = parseSetsCount(exercise.sets);
-          const mode = (exercise.sets.includes('sec') || exercise.sets.includes('min') ? 'hold' : 'reps') as 'hold' | 'reps';
+          const mode = inferMode(exercise.sets);
           const logs = {
             ...state.logs,
             [exercise.name]: {

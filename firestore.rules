@@ -38,14 +38,19 @@ service cloud.firestore {
         || (activity.visibility == 'followers' && isFollower(activity.userId));
     }
 
+    // ─── User Profiles ──────────────────────────────────────────
     // Profiles are public only when the owner opts in. Stats follow the same rule.
     match /users/{uid} {
       allow read: if isAdmin() || isOwner(uid) || resource.data.isPublic == true;
       allow create: if isOwner(uid) && request.resource.data.uid == uid
-        && (request.resource.data.isAdmin == false || isAdmin());
+        && (request.resource.data.isAdmin == false || isAdmin())
+        && request.resource.data.displayName.size() <= 50
+        && request.resource.data.bio.size() <= 500;
       allow update: if isAdmin()
         || (isOwner(uid) && request.resource.data.uid == uid
-          && request.resource.data.isAdmin == resource.data.isAdmin);
+          && request.resource.data.isAdmin == resource.data.isAdmin
+          && request.resource.data.displayName.size() <= 50
+          && request.resource.data.bio.size() <= 500);
       allow delete: if isOwner(uid);
 
       match /stats/{statId} {
@@ -63,12 +68,14 @@ service cloud.firestore {
       }
     }
 
+    // ─── Username Reservation ───────────────────────────────────
     match /usernames/{username} {
       allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
     }
 
+    // ─── Workout Plans ──────────────────────────────────────────
     match /plans/{planId} {
       allow read: if isAdmin() || resource.data.isPublic == true || isOwner(resource.data.ownerId);
       allow create: if isOwner(request.resource.data.ownerId);
@@ -87,6 +94,7 @@ service cloud.firestore {
       }
     }
 
+    // ─── Sample Plans ───────────────────────────────────────────
     match /samplePlans/{planId} {
       allow read: if true;
       allow create, delete: if isAdmin();
@@ -100,6 +108,7 @@ service cloud.firestore {
       }
     }
 
+    // ─── Workouts ───────────────────────────────────────────────
     match /workouts/{workoutId} {
       allow read: if isAdmin() || resource.data.visibility == 'public'
         || isOwner(resource.data.userId)
@@ -118,6 +127,7 @@ service cloud.firestore {
       }
     }
 
+    // ─── Follow System ──────────────────────────────────────────
     match /followers/{uid}/following/{followedUid} {
       allow read: if true;
       allow create: if isOwner(uid) && uid != followedUid;
@@ -130,14 +140,16 @@ service cloud.firestore {
       allow delete: if (isOwner(followerUid) || isOwner(uid)) && uid != followerUid;
     }
 
+    // ─── Activity Feed ──────────────────────────────────────────
     match /activities/{activityId} {
       allow read: if isAdmin() || resource.data.visibility == 'public'
         || isOwner(resource.data.userId)
         || (resource.data.visibility == 'followers' && isFollower(resource.data.userId));
       allow create: if isOwner(request.resource.data.userId)
         && request.resource.data.visibility in ['public', 'followers', 'private'];
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId
+      // Fix: explicit parentheses for operator precedence (owner OR counter update)
+      allow update: if (isOwner(resource.data.userId)
+          && request.resource.data.userId == resource.data.userId)
         || (isAuthenticated() && canReadActivity(activityId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount']));
       allow delete: if isOwner(resource.data.userId);
@@ -149,11 +161,13 @@ service cloud.firestore {
 
       match /comments/{commentId} {
         allow read: if canReadActivity(activityId);
-        allow create: if canReadActivity(activityId) && isOwner(request.resource.data.userId);
+        allow create: if canReadActivity(activityId) && isOwner(request.resource.data.userId)
+          && request.resource.data.text.size() <= 1000;
         allow update, delete: if isOwner(resource.data.userId);
       }
     }
 
+    // ─── Exercise Library ───────────────────────────────────────
     match /exerciseLibrary/{exerciseId} {
       allow read: if true;
       allow create: if isAdmin()
@@ -162,6 +176,7 @@ service cloud.firestore {
         || (isAuthenticated() && resource.data.isCustom == true && resource.data.createdBy == request.auth.uid);
     }
 
+    // ─── Notifications ──────────────────────────────────────────
     match /notifications/{notificationId} {
       allow read: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
       allow update: if isAuthenticated()
@@ -171,22 +186,32 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
     }
 
+    // ─── System Logs ────────────────────────────────────────────
     match /systemLogs/{logId} {
       allow create: if isAuthenticated();
       allow read, delete: if isAdmin();
       allow update: if false;
     }
 
+    // ─── Bans ───────────────────────────────────────────────────
     match /bans/{uid} {
       allow read: if isAdmin() || isOwner(uid);
       allow write: if isAdmin();
     }
 
+    // ─── Reports ────────────────────────────────────────────────
     match /reports/{reportId} {
       allow read: if isAdmin() || isOwner(resource.data.reporterId);
       allow create: if isAuthenticated() && isOwner(request.resource.data.reporterId);
       allow update: if isAdmin();
       allow delete: if isAdmin() || isOwner(resource.data.reporterId);
+    }
+
+    // ─── Catch-All ──────────────────────────────────────────────
+    // Deny access to any collection not explicitly defined above.
+    // This prevents accidentally exposing new collections.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

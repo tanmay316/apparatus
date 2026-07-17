@@ -1,18 +1,24 @@
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, addDoc, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
+import { validateMeasurement } from '@/lib/validation';
 import type { Measurement } from '@/types';
 
 /** Add a body measurement log */
 export const addMeasurement = async (userId: string, data: Omit<Measurement, 'id'>): Promise<string> => {
   const ref = collection(db, `users/${userId}/measurements`);
   
-  // Clean undefined values to prevent Firestore from crashing
-  const cleanData = Object.entries(data).reduce((acc, [key, val]) => {
-    if (val !== undefined) {
-      acc[key] = val;
+  // Clean undefined values and validate numeric fields
+  const cleanData: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(data)) {
+    if (val === undefined) continue;
+    if (key === 'date') {
+      cleanData[key] = val;
+    } else {
+      // Numeric measurement fields: validate realistic bounds
+      const validated = validateMeasurement(val, 0, key === 'weight' ? 500 : key === 'bodyfat' ? 100 : 300);
+      if (validated !== null) cleanData[key] = validated;
     }
-    return acc;
-  }, {} as Record<string, any>);
+  }
 
   const docRef = await addDoc(ref, {
     ...cleanData,

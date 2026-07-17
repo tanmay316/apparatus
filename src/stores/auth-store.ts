@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { User, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider, ADMIN_EMAIL } from '@/lib/firebase';
+import { sanitizeUsername, validateDisplayName } from '@/lib/validation';
 import { useUIStore } from '@/stores/ui-store';
 import type { UserProfile, UserStats } from '@/types';
 
@@ -65,16 +66,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             profile = { uid: firebaseUser.uid, ...profileSnap.data() } as UserProfile;
           } else {
             // First sign-in: create profile
-            const usernameBase = firebaseUser.email?.split('@')[0]?.toLowerCase().replace(/[^a-z0-9]/g, '') || 'athlete';
+            const usernameBase = sanitizeUsername(
+              firebaseUser.email?.split('@')[0] || 'athlete'
+            );
             // The UID suffix makes first-login username creation deterministic and
             // avoids one new user silently claiming another user's handle.
             const username = `${usernameBase.slice(0, 20)}${firebaseUser.uid.slice(0, 5).toLowerCase()}`;
+            const safeDisplayName = validateDisplayName(firebaseUser.displayName || '');
             profile = {
               uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName || 'Athlete',
+              displayName: safeDisplayName,
               username,
               usernameLower: username,
-              displayNameLower: (firebaseUser.displayName || 'Athlete').toLowerCase(),
+              displayNameLower: safeDisplayName.toLowerCase(),
               email: firebaseUser.email || '',
               photoURL: firebaseUser.photoURL || '',
               bio: '',

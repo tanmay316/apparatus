@@ -171,6 +171,7 @@ export interface Comment {
 export interface Notification {
   id?: string;
   type: 'follow' | 'unfollow' | 'like' | 'comment' | 'activity' | 'achievement' | 'reminder';
+  receiverId: string;
   senderId: string;
   senderName: string;
   senderPhoto: string;
@@ -252,5 +253,5 @@ export interface SystemLog {
   context?: string;
   url: string;
   userAgent: string;
-  createdAt: any; // Firestore Timestamp
+  createdAt: Timestamp | null;
 }

@@ -13,11 +13,17 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
   const newWorkoutId = workoutRef.id;
 
   const statsRef = doc(db, 'users', userId, 'stats', 'current');
-  const previousSnapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId), orderBy('startedAt', 'desc'), limit(250)));
-  const previousWorkout = previousSnapshot.docs
-    .map(item => item.data() as Workout)
-    .find(item => item.dayId === workout.dayId && item.date !== workout.date && (item.exercises || []).length > 0) || null;
-  const progressiveOverload = summarizeProgressiveOverload(workout, previousWorkout);
+  let progressiveOverload;
+  try {
+    const previousSnapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId), orderBy('startedAt', 'desc'), limit(250)));
+    const previousWorkout = previousSnapshot.docs
+      .map(item => item.data() as Workout)
+      .find(item => item.dayId === workout.dayId && item.date !== workout.date && (item.exercises || []).length > 0) || null;
+    progressiveOverload = summarizeProgressiveOverload(workout, previousWorkout);
+  } catch {
+    // Progressive overload is a nice-to-have — don't let it block saving.
+    progressiveOverload = undefined;
+  }
 
   await runTransaction(db, async (transaction) => {
     // 1. Read existing stats

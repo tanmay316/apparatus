@@ -1,0 +1,28 @@
+/* ═══════════════════════════════════════════════════════════════
+   APPARATUS — Theme Overrides
+   ═══════════════════════════════════════════════════════════════
+   Theme-specific overrides that cannot be handled by CSS variable
+   swaps alone (e.g. Tailwind utility classes that use hardcoded
+   color values).
+
+   The primary dark/light token switching happens in variables.css.
+   This file handles edge cases that need Tailwind class overrides.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Light theme overrides for Tailwind utilities that reference the
+   static token values rather than CSS custom properties. */
+[data-theme='light'] body {
+  background: var(--color-ink);
+  color: var(--color-bone);
+}
+
+[data-theme='light'] .bg-ink     { background-color: var(--color-ink)     !important; }
+[data-theme='light'] .bg-ink-2   { background-color: var(--color-ink-2)   !important; }
+[data-theme='light'] .bg-ink-3   { background-color: var(--color-ink-3)   !important; }
+[data-theme='light'] .text-bone  { color: var(--color-bone)               !important; }
+[data-theme='light'] .text-bone-dim { color: var(--color-bone-dim)         !important; }
+[data-theme='light'] .border-line { border-color: var(--color-line)        !important; }
+[data-theme='light'] .input-field {
+  background-color: var(--color-ink-2) !important;
+  color: var(--color-bone)             !important;
+}

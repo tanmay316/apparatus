@@ -1,0 +1,94 @@
+/* ═══════════════════════════════════════════════════════════════
+   APPARATUS — Design Tokens (CSS Custom Properties)
+   ═══════════════════════════════════════════════════════════════
+   All color, typography, spacing, and animation tokens live here.
+   To change the look-and-feel of the entire app, edit this file.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ─── Brand Colors ──────────────────────────────────────── */
+  --color-ink:       #090b12;
+  --color-ink-2:     #111522;
+  --color-ink-3:     #181c2a;
+
+  --color-bone:      #F5F1E8;
+  --color-bone-dim:  #A9A69D;
+
+  --color-teal:      #4F9E8D;
+  --color-teal-dim:  #3A756A;
+  --color-teal-light:#5FB09E;
+
+  --color-amber:     #D29A36;
+  --color-amber-light:#D4993F;
+
+  --color-line:      rgba(255,255,255,0.06);
+  --color-line-solid: #1e2130;
+  --color-danger:    #B5504A;
+
+  /* ─── Brand Gradient ────────────────────────────────────── */
+  --gradient-brand:  linear-gradient(110deg, #f4f0e6 18%, #f2b448 55%, #f4f0e6 88%);
+  --gradient-teal:   linear-gradient(to right, var(--color-teal), var(--color-teal-light));
+  --gradient-hero:   linear-gradient(135deg, rgba(79,158,141,0.12) 0%, rgba(9,11,18,0.95) 50%, rgba(210,154,54,0.06) 100%);
+
+  /* ─── Glassmorphism ─────────────────────────────────────── */
+  --glass-bg:        rgba(17, 21, 34, 0.65);
+  --glass-border:    rgba(255, 255, 255, 0.06);
+  --glass-blur:      16px;
+
+  /* ─── Typography ────────────────────────────────────────── */
+  --font-sans:       'Inter', system-ui, sans-serif;
+  --font-display:    'Oswald', sans-serif;
+  --font-mono:       'JetBrains Mono', monospace;
+  --font-brand:      'Suez One', serif;
+
+  /* ─── Sizing & Spacing ──────────────────────────────────── */
+  --page-max-width:  1440px;
+  --page-padding:    24px;
+  --radius-sm:       6px;
+  --radius-md:       12px;
+  --radius-lg:       16px;
+  --radius-xl:       20px;
+
+  /* ─── Transitions ───────────────────────────────────────── */
+  --transition-fast: 150ms ease-out;
+  --transition-base: 200ms ease-out;
+  --transition-slow: 300ms ease-out;
+
+  /* ─── Shadows ───────────────────────────────────────────── */
+  --shadow-sidebar:  8px 0 24px rgba(0, 0, 0, 0.3);
+  --shadow-teal-glow: 0 0 0 3px rgba(79, 158, 141, 0.08), 0 0 18px rgba(79, 158, 141, 0.25);
+  --shadow-card:     0 2px 16px rgba(0, 0, 0, 0.2);
+  --shadow-glow-teal: 0 0 24px rgba(79, 158, 141, 0.15);
+  --shadow-glow-amber: 0 0 24px rgba(210, 154, 54, 0.15);
+
+  /* ─── Selection ─────────────────────────────────────────── */
+  --color-selection-bg: var(--color-teal);
+  --color-selection-fg: var(--color-ink);
+
+  /* ─── Scrollbar ─────────────────────────────────────────── */
+  --scrollbar-track:  var(--color-ink);
+  --scrollbar-thumb:  var(--color-line-solid);
+  --scrollbar-hover:  var(--color-teal-dim);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Light Theme — Override only the tokens that change.
+   Everything keyed off these tokens adapts automatically.
+   ═══════════════════════════════════════════════════════════════ */
+[data-theme='light'] {
+  --color-ink:       #f4f1eb;
+  --color-ink-2:     #fffdf8;
+  --color-ink-3:     #ebe7df;
+
+  --color-bone:      #1a1b20;
+  --color-bone-dim:  #66645e;
+
+  --color-line:      rgba(0,0,0,0.08);
+  --color-line-solid: #d8d2c8;
+
+  --glass-bg:        rgba(255, 253, 248, 0.7);
+  --glass-border:    rgba(0, 0, 0, 0.06);
+
+  --scrollbar-track:  #f4f1eb;
+  --scrollbar-thumb:  #c7c0b5;
+}

@@ -1,17 +1,19 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { ReminderManager } from './ReminderManager';
 
 export function Layout() {
+  const location = useLocation();
+
   return (
     <div className="min-h-screen bg-ink">
       <Sidebar />
       <Topbar />
       <ReminderManager />
 
-      <main className="page-wrap pt-5">
+      <main className="max-w-[1440px] mx-auto px-5 sm:px-6 lg:px-8 py-6">
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}

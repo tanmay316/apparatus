@@ -1,6 +1,7 @@
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, increment, limit, orderBy, runTransaction, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { Activity, Comment, Notification as AppNotification } from '@/types';
+import { validateComment } from '@/lib/validation';
+import type { Activity, Comment, Notification as AppNotification, UserProfile } from '@/types';
 
 async function notify(receiverId: string, notification: Omit<AppNotification, 'id' | 'createdAt' | 'receiverId'>) {
   if (!receiverId || receiverId === notification.senderId) return;
@@ -32,8 +33,10 @@ export async function followUser(myUid: string, targetUid: string): Promise<void
   const followingRef = doc(db, `followers/${myUid}/following`, targetUid);
   const followerRef = doc(db, `followers/${targetUid}/followers`, myUid);
   
-  await setDoc(followingRef, { uid: targetUid, followedAt: serverTimestamp() });
-  await setDoc(followerRef, { uid: myUid, followedAt: serverTimestamp() });
+  const batch = writeBatch(db);
+  batch.set(followingRef, { uid: targetUid, followedAt: serverTimestamp() });
+  batch.set(followerRef, { uid: myUid, followedAt: serverTimestamp() });
+  await batch.commit();
   const senderSnap = await getDoc(doc(db, 'users', myUid));
   const sender = senderSnap.exists() ? senderSnap.data() : {};
   await notify(targetUid, {
@@ -51,8 +54,10 @@ export async function unfollowUser(myUid: string, targetUid: string): Promise<vo
   const followingRef = doc(db, `followers/${myUid}/following`, targetUid);
   const followerRef = doc(db, `followers/${targetUid}/followers`, myUid);
   
-  await deleteDoc(followingRef);
-  await deleteDoc(followerRef);
+  const batch = writeBatch(db);
+  batch.delete(followingRef);
+  batch.delete(followerRef);
+  await batch.commit();
   const senderSnap = await getDoc(doc(db, 'users', myUid));
   const sender = senderSnap.exists() ? senderSnap.data() : {};
   await notify(targetUid, {
@@ -252,8 +257,9 @@ export async function hasLiked(activityId: string, userId: string): Promise<bool
 }
 
 export async function addComment(activityId: string, comment: Omit<Comment, 'id' | 'createdAt'>): Promise<string> {
+  const safeComment = { ...comment, text: validateComment(comment.text) };
   const docRef = await addDoc(collection(db, `activities/${activityId}/comments`), {
-    ...comment,
+    ...safeComment,
     createdAt: serverTimestamp(),
   });
   await updateDoc(doc(db, 'activities', activityId), { commentsCount: increment(1) });

@@ -70,7 +70,8 @@ export function downloadJson(data: unknown, filename: string) {
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
+  // Delay revoke so the browser has time to start the download
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 export async function deleteAccountData(uid: string, username?: string) {

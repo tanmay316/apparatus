@@ -1,0 +1,16 @@
+/* ═══════════════════════════════════════════════════════════════
+   APPARATUS — Utility Styles
+   ═══════════════════════════════════════════════════════════════
+   Gradient text, glass morphism, and custom utility classes.
+   ═══════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  .text-gradient-teal {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-teal);
+  }
+
+  .glass {
+    @apply bg-ink-2/80 backdrop-blur-md border border-line/50;
+  }
+}
