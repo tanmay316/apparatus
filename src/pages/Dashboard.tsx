@@ -131,7 +131,9 @@ export function Dashboard() {
     });
   }
 
-  const completedCount = streakDays.filter(s => s.done).length;
+  const completedCount = activePlan
+    ? new Set(recentWorkouts.filter((w: any) => w.planId === activePlan.id).map((w: any) => w.dayId)).size
+    : streakDays.filter(s => s.done).length;
   const targetDays = activePlan?.daysPerWeek || 6;
   const followersActivity = feed.filter((act: any) => act.userId !== profile.uid);
 
@@ -212,6 +214,9 @@ export function Dashboard() {
         todayWorkouts={todayWorkouts}
         recentWorkouts={recentWorkouts}
         onShareDay={handleShareDay}
+        isActive={store.isActive}
+        sessionProgress={sessionProgress}
+        activeSessionDayId={store.dayId}
       />
 
       {/* 5. XP & Achievements */}

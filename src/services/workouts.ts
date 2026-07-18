@@ -78,20 +78,32 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
     // 3. Update stats object
     const newStats: UserStats = {
       ...stats,
-      totalWorkouts: stats.totalWorkouts + 1,
-      totalCalories: stats.totalCalories + calories,
-      totalDurationMin: stats.totalDurationMin + duration,
-      totalVolume: stats.totalVolume + volume,
+      totalWorkouts: (stats.totalWorkouts || 0) + 1,
+      totalCalories: (stats.totalCalories || 0) + calories,
+      totalDurationMin: (stats.totalDurationMin || 0) + duration,
+      totalVolume: (stats.totalVolume || 0) + volume,
       currentStreak: newStreak,
-      longestStreak: Math.max(stats.longestStreak, newStreak),
+      longestStreak: Math.max(stats.longestStreak || 0, newStreak),
       lastWorkoutDate: today,
-      xp: stats.xp + xpEarned,
-      prCount: stats.prCount + (workout.exercises?.filter(e => e.isPR).length || 0),
+      xp: (stats.xp || 0) + xpEarned,
+      prCount: (stats.prCount || 0) + (workout.exercises?.filter(e => e.isPR).length || 0),
       bestHold,
     };
 
-    // 4. Write data
-    transaction.set(workoutRef, { ...workout, progressiveOverload, id: newWorkoutId, finishedAt: Timestamp.now() });
+    // 4. Clean data of undefined fields which Firestore rejects
+    const workoutData: any = { ...workout, id: newWorkoutId, finishedAt: Timestamp.now() };
+    if (progressiveOverload !== undefined) {
+      workoutData.progressiveOverload = progressiveOverload;
+    }
+    
+    // Deep clone/clean undefined (simple shallow clean for top level fields)
+    Object.keys(workoutData).forEach(key => {
+      if (workoutData[key] === undefined) {
+        delete workoutData[key];
+      }
+    });
+
+    transaction.set(workoutRef, workoutData);
     transaction.set(statsRef, newStats);
   });
 

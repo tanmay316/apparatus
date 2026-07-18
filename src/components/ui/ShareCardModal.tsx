@@ -756,7 +756,7 @@ export function ShareCardModal({ data, onClose }: Props) {
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 50 }}
           transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-          className="relative z-10 w-full max-w-lg flex flex-col h-[90vh] md:h-auto md:max-h-[95vh] bg-ink-1 rounded-t-2xl md:rounded-2xl border-t border-line/20 md:border border-line/30 p-4 pb-6 md:pb-4"
+          className="relative z-10 w-full max-w-lg flex flex-col h-[90vh] md:h-auto md:max-h-[95vh] bg-ink rounded-t-2xl md:rounded-2xl border-t border-line/20 md:border border-line/30 p-4 pb-6 md:pb-4 shadow-2xl"
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-3 flex-shrink-0">
@@ -773,10 +773,10 @@ export function ShareCardModal({ data, onClose }: Props) {
           <div className="flex gap-1.5 mb-2 overflow-x-auto scrollbar-none flex-nowrap pb-1 -mx-2 px-2 flex-shrink-0">
             <button
               onClick={() => setVariant('combined')}
-              className={`flex items-center gap-1.5 text-xs font-mono py-1.5 px-3 rounded-lg transition-all flex-shrink-0 ${
+              className={`flex items-center gap-1.5 text-xs font-mono py-1.5 px-3 rounded-lg transition-all flex-shrink-0 border ${
                 variant === 'combined'
-                  ? 'bg-white/10 text-white border border-white/20'
-                  : 'text-bone-dim border border-line/20 hover:text-bone bg-ink-3/30'
+                  ? 'bg-bone text-ink border-bone shadow-sm'
+                  : 'bg-ink-2 text-bone-dim border-line/50 hover:bg-ink-3 hover:text-bone'
               }`}
             >
               <ImageIcon size={13} />
@@ -784,10 +784,10 @@ export function ShareCardModal({ data, onClose }: Props) {
             </button>
             <button
               onClick={() => setVariant('anatomy')}
-              className={`flex items-center gap-1.5 text-xs font-mono py-1.5 px-3 rounded-lg transition-all flex-shrink-0 ${
+              className={`flex items-center gap-1.5 text-xs font-mono py-1.5 px-3 rounded-lg transition-all flex-shrink-0 border ${
                 variant === 'anatomy'
-                  ? 'bg-white/10 text-white border border-white/20'
-                  : 'text-bone-dim border border-line/20 hover:text-bone bg-ink-3/30'
+                  ? 'bg-bone text-ink border-bone shadow-sm'
+                  : 'bg-ink-2 text-bone-dim border-line/50 hover:bg-ink-3 hover:text-bone'
               }`}
             >
               <ImageIcon size={13} />
@@ -795,10 +795,10 @@ export function ShareCardModal({ data, onClose }: Props) {
             </button>
             <button
               onClick={() => setVariant('exercises')}
-              className={`flex items-center gap-1.5 text-xs font-mono py-1.5 px-3 rounded-lg transition-all flex-shrink-0 ${
+              className={`flex items-center gap-1.5 text-xs font-mono py-1.5 px-3 rounded-lg transition-all flex-shrink-0 border ${
                 variant === 'exercises'
-                  ? 'bg-white/10 text-white border border-white/20'
-                  : 'text-bone-dim border border-line/20 hover:text-bone bg-ink-3/30'
+                  ? 'bg-bone text-ink border-bone shadow-sm'
+                  : 'bg-ink-2 text-bone-dim border-line/50 hover:bg-ink-3 hover:text-bone'
               }`}
             >
               <List size={13} />
@@ -810,10 +810,10 @@ export function ShareCardModal({ data, onClose }: Props) {
           <div className="flex gap-2 mb-3 items-center flex-shrink-0 flex-wrap sm:flex-nowrap">
             <button
               onClick={() => setTransparent(!transparent)}
-              className={`text-xs font-mono py-2 px-3 rounded-lg transition-all flex-shrink-0 ${
+              className={`text-xs font-mono py-2 px-3 rounded-lg transition-all flex-shrink-0 border ${
                 transparent
-                  ? 'bg-amber/10 text-amber border border-amber/30'
-                  : 'text-bone-dim border border-line/20 hover:text-bone bg-ink-3/45'
+                  ? 'bg-amber/10 text-amber border-amber/30'
+                  : 'bg-ink-2 text-bone-dim border-line/50 hover:bg-ink-3 hover:text-bone'
               }`}
             >
               {transparent ? 'Transparent BG' : 'Dark BG'}
@@ -908,7 +908,7 @@ export function ShareCardModal({ data, onClose }: Props) {
             <button
               onClick={handleShare}
               disabled={sharing || !previewUrl}
-              className="flex flex-col items-center gap-1.5 bg-white text-black font-display font-bold uppercase tracking-wider px-3 py-3 rounded-lg text-xs hover:bg-white/90 active:scale-[0.97] transition-all disabled:opacity-50"
+              className="flex flex-col items-center gap-1.5 bg-bone text-ink font-display font-bold uppercase tracking-wider px-3 py-3 rounded-lg text-xs hover:bg-bone/90 active:scale-[0.97] transition-all disabled:opacity-50"
             >
               <Share2 size={18} />
               <span className="text-[10px]">{sharing ? '...' : 'Share'}</span>

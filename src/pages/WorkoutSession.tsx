@@ -12,7 +12,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { ExerciseLogModal } from '@/components/ui/ExerciseLogModal';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
 import type { Exercise } from '@/types';
@@ -85,23 +85,28 @@ export function WorkoutSession() {
   });
 
   const currentDay = days.find(d => d.id === dayId);
-  const wasCompletedToday = todayWorkouts.some((w: any) => w.dayId === dayId);
+  const wasCompletedTodayInitial = todayWorkouts.some((w: any) => w.dayId === dayId);
+  const [forceRedo, setForceRedo] = useState(false);
+  const wasCompletedToday = wasCompletedTodayInitial && !forceRedo;
+  
+  // sessionFinished tracks if the user JUST finished the workout in this current view session
   const [sessionFinished, setSessionFinished] = useState(false);
 
   // Initialize workout if not active or if plan/day mismatch
   useEffect(() => {
     if (todayWorkoutsLoading) return;
     if (plan && currentDay) {
-      if (wasCompletedToday) {
+      if (wasCompletedTodayInitial && !forceRedo) {
         if (store.isActive) store.finishWorkout();
-        setSessionFinished(true);
+        // Do NOT set sessionFinished to true here, otherwise the button says 'Saved' instead of 'Log Again'
         return;
       }
       if (!store.isActive || store.planId !== plan.id || store.dayId !== currentDay.id) {
+        setSessionFinished(false);
         store.startWorkout(plan, currentDay);
       }
     }
-  }, [plan, currentDay, wasCompletedToday, todayWorkoutsLoading]); // Only re-run if plan/day/completion changes
+  }, [plan, currentDay, wasCompletedTodayInitial, forceRedo, todayWorkoutsLoading]); // Only re-run if plan/day/completion changes
 
   // Stopwatch state
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -165,15 +170,18 @@ export function WorkoutSession() {
     ? estimatedCalories
     : Number(completedWorkoutForDay?.calories || 0);
   const externalVolume = calculateWorkoutVolume(activeExercises, activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)), userWeight || 70);
-  const bodyweightReps = calculateBodyweightReps(activeLogs);
+  
+  let maxWeight = 0;
+  activeLogs.forEach(log => {
+    log.sets.forEach((s: any) => {
+      if (s.completed && s.weight && s.weight > maxWeight) {
+        maxWeight = s.weight;
+      }
+    });
+  });
 
-  const displayWeight = userWeight ? (units === 'imperial' ? Math.round(userWeight * 2.20462) : userWeight) : null;
   const displayWeightUnit = units === 'imperial' ? 'lb' : 'kg';
-  const bwLabel = displayWeight ? 'reps @ BW' : 'BW reps';
-
-  const volumeDisplay = externalVolume > 0
-    ? `${externalVolume.toLocaleString()} kg·reps${bodyweightReps ? ` · ${bodyweightReps} ${bwLabel}` : ''}`
-    : bodyweightReps > 0 ? `${bodyweightReps} ${bwLabel}` : '0 kg·reps';
+  const maxWeightDisplay = maxWeight > 0 ? `${maxWeight.toLocaleString()} ${displayWeightUnit}` : `0 ${displayWeightUnit}`;
 
   const handleFinish = async () => {
     if (!user || !store.isActive) return;
@@ -216,7 +224,7 @@ export function WorkoutSession() {
         dayId: store.dayId!,
         dayTitle: store.dayTitle,
         date: localDateKey(new Date()),
-        startedAt: { seconds: Math.floor(store.startedAt! / 1000), nanoseconds: 0 } as any,
+        startedAt: Timestamp.fromMillis(store.startedAt!),
         finishedAt: null, // Set in backend
         durationMin: finalDurationMin,
         calories,
@@ -230,7 +238,14 @@ export function WorkoutSession() {
         commentsCount: 0
       });
 
-      const savedProgress = (await getUserWorkouts(user.uid, 1))[0]?.progressiveOverload;
+      let savedProgress = null;
+      try {
+        const lastWorkouts = await getUserWorkouts(user.uid, 1);
+        savedProgress = lastWorkouts[0]?.progressiveOverload;
+      } catch (workoutQueryError) {
+        console.error('Failed to query workouts for progressive overload check:', workoutQueryError);
+      }
+
       if (savedProgress) {
         try {
           await createSelfNotification(user.uid, savedProgress.message);
@@ -312,6 +327,7 @@ export function WorkoutSession() {
       setSessionFinished(true);
       store.finishWorkout();
     } catch (error) {
+      console.error('Failed to save workout error details:', error);
       showToast('Failed to save workout', 'error');
     }
   };
@@ -484,8 +500,8 @@ export function WorkoutSession() {
             <div className="text-xl font-bold font-mono mt-1 text-bone">{Math.round(elapsedSec / 60)} min</div>
           </div>
           <div className="bg-ink-2 border border-line p-4 rounded-lg min-w-[160px] shrink-0">
-            <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">EXTERNAL VOLUME</div>
-            <div className="text-xl font-bold font-mono mt-1 text-bone">{volumeDisplay}</div>
+            <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">MAX LIFT</div>
+            <div className="text-xl font-bold font-mono mt-1 text-bone">{maxWeightDisplay}</div>
           </div>
           <div className="bg-ink-2 border border-line p-4 rounded-lg min-w-[140px] shrink-0">
             <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">EST. CALORIES</div>
@@ -512,13 +528,19 @@ export function WorkoutSession() {
              <option value="private" className="bg-ink text-bone">Private</option>
            </select>
          </div>
-         <button 
-           onClick={handleFinish}
-           disabled={wasCompletedToday || sessionFinished}
-           className={`py-3.5 px-8 text-base w-full max-w-md font-bold tracking-wider rounded-lg transition-all ${wasCompletedToday ? 'bg-line text-bone-dim cursor-not-allowed opacity-50' : 'bg-sienna text-bone hover:bg-sienna/90'}`}
-         >
-           {wasCompletedToday || sessionFinished ? '✓ Day Logged' : 'Finish Workout'}
-         </button>
+          <button 
+            onClick={() => {
+              if (wasCompletedToday) {
+                setForceRedo(true);
+              } else {
+                handleFinish();
+              }
+            }}
+            disabled={sessionFinished}
+            className={`py-3.5 px-8 text-base w-full max-w-md font-bold tracking-wider rounded-lg transition-all ${sessionFinished ? 'bg-line text-bone-dim cursor-not-allowed opacity-50' : 'bg-sienna text-bone hover:bg-sienna/90'}`}
+          >
+            {sessionFinished ? '✓ Saved' : wasCompletedToday ? 'Log Again' : 'Finish Workout'}
+          </button>
       </div>
 
       {activeExercise && (store[activeExercise.section][activeExercise.index] || wasCompletedToday) && (
