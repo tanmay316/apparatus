@@ -184,12 +184,6 @@ export function SettingsPage() {
           <h1 className="font-display text-3xl mb-1">Settings</h1>
           <p className="text-bone-dim text-sm max-w-xl">Manage your profile, physical measurements, and system preferences.</p>
         </div>
-        <button
-          onClick={handleLogout}
-          className="btn-secondary py-2 text-xs flex items-center gap-2 hover:text-danger hover:border-danger/30"
-        >
-          <LogOut size={14} /> Logout
-        </button>
       </motion.div>
 
       <form onSubmit={handleSave} className="space-y-6">

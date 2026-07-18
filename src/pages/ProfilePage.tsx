@@ -399,9 +399,6 @@ export function ProfilePage() {
                   </>
                 ) : (
                   <>
-                    <button onClick={startEditing} className="btn-primary py-2.5 px-5 flex items-center justify-center gap-1.5 text-xs w-full">
-                      <Edit3 size={14} /> Edit Profile
-                    </button>
                     <button onClick={() => setProfileShareData({
                       dayTitle: `${p.displayName}'s Profile`,
                       planTitle: 'Apparatus Athlete',
@@ -410,7 +407,7 @@ export function ProfilePage() {
                       volume: stats?.totalVolume || 0,
                       calories: displayTotalCalories,
                       exerciseNames: ['Total Workouts: ' + (stats?.totalWorkouts || 0)],
-                    })} className="btn-secondary py-2.5 px-5 flex items-center justify-center gap-1.5 text-xs w-full">
+                    })} className="btn-primary py-2.5 px-5 flex items-center justify-center gap-1.5 text-xs w-full">
                       <Share2 size={14} /> Share Profile
                     </button>
                   </>

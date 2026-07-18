@@ -50,6 +50,19 @@ function formatVolumeStat(vol: number, bodyweightReps: number, bodyweight?: numb
   return 'Bodyweight';
 }
 
+function calculateMaxWeight(exerciseLogs?: ShareCardData['exerciseLogs']): number {
+  if (!exerciseLogs) return 0;
+  let maxWeight = 0;
+  for (const log of exerciseLogs) {
+    for (const s of log.sets) {
+      if (s.completed && s.weight && s.weight > maxWeight) {
+        maxWeight = s.weight;
+      }
+    }
+  }
+  return maxWeight;
+}
+
 // ─── Canvas Drawing — Anatomy Card ──────────────────────────
 function drawAnatomyCard(
   canvas: HTMLCanvasElement,
@@ -82,10 +95,12 @@ function drawAnatomyCard(
   drawCardHeader(ctx, W, cursorY, highlightColor);
   cursorY += 100;
 
-  // ─── Metrics Row ─── (Time | Volume | Sets)
+  // ─── Metrics Row ─── (Time | Max Lift | Sets)
+  const maxWeight = calculateMaxWeight(data.exerciseLogs);
+  const maxWeightStr = maxWeight > 0 ? `${maxWeight} kg` : 'BW';
   const stats = [
     { label: 'Time', value: formatDuration(data.durationMin) },
-    { label: 'Volume', value: formatVolumeStat(volume, calculateBodyweightReps(data.exerciseLogs || []), data.bodyweight, units) },
+    { label: 'Max Lift', value: maxWeightStr },
     { label: 'Sets', value: `${totalSets}` },
   ];
 
@@ -314,9 +329,11 @@ function drawExercisesCard(
   cursorY += 40;
 
   // Metrics (4 Columns)
+  const maxWeight = calculateMaxWeight(data.exerciseLogs);
+  const maxWeightStr = maxWeight > 0 ? `${maxWeight} kg` : 'BW';
   const stats = [
     { label: 'TIME', value: formatDuration(data.durationMin) },
-    { label: 'VOLUME', value: formatVolumeStat(volume, calculateBodyweightReps(data.exerciseLogs || []), data.bodyweight, units) },
+    { label: 'MAX LIFT', value: maxWeightStr },
     { label: 'SETS', value: `${totalSets}` },
     { label: 'KCAL', value: `${calories !== undefined ? calories : data.calories}` },
   ];
@@ -468,9 +485,11 @@ function drawCombinedCard(
   cursorY += 40;
 
   // ─── Metrics Grid (4 columns) ───
+  const maxWeight = calculateMaxWeight(data.exerciseLogs);
+  const maxWeightStr = maxWeight > 0 ? `${maxWeight} kg` : 'BW';
   const stats = [
     { label: 'TIME', value: formatDuration(data.durationMin) },
-    { label: 'VOLUME', value: formatVolumeStat(volume, calculateBodyweightReps(data.exerciseLogs || []), data.bodyweight, units) },
+    { label: 'MAX LIFT', value: maxWeightStr },
     { label: 'SETS', value: `${totalSets}` },
     { label: 'KCAL', value: `${calories !== undefined ? calories : data.calories}` },
   ];
