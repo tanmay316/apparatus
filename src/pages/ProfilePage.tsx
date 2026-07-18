@@ -80,7 +80,7 @@ export function ProfilePage() {
     '--border': 'rgba(255,255,255,0.06)',
     '--text': '#f5f1e8',
     '--muted': '#8b92a5',
-    '--teal': '#4f9e8d',
+    '--teal': '#d7b29d',
     '--amber': '#d9a441',
   } as React.CSSProperties : {
     '--bg': '#f7f8fb',

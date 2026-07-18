@@ -11,10 +11,8 @@
     font-family: var(--font-brand);
     font-weight: 400;
     letter-spacing: 0.05em;
-    background: var(--gradient-brand);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    color: #5d2a1a !important;
+    -webkit-text-fill-color: #5d2a1a !important;
   }
 
   .brand-mark {
@@ -219,5 +217,306 @@
   /* ─── Stat Pills ────────────────────────────────────────── */
   .stat-pill {
     @apply card px-5 py-4;
+  }
+
+  /* ─── Dark Theme Editorial Overrides ────────────────────── */
+  /* Remove outlines/borders globally in dark mode for layout elements */
+  [data-theme='dark'] nav,
+  [data-theme='dark'] header,
+  [data-theme='dark'] aside,
+  [data-theme='dark'] .sidebar,
+  [data-theme='dark'] .navbar,
+  [data-theme='dark'] .border-r,
+  [data-theme='dark'] .border-b,
+  [data-theme='dark'] .border-t,
+  [data-theme='dark'] .border-l,
+  [data-theme='dark'] .border-line,
+  [data-theme='dark'] .border-solid,
+  [data-theme='dark'] .border-\[\#ececec\],
+  [data-theme='dark'] .border-\[\#ececec\]\/50 {
+    border-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* Make all page cards pure black with #1a1a1a border */
+  [data-theme='dark'] .card,
+  [data-theme='dark'] .floating-artifact,
+  [data-theme='dark'] .card-mist,
+  [data-theme='dark'] div.card,
+  [data-theme='dark'] div.floating-artifact,
+  [data-theme='dark'] div.card-mist,
+  [data-theme='dark'] a.card,
+  [data-theme='dark'] button.card {
+    background-color: #000000 !important;
+    border: 1px solid #1a1a1a !important;
+    border-radius: 24px !important;
+    box-shadow: none !important;
+  }
+
+  /* Target generic white/gray background containers in subpages to be dark/black */
+  [data-theme='dark'] .bg-white,
+  [data-theme='dark'] .bg-white\/80,
+  [data-theme='dark'] .bg-white\/90,
+  [data-theme='dark'] .bg-white\/95,
+  [data-theme='dark'] .bg-\[\#fafafb\],
+  [data-theme='dark'] .bg-ink-2 {
+    background-color: #000000 !important;
+  }
+
+  [data-theme='dark'] .bg-\[\#f2f2f3\] {
+    background-color: #141414 !important;
+  }
+
+  [data-theme='dark'] .border-\[\#ececec\],
+  [data-theme='dark'] .border {
+    border-color: #1a1a1a !important;
+  }
+
+  /* Skills Page Card & Progress styling overrides */
+  [data-theme='dark'] .skills-page-container .bg-ink-2,
+  [data-theme='dark'] .skills-page-container .bg-sienna\/5,
+  [data-theme='dark'] .skills-page-container button.bg-ink-2 {
+    background-color: #000000 !important;
+    border: 1px solid #1a1a1a !important;
+    box-shadow: none !important;
+  }
+
+  [data-theme='dark'] .skills-page-container button.bg-ink-2:hover,
+  [data-theme='dark'] .skills-page-container button.bg-ink-3:hover {
+    background-color: #141414 !important;
+    border-color: #3d2c22 !important;
+  }
+
+  [data-theme='dark'] .card-hover:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-soft);
+  }
+
+  /* Weekly Plan Card Height Alignment */
+  .weekly-plan-card {
+    min-height: 220px !important;
+  }
+
+  /* ─── Hero Section Override (Dark Brown) ────────────────── */
+  [data-theme='dark'] .dashboard-hero-card.bg-white {
+    background: linear-gradient(135deg, rgba(93, 42, 26, 0.26) 0%, rgba(31, 21, 12, 0.4) 50%, rgba(0, 0, 0, 0.55) 100%) !important;
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+    border: 1px solid rgba(215, 178, 157, 0.15) !important; /* Elegant glass outline */
+    box-shadow: 0 16px 40px 0 rgba(0, 0, 0, 0.4) !important;
+    color: #f7f5f2 !important; /* Creamy bone */
+  }
+
+  [data-theme='dark'] .dashboard-hero-card h1,
+  [data-theme='dark'] .dashboard-hero-card h1 span {
+    color: #ffffff !important;
+  }
+
+  [data-theme='dark'] .dashboard-hero-card p,
+  [data-theme='dark'] .dashboard-hero-card span.text-\[\#979799\] {
+    color: #bfaea5 !important; /* Muted creamy brown */
+  }
+
+  [data-theme='dark'] .dashboard-hero-card span.bg-\[\#f2f2f3\] {
+    background-color: #382921 !important;
+    color: #f7f5f2 !important;
+  }
+
+  [data-theme='dark'] .dashboard-hero-card span.bg-\[\#fbe1d1\] {
+    background-color: #4f3325 !important;
+    color: #e5bfa7 !important;
+  }
+
+  /* Progress Ring inside Hero Dashboard */
+  [data-theme='dark'] .hero-ring-container {
+    background-color: #33231c !important; /* Light brown inner background */
+  }
+
+  [data-theme='dark'] .hero-ring-bg {
+    stroke: #523b30 !important; /* Light brown outer circle stroke */
+  }
+
+  [data-theme='dark'] .hero-ring-progress {
+    stroke: #ffffff !important; /* White progress stroke */
+  }
+
+  [data-theme='dark'] .hero-ring-container .text-\[\#17191c\] {
+    color: #ffffff !important;
+  }
+
+  [data-theme='dark'] .hero-ring-container .text-\[\#777b86\] {
+    color: #bfaea5 !important;
+  }
+
+  [data-theme='dark'] .hero-ring-container .text-\[\#5d2a1a\] {
+    color: #ffffff !important;
+  }
+
+  /* ─── XP Panel Card Override (Full Black) ────────────────── */
+  [data-theme='dark'] .xp-panel-card {
+    background-color: #000000 !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+    color: #f7f5f2 !important;
+  }
+
+  [data-theme='dark'] .xp-panel-card .text-\[\#17191c\] {
+    color: #ffffff !important;
+  }
+
+  [data-theme='dark'] .xp-panel-card .text-\[\#777b86\],
+  [data-theme='dark'] .xp-panel-card .text-\[\#979799\] {
+    color: #8b9098 !important;
+  }
+
+  [data-theme='dark'] .xp-panel-card .bg-\[\#17191c\] {
+    background-color: #d7b29d !important; /* Light brown */
+    color: #1F150C !important;
+  }
+
+  [data-theme='dark'] .xp-panel-card .text-white {
+    color: #1F150C !important; /* Dark brown on light brown background */
+  }
+
+  [data-theme='dark'] .xp-panel-card .bg-\[\#f2f2f3\] {
+    background-color: #141414 !important;
+    color: #8b9098 !important;
+  }
+
+  [data-theme='dark'] .xp-panel-card .bg-\[\#fbe1d1\] {
+    background-color: #2d1a12 !important;
+    color: #e5bfa7 !important;
+  }
+
+  [data-theme='dark'] .xp-panel-card a {
+    color: #ffffff !important;
+  }
+
+  [data-theme='dark'] .xp-panel-card .border-white {
+    border-color: #000000 !important;
+  }
+
+  /* ─── KPI Card Override (Full Black) ─────────────────────── */
+  [data-theme='dark'] .kpi-stat-card {
+    background-color: #000000 !important;
+    border-color: #1a1a1a !important;
+    box-shadow: none !important;
+  }
+
+  [data-theme='dark'] .kpi-stat-card .bg-\[\#edf4ff\],
+  [data-theme='dark'] .kpi-stat-card .bg-\[\#fff4ed\],
+  [data-theme='dark'] .kpi-stat-card .bg-\[\#f5f3ff\] {
+    background-color: #141414 !important;
+  }
+
+  /* ─── Weekly Plan Card Override (Full Black) ─────────────── */
+  [data-theme='dark'] .weekly-plan-card {
+    background-color: #000000 !important;
+    border-color: #1a1a1a !important;
+    box-shadow: none !important;
+  }
+
+  [data-theme='dark'] .weekly-plan-card .bg-\[\#f2f2f3\],
+  [data-theme='dark'] .weekly-plan-card .bg-ink,
+  [data-theme='dark'] .weekly-plan-card .bg-ink-2 {
+    background-color: #000000 !important;
+  }
+
+  [data-theme='dark'] .weekly-plan-card .border-line,
+  [data-theme='dark'] .weekly-plan-card .border {
+    border-color: #1a1a1a !important;
+  }
+
+  [data-theme='dark'] .weekly-plan-card .bg-white\/40 {
+    background-color: #141414 !important;
+  }
+
+  [data-theme='dark'] .weekly-plan-card .bg-ink {
+    background-color: #141414 !important;
+  }
+
+  /* ─── Activity Post Card Override (Full Black) ──────────── */
+  [data-theme='dark'] .activity-post-card {
+    background-color: #000000 !important;
+    border-color: #1a1a1a !important; /* Extremely dark border or transparent */
+    box-shadow: none !important;
+    color: #f7f5f2 !important;
+  }
+
+  [data-theme='dark'] .activity-post-card a,
+  [data-theme='dark'] .activity-post-card span.font-serif,
+  [data-theme='dark'] .activity-post-card h3 {
+    color: #ffffff !important;
+  }
+
+  [data-theme='dark'] .activity-post-card .text-\[\#17191c\] {
+    color: #f7f5f2 !important;
+  }
+
+  [data-theme='dark'] .activity-post-card .text-\[\#777b86\],
+  [data-theme='dark'] .activity-post-card .text-\[\#979799\] {
+    color: #8b9098 !important;
+  }
+
+  /* Inner elements of Activity Card */
+  [data-theme='dark'] .activity-post-card .bg-\[\#fafafb\] {
+    background-color: #0d0d0d !important;
+    border-color: #1a1a1a !important;
+  }
+
+  [data-theme='dark'] .activity-post-card .bg-white {
+    background-color: #0d0d0d !important;
+    border-color: #1a1a1a !important;
+  }
+
+  [data-theme='dark'] .activity-post-card .border-\[\#ececec\],
+  [data-theme='dark'] .activity-post-card .border-2 {
+    border-color: #1a1a1a !important;
+  }
+
+  [data-theme='dark'] .activity-post-card .bg-\[\#f2f2f3\] {
+    background-color: #141414 !important;
+  }
+
+  [data-theme='dark'] .activity-post-card button:hover {
+    color: #ffffff !important;
+  }
+
+  [data-theme='dark'] .activity-post-card .bg-\[\#e8f5e9\] {
+    background-color: #162418 !important;
+    color: #4ade80 !important;
+  }
+
+  [data-theme='dark'] .activity-post-card .text-\[\#2e7d32\] {
+    color: #4ade80 !important;
+  }
+
+  [data-theme='dark'] .brand-wordmark {
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    color: #8c5a49 !important;
+    -webkit-text-fill-color: #8c5a49 !important;
+  }
+
+  [data-theme='dark'] header,
+  [data-theme='dark'] .bg-ink\/90 {
+    background-color: #000000 !important;
+  }
+
+  /* Dark Theme Ambient Background Mesh Glow Overrides (Sienna Brown / Dark Peach) */
+  [data-theme='dark'] .ambient-glow-1 {
+    background: radial-gradient(circle at center, rgba(93, 42, 26, 0.16) 0%, transparent 68%) !important;
+    opacity: 0.95 !important;
+  }
+
+  [data-theme='dark'] .ambient-glow-2 {
+    background: radial-gradient(circle at center, rgba(122, 67, 48, 0.14) 0%, transparent 72%) !important;
+    opacity: 0.95 !important;
+  }
+
+  [data-theme='dark'] .ambient-glow-3 {
+    background: radial-gradient(circle at center, rgba(31, 21, 12, 0.3) 0%, transparent 70%) !important;
+    opacity: 0.9 !important;
   }
 }

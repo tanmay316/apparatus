@@ -137,7 +137,7 @@ export function Sidebar() {
                   {isActive && (
                     <motion.div
                       layoutId="sidebar-active"
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-bone rounded-r-full"
+                      className="absolute left-0 top-1/2 -mt-2.5 w-[3px] h-5 bg-bone rounded-r-full"
                       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                     />
                   )}
@@ -167,7 +167,7 @@ export function Sidebar() {
                 {location.pathname === '/admin' && (
                   <motion.div
                     layoutId="sidebar-active"
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-bone rounded-r-full"
+                    className="absolute left-0 top-1/2 -mt-2.5 w-[3px] h-5 bg-bone rounded-r-full"
                   />
                 )}
                 <ShieldCheck size={18} />

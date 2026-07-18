@@ -83,7 +83,7 @@ export function StatsPills({ totalWorkouts, totalCalories, totalHours }: StatsPi
             key={pill.key}
             whileHover={{ y: -2 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="p-5 sm:p-6 min-w-[220px] sm:min-w-0 shrink-0 sm:shrink rounded-[24px] bg-ink border border-line shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.06),0_8px_10px_-6px_rgba(0,0,0,0.04)] flex items-center justify-between text-bone relative z-0 hover:z-10"
+            className="kpi-stat-card p-5 sm:p-6 min-w-[220px] sm:min-w-0 shrink-0 sm:shrink rounded-[24px] bg-ink border border-line shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.06),0_8px_10px_-6px_rgba(0,0,0,0.04)] flex items-center justify-between text-bone relative z-0 hover:z-10"
           >
             <div className="flex items-center gap-4 min-w-0">
               <div className={`w-12 h-12 rounded-full ${pill.iconBg} flex items-center justify-center ${pill.iconColor} shrink-0`}>

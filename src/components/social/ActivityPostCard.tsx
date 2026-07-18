@@ -119,7 +119,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="relative overflow-hidden text-[#17191c] border border-[#ececec] rounded-[24px] bg-white shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] p-6 mb-6"
+      className="activity-post-card relative overflow-hidden text-[#17191c] border border-[#ececec] rounded-[24px] bg-white shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] p-6 mb-6"
     >
       {/* ─── SECTION 1: HEADER ────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 mb-5">

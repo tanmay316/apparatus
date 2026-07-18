@@ -36,7 +36,7 @@ export function XPPanel({ xp, streak, badges }: XPPanelProps) {
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="relative overflow-hidden p-8 mb-8 rounded-[24px] bg-white border border-[#ececec] shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] text-[#17191c]"
+      className="xp-panel-card relative overflow-hidden p-8 mb-8 rounded-[24px] bg-white border border-[#ececec] shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] text-[#17191c]"
     >
       <div className="relative flex flex-col sm:flex-row items-center gap-6">
         {/* Level badge */}

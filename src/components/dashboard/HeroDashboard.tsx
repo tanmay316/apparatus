@@ -40,7 +40,7 @@ export function HeroDashboard({ displayName, streak, xp, completedCount, targetD
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="relative overflow-hidden mb-10 p-6 sm:p-8 md:p-10 rounded-[24px] bg-white border border-[#ececec] shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] text-[#17191c]"
+      className="dashboard-hero-card relative overflow-hidden mb-10 p-6 sm:p-8 md:p-10 rounded-[24px] bg-white border border-[#ececec] shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] text-[#17191c]"
     >
       <div className="relative flex flex-col items-center md:flex-row md:items-center md:justify-between gap-6 md:gap-8">
         {/* Left Editorial Copy */}
@@ -68,16 +68,16 @@ export function HeroDashboard({ displayName, streak, xp, completedCount, targetD
         </div>
 
         {/* Circular Gestural Progress Ring — centered on mobile */}
-        <div className="relative w-28 h-28 sm:w-32 sm:h-32 md:w-36 md:h-36 shrink-0 p-3 rounded-full bg-[#f2f2f3] flex items-center justify-center mx-auto md:mx-0">
+        <div className="hero-ring-container relative w-28 h-28 sm:w-32 sm:h-32 md:w-36 md:h-36 shrink-0 p-3 rounded-full bg-[#f2f2f3] flex items-center justify-center mx-auto md:mx-0">
           <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
-            <circle cx="60" cy="60" r="50" fill="none" stroke="#e0e0e2" strokeWidth="6" />
+            <circle cx="60" cy="60" r="50" fill="none" stroke="#e0e0e2" strokeWidth="6" className="hero-ring-bg" />
             <circle
               cx="60" cy="60" r="50" fill="none"
               stroke="#5d2a1a" strokeWidth="6"
               strokeLinecap="round"
               strokeDasharray={circumference}
               strokeDashoffset={circumference - strokeDash}
-              className="transition-all duration-1000 ease-out"
+              className="hero-ring-progress transition-all duration-1000 ease-out"
             />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">

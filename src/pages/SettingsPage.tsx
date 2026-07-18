@@ -413,8 +413,8 @@ export function SettingsPage() {
             <div>
               <label className="label">Theme</label>
               <select className="input-field bg-ink-2" value={theme} onChange={(event) => setTheme(event.target.value as 'dark' | 'light')}>
-                <option value="dark">Dark</option>
                 <option value="light">Light</option>
+                <option value="dark">Dark</option>
               </select>
             </div>
             <div>

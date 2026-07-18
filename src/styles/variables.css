@@ -115,16 +115,29 @@
 
 /* Steep Dark Theme */
 [data-theme='dark'] {
-  --color-ink:       23 25 28;     /* #17191c Ink Black */
-  --color-ink-2:     30 32 36;     /* #1e2024 Mist Gray Dark */
-  --color-ink-3:     36 39 44;     /* #24272c Fog White Dark */
+  --color-ink:       8 7 6;        /* #080706 Canvas Base */
+  --color-ink-2:     15 13 12;     /* #0f0d0c Surface Secondary */
+  --color-ink-3:     10 7 6;       /* #0A0706 Premium black-brown canvas background */
 
-  --color-bone:      255 255 255;  /* #ffffff Primary Text */
-  --color-bone-dim:  151 151 153;  /* #979799 Ash Gray */
+  --color-bone:      247 245 242;  /* #f7f5f2 Primary Text */
+  --color-bone-dim:  139 144 152;  /* #8b9098 Muted Text */
 
-  --color-line:      46 49 54;     /* #2e3136 Hairline Dark */
+  --color-line:      110 115 123;  /* #6e737b Subtle Border/Divider */
   --color-line-solid: 58 61 68;
 
-  --surface-canvas:   #17191c;
+  --color-sienna:    215 178 157;  /* #d7b29d Accent */
+  --color-sienna-dim: 122 67 48;   /* #7a4330 Accent Strong */
+
+  --surface-canvas:   #0A0706;
+
+  --shadow-subtle: none;
+  --shadow-subtle-2: none;
+  --shadow-subtle-3: none;
+  --shadow-artifact: none;
+  --clay-shadow-lg: none;
+  --neo-shadow-raised: none;
+  --neo-shadow-raised-lg: none;
+  
+  --shadow-soft: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 24px 60px rgba(0, 0, 0, 0.35);
 }
 

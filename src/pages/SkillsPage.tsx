@@ -70,7 +70,7 @@ export function SkillsPage() {
   const overallProgress = Math.round((totalMastered / totalSkills) * 100);
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+    <motion.div variants={container} initial="hidden" animate="show" className="skills-page-container space-y-6">
       {/* Header */}
       <motion.div variants={item} className="pb-5 border-b border-line mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>

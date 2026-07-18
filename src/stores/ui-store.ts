@@ -32,7 +32,7 @@ export const useUIStore = create<UIState>()(persist((set) => ({
     setTimeout(() => set({ toast: null }), 3500);
   },
   clearToast: () => set({ toast: null }),
-  theme: 'dark',
+  theme: 'light',
   units: 'metric',
   language: 'en',
   setTheme: (theme) => set({ theme }),

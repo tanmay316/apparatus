@@ -293,6 +293,13 @@ export function WorkoutSession() {
       queryClient.invalidateQueries({ queryKey: ['progressWorkouts'] });
       queryClient.invalidateQueries({ queryKey: ['calendarWorkouts'] });
 
+      // Refresh Zustand store stats with new database data so all components re-render immediately
+      try {
+        await useAuthStore.getState().refreshProfile();
+      } catch (refreshError) {
+        console.error('Failed to refresh profile stats locally:', refreshError);
+      }
+
       // Navigate or show celebration! We'll show celebration by setting local state or let App handle it.
       // But user wanted: "after i log my day it should display this type of pop up"
       // We will show a custom celebration dialog
