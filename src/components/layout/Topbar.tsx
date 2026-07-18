@@ -172,8 +172,7 @@ export function Topbar() {
           {/* Semantic Search Results Dropdown */}
           {searchFocused && hasSearchQuery && (
             <div
-              className="absolute left-0 right-0 top-11 rounded-2xl border border-white/[0.08] shadow-2xl z-[80] overflow-hidden max-h-[420px] overflow-y-auto divide-y divide-white/[0.04]"
-              style={{ background: 'rgba(17,21,34,0.96)', backdropFilter: 'blur(20px)' }}
+              className="absolute left-0 right-0 top-11 rounded-2xl border border-line shadow-2xl z-[80] overflow-hidden max-h-[420px] overflow-y-auto divide-y divide-line/30 bg-ink-2/95 backdrop-blur-xl"
             >
               {!hasSearchResults ? (
                 <div className="p-4 text-center text-xs text-bone-dim font-mono">
@@ -195,7 +194,7 @@ export function Topbar() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={() => setSearchFocused(false)}
-                            className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.04] transition-colors group"
+                            className="flex items-center justify-between p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group"
                           >
                             <div>
                               <div className="text-xs text-bone font-medium group-hover:text-bone transition-colors">{ex.name}</div>
@@ -220,7 +219,7 @@ export function Topbar() {
                             key={plan.id}
                             to={`/plans/${plan.id}`}
                             onClick={() => setSearchFocused(false)}
-                            className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.04] transition-colors group"
+                            className="flex items-center justify-between p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group"
                           >
                             <div>
                               <div className="text-xs text-bone font-medium group-hover:text-bone transition-colors">{plan.title}</div>
@@ -245,7 +244,7 @@ export function Topbar() {
                             key={athlete.uid}
                             to={`/profile/${athlete.username || athlete.uid}`}
                             onClick={() => setSearchFocused(false)}
-                            className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/[0.04] transition-colors group"
+                            className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group"
                           >
                             <img
                               src={athlete.photoURL || getAvatarUrl(athlete.displayName, theme)}
@@ -305,12 +304,12 @@ export function Topbar() {
                 </button>
 
                 {notificationsOpen && (
-                  <div className="fixed md:absolute right-4 md:right-0 top-16 md:top-12 w-[calc(100vw-2rem)] md:w-80 rounded-2xl border border-line shadow-2xl z-[70] p-3" style={{ background: 'rgba(17,21,34,0.95)', backdropFilter: 'blur(20px)' }}>
+                  <div className="fixed md:absolute right-4 md:right-0 top-16 md:top-12 w-[calc(100vw-2rem)] md:w-80 rounded-2xl border border-line shadow-2xl z-[70] p-3 bg-ink-2/95 backdrop-blur-xl">
                     <div className="flex items-center justify-between px-2 pb-2 border-b border-line">
                       <span className="font-display text-sm">Notifications</span>
                       <span className="font-mono text-[10px] text-bone-dim">{notifications.filter(item => !item.read).length} unread</span>
                     </div>
-                    <div className="max-h-72 overflow-y-auto divide-y divide-white/[0.04]">
+                    <div className="max-h-72 overflow-y-auto divide-y divide-line/30">
                       {notifications.length === 0 ? (
                         <p className="text-xs text-bone-dim text-center py-6">You are all caught up.</p>
                       ) : (
@@ -318,7 +317,7 @@ export function Topbar() {
                           <button
                             key={notification.id}
                             onClick={() => handleNotificationClick(notification)}
-                            className={`w-full text-left px-2 py-3 rounded-lg hover:bg-white/[0.03] transition-colors ${!notification.read ? 'bg-bone/5' : ''}`}
+                            className={`w-full text-left px-2 py-3 rounded-lg hover:bg-bone/[0.05] transition-colors ${!notification.read ? 'bg-bone/5' : ''}`}
                           >
                             <div className="text-xs text-bone">{notification.message}</div>
                             <div className="font-mono text-[10px] text-bone-dim mt-1">

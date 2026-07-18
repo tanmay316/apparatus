@@ -55,7 +55,16 @@ function PublicOnly({ children }: { children: React.ReactNode }) {
 }
 
 function PreferencesSync() {
-  const { theme, language } = useUIStore();
+  const { theme, setTheme, language } = useUIStore();
+
+  useEffect(() => {
+    const key = 'forced-light-theme-reset-v2';
+    if (!localStorage.getItem(key)) {
+      localStorage.setItem(key, 'true');
+      setTheme('light');
+    }
+  }, [setTheme]);
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.lang = language;
