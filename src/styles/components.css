@@ -25,6 +25,24 @@
     box-shadow: 0 0 10px rgba(var(--color-sienna), 0.5);
   }
 
+  /* Sienna background text contrast overrides (forces legible light brown/peach text) */
+  .bg-sienna,
+  .bg-sienna-dim,
+  .hover\:bg-sienna:hover,
+  .hover\:bg-sienna-dim:hover {
+    color: #fbe1d1 !important;
+  }
+  .bg-sienna.text-bone,
+  .bg-sienna-dim.text-bone,
+  .bg-sienna .text-bone,
+  .bg-sienna-dim .text-bone,
+  .hover\:bg-sienna:hover.text-bone,
+  .hover\:bg-sienna-dim:hover.text-bone,
+  .hover\:bg-sienna:hover .text-bone,
+  .hover\:bg-sienna-dim:hover .text-bone {
+    color: #fbe1d1 !important;
+  }
+
   /* ─── Buttons (Tactile Clay Pill Buttons) ───────────────── */
   .btn-primary {
     @apply text-white font-display font-semibold tracking-wide
