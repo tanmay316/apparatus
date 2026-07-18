@@ -37,9 +37,33 @@ function AnimatedCounter({ value, suffix = '' }: { value: number; suffix?: strin
 }
 
 const pills = [
-  { key: 'workouts', label: 'Workouts', icon: Zap, color: 'text-teal', bg: 'bg-teal/10', border: 'border-teal/15', glow: 'hover:shadow-[0_0_16px_rgba(79,158,141,0.12)]', suffix: '' },
-  { key: 'calories', label: 'Calories', icon: TrendingUp, color: 'text-amber', bg: 'bg-amber/10', border: 'border-amber/15', glow: 'hover:shadow-[0_0_16px_rgba(210,154,54,0.12)]', suffix: '' },
-  { key: 'hours', label: 'Hours', icon: Clock, color: 'text-teal', bg: 'bg-teal/10', border: 'border-teal/15', glow: 'hover:shadow-[0_0_16px_rgba(79,158,141,0.12)]', suffix: 'h' },
+  {
+    key: 'workouts',
+    label: 'Workouts Completed',
+    tag: 'Total Sessions',
+    icon: Zap,
+    iconBg: 'bg-[#edf4ff]',
+    iconColor: 'text-[#2563eb]',
+    suffix: '',
+  },
+  {
+    key: 'calories',
+    label: 'Calories Burned',
+    tag: 'Energy Output',
+    icon: TrendingUp,
+    iconBg: 'bg-[#fff4ed]',
+    iconColor: 'text-[#ea580c]',
+    suffix: '',
+  },
+  {
+    key: 'hours',
+    label: 'Training Hours',
+    tag: 'Time Invested',
+    icon: Clock,
+    iconBg: 'bg-[#f5f3ff]',
+    iconColor: 'text-[#9333ea]',
+    suffix: 'h',
+  },
 ];
 
 export function StatsPills({ totalWorkouts, totalCalories, totalHours }: StatsPillsProps) {
@@ -47,28 +71,41 @@ export function StatsPills({ totalWorkouts, totalCalories, totalHours }: StatsPi
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15 }}
-      className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6"
+      className="flex gap-4 overflow-x-auto px-4 -mx-4 pb-5 pt-1 sm:overflow-visible sm:px-0 sm:mx-0 sm:pb-0 sm:pt-0 sm:grid sm:grid-cols-3 sm:gap-5 mb-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
     >
       {pills.map((pill) => {
         const Icon = pill.icon;
         return (
-          <div
+          <motion.div
             key={pill.key}
-            className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl border ${pill.border} ${pill.bg} transition-all duration-300 ${pill.glow} cursor-default group`}
+            whileHover={{ y: -2 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="p-5 sm:p-6 min-w-[220px] sm:min-w-0 shrink-0 sm:shrink rounded-[24px] bg-ink border border-line shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.06),0_8px_10px_-6px_rgba(0,0,0,0.04)] flex items-center justify-between text-bone relative z-0 hover:z-10"
           >
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${pill.bg} ${pill.color} shrink-0 group-hover:scale-110 transition-transform duration-200`}>
-              <Icon size={18} />
-            </div>
-            <div className="min-w-0">
-              <div className="font-display text-xl text-bone leading-none">
-                <AnimatedCounter value={values[pill.key]} suffix={pill.suffix} />
+            <div className="flex items-center gap-4 min-w-0">
+              <div className={`w-12 h-12 rounded-full ${pill.iconBg} flex items-center justify-center ${pill.iconColor} shrink-0`}>
+                <Icon size={20} strokeWidth={2} />
               </div>
-              <div className="font-mono text-[10px] text-bone-dim tracking-wider mt-0.5">{pill.label.toUpperCase()}</div>
+
+              <div className="min-w-0">
+                <div className="text-[14px] font-sans font-normal text-bone-dim">
+                  {pill.label}
+                </div>
+                <div className="font-sans font-semibold text-2xl text-bone leading-tight mt-0.5">
+                  <AnimatedCounter value={values[pill.key]} suffix={pill.suffix} />
+                </div>
+              </div>
             </div>
-          </div>
+
+            <div className="hidden xl:block text-right">
+              <span className="text-xs font-sans text-bone-dim">
+                {pill.tag}
+              </span>
+            </div>
+          </motion.div>
         );
       })}
     </motion.div>

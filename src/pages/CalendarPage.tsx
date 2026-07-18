@@ -80,13 +80,13 @@ export function CalendarPage() {
       {/* Month Navigation */}
       <motion.div variants={item} className="card p-5 mb-6">
         <div className="flex items-center justify-between mb-6">
-          <button onClick={prevMonth} className="p-2 rounded-lg border border-line hover:border-teal hover:text-teal transition-colors">
+          <button onClick={prevMonth} className="p-2 rounded-lg border border-line hover:border-sienna hover:text-sienna transition-colors">
             <ChevronLeft size={18} />
           </button>
           <h2 className="font-display text-xl tracking-wider">
             {MONTHS[currentMonth]} {currentYear}
           </h2>
-          <button onClick={nextMonth} className="p-2 rounded-lg border border-line hover:border-teal hover:text-teal transition-colors">
+          <button onClick={nextMonth} className="p-2 rounded-lg border border-line hover:border-sienna hover:text-sienna transition-colors">
             <ChevronRight size={18} />
           </button>
         </div>
@@ -103,7 +103,7 @@ export function CalendarPage() {
         {/* Calendar grid */}
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <div className="w-6 h-6 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
           <div className="grid grid-cols-7 gap-1">
@@ -121,17 +121,17 @@ export function CalendarPage() {
                   onClick={() => setSelectedDate(cell.dateStr)}
                   className={`aspect-square rounded-lg flex flex-col items-center justify-center text-sm font-mono relative transition-all ${
                     isSelected
-                      ? 'bg-teal text-ink font-bold ring-2 ring-teal ring-offset-2 ring-offset-ink'
+                      ? 'bg-sienna text-bone font-bold ring-2 ring-sienna ring-offset-2 ring-offset-ink'
                       : isToday
                       ? 'bg-amber/15 text-amber font-bold border border-amber/30'
                       : hasWorkout
-                      ? 'bg-teal/10 text-bone hover:bg-teal/20 border border-teal/20'
+                      ? 'bg-sienna/10 text-bone hover:bg-sienna/20 border border-sienna/20'
                       : 'text-bone-dim hover:bg-ink-3 border border-transparent'
                   }`}
                 >
                   {cell.day}
                   {hasWorkout && !isSelected && (
-                    <div className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-teal" />
+                    <div className="absolute bottom-1 w-1.5 h-1.5 rounded-full bg-sienna" />
                   )}
                 </button>
               );
@@ -149,7 +149,7 @@ export function CalendarPage() {
           className="card p-5"
         >
           <div className="flex items-center gap-2 mb-4">
-            <CalIcon size={16} className="text-teal" />
+            <CalIcon size={16} className="text-sienna" />
             <h3 className="font-display text-base">
               {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
             </h3>
@@ -166,7 +166,7 @@ export function CalendarPage() {
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <div className="font-bold text-sm">{w.planTitle || 'Workout'}</div>
-                      <div className="font-mono text-xs text-teal">{w.dayTitle || ''}</div>
+                      <div className="font-mono text-xs text-sienna">{w.dayTitle || ''}</div>
                     </div>
                     <span className="font-mono text-[10px] text-bone-dim bg-ink-3 px-2 py-0.5 rounded">
                       {w.exercises?.length || 0} exercises
@@ -174,7 +174,7 @@ export function CalendarPage() {
                   </div>
                   <div className="grid grid-cols-3 gap-3 mt-3 pt-3 border-t border-line/30">
                     <div className="flex items-center gap-1.5 text-xs">
-                      <Clock size={12} className="text-teal" />
+                      <Clock size={12} className="text-sienna" />
                       <span className="font-mono text-bone-dim">{w.durationMin} min</span>
                     </div>
                     <div className="flex items-center gap-1.5 text-xs">

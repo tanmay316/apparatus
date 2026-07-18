@@ -134,7 +134,7 @@ export function ExerciseAutocomplete({
               key={ex.id}
               type="button"
               onClick={() => handleSelectOption(ex)}
-              className="w-full text-left px-3 py-2 text-sm hover:bg-teal hover:text-ink transition-colors flex flex-col"
+              className="w-full text-left px-3 py-2 text-sm hover:bg-sienna hover:text-bone transition-colors flex flex-col"
             >
               <span className="font-bold">{ex.name}</span>
               <span className="text-[10px] text-bone-dim hover:text-ink/80 font-mono">

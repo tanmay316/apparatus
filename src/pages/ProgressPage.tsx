@@ -86,8 +86,8 @@ function VolumeChart({ workouts }: { workouts: Workout[] }) {
       
       // Gradient bar
       const grad = ctx.createLinearGradient(x, y, x, padding.top + chartH);
-      grad.addColorStop(0, 'rgba(79,158,141,0.9)');
-      grad.addColorStop(1, 'rgba(79,158,141,0.3)');
+      grad.addColorStop(0, 'rgba(93,42,26,0.9)');
+      grad.addColorStop(1, 'rgba(93,42,26,0.3)');
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
@@ -162,8 +162,8 @@ function WorkoutHeatmap({ workouts }: { workouts: Workout[] }) {
                 cell.isToday ? 'ring-1 ring-amber ring-offset-1 ring-offset-ink' : ''
               } ${
                 cell.count === 0 ? 'bg-line/40' :
-                cell.count === 1 ? 'bg-teal/50' :
-                cell.count >= 2 ? 'bg-teal' : ''
+                cell.count === 1 ? 'bg-sienna/50' :
+                cell.count >= 2 ? 'bg-sienna' : ''
               }`}
             />
           ))}
@@ -222,7 +222,7 @@ function PersonalRecords({ workouts }: { workouts: Workout[] }) {
           <div className="flex gap-4 text-right">
             {data.maxWeight > 0 && (
               <div>
-                <div className="font-mono text-teal font-bold">{data.maxWeight} kg</div>
+                <div className="font-mono text-sienna font-bold">{data.maxWeight} kg</div>
                 <div className="font-mono text-[9px] text-bone-dim">BEST WEIGHT</div>
               </div>
             )}
@@ -297,7 +297,7 @@ export function ProgressPage() {
         </div>
         <div className="w-full h-2 bg-line rounded-full overflow-hidden">
           <motion.div 
-            className="h-full bg-gradient-to-r from-teal to-amber rounded-full"
+            className="h-full bg-gradient-to-r from-sienna to-amber rounded-full"
             initial={{ width: 0 }}
             animate={{ width: `${levelProgress}%` }}
             transition={{ duration: 1, ease: 'easeOut' }}
@@ -308,10 +308,10 @@ export function ProgressPage() {
       {/* Stat Cards */}
       <motion.div variants={item} className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
         {[
-          { icon: <Dumbbell size={18} />, value: stats.totalWorkouts, label: 'WORKOUTS', color: 'text-teal' },
+          { icon: <Dumbbell size={18} />, value: stats.totalWorkouts, label: 'WORKOUTS', color: 'text-sienna' },
           { icon: <TrendingUp size={18} />, value: formatNumber(stats.totalVolume), label: 'VOLUME (kg·reps)', color: 'text-amber' },
           { icon: <Flame size={18} />, value: formatNumber(stats.totalCalories), label: 'CALORIES', color: 'text-danger' },
-          { icon: <Clock size={18} />, value: Math.round(stats.totalDurationMin / 60), label: 'HOURS', color: 'text-teal' },
+          { icon: <Clock size={18} />, value: Math.round(stats.totalDurationMin / 60), label: 'HOURS', color: 'text-sienna' },
         ].map((s, i) => (
           <div key={i} className="card p-4 text-center">
             <div className={`mb-2 flex justify-center ${s.color}`}>{s.icon}</div>
@@ -328,24 +328,24 @@ export function ProgressPage() {
           <div className="font-mono text-[10px] text-bone-dim tracking-wider">CURRENT STREAK</div>
         </div>
         <div className="card p-4 text-center">
-          <div className="text-3xl font-bold font-mono text-teal">{stats.longestStreak}</div>
+          <div className="text-3xl font-bold font-mono text-sienna">{stats.longestStreak}</div>
           <div className="font-mono text-[10px] text-bone-dim tracking-wider">LONGEST STREAK</div>
         </div>
       </motion.div>
 
       <motion.div variants={item} className="card p-5 mb-6">
-        <div className="flex items-center justify-between gap-3 mb-4"><div><div className="font-mono text-[10px] text-teal tracking-widest">BODY LOG</div><h3 className="font-display text-xl mt-1">Physical progress</h3></div><Trophy size={18} className="text-amber" /></div>
+        <div className="flex items-center justify-between gap-3 mb-4"><div><div className="font-mono text-[10px] text-sienna tracking-widest">BODY LOG</div><h3 className="font-display text-xl mt-1">Physical progress</h3></div><Trophy size={18} className="text-amber" /></div>
         {latestMeasurement ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3"><div className="stat-pill"><div className="font-mono text-lg">{latestMeasurement.weight ?? '—'} kg</div><div className="text-[10px] text-bone-dim">WEIGHT {metricDelta('weight') != null ? `(${metricDelta('weight')! > 0 ? '+' : ''}${metricDelta('weight')!.toFixed(1)})` : ''}</div></div><div className="stat-pill"><div className="font-mono text-lg">{latestMeasurement.bodyfat ?? '—'}%</div><div className="text-[10px] text-bone-dim">BODY FAT {metricDelta('bodyfat') != null ? `(${metricDelta('bodyfat')! > 0 ? '+' : ''}${metricDelta('bodyfat')!.toFixed(1)})` : ''}</div></div><div className="stat-pill"><div className="font-mono text-lg">{latestMeasurement.waist ?? '—'} cm</div><div className="text-[10px] text-bone-dim">WAIST {metricDelta('waist') != null ? `(${metricDelta('waist')! > 0 ? '+' : ''}${metricDelta('waist')!.toFixed(1)})` : ''}</div></div><div className="stat-pill"><div className="font-mono text-lg">{measurements.length}</div><div className="text-[10px] text-bone-dim">LOG ENTRIES</div></div></div> : <p className="text-sm text-bone-dim">Add entries in Body Log to see weight, body-fat, waist and trend changes here.</p>}
       </motion.div>
 
       {/* Volume Chart */}
       <motion.div variants={item} className="card p-5 mb-6">
         <h3 className="font-display text-base mb-4 flex items-center gap-2">
-          <TrendingUp size={16} className="text-teal" /> Weekly Volume
+          <TrendingUp size={16} className="text-sienna" /> Weekly Volume
         </h3>
         {isLoading ? (
           <div className="flex justify-center py-12">
-            <div className="w-6 h-6 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
           </div>
         ) : recentWorkouts.length === 0 ? (
           <div className="text-center text-bone-dim text-sm py-12 border border-dashed border-line rounded">
@@ -365,8 +365,8 @@ export function ProgressPage() {
         <div className="flex items-center gap-2 mt-3 text-[10px] font-mono text-bone-dim">
           <span>Less</span>
           <div className="w-3 h-3 rounded-sm bg-line/40" />
-          <div className="w-3 h-3 rounded-sm bg-teal/50" />
-          <div className="w-3 h-3 rounded-sm bg-teal" />
+          <div className="w-3 h-3 rounded-sm bg-sienna/50" />
+          <div className="w-3 h-3 rounded-sm bg-sienna" />
           <span>More</span>
         </div>
       </motion.div>

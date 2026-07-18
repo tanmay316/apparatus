@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
+import { getAvatarUrl } from '@/lib/avatar';
 
 interface NavItem {
   id: string;
@@ -36,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export function Sidebar() {
   const { profile } = useAuthStore();
-  const { sidebarOpen, closeSidebar } = useUIStore();
+  const { sidebarOpen, closeSidebar, theme } = useUIStore();
   const location = useLocation();
 
   // Close sidebar on route change
@@ -73,21 +74,21 @@ export function Sidebar() {
 
       {/* Sidebar panel */}
       <motion.div
-        className="fixed top-0 left-0 h-screen w-[260px] max-w-[82vw] bg-ink-2 border-r border-white/[0.06] z-[300] flex flex-col"
+        className="fixed top-0 left-0 h-screen w-[260px] max-w-[82vw] bg-ink-2 border-r border-line z-[300] flex flex-col"
         style={{ boxShadow: sidebarOpen ? '8px 0 40px rgba(0,0,0,0.5)' : 'none' }}
         initial={false}
         animate={{ x: sidebarOpen ? 0 : '-105%' }}
         transition={{ type: 'spring', stiffness: 400, damping: 35 }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-line">
           <div className="flex items-baseline gap-2.5">
             <div className="brand-mark flex-none" />
             <span className="brand-wordmark text-[15px]">APPARATUS</span>
           </div>
           <button
             onClick={closeSidebar}
-            className="w-7 h-7 rounded-lg border border-white/[0.06] text-bone-dim hover:border-danger/40 hover:text-danger flex items-center justify-center transition-all duration-200"
+            className="w-7 h-7 rounded-lg border border-line text-bone-dim hover:border-danger/40 hover:text-danger flex items-center justify-center transition-all duration-200"
           >
             <X size={14} />
           </button>
@@ -95,16 +96,16 @@ export function Sidebar() {
 
         {/* User info */}
         {profile && (
-          <Link to={`/profile/${profile.username}`} className="flex items-center gap-3 px-5 py-3.5 border-b border-white/[0.06] hover:bg-white/[0.02] transition-colors" onClick={closeSidebar}>
+          <Link to={`/profile/${profile.username}`} className="flex items-center gap-3 px-5 py-3.5 border-b border-line hover:bg-white/[0.02] transition-colors" onClick={closeSidebar}>
             <img
-              src={profile.photoURL || `https://ui-avatars.com/api/?name=${profile.displayName}&background=4F9E8D&color=14151A&bold=true`}
+              src={profile.photoURL || getAvatarUrl(profile.displayName, theme)}
               alt={profile.displayName}
-              className="w-9 h-9 rounded-full border-2 border-teal/30 flex-shrink-0 object-cover"
+              className="w-9 h-9 rounded-full border border-line flex-shrink-0 object-cover"
               referrerPolicy="no-referrer"
             />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold truncate text-bone">{profile.displayName}</div>
-              <div className="text-[11px] text-teal font-mono truncate">@{profile.username}</div>
+              <div className="text-[11px] text-bone-dim font-mono truncate">@{profile.username}</div>
             </div>
           </Link>
         )}
@@ -128,7 +129,7 @@ export function Sidebar() {
                   to={navItem.path}
                   className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl font-mono text-[13px] transition-all duration-200 w-full group ${
                     isActive
-                      ? 'bg-teal/10 text-teal font-bold'
+                      ? 'bg-bone/10 text-bone font-bold'
                       : 'text-bone-dim hover:bg-white/[0.03] hover:text-bone'
                   }`}
                 >
@@ -136,11 +137,11 @@ export function Sidebar() {
                   {isActive && (
                     <motion.div
                       layoutId="sidebar-active"
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-teal rounded-r-full"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-bone rounded-r-full"
                       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                     />
                   )}
-                  <span className={`flex-none w-5 flex items-center justify-center transition-colors ${isActive ? 'text-teal' : 'text-bone-dim group-hover:text-bone'}`}>
+                  <span className={`flex-none w-5 flex items-center justify-center transition-colors ${isActive ? 'text-bone' : 'text-bone-dim group-hover:text-bone'}`}>
                     {navItem.icon}
                   </span>
                   <span>{navItem.label}</span>
@@ -159,14 +160,14 @@ export function Sidebar() {
                 to="/admin"
                 className={`relative flex items-center gap-3 px-3 py-2.5 rounded-xl font-mono text-[13px] transition-all duration-200 w-full group ${
                   location.pathname === '/admin'
-                    ? 'bg-teal/10 text-teal font-bold'
+                    ? 'bg-bone/10 text-bone font-bold'
                     : 'text-bone-dim hover:bg-white/[0.03] hover:text-bone'
                 }`}
               >
                 {location.pathname === '/admin' && (
                   <motion.div
                     layoutId="sidebar-active"
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-teal rounded-r-full"
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-bone rounded-r-full"
                   />
                 )}
                 <ShieldCheck size={18} />

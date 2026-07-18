@@ -136,7 +136,7 @@ export function PlanDetail() {
   if (planLoading || daysLoading) {
     return (
       <div className="flex justify-center py-20">
-        <div className="w-8 h-8 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -158,7 +158,7 @@ export function PlanDetail() {
               <span className="font-mono text-amber text-xs tracking-widest uppercase">
                 {isSample ? 'SAMPLE PLAN' : 'CUSTOM PLAN'}
               </span>
-              {plan.isPublic ? <span className="flex items-center gap-1 text-[10px] text-teal font-mono border border-teal/30 px-1.5 rounded bg-teal/10"><Eye size={10}/> PUBLIC</span> : <span className="flex items-center gap-1 text-[10px] text-bone-dim font-mono border border-line px-1.5 rounded bg-ink-2"><Lock size={10}/> PRIVATE</span>}
+              {plan.isPublic ? <span className="flex items-center gap-1 text-[10px] text-sienna font-mono border border-sienna/30 px-1.5 rounded bg-sienna/10"><Eye size={10}/> PUBLIC</span> : <span className="flex items-center gap-1 text-[10px] text-bone-dim font-mono border border-line px-1.5 rounded bg-ink-2"><Lock size={10}/> PRIVATE</span>}
             </div>
             
             {editingTitle ? (
@@ -177,7 +177,7 @@ export function PlanDetail() {
               <div className="flex items-center gap-3 group mt-1">
                 <h1 className="font-display text-3xl">{plan.title}</h1>
                 {isOwner && !isSample && (
-                  <button onClick={() => { setNewTitle(plan.title); setEditingTitle(true); }} className="text-bone-dim hover:text-teal opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => { setNewTitle(plan.title); setEditingTitle(true); }} className="text-bone-dim hover:text-sienna opacity-0 group-hover:opacity-100 transition-opacity">
                     <Edit3 size={16} />
                   </button>
                 )}
@@ -191,7 +191,7 @@ export function PlanDetail() {
             <div className="flex gap-2 shrink-0">
               {profile?.activePlanId === planId ? (
                 <div className="btn-secondary opacity-50 cursor-default flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-teal" /> Active Program
+                  <span className="w-2 h-2 rounded-full bg-sienna" /> Active Program
                 </div>
               ) : (
                 <button 
@@ -237,7 +237,7 @@ export function PlanDetail() {
           {orderedDays.map((day, i) => (
             <motion.div 
               key={day.id} 
-              className="card relative group hover:border-teal-dim transition-colors flex flex-col h-full"
+              className="card relative group hover:border-sienna/50 transition-colors flex flex-col h-full"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05 }}
@@ -246,7 +246,7 @@ export function PlanDetail() {
               onDragOver={(event) => event.preventDefault()}
               onDrop={() => handleDropDay(day.id!)}
             >
-              <div className="absolute left-0 top-0 bottom-0 w-1 bg-teal opacity-0 group-hover:opacity-100 transition-opacity" />
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-sienna opacity-0 group-hover:opacity-100 transition-opacity" />
               
               <Link to={`/plans/${planId}/day/${day.id}`} className="block p-5 flex-1 cursor-pointer">
                 <div className="flex justify-between items-start mb-2">
@@ -264,7 +264,7 @@ export function PlanDetail() {
               
               {isOwner && !isSample && (
                 <div className="px-5 pb-4 pt-2 border-t border-line/30 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                   <Link to={`/plans/${planId}/day/${day.id}`} className="text-xs text-teal hover:text-teal-light font-mono font-bold flex items-center gap-1">
+                   <Link to={`/plans/${planId}/day/${day.id}`} className="text-xs text-sienna hover:text-sienna/80 font-mono font-bold flex items-center gap-1">
                     <Edit3 size={12}/> Edit
                    </Link>
                    <button 

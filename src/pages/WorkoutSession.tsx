@@ -322,7 +322,7 @@ export function WorkoutSession() {
   if (planLoading || daysLoading) {
     return (
       <div className="flex justify-center py-20">
-        <div className="w-8 h-8 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -388,7 +388,7 @@ export function WorkoutSession() {
           </div>
           <button 
             onClick={() => setAddSection(sectionKey)}
-            className="text-[10px] text-teal font-mono border border-teal/30 px-1.5 py-0.5 rounded bg-teal/5 flex items-center gap-1 hover:bg-teal/15 transition-all"
+            className="text-[10px] text-sienna font-mono border border-sienna/30 px-1.5 py-0.5 rounded bg-sienna/5 flex items-center gap-1 hover:bg-sienna/15 transition-all"
           >
             <Plus size={10} /> Add
           </button>
@@ -432,21 +432,21 @@ export function WorkoutSession() {
                         });
                         showToast(`All sets marked ${!isCurrentlyDone ? 'complete' : 'incomplete'}`);
                       }}
-                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-none transition-colors ${isDone ? 'bg-teal border-teal text-ink font-bold' : 'border-line text-transparent hover:border-teal'}`}
+                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-none transition-colors ${isDone ? 'bg-sienna border-sienna text-bone font-bold' : 'border-line text-transparent hover:border-sienna'}`}
                     >
                       {isDone ? '✓' : ''}
                     </button>
                     <div>
-                      <h5 className={`font-semibold ${isDone ? 'text-teal' : ''}`}>{e.name}</h5>
+                      <h5 className={`font-semibold ${isDone ? 'text-sienna' : ''}`}>{e.name}</h5>
                       <div className="text-xs text-bone-dim font-mono mt-0.5">
                         {e.sets} {e.tempo ? `· tempo ${e.tempo}` : ''} {e.rest ? `· rest ${e.rest}` : ''}
                       </div>
-                      <div className={`text-[10px] mt-1 ${comparison?.progressed ? 'text-teal' : 'text-bone-dim'}`}>
+                      <div className={`text-[10px] mt-1 ${comparison?.progressed ? 'text-sienna' : 'text-bone-dim'}`}>
                         {comparison?.progressed ? 'Progressive overload detected · ' : ''}{historyLabel}
                       </div>
                     </div>
                   </div>
-                  <div className="text-bone-dim group-hover:text-teal transition-colors">›</div>
+                  <div className="text-bone-dim group-hover:text-sienna transition-colors">›</div>
                 </div>
               );
             })
@@ -462,7 +462,7 @@ export function WorkoutSession() {
         <Link to="/" className="inline-flex items-center gap-2 text-sm text-bone-dim hover:text-bone transition-colors">
           <ArrowLeft size={16} /> Quit
         </Link>
-        <div className="flex items-center gap-2 font-mono text-teal">
+        <div className="flex items-center gap-2 font-mono text-sienna">
           <Clock size={16} />
           {formatStopwatch(elapsedSec)}
         </div>
@@ -474,20 +474,20 @@ export function WorkoutSession() {
         </div>
         <h1 className="font-display text-3xl mb-2">{currentDay.title}</h1>
         <div className="text-sm text-bone-dim font-mono">
-          SKILL: <span className="text-bone">{currentDay.skill || 'None'}</span> • PROGRESS: <span className="text-teal">{activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length}/{activeExercises.length}</span>
+          SKILL: <span className="text-bone">{currentDay.skill || 'None'}</span> • PROGRESS: <span className="text-sienna">{activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length}/{activeExercises.length}</span>
         </div>
         
         {/* Dynamic metrics strip */}
-        <div className="grid grid-cols-3 gap-3 mt-6">
-          <div className="bg-ink-2 border border-line p-4 rounded-lg">
+        <div className="flex sm:grid sm:grid-cols-3 gap-3 mt-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="bg-ink-2 border border-line p-4 rounded-lg min-w-[140px] shrink-0">
             <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">DURATION (TODAY)</div>
             <div className="text-xl font-bold font-mono mt-1 text-bone">{Math.round(elapsedSec / 60)} min</div>
           </div>
-          <div className="bg-ink-2 border border-line p-4 rounded-lg">
+          <div className="bg-ink-2 border border-line p-4 rounded-lg min-w-[160px] shrink-0">
             <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">EXTERNAL VOLUME</div>
             <div className="text-xl font-bold font-mono mt-1 text-bone">{volumeDisplay}</div>
           </div>
-          <div className="bg-ink-2 border border-line p-4 rounded-lg">
+          <div className="bg-ink-2 border border-line p-4 rounded-lg min-w-[140px] shrink-0">
             <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">EST. CALORIES</div>
             <div className="text-xl font-bold font-mono mt-1 text-bone">{displayCalories} kcal</div>
           </div>
@@ -496,14 +496,14 @@ export function WorkoutSession() {
 
       {renderSection(currentDay.time, 'WARM-UP', 'bg-bone text-ink', store.isActive ? store.warmup : displayWarmup, 'warmup')}
       {renderSection('~15 min', `SKILL — ${currentDay.skill || 'NONE'}`, 'bg-amber/20 text-amber border border-amber/30', store.isActive ? store.skillWork : displaySkillWork, 'skillWork')}
-      {renderSection('Main sets', 'STRENGTH', 'bg-teal/20 text-teal border border-teal/30', store.isActive ? store.strength : displayStrength, 'strength')}
+      {renderSection('Main sets', 'STRENGTH', 'bg-sienna/10 text-sienna border border-sienna/20', store.isActive ? store.strength : displayStrength, 'strength')}
       {renderSection('5-10 min', 'COOLDOWN', 'bg-bone text-ink', store.isActive ? store.cooldown : displayCooldown, 'cooldown')}
 
       <div className="mt-12 flex flex-col items-center justify-center gap-3 pb-20">
          <div className="flex items-center gap-3 bg-ink-2 p-2 px-4 rounded border border-line">
            <span className="text-xs font-mono text-bone-dim uppercase">Workout Privacy:</span>
            <select 
-             className="bg-transparent text-xs font-mono text-teal border-none focus:outline-none cursor-pointer"
+             className="bg-transparent text-xs font-mono text-sienna border-none focus:outline-none cursor-pointer"
              value={privacy}
              onChange={(e) => setPrivacy(e.target.value as any)}
            >
@@ -515,7 +515,7 @@ export function WorkoutSession() {
          <button 
            onClick={handleFinish}
            disabled={wasCompletedToday || sessionFinished}
-           className={`py-3.5 px-8 text-base w-full max-w-md font-bold tracking-wider rounded-lg transition-all ${wasCompletedToday ? 'bg-line text-bone-dim cursor-not-allowed opacity-50' : 'btn-primary shadow-[0_0_20px_rgba(79,158,141,0.3)]'}`}
+           className={`py-3.5 px-8 text-base w-full max-w-md font-bold tracking-wider rounded-lg transition-all ${wasCompletedToday ? 'bg-line text-bone-dim cursor-not-allowed opacity-50' : 'bg-sienna text-bone hover:bg-sienna/90'}`}
          >
            {wasCompletedToday || sessionFinished ? '✓ Day Logged' : 'Finish Workout'}
          </button>
@@ -646,7 +646,7 @@ export function WorkoutSession() {
               {celebrationData.xpBreakdown.map((row, idx) => (
                 <div key={idx} className="flex justify-between items-center text-sm py-1.5 border-b border-line/30 last:border-b-0">
                   <span className="text-bone-dim">{row.label}</span>
-                  <span className="font-mono text-teal">+{row.val} XP</span>
+                  <span className="font-mono text-sienna">+{row.val} XP</span>
                 </div>
               ))}
               <div className="flex justify-between items-center text-sm font-bold pt-2 mt-1 border-t border-line">
@@ -655,10 +655,10 @@ export function WorkoutSession() {
               </div>
             </div>
 
-            <div className="bg-teal/5 border border-teal/30 rounded-lg p-4 flex gap-4 text-left mb-6 items-center">
+            <div className="bg-sienna/5 border border-sienna/20 rounded-lg p-4 flex gap-4 text-left mb-6 items-center">
               <div className="text-2xl">🏁</div>
               <div>
-                <h4 className="font-semibold text-sm text-teal">Day One</h4>
+                <h4 className="font-semibold text-sm text-sienna">Day One</h4>
                 <p className="text-xs text-bone-dim mt-0.5">Complete your first full training day.</p>
               </div>
             </div>
@@ -676,7 +676,7 @@ export function WorkoutSession() {
               </button>
               <button
                 onClick={() => setCelebrationData(null)}
-                className="flex items-center justify-center gap-2 bg-ink-3 border border-teal/40 text-teal font-display font-bold uppercase tracking-wider py-3 rounded-md text-sm hover:bg-teal/10 active:scale-[0.98] transition-all"
+                className="flex items-center justify-center gap-2 bg-ink-3 border border-sienna/40 text-sienna font-display font-bold uppercase tracking-wider py-3 rounded-md text-sm hover:bg-sienna/10 active:scale-[0.98] transition-all"
               >
                 <Share2 size={18} />
                 Share

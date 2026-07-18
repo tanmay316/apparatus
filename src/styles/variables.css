@@ -6,89 +6,125 @@
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ─── Brand Colors ──────────────────────────────────────── */
-  --color-ink:       #090b12;
-  --color-ink-2:     #111522;
-  --color-ink-3:     #181c2a;
+  /* ─── Steep Palette Tokens ───────────────────────────────── */
+  --color-ink-black:    #17191c;
+  --color-paper-white:  #ffffff;
+  --color-mist-gray:    #f2f2f3;
+  --color-fog-white:    #fafafb;
+  --color-slate-gray:   #777b86;
+  --color-ash-gray:     #979799;
+  --color-smoke-gray:   #a3a6af;
+  --color-blush-peach:  #fbe1d1;
+  --color-sienna-brown: #5d2a1a;
 
-  --color-bone:      #F5F1E8;
-  --color-bone-dim:  #A9A69D;
+  /* ─── Base Variables (Default to Dark Theme for backward compatibility, but we will define explicit data-themes below) ────── */
+  --color-ink:       23 25 28;     /* #17191c Ink Black */
+  --color-ink-2:     30 32 36;     /* #1e2024 Mist Gray Dark */
+  --color-ink-3:     36 39 44;     /* #24272c Fog White Dark */
 
-  --color-teal:      #4F9E8D;
-  --color-teal-dim:  #3A756A;
-  --color-teal-light:#5FB09E;
+  --color-bone:      255 255 255;  /* #ffffff Primary Text */
+  --color-bone-dim:  151 151 153;  /* #979799 Ash Gray */
 
-  --color-amber:     #D29A36;
-  --color-amber-light:#D4993F;
+  --color-teal:      75 110 220;   /* Keeping as legacy, replacing in UI */
+  --color-teal-dim:  35 55 135;
+  --color-teal-light: 110 145 245;
 
-  --color-line:      rgba(255,255,255,0.06);
-  --color-line-solid: #1e2130;
-  --color-danger:    #B5504A;
+  --color-amber:     251 225 209;  /* #fbe1d1 Blush Peach */
+  --color-amber-light: 255 240 230;
 
-  /* ─── Brand Gradient ────────────────────────────────────── */
-  --gradient-brand:  linear-gradient(110deg, #f4f0e6 18%, #f2b448 55%, #f4f0e6 88%);
-  --gradient-teal:   linear-gradient(to right, var(--color-teal), var(--color-teal-light));
-  --gradient-hero:   linear-gradient(135deg, rgba(79,158,141,0.12) 0%, rgba(9,11,18,0.95) 50%, rgba(210,154,54,0.06) 100%);
+  --color-sienna:    93 42 26;     /* #5d2a1a Sienna Brown */
+  --color-sienna-dim: 70 30 18;
+  --color-sienna-light: 140 70 40;
 
-  /* ─── Glassmorphism ─────────────────────────────────────── */
-  --glass-bg:        rgba(17, 21, 34, 0.65);
-  --glass-border:    rgba(255, 255, 255, 0.06);
-  --glass-blur:      16px;
+  --color-line:      46 49 54;     /* #2e3136 Hairline Dark */
+  --color-line-solid: 58 61 68;
+  --color-danger:    239 68 68;
 
-  /* ─── Typography ────────────────────────────────────────── */
-  --font-sans:       'Inter', system-ui, sans-serif;
-  --font-display:    'Oswald', sans-serif;
+  /* ─── Steep Typography Tokens ────────────────────────────── */
+  --font-signifier:  'Source Serif 4', 'Georgia', serif;
+  --font-sohne:      'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans:       var(--font-sohne);
+  --font-display:    var(--font-signifier);
   --font-mono:       'JetBrains Mono', monospace;
-  --font-brand:      'Suez One', serif;
+  --font-brand:      var(--font-signifier);
 
-  /* ─── Sizing & Spacing ──────────────────────────────────── */
-  --page-max-width:  1440px;
+  /* ─── Steep Radii & Spacing ──────────────────────────────── */
+  --radius-cards:        24px;
+  --radius-images:       12px;
+  --radius-inputs:       16px;
+  --radius-buttons:      9999px;
+  --radius-smallcards:   16px;
+  --radius-elevatedcards: 20px;
+
+  --page-max-width:  1200px;
   --page-padding:    24px;
-  --radius-sm:       6px;
-  --radius-md:       12px;
-  --radius-lg:       16px;
-  --radius-xl:       20px;
+  --radius-sm:       8px;
+  --radius-md:       14px;
+  --radius-lg:       20px;
+  --radius-xl:       24px;
 
-  /* ─── Transitions ───────────────────────────────────────── */
-  --transition-fast: 150ms ease-out;
-  --transition-base: 200ms ease-out;
-  --transition-slow: 300ms ease-out;
+  /* ─── Steep Shadows & Elevation ─────────────────────────── */
+  --shadow-subtle:       oklab(0 0 0 / 0.05) 0px 0px 0px 1px, rgba(0, 0, 0, 0.08) 0px 4px 24px 0px;
+  --shadow-subtle-2:     oklab(0 0 0 / 0.05) 0px 0px 0px 1px, rgba(0, 0, 0, 0.1) 0px 8px 40px 0px;
+  --shadow-subtle-3:     rgba(4, 23, 43, 0.05) 0px 0px 0px 1px, rgba(0, 0, 0, 0.1) 0px 20px 25px -5px, rgba(0, 0, 0, 0.1) 0px 8px 10px -6px;
+  --shadow-artifact:     0 0 0 1px rgba(4, 23, 43, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
 
-  /* ─── Shadows ───────────────────────────────────────────── */
-  --shadow-sidebar:  8px 0 24px rgba(0, 0, 0, 0.3);
-  --shadow-teal-glow: 0 0 0 3px rgba(79, 158, 141, 0.08), 0 0 18px rgba(79, 158, 141, 0.25);
-  --shadow-card:     0 2px 16px rgba(0, 0, 0, 0.2);
-  --shadow-glow-teal: 0 0 24px rgba(79, 158, 141, 0.15);
-  --shadow-glow-amber: 0 0 24px rgba(210, 154, 54, 0.15);
+  --clay-card-bg:        #f2f2f3;
+  --clay-card-border:    none;
+  --clay-shadow-sm:      none;
+  --clay-shadow-md:      none;
+  --clay-shadow-lg:      var(--shadow-artifact);
+  --clay-shadow-btn:     none;
 
-  /* ─── Selection ─────────────────────────────────────────── */
-  --color-selection-bg: var(--color-teal);
-  --color-selection-fg: var(--color-ink);
+  --neo-shadow-raised:   var(--shadow-artifact);
+  --neo-shadow-raised-sm: none;
+  --neo-shadow-raised-lg: var(--shadow-subtle-3);
+  --neo-shadow-inset:    none;
+  --neo-shadow-inset-sm: none;
 
-  /* ─── Scrollbar ─────────────────────────────────────────── */
-  --scrollbar-track:  var(--color-ink);
-  --scrollbar-thumb:  var(--color-line-solid);
-  --scrollbar-hover:  var(--color-teal-dim);
+  /* ─── Surfaces ───────────────────────────────────────────── */
+  --surface-canvas:         #ffffff;
+  --surface-card-mist:     #f2f2f3;
+  --surface-section-fog:   #fafafb;
+  --surface-accent-blush:  #fbe1d1;
+  --surface-elevated-white: #ffffff;
+
+  /* ─── Selection & Scrollbar ──────────────────────────────── */
+  --color-selection-bg: #17191c;
+  --color-selection-fg: #ffffff;
+
+  --scrollbar-track:  #ffffff;
+  --scrollbar-thumb:  #a3a6af;
+  --scrollbar-hover:  #777b86;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   Light Theme — Override only the tokens that change.
-   Everything keyed off these tokens adapts automatically.
-   ═══════════════════════════════════════════════════════════════ */
+/* Steep Light Theme */
 [data-theme='light'] {
-  --color-ink:       #f4f1eb;
-  --color-ink-2:     #fffdf8;
-  --color-ink-3:     #ebe7df;
+  --color-ink:       255 255 255;  /* #ffffff Paper White */
+  --color-ink-2:     242 242 243;  /* #f2f2f3 Mist Gray */
+  --color-ink-3:     250 250 251;  /* #fafafb Fog White */
 
-  --color-bone:      #1a1b20;
-  --color-bone-dim:  #66645e;
+  --color-bone:      23 25 28;     /* #17191c Primary Text */
+  --color-bone-dim:  119 123 134;  /* #777b86 Slate Gray */
 
-  --color-line:      rgba(0,0,0,0.08);
-  --color-line-solid: #d8d2c8;
+  --color-line:      236 236 236;  /* #ececec Hairline Light */
+  --color-line-solid: 230 230 232;
 
-  --glass-bg:        rgba(255, 253, 248, 0.7);
-  --glass-border:    rgba(0, 0, 0, 0.06);
-
-  --scrollbar-track:  #f4f1eb;
-  --scrollbar-thumb:  #c7c0b5;
+  --surface-canvas:   #ffffff;
 }
+
+/* Steep Dark Theme */
+[data-theme='dark'] {
+  --color-ink:       23 25 28;     /* #17191c Ink Black */
+  --color-ink-2:     30 32 36;     /* #1e2024 Mist Gray Dark */
+  --color-ink-3:     36 39 44;     /* #24272c Fog White Dark */
+
+  --color-bone:      255 255 255;  /* #ffffff Primary Text */
+  --color-bone-dim:  151 151 153;  /* #979799 Ash Gray */
+
+  --color-line:      46 49 54;     /* #2e3136 Hairline Dark */
+  --color-line-solid: 58 61 68;
+
+  --surface-canvas:   #17191c;
+}
+

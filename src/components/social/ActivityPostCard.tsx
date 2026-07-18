@@ -14,6 +14,7 @@ import { calculateBodyweightReps, calculateShareVolume, getActiveMuscles } from 
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { COMPACT_LIBRARY } from '@/services/library';
 import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
+import { getAvatarUrl } from '@/lib/avatar';
 
 function timeAgo(seconds?: number): string {
   if (!seconds) return 'just now';
@@ -31,7 +32,7 @@ interface ActivityPostCardProps {
 
 export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
   const { user, profile } = useAuthStore();
-  const { showToast, units } = useUIStore();
+  const { showToast, units, theme } = useUIStore();
   const queryClient = useQueryClient();
 
   const [showComments, setShowComments] = useState(false);
@@ -116,21 +117,18 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
     <motion.article
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -4, scale: 1.005 }}
+      whileHover={{ y: -2 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="relative overflow-hidden rounded-2xl border border-white/[0.06] dark:border-white/[0.06] light:border-gray-200 bg-[#121826] dark:bg-[#121826] light:bg-white text-[#F7F5F0] dark:text-[#F7F5F0] light:text-gray-900 shadow-xl shadow-black/20 light:shadow-gray-200/50 p-4 sm:p-5 transition-all mb-4"
+      className="relative overflow-hidden text-[#17191c] border border-[#ececec] rounded-[24px] bg-white shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] p-6 mb-6"
     >
-      {/* Soft background glow */}
-      <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-[#4F9E8D]/10 blur-3xl pointer-events-none" />
-
       {/* ─── SECTION 1: HEADER ────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-3">
           <Link to={`/profile/${activity.username || activity.userId}`} className="shrink-0">
             <img
-              src={activity.userPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(activity.userName)}&background=4F9E8D&color=14151A&bold=true`}
+              src={activity.userPhoto || getAvatarUrl(activity.userName, theme)}
               alt={activity.userName}
-              className="w-10 h-10 md:w-12 md:h-12 rounded-full border-2 border-[#4F9E8D]/50 object-cover"
+              className="w-10 h-10 md:w-11 md:h-11 rounded-full border-2 border-[#ececec] object-cover"
               referrerPolicy="no-referrer"
             />
           </Link>
@@ -138,79 +136,76 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
             <div className="flex items-center gap-2">
               <Link
                 to={`/profile/${activity.username || activity.userId}`}
-                className="font-semibold text-sm hover:text-[#4F9E8D] transition-colors text-bone dark:text-bone light:text-gray-900"
+                className="font-bold text-sm hover:text-[#5d2a1a] transition-colors text-[#17191c]"
               >
                 {activity.userName}
               </Link>
               {activity.username && (
-                <span className="text-[11px] font-mono text-[#8B92A5] hidden sm:inline">@{activity.username}</span>
+                <span className="text-[11px] font-mono text-[#777b86] hidden sm:inline">@{activity.username}</span>
               )}
               {profile?.experienceLevel && (
-                <span className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#4F9E8D]/10 border border-[#4F9E8D]/20 text-[#4F9E8D]">
+                <span className="text-[10px] font-mono font-medium uppercase px-2.5 py-0.5 rounded-full bg-[#f2f2f3] text-[#777b86] border border-[#ececec]">
                   {profile.experienceLevel}
                 </span>
               )}
             </div>
-            <div className="text-[11px] font-mono text-[#4F9E8D] tracking-wide uppercase mt-0.5">
-              Completed a workout
+            <div className="text-[11px] font-sans font-semibold text-[#777b86] tracking-wider uppercase mt-0.5">
+              COMPLETED A WORKOUT
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-[10px] sm:text-xs font-mono text-[#8B92A5]">
+          <span className="text-xs font-mono text-[#777b86]">
             {timeAgo(activity.createdAt?.seconds)}
           </span>
-          <button className="p-1 text-[#8B92A5] hover:text-bone transition-colors" title="Post options">
-            <MoreHorizontal size={16} />
+          <button className="p-1.5 text-[#777b86] hover:text-[#17191c] transition-colors" title="Post options">
+            <MoreHorizontal size={18} />
           </button>
         </div>
       </div>
 
       {/* ─── SECTION 2: WORKOUT HERO ───────────────────────────────────── */}
       <div
-        className="relative overflow-hidden rounded-xl p-4 sm:p-5 mb-4 border border-white/[0.06] dark:border-white/[0.06] light:border-gray-200 flex flex-col justify-between min-h-[140px]"
-        style={{
-          background: 'linear-gradient(135deg, rgba(79,158,141,0.12) 0%, rgba(18,24,38,0.95) 50%, rgba(217,164,65,0.06) 100%)',
-        }}
+        className="relative overflow-hidden rounded-[20px] p-6 mb-5 bg-[#fafafb] border border-[#ececec] flex flex-col justify-between min-h-[130px]"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#D9A441]/10 border border-[#D9A441]/20 text-[#D9A441]">
+              <span className="text-xs font-sans font-medium text-[#5d2a1a]">
                 {details.planTitle || 'Custom Program'}
               </span>
               {details.skill && (
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-[#4F9E8D]/10 border border-[#4F9E8D]/20 text-[#4F9E8D]">
-                  Skill — {details.skill}
+                <span className="text-xs font-mono text-[#777b86]">
+                  · Skill: {details.skill}
                 </span>
               )}
             </div>
 
-            <h3 className="font-display text-xl sm:text-2xl text-bone dark:text-bone light:text-gray-900 leading-snug">
+            <h3 className="font-serif font-normal text-2xl text-[#17191c] leading-tight">
               {details.dayTitle || activity.summary}
             </h3>
           </div>
 
           {/* Small size Anatomy figure beside workout day title */}
           {activeMuscleSet.size > 0 && (
-            <div className="flex items-center gap-1.5 shrink-0 bg-black/40 p-1.5 rounded-xl border border-white/[0.08]" title="Muscles Targeted">
-              <AnatomyFigureSVG view="front" activeMuscles={activeMuscleSet} className="w-7 h-11" />
-              <AnatomyFigureSVG view="back" activeMuscles={activeMuscleSet} className="w-7 h-11" />
+            <div className="flex items-center gap-1.5 shrink-0 bg-white p-2 rounded-2xl border border-[#ececec]" title="Muscles Targeted">
+              <AnatomyFigureSVG view="front" activeMuscles={activeMuscleSet} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
+              <AnatomyFigureSVG view="back" activeMuscles={activeMuscleSet} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
             </div>
           )}
         </div>
 
         {/* Muscle Heatmap Text Strip */}
         {activeMuscleList.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-mono text-[#8B92A5] flex items-center gap-1">
-              <Sparkles size={11} className="text-[#4F9E8D]" /> Trained:
+          <div className="mt-4 pt-3 border-t border-[#ececec] flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-mono font-semibold text-[#777b86] flex items-center gap-1">
+              <Sparkles size={12} className="text-[#979799]" /> Trained:
             </span>
             {activeMuscleList.map((m, idx) => (
               <span
                 key={idx}
-                className="text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-[#4F9E8D]/15 border border-[#4F9E8D]/30 text-[#4F9E8D]"
+                className="text-xs font-sans text-[#17191c] bg-white px-2.5 py-0.5 rounded-md border border-[#ececec]"
               >
                 {m.replace('_', ' ')}
               </span>
@@ -220,58 +215,58 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
       </div>
 
       {/* ─── SECTION 3: METRICS ROW ────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {/* Duration */}
-        <div className="rounded-xl border border-white/[0.06] dark:border-white/[0.06] light:border-gray-200 bg-white/[0.03] dark:bg-white/[0.03] light:bg-gray-50 p-2.5 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#4F9E8D]/10 flex items-center justify-center text-[#4F9E8D] shrink-0">
+        <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
             <Clock3 size={15} />
           </div>
           <div>
-            <div className="font-mono text-xs font-bold text-bone dark:text-bone light:text-gray-900">
+            <div className="font-mono text-sm font-bold text-[#17191c]">
               {details.durationMin || 0} min
             </div>
-            <div className="font-mono text-[9px] text-[#8B92A5] uppercase">Duration</div>
+            <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Duration</div>
           </div>
         </div>
 
         {/* Volume */}
-        <div className="rounded-xl border border-white/[0.06] dark:border-white/[0.06] light:border-gray-200 bg-white/[0.03] dark:bg-white/[0.03] light:bg-gray-50 p-2.5 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#D9A441]/10 flex items-center justify-center text-[#D9A441] shrink-0">
+        <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
             <TrendingUp size={15} />
           </div>
           <div>
-            <div className="font-mono text-xs font-bold text-bone dark:text-bone light:text-gray-900">
+            <div className="font-mono text-sm font-bold text-[#17191c]">
               {displayVolume > 0 ? displayVolume.toLocaleString() : displayBodyweightReps > 0 ? displayBodyweightReps : '0'}
             </div>
-            <div className="font-mono text-[9px] text-[#8B92A5] uppercase">
+            <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">
               {displayVolume > 0 ? 'kg·reps' : repsLabel}
             </div>
           </div>
         </div>
 
         {/* Calories */}
-        <div className="rounded-xl border border-white/[0.06] dark:border-white/[0.06] light:border-gray-200 bg-white/[0.03] dark:bg-white/[0.03] light:bg-gray-50 p-2.5 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#B5504A]/10 flex items-center justify-center text-[#B5504A] shrink-0">
+        <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
             <Flame size={15} />
           </div>
           <div>
-            <div className="font-mono text-xs font-bold text-bone dark:text-bone light:text-gray-900">
+            <div className="font-mono text-sm font-bold text-[#17191c]">
               {displayCalories} kcal
             </div>
-            <div className="font-mono text-[9px] text-[#8B92A5] uppercase">Burned</div>
+            <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Burned</div>
           </div>
         </div>
 
         {/* Exercise count */}
-        <div className="rounded-xl border border-white/[0.06] dark:border-white/[0.06] light:border-gray-200 bg-white/[0.03] dark:bg-white/[0.03] light:bg-gray-50 p-2.5 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#4F9E8D]/10 flex items-center justify-center text-[#4F9E8D] shrink-0">
+        <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
             <Dumbbell size={15} />
           </div>
           <div>
-            <div className="font-mono text-xs font-bold text-bone dark:text-bone light:text-gray-900">
+            <div className="font-mono text-sm font-bold text-[#17191c]">
               {exerciseNames.length}
             </div>
-            <div className="font-mono text-[9px] text-[#8B92A5] uppercase">Exercises</div>
+            <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Exercises</div>
           </div>
         </div>
       </div>
@@ -281,19 +276,19 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
         <div className="mb-4">
           {/* Default collapsed preview (shows first 2) */}
           {!showAllExercises && (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               {exerciseNames.slice(0, 2).map((name, index) => (
                 <div
                   key={`${name}-${index}`}
-                  className="flex items-center justify-between p-2 rounded-xl border border-white/[0.04] bg-white/[0.02] text-xs font-mono"
+                  className="flex items-center justify-between py-1.5 px-3 text-xs font-mono"
                 >
                   <div className="flex items-center gap-2 truncate">
-                    <span className="w-4 h-4 rounded-full bg-[#46C37B]/10 text-[#46C37B] flex items-center justify-center shrink-0">
+                    <span className="w-4 h-4 rounded-full bg-[#e8f5e9] text-[#2e7d32] flex items-center justify-center shrink-0">
                       <Check size={10} />
                     </span>
-                    <span className="truncate text-bone dark:text-bone light:text-gray-900">{name}</span>
+                    <span className="truncate text-[#17191c] font-medium">{name}</span>
                   </div>
-                  <span className="text-[10px] text-[#8B92A5] shrink-0 ml-2">
+                  <span className="text-[11px] text-[#777b86] shrink-0 ml-2">
                     {getExerciseMuscleGroup(name)}
                   </span>
                 </div>
@@ -302,7 +297,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               {exerciseNames.length > 2 && (
                 <button
                   onClick={() => setShowAllExercises(true)}
-                  className="w-full py-1.5 text-center text-[11px] font-mono text-[#4F9E8D] hover:underline flex items-center justify-center gap-1"
+                  className="w-full py-2 text-center text-xs font-sans text-[#17191c] hover:underline flex items-center justify-center gap-1"
                 >
                   Show all {exerciseNames.length} exercises <ChevronDown size={14} />
                 </button>
@@ -327,12 +322,12 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
                       className="flex items-center justify-between p-2 rounded-xl border border-white/[0.04] bg-white/[0.02] text-xs font-mono"
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <span className="w-4 h-4 rounded-full bg-[#46C37B]/10 text-[#46C37B] flex items-center justify-center shrink-0">
+                        <span className="w-4 h-4 rounded-full bg-[#e8f5e9] text-[#2e7d32] flex items-center justify-center shrink-0">
                           <Check size={10} />
                         </span>
-                        <span className="truncate text-bone dark:text-bone light:text-gray-900">{name}</span>
+                        <span className="truncate text-[#17191c]">{name}</span>
                       </div>
-                      <span className="text-[10px] text-[#8B92A5] shrink-0 ml-2">
+                      <span className="text-[10px] text-[#777b86] shrink-0 ml-2">
                         {getExerciseMuscleGroup(name)}
                       </span>
                     </div>
@@ -340,7 +335,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
                 </div>
                 <button
                   onClick={() => setShowAllExercises(false)}
-                  className="w-full mt-2 py-1.5 text-center text-[11px] font-mono text-[#4F9E8D] hover:underline flex items-center justify-center gap-1"
+                  className="w-full mt-2 py-1.5 text-center text-[11px] font-sans text-[#17191c] hover:underline flex items-center justify-center gap-1"
                 >
                   Show less <ChevronUp size={14} />
                 </button>
@@ -351,14 +346,14 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
       )}
 
       {/* ─── SECTION 5: SOCIAL ACTIONS ─────────────────────────────────── */}
-      <div className="flex items-center justify-between border-t border-white/[0.06] pt-3 text-xs font-mono">
+      <div className="flex items-center justify-between border-t border-[#ececec] pt-3 text-xs font-sans">
         <div className="flex items-center gap-4">
           {/* Like */}
           <motion.button
             whileTap={{ scale: 1.25 }}
             onClick={() => likeMutation.mutate()}
             className={`flex items-center gap-1.5 transition-colors ${
-              liked ? 'text-[#B5504A] font-bold' : 'text-[#8B92A5] hover:text-[#B5504A]'
+              liked ? 'text-red-500 font-bold' : 'text-[#777b86] hover:text-red-500'
             }`}
           >
             <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
@@ -368,7 +363,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
           {/* Comment */}
           <button
             onClick={() => setShowComments(prev => !prev)}
-            className="flex items-center gap-1.5 text-[#8B92A5] hover:text-[#4F9E8D] transition-colors"
+            className="flex items-center gap-1.5 text-[#777b86] hover:text-[#17191c] transition-colors"
           >
             <MessageCircle size={16} />
             <span>{activity.commentsCount || 0}</span>
@@ -377,7 +372,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
           {/* Share */}
           <button
             onClick={() => onShare && onShare(activity)}
-            className="flex items-center gap-1.5 text-[#8B92A5] hover:text-[#4F9E8D] transition-colors"
+            className="flex items-center gap-1.5 text-[#777b86] hover:text-[#17191c] transition-colors"
           >
             <Share2 size={15} />
             <span className="hidden sm:inline">Share</span>
@@ -391,7 +386,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
             showToast(isSaved ? 'Unsaved post' : 'Saved to bookmarks', 'info');
           }}
           className={`p-1.5 rounded-lg transition-colors ${
-            isSaved ? 'text-[#D9A441] bg-[#D9A441]/10' : 'text-[#8B92A5] hover:text-bone'
+            isSaved ? 'text-[#5d2a1a] bg-[#fbe1d1]/30' : 'text-[#777b86] hover:text-[#17191c]'
           }`}
           title="Save post"
         >
@@ -406,18 +401,18 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="mt-3 pt-3 border-t border-white/[0.04] space-y-2"
+            className="mt-3 pt-3 border-t border-[#ececec] space-y-2"
           >
             {comments.map((comment: Comment) => (
               <div key={comment.id} className="flex items-start gap-2.5 text-xs">
                 <img
-                  src={comment.userPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(comment.userName)}`}
+                  src={comment.userPhoto || getAvatarUrl(comment.userName, theme, 64)}
                   className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5"
                   alt=""
                 />
-                <div className="rounded-xl bg-white/[0.03] px-3 py-2 flex-1">
-                  <span className="font-bold text-bone dark:text-bone light:text-gray-900">{comment.userName}</span>
-                  <p className="text-[#8B92A5] mt-0.5 leading-relaxed">{comment.text}</p>
+                <div className="rounded-xl bg-[#f2f2f3] px-3 py-2 flex-1">
+                  <span className="font-bold text-[#17191c]">{comment.userName}</span>
+                  <p className="text-[#777b86] mt-0.5 leading-relaxed">{comment.text}</p>
                 </div>
               </div>
             ))}
@@ -431,12 +426,12 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
                   if (e.key === 'Enter' && commentText.trim()) commentMutation.mutate();
                 }}
                 placeholder="Say something encouraging…"
-                className="flex-1 bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-2 text-xs text-bone outline-none focus:border-[#4F9E8D]/40 font-mono"
+                className="flex-1 bg-[#f2f2f3] border border-[#ececec] rounded-xl px-3 py-2 text-xs text-[#17191c] outline-none focus:border-[#5d2a1a]/40 font-sans"
               />
               <button
                 disabled={!commentText.trim() || commentMutation.isPending}
                 onClick={() => commentMutation.mutate()}
-                className="px-3 py-2 rounded-xl bg-[#4F9E8D] text-[#14151A] font-bold hover:bg-[#5FB09E] disabled:opacity-50 transition-all flex items-center justify-center shrink-0"
+                className="px-3 py-2 rounded-xl bg-[#17191c] text-white font-medium hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center shrink-0"
               >
                 <Send size={14} />
               </button>
@@ -451,20 +446,20 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
 /** Skeleton Loader Component */
 export function ActivityPostCardSkeleton() {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-[#121826] p-5 mb-4 animate-pulse">
+    <div className="rounded-[24px] border border-[#ececec] bg-white p-5 mb-4 animate-pulse">
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-12 h-12 rounded-full bg-white/10" />
+        <div className="w-12 h-12 rounded-full bg-[#f2f2f3]" />
         <div className="space-y-2 flex-1">
-          <div className="w-32 h-3 bg-white/10 rounded" />
-          <div className="w-20 h-2 bg-white/10 rounded" />
+          <div className="w-32 h-3 bg-[#f2f2f3] rounded" />
+          <div className="w-20 h-2 bg-[#f2f2f3] rounded" />
         </div>
       </div>
-      <div className="h-28 rounded-xl bg-white/5 mb-4" />
+      <div className="h-28 rounded-xl bg-[#f2f2f3] mb-4" />
       <div className="grid grid-cols-4 gap-2 mb-4">
-        <div className="h-10 rounded-xl bg-white/5" />
-        <div className="h-10 rounded-xl bg-white/5" />
-        <div className="h-10 rounded-xl bg-white/5" />
-        <div className="h-10 rounded-xl bg-white/5" />
+        <div className="h-10 rounded-xl bg-[#f2f2f3]" />
+        <div className="h-10 rounded-xl bg-[#f2f2f3]" />
+        <div className="h-10 rounded-xl bg-[#f2f2f3]" />
+        <div className="h-10 rounded-xl bg-[#f2f2f3]" />
       </div>
     </div>
   );

@@ -19,85 +19,205 @@
 
   .brand-mark {
     position: relative;
-    width: 0.72rem;
-    height: 0.72rem;
-    border: 2px solid var(--color-teal);
-    border-radius: 0.22rem;
+    width: 0.75rem;
+    height: 0.75rem;
+    border: 2.5px solid rgb(var(--color-sienna));
+    border-radius: 0.25rem;
     transform: rotate(45deg);
-    box-shadow: var(--shadow-teal-glow);
+    box-shadow: 0 0 10px rgba(var(--color-sienna), 0.5);
   }
 
-  /* ─── Buttons ───────────────────────────────────────────── */
+  /* ─── Buttons (Tactile Clay Pill Buttons) ───────────────── */
   .btn-primary {
-    @apply bg-teal text-ink font-display font-bold uppercase tracking-wider
-           px-5 py-3 rounded-md text-sm
-           hover:bg-teal-light active:scale-[0.98]
+    @apply text-white font-display font-semibold tracking-wide
+           px-6 py-3 rounded-2xl text-sm inline-flex items-center justify-center gap-2
            disabled:opacity-50 disabled:cursor-not-allowed;
-    transition: all var(--transition-fast);
+    background: linear-gradient(135deg, rgb(var(--color-sienna)) 0%, rgb(var(--color-sienna-dim)) 100%);
+    box-shadow: var(--clay-shadow-btn);
+    transition: all var(--transition-base);
+  }
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(112, 145, 230, 0.35), inset 2px 2px 4px rgba(255, 255, 255, 0.7);
+  }
+  .btn-primary:active:not(:disabled) {
+    transform: translateY(0) scale(0.98);
   }
 
   .btn-secondary {
-    @apply bg-transparent border border-line text-bone-dim font-mono text-xs
-           px-4 py-2.5 rounded-md
-           hover:border-bone-dim hover:text-bone;
-    transition: all var(--transition-fast);
+    @apply text-bone font-display font-medium text-xs
+           px-5 py-2.5 rounded-2xl inline-flex items-center justify-center gap-2;
+    background: rgba(var(--color-ink-2), 0.8);
+    border: 1px solid rgba(var(--color-line), 0.25);
+    box-shadow: var(--clay-shadow-sm);
+    transition: all var(--transition-base);
+  }
+  .btn-secondary:hover {
+    color: rgb(var(--color-sienna));
+    transform: translateY(-1.5px);
+    border-color: rgba(var(--color-sienna), 0.4);
+    box-shadow: var(--clay-shadow-md);
   }
 
   .btn-danger {
-    @apply bg-transparent border border-line text-danger font-mono text-xs
-           px-4 py-2.5 rounded-md
-           hover:border-danger hover:bg-danger/10;
+    @apply text-danger font-mono text-xs px-4 py-2.5 rounded-2xl inline-flex items-center justify-center;
+    background: rgba(var(--color-danger), 0.08);
+    border: 1px solid rgba(var(--color-danger), 0.2);
+    box-shadow: var(--clay-shadow-sm);
     transition: all var(--transition-fast);
+  }
+  .btn-danger:hover {
+    background: rgba(var(--color-danger), 0.15);
+    transform: translateY(-1px);
   }
 
   .btn-ghost {
-    @apply bg-transparent text-bone-dim text-sm
-           px-3 py-2 rounded-md
-           hover:bg-ink-3 hover:text-bone;
+    @apply bg-transparent text-bone-dim text-sm px-3.5 py-2 rounded-xl;
     transition: all var(--transition-fast);
   }
+  .btn-ghost:hover {
+    background-color: rgb(var(--color-sienna) / 0.1);
+    color: rgb(var(--color-sienna));
+  }
 
-  /* ─── Cards ─────────────────────────────────────────────── */
+  /* ─── Steep Editorial Component Classes ──────────────────── */
+  .btn-pill-filled {
+    background: #17191c;
+    color: #ffffff;
+    border-radius: 9999px;
+    padding: 0.625rem 1.25rem;
+    font-family: var(--font-sohne);
+    font-size: 1rem;
+    font-weight: 400;
+    border: 1px solid #17191c;
+    transition: all 150ms ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  .btn-pill-filled:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+  }
+
+  .btn-pill-ghost {
+    background: transparent;
+    color: #17191c;
+    border-radius: 9999px;
+    padding: 0.625rem 1.25rem;
+    font-family: var(--font-sohne);
+    font-size: 1rem;
+    font-weight: 400;
+    border: 1px solid #17191c;
+    transition: all 150ms ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  .btn-pill-ghost:hover {
+    background: rgba(23, 25, 28, 0.05);
+  }
+
+  .card-mist {
+    background: #f2f2f3;
+    border-radius: 24px;
+    border: none;
+    transition: all 220ms ease;
+  }
+
+  .card-blush {
+    background: #fbe1d1;
+    color: #5d2a1a;
+    border-radius: 24px;
+    border: none;
+    transition: all 220ms ease;
+  }
+
+  .floating-artifact {
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 0 0 1px rgba(4, 23, 43, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(4, 23, 43, 0.05);
+  }
+
+  /* ─── Card Default ───────────────────────────────────────── */
   .card {
-    @apply bg-ink-2 border border-line rounded-md overflow-hidden;
-    transition: color var(--transition-fast), border-color var(--transition-fast);
+    background: #ffffff;
+    border-radius: 24px;
+    box-shadow: 0 0 0 1px rgba(4, 23, 43, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(4, 23, 43, 0.05);
+    overflow: hidden;
+    transition: all var(--transition-base);
   }
 
   .card-hover {
-    @apply card hover:border-teal-dim cursor-pointer
-           hover:-translate-y-0.5;
+    @apply card cursor-pointer;
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 0 1px rgba(4, 23, 43, 0.08), 0 24px 32px -5px rgba(0, 0, 0, 0.1), 0 10px 12px -6px rgba(0, 0, 0, 0.06);
+  }
+
+  .neo-inset {
+    background: #f2f2f3;
+    border-radius: 16px;
+    border: 1px solid #ececec;
+  }
+
+  .neo-btn {
+    background: #17191c;
+    color: #ffffff;
+    border-radius: 9999px;
+    padding: 0.5rem 1.25rem;
+    font-family: var(--font-sohne);
+    font-size: 0.9375rem;
+    border: 1px solid #17191c;
     transition: all var(--transition-base);
   }
 
   /* ─── Inputs ────────────────────────────────────────────── */
   .input-field {
-    @apply w-full bg-ink border border-line text-bone rounded-md
-           px-3 py-2.5 text-sm font-sans
-           focus:outline-none focus:ring-1 focus:ring-teal focus:border-teal
+    @apply w-full text-bone rounded-2xl
+           px-4 py-3 text-sm font-sans
+           focus:outline-none focus:ring-2
            placeholder:text-bone-dim/50;
+    background: rgba(var(--color-ink-2), 0.9);
+    border: 1px solid rgba(var(--color-line), 0.25);
+    box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.06), inset -2px -2px 4px rgba(255, 255, 255, 0.8);
     transition: all var(--transition-fast);
+  }
+  .input-field:focus {
+    --tw-ring-color: rgb(var(--color-sienna) / 0.5);
   }
 
   .label {
-    @apply font-mono text-[11px] text-bone-dim tracking-wider uppercase mb-2 block;
+    @apply font-mono text-[11px] text-bone-dim tracking-wider uppercase mb-2 block font-semibold;
   }
 
-  /* ─── Tags ──────────────────────────────────────────────── */
+  /* ─── Tags & Badges ─────────────────────────────────────── */
   .tag {
     @apply font-mono text-[11px] tracking-wider font-bold
-           px-2.5 py-1 rounded inline-block;
+           px-3 py-1 rounded-full inline-flex items-center gap-1;
   }
 
-  .tag-teal {
-    @apply tag bg-teal text-ink;
+  .tag-sienna {
+    @apply tag text-sienna;
+    background: rgba(var(--color-sienna), 0.12);
+    border: 1px solid rgba(var(--color-sienna), 0.25);
+    box-shadow: inset 1px 1px 2px rgba(255, 255, 255, 0.4);
   }
 
   .tag-amber {
-    @apply tag bg-amber text-ink;
+    @apply tag text-amber;
+    background: rgba(var(--color-amber), 0.12);
+    border: 1px solid rgba(var(--color-amber), 0.25);
+    box-shadow: inset 1px 1px 2px rgba(255, 255, 255, 0.4);
   }
 
   /* ─── Stat Pills ────────────────────────────────────────── */
   .stat-pill {
-    @apply card px-4 py-3;
+    @apply card px-5 py-4;
   }
 }

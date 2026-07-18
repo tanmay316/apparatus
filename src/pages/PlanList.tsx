@@ -147,7 +147,7 @@ export function PlanList() {
 
       {isLoading ? (
         <div className="flex justify-center py-20">
-          <div className="w-8 h-8 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
         </div>
       ) : plans.length === 0 ? (
         <div className="text-center py-20 border border-dashed border-line rounded-lg">
@@ -173,13 +173,13 @@ export function PlanList() {
               <Link to={`/plans/${plan.id}`} className="card-hover block h-full">
                 <div className="p-5 flex flex-col h-full relative">
                   {profile?.activePlanId === plan.id && (
-                    <div className="absolute top-0 right-0 bg-teal text-ink text-[10px] font-bold px-3 py-1 rounded-bl-lg rounded-tr-lg">
+                    <div className="absolute top-0 right-0 bg-sienna text-bone text-[10px] font-bold px-3 py-1 rounded-bl-lg rounded-tr-lg">
                       ACTIVE
                     </div>
                   )}
                   
                   <div className="flex justify-between items-start mb-2 pr-12">
-                    <h3 className="font-display text-lg leading-tight group-hover:text-teal transition-colors">
+                    <h3 className="font-display text-lg leading-tight group-hover:text-sienna transition-colors">
                       {plan.title}
                     </h3>
                     {plan.type === 'sample' && (
@@ -203,8 +203,8 @@ export function PlanList() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 z-10 relative">
-                      {profile?.activePlanId !== plan.id && <button onClick={(e) => handleSetActive(e, plan.id!)} className="text-xs font-mono text-teal hover:text-teal-light">Set Active</button>}
-                      <button onClick={(e) => { stopCardAction(e); duplicateMutation.mutate(plan.id!); }} className="text-bone-dim hover:text-teal p-1" title="Duplicate plan" aria-label={`Duplicate ${plan.title}`}><Copy size={14} /></button>
+                      {profile?.activePlanId !== plan.id && <button onClick={(e) => handleSetActive(e, plan.id!)} className="text-xs font-mono text-sienna hover:text-sienna/80">Set Active</button>}
+                      <button onClick={(e) => { stopCardAction(e); duplicateMutation.mutate(plan.id!); }} className="text-bone-dim hover:text-sienna p-1" title="Duplicate plan" aria-label={`Duplicate ${plan.title}`}><Copy size={14} /></button>
                       <button onClick={(e) => { stopCardAction(e); if (confirm(`Archive ${plan.title}?`)) archiveMutation.mutate(plan.id!); }} className="text-bone-dim hover:text-amber p-1" title="Archive plan" aria-label={`Archive ${plan.title}`}><Archive size={14} /></button>
                       <button onClick={(e) => { stopCardAction(e); if (confirm(`Delete ${plan.title} permanently?`)) deleteMutation.mutate(plan.id!); }} className="text-bone-dim hover:text-danger p-1" title="Delete plan" aria-label={`Delete ${plan.title}`}><Trash2 size={14} /></button>
                     </div>

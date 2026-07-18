@@ -42,7 +42,7 @@ export function SkillsPage() {
   if (isLoading || !profile) {
     return (
       <div className="flex justify-center py-20">
-        <div className="w-8 h-8 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -81,14 +81,14 @@ export function SkillsPage() {
 
         {/* Overall mastery progress card */}
         <div className="bg-ink-2 border border-line/50 rounded-lg p-4 flex items-center gap-4 w-full md:w-64">
-          <div className="w-12 h-12 rounded-full border border-teal/30 bg-teal/5 flex items-center justify-center text-teal flex-none">
+          <div className="w-12 h-12 rounded-full border border-sienna/30 bg-sienna/5 flex items-center justify-center text-sienna flex-none">
             <Award size={24} />
           </div>
           <div className="flex-1">
             <div className="text-xs font-mono text-bone-dim">ROADMAP MASTERY</div>
-            <div className="text-lg font-bold font-mono text-teal">{totalMastered} / {totalSkills}</div>
+            <div className="text-lg font-bold font-mono text-sienna">{totalMastered} / {totalSkills}</div>
             <div className="w-full bg-ink h-1.5 rounded-full overflow-hidden mt-1">
-              <div className="bg-teal h-full transition-all duration-500" style={{ width: `${overallProgress}%` }} />
+              <div className="bg-sienna h-full transition-all duration-500" style={{ width: `${overallProgress}%` }} />
             </div>
           </div>
         </div>
@@ -96,15 +96,15 @@ export function SkillsPage() {
 
       {/* Filter and stats row */}
       <motion.div variants={item} className="flex flex-wrap items-center justify-between gap-4 bg-ink-2 p-3 rounded-lg border border-line/30">
-        <div className="flex flex-wrap gap-1">
+        <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1">
           {(['all', 'push', 'pull', 'balance', 'core'] as const).map(cat => (
             <button
               key={cat}
               onClick={() => setFilter(cat)}
-              className={`px-3 py-1.5 rounded font-mono text-xs capitalize transition-colors ${
+              className={`flex shrink-0 items-center px-4 py-2 rounded-full font-mono text-sm capitalize transition-colors ${
                 filter === cat
-                  ? 'bg-teal text-ink font-bold'
-                  : 'text-bone-dim hover:text-bone hover:bg-line/30'
+                  ? 'bg-ink text-bone font-bold shadow-sm border border-line/20'
+                  : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'
               }`}
             >
               {cat}
@@ -112,7 +112,7 @@ export function SkillsPage() {
           ))}
         </div>
         <div className="text-xs font-mono text-bone-dim flex items-center gap-2">
-          <Filter size={12} className="text-teal" />
+          <Filter size={12} className="text-sienna" />
           Showing {filteredRoadmap.length} skill{filteredRoadmap.length !== 1 ? 's' : ''}
         </div>
       </motion.div>
@@ -132,7 +132,7 @@ export function SkillsPage() {
               {/* Phase header */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-line/30">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${phaseProgress === 100 ? 'bg-teal' : 'bg-amber animate-pulse'}`} />
+                  <div className={`w-2 h-2 rounded-full ${phaseProgress === 100 ? 'bg-sienna' : 'bg-amber animate-pulse'}`} />
                   <h3 className="font-display text-lg tracking-wide">{phaseLabels[phaseNum]}</h3>
                 </div>
                 <div className="flex items-center gap-3">
@@ -153,14 +153,14 @@ export function SkillsPage() {
                       onClick={() => setSelectedSkill(skill)}
                       className={`text-left p-4 rounded-lg border transition-all duration-300 relative overflow-hidden group ${
                         isMastered
-                          ? 'bg-teal/5 border-teal/40 shadow-[0_0_15px_rgba(79,158,141,0.05)] hover:border-teal/60'
+                          ? 'bg-sienna/5 border-sienna/40 shadow-[0_0_15px_rgba(93,42,26,0.05)] hover:border-sienna/60'
                           : 'bg-ink-2 border-line/50 hover:bg-ink-3 hover:border-bone/20'
                       }`}
                     >
                       {/* Check/Unlocked label at top right */}
                       <div className="absolute top-3 right-3">
                         {isMastered ? (
-                          <div className="w-5 h-5 rounded-full bg-teal text-ink flex items-center justify-center">
+                          <div className="w-5 h-5 rounded-full bg-sienna text-bone flex items-center justify-center">
                             <Check size={12} strokeWidth={3} />
                           </div>
                         ) : (
@@ -175,7 +175,7 @@ export function SkillsPage() {
                         <span className="font-mono text-[9px] bg-ink px-1.5 py-0.5 rounded text-bone-dim tracking-wider uppercase">
                           {skill.category}
                         </span>
-                        <h4 className={`font-display text-base tracking-wide ${isMastered ? 'text-teal' : 'text-bone'}`}>
+                        <h4 className={`font-display text-base tracking-wide ${isMastered ? 'text-sienna' : 'text-bone'}`}>
                           {skill.name}
                         </h4>
                         <p className="text-xs text-bone-dim leading-relaxed">
@@ -186,7 +186,7 @@ export function SkillsPage() {
                       {/* Subtle hover spark effect */}
                       {isMastered && (
                         <div className="absolute bottom-1 right-1 opacity-0 group-hover:opacity-30 transition-opacity">
-                          <Sparkles size={16} className="text-teal" />
+                          <Sparkles size={16} className="text-sienna" />
                         </div>
                       )}
                     </button>

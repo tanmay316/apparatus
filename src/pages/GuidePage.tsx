@@ -48,7 +48,7 @@ const warmupSteps = [
 ];
 
 const nutritionCards = [
-  { label: 'Protein', value: '25–40 g', detail: 'Include a palm-sized serving at each main meal: eggs, dairy, tofu, beans, fish, or meat.', color: 'text-teal', icon: Target },
+  { label: 'Protein', value: '25–40 g', detail: 'Include a palm-sized serving at each main meal: eggs, dairy, tofu, beans, fish, or meat.', color: 'text-sienna', icon: Target },
   { label: 'Carbohydrates', value: 'Train hard', detail: 'Rice, potatoes, fruit, oats, and bread support high-quality sessions and recovery.', color: 'text-amber', icon: Flame },
   { label: 'Plants + fats', value: 'Every meal', detail: 'Add colorful produce and a thumb-sized fat source for micronutrients and satiety.', color: 'text-bone', icon: Leaf },
 ];
@@ -160,14 +160,14 @@ function WarmupGuide() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-4">
-        <section className="card p-6 bg-gradient-to-br from-teal/15 via-ink-2 to-ink-2">
+        <section className="card p-6 bg-gradient-to-br from-sienna/15 via-ink-2 to-ink-2">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="tag-teal mb-4">10–12 MIN RESET</div>
+              <div className="bg-amber/10 text-amber border border-amber/20 px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase mb-4 inline-block">10–12 MIN RESET</div>
               <h2 className="font-display text-2xl mb-2">Make the first set feel familiar.</h2>
               <p className="text-sm text-bone-dim leading-relaxed max-w-xl">Use this sequence before strength, skills, or a longer mobility session. Scale every movement to how your body feels today.</p>
             </div>
-            <HeartPulse className="text-teal flex-none" size={28} />
+            <HeartPulse className="text-sienna flex-none" size={28} />
           </div>
           <div className="grid grid-cols-3 gap-2 mt-6">
             <div className="bg-ink/50 border border-line/60 rounded-lg p-3"><div className="font-mono text-[10px] text-bone-dim">TEMPO</div><div className="font-display text-xl mt-1">Easy</div></div>
@@ -183,7 +183,7 @@ function WarmupGuide() {
           </div>
           <div className="rounded-xl bg-ink border border-line p-5 text-center">
             <div className="text-xs font-mono text-bone-dim tracking-widest mb-2">{breathPhase.toUpperCase()}</div>
-            <div className="font-mono text-4xl text-teal tabular-nums">{formatClock(seconds)}</div>
+            <div className="font-mono text-4xl text-sienna tabular-nums">{formatClock(seconds)}</div>
             <div className="text-xs text-bone-dim mt-2">4s inhale · 4s hold · 4s exhale · 4s recover</div>
             <div className="flex justify-center gap-2 mt-5">
               <button className="btn-primary py-2.5 flex items-center gap-2" onClick={() => setRunning(value => !value)}>
@@ -200,32 +200,32 @@ function WarmupGuide() {
         <div className="flex items-center justify-between gap-3 mb-4"><div><div className="font-mono text-[10px] text-amber tracking-widest">MEDITATION TIMER</div><h2 className="font-display text-xl mt-1">Finish calm and focused</h2></div><TimerReset className="text-amber" size={22} /></div>
         <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
           <label className="flex-1"><span className="label">Custom time (minutes)</span><input className="input-field" type="number" min="1" max="120" value={meditationMinutes} onChange={e => { const value = Math.max(1, Math.min(120, Number(e.target.value) || 1)); setMeditationMinutes(value); if (!meditationRunning) setMeditationSeconds(value * 60); }} /></label>
-          <div className="text-center rounded-xl bg-ink border border-line px-6 py-3"><div className="font-mono text-3xl text-teal tabular-nums">{formatClock(meditationSeconds)}</div><div className="text-[10px] text-bone-dim mt-1">A soft chime plays at the end</div></div>
+          <div className="text-center rounded-xl bg-ink border border-line px-6 py-3"><div className="font-mono text-3xl text-sienna tabular-nums">{formatClock(meditationSeconds)}</div><div className="text-[10px] text-bone-dim mt-1">A soft chime plays at the end</div></div>
           <div className="flex gap-2"><button className="btn-primary py-2.5" onClick={() => setMeditationRunning(value => !value)}>{meditationRunning ? 'Pause' : 'Start'}</button><button className="btn-secondary py-2.5" onClick={() => { setMeditationRunning(false); setMeditationSeconds(meditationMinutes * 60); }}>Reset</button></div>
         </div>
       </section>
 
       <section className="card p-5">
-        <div className="flex items-center justify-between gap-4 mb-4"><div><div className="font-mono text-[10px] text-teal tracking-widest">WARM-UP EXERCISES</div><h2 className="font-display text-xl mt-1">Move through this sequence</h2></div><HeartPulse size={18} className="text-teal" /></div>
+        <div className="flex items-center justify-between gap-4 mb-4"><div><div className="font-mono text-[10px] text-sienna tracking-widest">WARM-UP EXERCISES</div><h2 className="font-display text-xl mt-1">Move through this sequence</h2></div><HeartPulse size={18} className="text-sienna" /></div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">{warmupExercises.map(([name, duration, detail]) => <div key={name} className="rounded-lg border border-line bg-ink-2 p-3"><div className="font-semibold text-sm">{name}</div><div className="font-mono text-[10px] text-amber mt-2">{duration}</div><p className="text-xs text-bone-dim mt-1 leading-relaxed">{detail}</p></div>)}</div>
       </section>
 
       <section className="card p-5">
-        <div className="flex items-center justify-between gap-4 mb-4"><div><div className="font-mono text-[10px] text-bone-dim tracking-widest">SESSION CHECKLIST</div><h2 className="font-display text-xl mt-1">Arrive prepared</h2></div><span className="font-mono text-xs text-teal">{completedCount}/{warmupSteps.length} complete</span></div>
+        <div className="flex items-center justify-between gap-4 mb-4"><div><div className="font-mono text-[10px] text-bone-dim tracking-widest">SESSION CHECKLIST</div><h2 className="font-display text-xl mt-1">Arrive prepared</h2></div><span className="font-mono text-xs text-sienna">{completedCount}/{warmupSteps.length} complete</span></div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {warmupSteps.map((step, index) => {
             const Icon = step.icon;
             const isDone = !!completed[index];
-            return <button key={step.title} onClick={() => setCompleted(items => items.map((value, itemIndex) => itemIndex === index ? !value : value))} className={`text-left flex items-start gap-3 rounded-lg border p-4 transition-all ${isDone ? 'border-teal/60 bg-teal/10' : 'border-line bg-ink-2 hover:border-teal-dim'}`}>
-              <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-none ${isDone ? 'bg-teal text-ink' : 'bg-ink-3 text-teal'}`}>{isDone ? <Check size={16} /> : <Icon size={16} />}</span>
-              <span className="min-w-0"><span className={`font-semibold text-sm block ${isDone ? 'text-teal' : ''}`}>{step.title}</span><span className="text-xs text-bone-dim leading-relaxed block mt-1">{step.detail}</span><span className="text-[10px] font-mono text-amber block mt-2">{step.duration}</span></span>
+            return <button key={step.title} onClick={() => setCompleted(items => items.map((value, itemIndex) => itemIndex === index ? !value : value))} className={`text-left flex items-start gap-3 rounded-lg border p-4 transition-all ${isDone ? 'border-sienna/60 bg-sienna/10' : 'border-line bg-ink-2 hover:border-sienna/50'}`}>
+              <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-none ${isDone ? 'bg-sienna text-bone' : 'bg-ink-3 text-sienna'}`}>{isDone ? <Check size={16} /> : <Icon size={16} />}</span>
+              <span className="min-w-0"><span className={`font-semibold text-sm block ${isDone ? 'text-sienna' : ''}`}>{step.title}</span><span className="text-xs text-bone-dim leading-relaxed block mt-1">{step.detail}</span><span className="text-[10px] font-mono text-amber block mt-2">{step.duration}</span></span>
             </button>;
           })}
         </div>
       </section>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <section className="card p-5"><div className="flex items-center gap-2 mb-3"><ShieldCheck size={18} className="text-teal" /><h3 className="font-display text-lg">Training-day rule</h3></div><p className="text-sm text-bone-dim leading-relaxed">Warm-ups should improve the session in front of you. If fatigue is rising before your working sets, shorten the sequence.</p></section>
+        <section className="card p-5"><div className="flex items-center gap-2 mb-3"><ShieldCheck size={18} className="text-sienna" /><h3 className="font-display text-lg">Training-day rule</h3></div><p className="text-sm text-bone-dim leading-relaxed">Warm-ups should improve the session in front of you. If fatigue is rising before your working sets, shorten the sequence.</p></section>
         <section className="card p-5"><div className="flex items-center gap-2 mb-3"><Sparkles size={18} className="text-amber" /><h3 className="font-display text-lg">Make it yours</h3></div><p className="text-sm text-bone-dim leading-relaxed">For wrists and shoulders, spend extra time on the areas that limit your first exercise. Log the change in your workout notes.</p></section>
       </div>
     </div>
@@ -243,12 +243,12 @@ function NutritionGuide() {
     </section>
 
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_0.85fr] gap-4">
-      <section className="card p-5"><div className="flex items-center gap-2 mb-4"><Clock3 size={18} className="text-teal" /><h2 className="font-display text-xl">Timing that stays flexible</h2></div><div className="space-y-2">{timingRows.map(([title, detail], index) => <button key={title} onClick={() => setExpanded(expanded === index ? null : index)} className="w-full text-left rounded-lg border border-line bg-ink-2 p-4 hover:border-teal-dim transition-colors"><div className="flex items-center justify-between gap-3"><span className="font-semibold text-sm">{title}</span><ChevronDown size={16} className={`text-bone-dim transition-transform ${expanded === index ? 'rotate-180' : ''}`} /></div>{expanded === index && <p className="text-xs text-bone-dim leading-relaxed mt-2 pr-5">{detail}</p>}</button>)}</div></section>
-      <section className="card p-5"><div className="flex items-center justify-between mb-4"><div><div className="font-mono text-[10px] text-teal tracking-widest">HYDRATION CHECK</div><h2 className="font-display text-xl mt-1">Sip steadily</h2></div><Droplets className="text-teal" size={22} /></div><p className="text-sm text-bone-dim leading-relaxed mb-5">Use thirst, sweat, and urine color as signals. There is no universal target, but a simple reminder helps on busy training days.</p><div className="grid grid-cols-4 gap-2 mb-5">{Array.from({ length: 8 }, (_, index) => <button key={index} onClick={() => setGlasses(value => value === index + 1 ? index : index + 1)} className={`h-12 rounded-lg border flex items-center justify-center transition-colors ${index < glasses ? 'bg-teal/20 border-teal text-teal' : 'bg-ink-2 border-line text-bone-dim'}`} aria-label={`Water glass ${index + 1}`}><Droplets size={16} /></button>)}</div><div className="flex items-center justify-between"><span className="font-mono text-xs text-bone-dim">{glasses} / 8 reminders</span><button className="btn-ghost text-xs" onClick={() => setGlasses(0)}>Reset</button></div></section>
+      <section className="card p-5"><div className="flex items-center gap-2 mb-4"><Clock3 size={18} className="text-sienna" /><h2 className="font-display text-xl">Timing that stays flexible</h2></div><div className="space-y-2">{timingRows.map(([title, detail], index) => <button key={title} onClick={() => setExpanded(expanded === index ? null : index)} className="w-full text-left rounded-lg border border-line bg-ink-2 p-4 hover:border-sienna/50 transition-colors"><div className="flex items-center justify-between gap-3"><span className="font-semibold text-sm">{title}</span><ChevronDown size={16} className={`text-bone-dim transition-transform ${expanded === index ? 'rotate-180' : ''}`} /></div>{expanded === index && <p className="text-xs text-bone-dim leading-relaxed mt-2 pr-5">{detail}</p>}</button>)}</div></section>
+      <section className="card p-5"><div className="flex items-center justify-between mb-4"><div><div className="font-mono text-[10px] text-sienna tracking-widest">HYDRATION CHECK</div><h2 className="font-display text-xl mt-1">Sip steadily</h2></div><Droplets className="text-sienna" size={22} /></div><p className="text-sm text-bone-dim leading-relaxed mb-5">Use thirst, sweat, and urine color as signals. There is no universal target, but a simple reminder helps on busy training days.</p><div className="grid grid-cols-4 gap-2 mb-5">{Array.from({ length: 8 }, (_, index) => <button key={index} onClick={() => setGlasses(value => value === index + 1 ? index : index + 1)} className={`h-12 rounded-lg border flex items-center justify-center transition-colors ${index < glasses ? 'bg-amber border-amber/30 text-sienna' : 'bg-ink-2 border-line text-bone-dim'}`} aria-label={`Water glass ${index + 1}`}><Droplets size={16} /></button>)}</div><div className="flex items-center justify-between"><span className="font-mono text-xs text-bone-dim">{glasses} / 8 reminders</span><button className="btn-ghost text-xs" onClick={() => setGlasses(0)}>Reset</button></div></section>
     </div>
 
-    <section className="card p-5"><div className="flex items-center gap-2 mb-4"><Utensils size={18} className="text-amber" /><h2 className="font-display text-xl">Build a plate</h2></div><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{['½ colorful plants', '¼ protein', '¼ carbs', 'Add fluids'].map((label, index) => <div key={label} className="bg-ink-2 rounded-lg border border-line/50 p-4"><div className={`w-8 h-8 rounded-full flex items-center justify-center mb-3 ${index === 0 ? 'bg-teal/20 text-teal' : index === 1 ? 'bg-amber/20 text-amber' : 'bg-bone/10 text-bone'}`}><span className="font-mono text-xs">0{index + 1}</span></div><div className="text-sm font-semibold">{label}</div></div>)}</div></section>
-    <section className="card p-5"><div className="flex items-center gap-2 mb-4"><Leaf size={18} className="text-teal" /><h2 className="font-display text-xl">Vegetarian protein foods</h2></div><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{vegetarianProteinFoods.map(([name, detail]) => <div key={name} className="rounded-lg border border-line bg-ink-2 p-4"><div className="font-semibold text-sm">{name}</div><p className="text-xs text-bone-dim mt-1 leading-relaxed">{detail}</p></div>)}</div></section>
+    <section className="card p-5"><div className="flex items-center gap-2 mb-4"><Utensils size={18} className="text-amber" /><h2 className="font-display text-xl">Build a plate</h2></div><div className="grid grid-cols-2 md:grid-cols-4 gap-3">{['½ colorful plants', '¼ protein', '¼ carbs', 'Add fluids'].map((label, index) => <div key={label} className="bg-ink-2 rounded-lg border border-line/50 p-4"><div className={`w-8 h-8 rounded-full flex items-center justify-center mb-3 ${index === 0 ? 'bg-sienna/20 text-sienna' : index === 1 ? 'bg-amber/20 text-amber' : 'bg-bone/10 text-bone'}`}><span className="font-mono text-xs">0{index + 1}</span></div><div className="text-sm font-semibold">{label}</div></div>)}</div></section>
+    <section className="card p-5"><div className="flex items-center gap-2 mb-4"><Leaf size={18} className="text-sienna" /><h2 className="font-display text-xl">Vegetarian protein foods</h2></div><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{vegetarianProteinFoods.map(([name, detail]) => <div key={name} className="rounded-lg border border-line bg-ink-2 p-4"><div className="font-semibold text-sm">{name}</div><p className="text-xs text-bone-dim mt-1 leading-relaxed">{detail}</p></div>)}</div></section>
   </div>;
 }
 

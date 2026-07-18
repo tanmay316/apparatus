@@ -12,17 +12,32 @@
 /* Light theme overrides for Tailwind utilities that reference the
    static token values rather than CSS custom properties. */
 [data-theme='light'] body {
-  background: var(--color-ink);
-  color: var(--color-bone);
+  background: rgb(var(--color-ink));
+  color: rgb(var(--color-bone));
+  position: relative;
+  overflow-x: hidden;
 }
 
-[data-theme='light'] .bg-ink     { background-color: var(--color-ink)     !important; }
-[data-theme='light'] .bg-ink-2   { background-color: var(--color-ink-2)   !important; }
-[data-theme='light'] .bg-ink-3   { background-color: var(--color-ink-3)   !important; }
-[data-theme='light'] .text-bone  { color: var(--color-bone)               !important; }
-[data-theme='light'] .text-bone-dim { color: var(--color-bone-dim)         !important; }
-[data-theme='light'] .border-line { border-color: var(--color-line)        !important; }
+[data-theme='light'] body::before {
+  content: '';
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 50% 50%, rgba(var(--color-amber), 0.05) 0%, rgba(var(--color-ink), 0) 50%),
+              radial-gradient(circle at 80% 20%, rgba(var(--color-sienna), 0.04) 0%, rgba(var(--color-ink), 0) 40%);
+  z-index: -1;
+  pointer-events: none;
+  animation: bgGlow 15s ease-in-out infinite alternate;
+}
+
+@keyframes bgGlow {
+  0% { transform: scale(1) rotate(0deg); }
+  100% { transform: scale(1.1) rotate(10deg); }
+}
+
 [data-theme='light'] .input-field {
-  background-color: var(--color-ink-2) !important;
-  color: var(--color-bone)             !important;
+  background-color: rgb(var(--color-ink-2));
+  color: rgb(var(--color-bone));
 }

@@ -114,8 +114,8 @@ function ExerciseSection({
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="font-bold text-sm mb-1">{ex.name}</div>
-                    <div className="flex items-center gap-3 font-mono text-[10px] text-teal">
-                      <span className="bg-teal/10 px-1.5 py-0.5 rounded">{ex.sets}</span>
+                    <div className="flex items-center gap-3 font-mono text-[10px] text-sienna">
+                      <span className="bg-sienna/10 px-1.5 py-0.5 rounded">{ex.sets}</span>
                       {ex.tempo && <span className="text-bone-dim">T: {ex.tempo}</span>}
                       {ex.rest && <span className="text-bone-dim">R: {ex.rest}</span>}
                     </div>
@@ -124,7 +124,7 @@ function ExerciseSection({
                 {ex.cues && ex.cues.length > 0 && (
                   <ul className="mt-3 space-y-1">
                     {ex.cues.map((cue, ci) => (
-                      <li key={ci} className="text-[12px] text-bone-dim leading-snug pl-3 relative before:content-['—'] before:absolute before:left-0 before:text-teal/50">{cue}</li>
+                      <li key={ci} className="text-[12px] text-bone-dim leading-snug pl-3 relative before:content-['—'] before:absolute before:left-0 before:text-sienna/50">{cue}</li>
                     ))}
                   </ul>
                 )}
@@ -134,7 +134,7 @@ function ExerciseSection({
         ))}
         
         {isOwner && (
-          <button onClick={addExercise} className="w-full py-3 border border-dashed border-line rounded hover:border-teal hover:text-teal transition-colors text-sm font-mono text-bone-dim flex items-center justify-center gap-2">
+          <button onClick={addExercise} className="w-full py-3 border border-dashed border-line rounded hover:border-sienna hover:text-sienna transition-colors text-sm font-mono text-bone-dim flex items-center justify-center gap-2">
             <Plus size={14}/> Add {title} Exercise
           </button>
         )}
@@ -181,7 +181,7 @@ export function DayView() {
   if (!day || !plan) {
     return (
       <div className="flex justify-center py-20">
-        <div className="w-8 h-8 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -192,7 +192,7 @@ export function DayView() {
         <Link to={`/plans/${planId}`} className="inline-flex items-center gap-2 text-sm text-bone-dim hover:text-bone transition-colors">
           <ArrowLeft size={16} /> Back to Plan
         </Link>
-        <button className="btn-primary flex items-center gap-2 bg-teal-light text-ink hover:bg-teal">
+        <button className="btn-primary flex items-center gap-2 bg-sienna text-bone hover:bg-sienna/80">
           <Play size={16} fill="currentColor"/> Start Workout
         </button>
       </div>
@@ -217,7 +217,7 @@ export function DayView() {
         ) : (
           <div>
             <h1 className="font-display text-3xl mb-1">{day.title}</h1>
-            {day.skill && <div className="font-mono text-teal text-sm mt-1">{day.skill}</div>}
+            {day.skill && <div className="font-mono text-sienna text-sm mt-1">{day.skill}</div>}
           </div>
         )}
       </div>

@@ -5,25 +5,31 @@ export default {
     extend: {
       colors: {
         ink: {
-          DEFAULT: '#090b12',
-          2: '#111522',
-          3: '#181c2a',
+          DEFAULT: 'rgb(var(--color-ink) / <alpha-value>)',
+          2: 'rgb(var(--color-ink-2) / <alpha-value>)',
+          3: 'rgb(var(--color-ink-3) / <alpha-value>)',
         },
         bone: {
-          DEFAULT: '#F5F1E8',
-          dim: '#A9A69D',
+          DEFAULT: 'rgb(var(--color-bone) / <alpha-value>)',
+          dim: 'rgb(var(--color-bone-dim) / <alpha-value>)',
         },
         teal: {
-          DEFAULT: '#4F9E8D',
-          dim: '#3A756A',
-          light: '#5FB09E',
+          DEFAULT: 'rgb(var(--color-teal) / <alpha-value>)',
+          dim: 'rgb(var(--color-teal-dim) / <alpha-value>)',
+          light: 'rgb(var(--color-teal-light) / <alpha-value>)',
         },
         amber: {
-          DEFAULT: '#D29A36',
-          light: '#D4993F',
+          DEFAULT: 'rgb(var(--color-amber) / <alpha-value>)',
+          light: 'rgb(var(--color-amber-light) / <alpha-value>)',
         },
-        line: '#1e2130',
-        danger: '#B5504A',
+        sienna: {
+          DEFAULT: 'rgb(var(--color-sienna) / <alpha-value>)',
+          dim: 'rgb(var(--color-sienna-dim) / <alpha-value>)',
+          light: 'rgb(var(--color-sienna-light) / <alpha-value>)',
+        },
+        line: 'rgb(var(--color-line) / <alpha-value>)',
+        'line-solid': 'rgb(var(--color-line-solid) / <alpha-value>)',
+        danger: 'rgb(var(--color-danger) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
@@ -82,3 +88,5 @@ export default {
   },
   plugins: [],
 };
+
+// trigger

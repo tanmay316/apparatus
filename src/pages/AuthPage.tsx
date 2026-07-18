@@ -30,12 +30,12 @@ export function AuthPage() {
         {/* Logo + branding */}
         <div className="text-center mb-10">
           <motion.div
-            className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-teal/10 border border-teal/20 mb-6"
+            className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-sienna/10 border border-sienna/20 mb-6"
             initial={{ scale: 0, rotate: -45 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.2 }}
           >
-            <Dumbbell size={32} className="text-teal" />
+            <Dumbbell size={32} className="text-sienna" />
           </motion.div>
 
           <h1 className="brand-wordmark text-4xl leading-none mb-3">APPARATUS</h1>

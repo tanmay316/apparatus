@@ -8,6 +8,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { googleProvider } from '@/lib/firebase';
 import { deleteAccountData, deleteAvatar, downloadJson, exportAccountData, resetUserData, uploadAvatar } from '@/services/account';
+import { getAvatarUrl } from '@/lib/avatar';
 
 const container = {
   hidden: { opacity: 0 },
@@ -196,7 +197,7 @@ export function SettingsPage() {
           {/* left: Profile settings */}
           <motion.div variants={item} className="card p-5 md:col-span-2 space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-line/30 mb-2">
-              <User size={18} className="text-teal" />
+              <User size={18} className="text-sienna" />
               <h3 className="font-display text-base uppercase tracking-wide text-bone">Profile Details</h3>
             </div>
 
@@ -255,9 +256,9 @@ export function SettingsPage() {
           <motion.div variants={item} className="card p-5 md:col-span-1 flex flex-col items-center justify-center text-center space-y-4">
             <div className="relative group">
               <img
-                src={photoURL || `https://ui-avatars.com/api/?name=${displayName}&background=4F9E8D&color=14151A&bold=true&size=128`}
+                src={photoURL || getAvatarUrl(displayName, theme, 128)}
                 alt={displayName}
-                className="w-24 h-24 rounded-full border-2 border-teal object-cover"
+                className="w-24 h-24 rounded-full border-2 border-sienna object-cover"
                 referrerPolicy="no-referrer"
               />
             </div>
@@ -267,7 +268,7 @@ export function SettingsPage() {
             </div>
             <div className="w-full pt-4 border-t border-line/30 space-y-3">
               {success && (
-                <div className="text-xs text-teal font-mono bg-teal/10 p-2 rounded border border-teal/20 flex items-center justify-center gap-1">
+                <div className="text-xs text-sienna font-mono bg-sienna/10 p-2 rounded border border-sienna/20 flex items-center justify-center gap-1">
                   <Check size={14} /> Saved successfully!
                 </div>
               )}
@@ -285,7 +286,7 @@ export function SettingsPage() {
         {/* Physical Details & Fitness */}
         <motion.div variants={item} className="card p-5 space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-line/30 mb-2">
-            <Scale size={18} className="text-teal" />
+            <Scale size={18} className="text-sienna" />
             <h3 className="font-display text-base uppercase tracking-wide text-bone">Physical Details</h3>
           </div>
 
@@ -380,7 +381,7 @@ export function SettingsPage() {
         {/* Privacy preferences */}
         <motion.div variants={item} className="card p-5 space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-line/30 mb-2">
-            <Eye size={18} className="text-teal" />
+            <Eye size={18} className="text-sienna" />
             <h3 className="font-display text-base uppercase tracking-wide text-bone">Privacy Settings</h3>
           </div>
 
@@ -388,7 +389,7 @@ export function SettingsPage() {
             <input
               type="checkbox"
               id="isPublic"
-              className="mt-1 accent-teal cursor-pointer"
+              className="mt-1 accent-sienna cursor-pointer"
               checked={isPublic}
               onChange={(e) => setIsPublic(e.target.checked)}
             />
@@ -405,7 +406,7 @@ export function SettingsPage() {
 
         <motion.div variants={item} className="card p-5 space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-line/30 mb-2">
-            {theme === 'dark' ? <Moon size={18} className="text-teal" /> : <Sun size={18} className="text-amber" />}
+            {theme === 'dark' ? <Moon size={18} className="text-sienna" /> : <Sun size={18} className="text-amber" />}
             <h3 className="font-display text-base uppercase tracking-wide text-bone">App Preferences</h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -436,7 +437,7 @@ export function SettingsPage() {
 
         <motion.div variants={item} className="card p-5 space-y-4">
           <div className="flex items-center gap-2 pb-2 border-b border-line/30 mb-2">
-            <Download size={18} className="text-teal" />
+            <Download size={18} className="text-sienna" />
             <h3 className="font-display text-base uppercase tracking-wide text-bone">Your Data</h3>
           </div>
           <p className="text-sm text-bone-dim leading-relaxed">Download a JSON copy of your profile, plans, workouts, measurements, skills, activities, and notifications.</p>

@@ -12,7 +12,7 @@ export function Toast() {
   };
 
   const colors = {
-    success: 'bg-teal text-ink',
+    success: 'bg-sienna text-bone',
     error: 'bg-danger text-bone',
     info: 'bg-amber text-ink',
   };

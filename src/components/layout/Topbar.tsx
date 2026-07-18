@@ -4,13 +4,14 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
+import { getAvatarUrl } from '@/lib/avatar';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, searchUsers } from '@/services/social';
 import { COMPACT_LIBRARY } from '@/services/library';
 import { getSamplePlans } from '@/services/plans';
 
 export function Topbar() {
   const { profile, stats, signOut } = useAuthStore();
-  const { toggleSidebar } = useUIStore();
+  const { toggleSidebar, theme } = useUIStore();
   const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -123,13 +124,13 @@ export function Topbar() {
   const streak = stats?.currentStreak || 0;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/[0.06]" style={{ background: 'rgba(9,11,18,0.88)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
+    <header className="sticky top-0 z-50 border-b border-line bg-ink/90 backdrop-blur-xl">
       <div className="max-w-[1440px] mx-auto px-4 sm:px-5 h-14 flex items-center justify-between gap-3">
         {/* Left — Collapse + Logo */}
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={toggleSidebar}
-            className="w-9 h-9 rounded-xl border border-white/[0.06] text-bone-dim hover:border-teal/40 hover:text-teal flex items-center justify-center transition-all duration-200"
+            className="w-9 h-9 rounded-xl border border-line text-bone-dim hover:border-bone/40 hover:text-bone flex items-center justify-center transition-all duration-200"
             aria-label="Open menu"
           >
             <Menu size={18} />
@@ -146,8 +147,8 @@ export function Topbar() {
           <div
             className={`flex items-center gap-2.5 h-9 px-3.5 rounded-xl border transition-all duration-200 ${
               searchFocused
-                ? 'border-teal/40 bg-ink-2 shadow-[0_0_16px_rgba(79,158,141,0.12)]'
-                : 'border-white/[0.06] bg-white/[0.03]'
+                ? 'border-bone/40 bg-ink-2 shadow-[0_0_16px_rgba(0,0,0,0.08)]'
+                : 'border-line bg-white/[0.03]'
             }`}
           >
             <Search size={14} className="text-bone-dim shrink-0" />
@@ -164,7 +165,7 @@ export function Topbar() {
                 <X size={13} />
               </button>
             ) : (
-              <kbd className="hidden lg:inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono text-bone-dim/50 border border-white/[0.06] rounded">⌘K</kbd>
+              <kbd className="hidden lg:inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono text-bone-dim/50 border border-line rounded">⌘K</kbd>
             )}
           </div>
 
@@ -183,7 +184,7 @@ export function Topbar() {
                   {/* Exercises */}
                   {matchingExercises.length > 0 && (
                     <div className="p-3">
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-teal tracking-wider uppercase mb-2">
+                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-bone tracking-wider uppercase mb-2">
                         <Dumbbell size={12} /> Exercises ({matchingExercises.length})
                       </div>
                       <div className="space-y-1">
@@ -197,10 +198,10 @@ export function Topbar() {
                             className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.04] transition-colors group"
                           >
                             <div>
-                              <div className="text-xs text-bone font-medium group-hover:text-teal transition-colors">{ex.name}</div>
+                              <div className="text-xs text-bone font-medium group-hover:text-bone transition-colors">{ex.name}</div>
                               <div className="text-[10px] font-mono text-bone-dim">{ex.muscleGroup} · {ex.equipment}</div>
                             </div>
-                            <ExternalLink size={12} className="text-bone-dim/50 group-hover:text-teal" />
+                            <ExternalLink size={12} className="text-bone-dim/50 group-hover:text-bone" />
                           </a>
                         ))}
                       </div>
@@ -210,7 +211,7 @@ export function Topbar() {
                   {/* Plans */}
                   {matchingPlans.length > 0 && (
                     <div className="p-3">
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-amber tracking-wider uppercase mb-2">
+                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-bone tracking-wider uppercase mb-2">
                         <BookOpen size={12} /> Training Plans ({matchingPlans.length})
                       </div>
                       <div className="space-y-1">
@@ -222,10 +223,10 @@ export function Topbar() {
                             className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.04] transition-colors group"
                           >
                             <div>
-                              <div className="text-xs text-bone font-medium group-hover:text-amber transition-colors">{plan.title}</div>
+                              <div className="text-xs text-bone font-medium group-hover:text-bone transition-colors">{plan.title}</div>
                               <div className="text-[10px] font-mono text-bone-dim">{plan.daysPerWeek} days/week · {plan.estimatedDuration || 'Custom'}</div>
                             </div>
-                            <span className="text-[10px] font-mono text-amber bg-amber/10 px-2 py-0.5 rounded-full">View</span>
+                            <span className="text-[10px] font-mono text-bone bg-bone/10 px-2 py-0.5 rounded-full">View</span>
                           </Link>
                         ))}
                       </div>
@@ -235,7 +236,7 @@ export function Topbar() {
                   {/* Athletes */}
                   {matchingAthletes.length > 0 && (
                     <div className="p-3">
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-teal tracking-wider uppercase mb-2">
+                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-bone tracking-wider uppercase mb-2">
                         <User size={12} /> Athletes ({matchingAthletes.length})
                       </div>
                       <div className="space-y-1">
@@ -247,12 +248,12 @@ export function Topbar() {
                             className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-white/[0.04] transition-colors group"
                           >
                             <img
-                              src={athlete.photoURL || `https://ui-avatars.com/api/?name=${athlete.displayName}&background=4F9E8D&color=14151A&bold=true`}
+                              src={athlete.photoURL || getAvatarUrl(athlete.displayName, theme)}
                               alt={athlete.displayName}
-                              className="w-7 h-7 rounded-full object-cover border border-teal/30"
+                              className="w-7 h-7 rounded-full object-cover border border-line"
                             />
                             <div className="min-w-0 flex-1">
-                              <div className="text-xs text-bone font-medium truncate group-hover:text-teal transition-colors">{athlete.displayName}</div>
+                              <div className="text-xs text-bone font-medium truncate group-hover:text-bone transition-colors">{athlete.displayName}</div>
                               <div className="text-[10px] font-mono text-bone-dim truncate">@{athlete.username || 'athlete'}</div>
                             </div>
                           </Link>
@@ -271,7 +272,7 @@ export function Topbar() {
           {/* Mobile search toggle button */}
           <button
             onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-            className="md:hidden w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-white/[0.06] text-bone-dim hover:text-teal flex items-center justify-center transition-colors"
+            className="md:hidden w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-line text-bone-dim hover:text-bone flex items-center justify-center transition-colors"
             aria-label="Search"
           >
             <Search size={16} />
@@ -279,9 +280,9 @@ export function Topbar() {
 
           {/* Streak chip */}
           {profile && streak > 0 && (
-            <div className="hidden sm:flex items-center gap-1.5 h-8 px-2.5 rounded-xl bg-amber/10 border border-amber/20">
-              <Flame size={14} className="text-amber" />
-              <span className="font-mono text-xs font-bold text-amber">{streak}</span>
+            <div className="hidden sm:flex items-center gap-1.5 h-8 px-2.5 rounded-xl bg-[var(--color-blush-peach)] border border-[var(--color-sienna-brown)]/10">
+              <Flame size={14} className="text-[var(--color-sienna-brown)]" />
+              <span className="font-sans text-xs font-bold text-[var(--color-sienna-brown)]">{streak}</span>
             </div>
           )}
 
@@ -291,21 +292,21 @@ export function Topbar() {
               <div className="relative" ref={containerRef}>
                 <button
                   onClick={handleToggleNotifications}
-                  className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-white/[0.06] text-bone-dim hover:text-bone hover:border-white/10 flex items-center justify-center transition-all duration-200"
+                  className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-line text-bone-dim hover:text-bone hover:border-white/10 flex items-center justify-center transition-all duration-200"
                   aria-label="Notifications"
                   aria-expanded={notificationsOpen}
                 >
                   <Bell size={16} />
                   {unreadCount > 0 && !notificationsOpen && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-teal text-[9px] font-bold font-mono text-ink flex items-center justify-center">
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--color-sienna-brown)] text-[9px] font-bold font-mono text-[#fbe1d1] flex items-center justify-center">
                       {unreadCount}
                     </span>
                   )}
                 </button>
 
                 {notificationsOpen && (
-                  <div className="fixed md:absolute right-4 md:right-0 top-16 md:top-12 w-[calc(100vw-2rem)] md:w-80 rounded-2xl border border-white/[0.06] shadow-2xl z-[70] p-3" style={{ background: 'rgba(17,21,34,0.95)', backdropFilter: 'blur(20px)' }}>
-                    <div className="flex items-center justify-between px-2 pb-2 border-b border-white/[0.06]">
+                  <div className="fixed md:absolute right-4 md:right-0 top-16 md:top-12 w-[calc(100vw-2rem)] md:w-80 rounded-2xl border border-line shadow-2xl z-[70] p-3" style={{ background: 'rgba(17,21,34,0.95)', backdropFilter: 'blur(20px)' }}>
+                    <div className="flex items-center justify-between px-2 pb-2 border-b border-line">
                       <span className="font-display text-sm">Notifications</span>
                       <span className="font-mono text-[10px] text-bone-dim">{notifications.filter(item => !item.read).length} unread</span>
                     </div>
@@ -317,7 +318,7 @@ export function Topbar() {
                           <button
                             key={notification.id}
                             onClick={() => handleNotificationClick(notification)}
-                            className={`w-full text-left px-2 py-3 rounded-lg hover:bg-white/[0.03] transition-colors ${!notification.read ? 'bg-teal/5' : ''}`}
+                            className={`w-full text-left px-2 py-3 rounded-lg hover:bg-white/[0.03] transition-colors ${!notification.read ? 'bg-bone/5' : ''}`}
                           >
                             <div className="text-xs text-bone">{notification.message}</div>
                             <div className="font-mono text-[10px] text-bone-dim mt-1">
@@ -334,7 +335,7 @@ export function Topbar() {
               {/* Settings Icon Link */}
               <Link
                 to="/settings"
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-white/[0.06] text-bone-dim hover:text-bone hover:border-white/10 flex items-center justify-center transition-all duration-200"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-line text-bone-dim hover:text-bone hover:border-white/10 flex items-center justify-center transition-all duration-200"
                 title="Settings"
               >
                 <Settings size={16} />
@@ -343,7 +344,7 @@ export function Topbar() {
               {/* Sign Out Button */}
               <button
                 onClick={handleSignOut}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-white/[0.06] text-bone-dim hover:text-danger hover:border-danger/40 hover:bg-danger/10 flex items-center justify-center transition-all duration-200"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-line text-bone-dim hover:text-danger hover:border-danger/40 hover:bg-danger/10 flex items-center justify-center transition-all duration-200"
                 title="Sign Out"
               >
                 <LogOut size={16} />
@@ -352,9 +353,9 @@ export function Topbar() {
               {/* Avatar */}
               <Link to={`/profile/${profile.username}`}>
                 <img
-                  src={profile.photoURL || `https://ui-avatars.com/api/?name=${profile.displayName}&background=4F9E8D&color=14151A&bold=true`}
+                  src={profile.photoURL || getAvatarUrl(profile.displayName, theme)}
                   alt={profile.displayName}
-                  className="w-8 h-8 rounded-full border-2 border-white/[0.06] hover:border-teal/40 transition-all duration-200 object-cover"
+                  className="w-8 h-8 rounded-full border-2 border-line hover:border-bone/40 transition-all duration-200 object-cover"
                   referrerPolicy="no-referrer"
                 />
               </Link>
@@ -365,9 +366,9 @@ export function Topbar() {
 
       {/* Mobile Search Overlay Bar */}
       {mobileSearchOpen && (
-        <div className="md:hidden border-t border-white/[0.06] p-3 bg-ink-2/95 backdrop-blur-md">
-          <div className="flex items-center gap-2 h-9 px-3 rounded-xl border border-teal/40 bg-ink">
-            <Search size={14} className="text-teal shrink-0" />
+        <div className="md:hidden border-t border-line p-3 bg-ink-2/95 backdrop-blur-md">
+          <div className="flex items-center gap-2 h-9 px-3 rounded-xl border border-bone/40 bg-ink">
+            <Search size={14} className="text-bone shrink-0" />
             <input
               type="text"
               value={searchQuery}
@@ -385,14 +386,14 @@ export function Topbar() {
             <div className="mt-2 rounded-xl border border-white/[0.08] bg-ink-2 p-2 max-h-72 overflow-y-auto space-y-3">
               {matchingExercises.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-mono text-teal uppercase mb-1">Exercises</div>
+                  <div className="text-[10px] font-mono text-bone uppercase mb-1">Exercises</div>
                   {matchingExercises.map((ex, idx) => (
                     <a
                       key={idx}
                       href={`https://www.youtube.com/results?search_query=${encodeURIComponent(ex.youtubeSearch || (ex.name + ' form tutorial'))}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="block p-1.5 text-xs text-bone hover:text-teal font-mono truncate"
+                      className="block p-1.5 text-xs text-bone hover:text-bone font-mono truncate"
                     >
                       {ex.name} ({ex.muscleGroup})
                     </a>
@@ -401,13 +402,13 @@ export function Topbar() {
               )}
               {matchingPlans.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-mono text-amber uppercase mb-1">Plans</div>
+                  <div className="text-[10px] font-mono text-bone uppercase mb-1">Plans</div>
                   {matchingPlans.map(plan => (
                     <Link
                       key={plan.id}
                       to={`/plans/${plan.id}`}
                       onClick={() => setMobileSearchOpen(false)}
-                      className="block p-1.5 text-xs text-bone hover:text-amber font-mono truncate"
+                      className="block p-1.5 text-xs text-bone hover:text-bone font-mono truncate"
                     >
                       {plan.title}
                     </Link>
@@ -416,13 +417,13 @@ export function Topbar() {
               )}
               {matchingAthletes.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-mono text-teal uppercase mb-1">Athletes</div>
+                  <div className="text-[10px] font-mono text-bone uppercase mb-1">Athletes</div>
                   {matchingAthletes.map((athlete: any) => (
                     <Link
                       key={athlete.uid}
                       to={`/profile/${athlete.username || athlete.uid}`}
                       onClick={() => setMobileSearchOpen(false)}
-                      className="block p-1.5 text-xs text-bone hover:text-teal font-mono truncate"
+                      className="block p-1.5 text-xs text-bone hover:text-sienna font-mono truncate"
                     >
                       @{athlete.username || athlete.displayName}
                     </Link>

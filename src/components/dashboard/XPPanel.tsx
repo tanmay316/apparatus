@@ -34,41 +34,39 @@ export function XPPanel({ xp, streak, badges }: XPPanelProps) {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.3 }}
-      className="relative overflow-hidden rounded-2xl border border-white/[0.06] p-5 mb-6"
-      style={{ background: 'rgba(17,21,34,0.7)' }}
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="relative overflow-hidden p-8 mb-8 rounded-[24px] bg-white border border-[#ececec] shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] text-[#17191c]"
     >
-      {/* Glow */}
-      <div className="absolute -top-16 -left-16 w-32 h-32 rounded-full bg-teal/[0.06] blur-3xl animate-glow-pulse pointer-events-none" />
-
-      <div className="relative flex flex-col sm:flex-row gap-5">
+      <div className="relative flex flex-col sm:flex-row items-center gap-6">
         {/* Level badge */}
         <div className="flex items-center gap-4 shrink-0">
           <div className="relative">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-teal to-teal-light flex items-center justify-center font-display font-bold text-2xl text-ink shadow-[0_0_20px_rgba(79,158,141,0.2)]">
+            <div className="w-14 h-14 rounded-full bg-[#17191c] flex items-center justify-center font-serif font-normal text-2xl text-white">
               {level}
             </div>
-            <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber flex items-center justify-center">
+            <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-[#fbe1d1] text-[#5d2a1a] border-2 border-white flex items-center justify-center shadow-xs">
               <span className="text-[10px]">⚡</span>
             </div>
           </div>
           <div>
-            <h4 className="font-display text-lg text-bone">{title}</h4>
-            <div className="font-mono text-[11px] text-bone-dim">{xp} / {nextLevelXp} XP</div>
+            <h4 className="font-serif font-normal text-xl text-[#17191c] leading-tight">{title}</h4>
+            <div className="font-sans text-xs text-[#777b86] mt-0.5">{xp} / {nextLevelXp} XP</div>
           </div>
         </div>
 
         {/* Progress + stats */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 w-full">
           {/* XP bar */}
-          <div className="mb-3">
+          <div className="mb-3.5">
             <div className="flex items-center justify-between mb-1.5">
-              <span className="font-mono text-[10px] text-bone-dim tracking-wider">LEVEL {level} → {level + 1}</span>
-              <span className="font-mono text-[10px] text-teal">{Math.round(progress)}%</span>
+              <span className="font-sans text-xs font-normal text-[#979799] uppercase tracking-wider">LEVEL {level} → {level + 1}</span>
+              <span className="font-sans text-xs font-medium text-[#17191c]">{Math.round(progress)}%</span>
             </div>
-            <div className="h-2 bg-white/[0.04] rounded-full overflow-hidden">
+            {/* Minimal Progress Bar */}
+            <div className="h-2 bg-[#f2f2f3] rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-gradient-to-r from-teal to-teal-light rounded-full"
+                className="h-full bg-[#17191c] rounded-full"
                 initial={{ width: 0 }}
                 animate={{ width: `${progress}%` }}
                 transition={{ duration: 1, ease: 'easeOut', delay: 0.4 }}
@@ -77,28 +75,28 @@ export function XPPanel({ xp, streak, badges }: XPPanelProps) {
           </div>
 
           {/* Streak + recent badges */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             {/* Streak flames */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber/10 border border-amber/15">
-              <Flame size={14} className="text-amber" />
-              <span className="font-mono text-xs font-bold text-amber">{streak}</span>
-              <span className="font-mono text-[10px] text-bone-dim">day streak</span>
+            <div className="px-3.5 py-1 rounded-full bg-[#fbe1d1] text-[#5d2a1a] font-sans text-xs font-medium flex items-center gap-1.5">
+              <Flame size={14} className="text-[#5d2a1a]" />
+              <span className="font-sans text-xs font-semibold">{streak}</span>
+              <span className="font-sans text-[11px] opacity-80">day streak</span>
             </div>
 
             {/* Recent achievements */}
             {recentBadges.length > 0 && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5 bg-[#f2f2f3] px-3 py-1 rounded-full text-xs font-sans text-[#777b86]">
                 {recentBadges.map((badge, i) => (
-                  <span key={i} className="text-lg" title={badge}>{badge}</span>
+                  <span key={i} className="text-sm" title={badge}>{badge}</span>
                 ))}
               </div>
             )}
 
             <Link
               to="/achievements"
-              className="ml-auto flex items-center gap-1 text-[10px] font-mono text-bone-dim hover:text-teal transition-colors"
+              className="ml-auto flex items-center gap-1 text-xs font-sans font-medium text-[#17191c] hover:underline transition-all"
             >
-              All Achievements <ChevronRight size={12} />
+              All Achievements <ChevronRight size={14} />
             </Link>
           </div>
         </div>

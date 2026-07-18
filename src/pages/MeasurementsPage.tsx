@@ -91,8 +91,8 @@ function MeasurementChart({ data, metric }: { data: Measurement[]; metric: 'weig
     ctx.closePath();
 
     const areaGrad = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartH);
-    areaGrad.addColorStop(0, metric === 'weight' ? 'rgba(79, 158, 141, 0.15)' : 'rgba(242, 191, 73, 0.15)');
-    areaGrad.addColorStop(1, 'rgba(79, 158, 141, 0.0)');
+    areaGrad.addColorStop(0, metric === 'weight' ? 'rgba(93, 42, 26, 0.15)' : 'rgba(242, 191, 73, 0.15)');
+    areaGrad.addColorStop(1, 'rgba(93, 42, 26, 0.0)');
     ctx.fillStyle = areaGrad;
     ctx.fill();
 
@@ -102,7 +102,7 @@ function MeasurementChart({ data, metric }: { data: Measurement[]; metric: 'weig
     for (let i = 1; i < points.length; i++) {
       ctx.lineTo(getX(i), getY(points[i][metric] as number));
     }
-    ctx.strokeStyle = metric === 'weight' ? '#4F9E8D' : '#F2BF49';
+    ctx.strokeStyle = metric === 'weight' ? '#5d2a1a' : '#F2BF49';
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -115,7 +115,7 @@ function MeasurementChart({ data, metric }: { data: Measurement[]; metric: 'weig
       ctx.arc(cx, cy, 4, 0, Math.PI * 2);
       ctx.fillStyle = '#14151A';
       ctx.fill();
-      ctx.strokeStyle = metric === 'weight' ? '#4F9E8D' : '#F2BF49';
+      ctx.strokeStyle = metric === 'weight' ? '#5d2a1a' : '#F2BF49';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     }
@@ -195,7 +195,7 @@ export function MeasurementsPage() {
   if (isLoading || !profile) {
     return (
       <div className="flex justify-center py-20">
-        <div className="w-8 h-8 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -241,7 +241,7 @@ export function MeasurementsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <motion.div variants={item} className="card p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Scale size={18} className="text-teal" />
+            <Scale size={18} className="text-sienna" />
             <h3 className="font-display text-base">Weight Progress (kg)</h3>
           </div>
           <MeasurementChart data={logs} metric="weight" />
@@ -367,7 +367,7 @@ export function MeasurementsPage() {
             {errorMsg && <div className="text-xs text-danger font-mono bg-danger/10 p-2.5 rounded border border-danger/20">{errorMsg}</div>}
             
             {success && (
-              <div className="text-xs text-teal font-mono bg-teal/10 p-2.5 rounded border border-teal/20 flex items-center gap-1.5">
+              <div className="text-xs text-sienna font-mono bg-sienna/10 p-2.5 rounded border border-sienna/20 flex items-center gap-1.5">
                 <Check size={14} /> Entry logged successfully!
               </div>
             )}
@@ -409,10 +409,10 @@ export function MeasurementsPage() {
                   {logs.map((log) => (
                     <tr key={log.id} className="hover:bg-line/10 transition-colors">
                       <td className="py-3 flex items-center gap-1.5 text-bone">
-                        <Calendar size={13} className="text-teal" />
+                        <Calendar size={13} className="text-sienna" />
                         {log.date}
                       </td>
-                      <td className="py-3 text-right font-bold text-teal">{log.weight} kg</td>
+                      <td className="py-3 text-right font-bold text-sienna">{log.weight} kg</td>
                       <td className="py-3 text-right text-amber">{log.bodyfat ? `${log.bodyfat}%` : '—'}</td>
                       <td className="py-3 text-right text-bone-dim hidden sm:table-cell">{log.waist ? `${log.waist}cm` : '—'}</td>
                       <td className="py-3 text-right text-bone-dim hidden sm:table-cell">{log.chest ? `${log.chest}cm` : '—'}</td>

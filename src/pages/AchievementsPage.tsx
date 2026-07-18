@@ -51,7 +51,7 @@ export function AchievementsPage() {
         </div>
         <div className="w-full h-2.5 bg-line rounded-full overflow-hidden">
           <motion.div 
-            className="h-full bg-gradient-to-r from-amber to-teal rounded-full"
+            className="h-full bg-gradient-to-r from-amber to-sienna rounded-full"
             initial={{ width: 0 }}
             animate={{ width: `${progressPct}%` }}
             transition={{ duration: 1, ease: 'easeOut' }}
@@ -70,13 +70,13 @@ export function AchievementsPage() {
               variants={item}
               className={`relative card p-5 text-center transition-all duration-300 ${
                 isEarned 
-                  ? 'border-teal/50 bg-gradient-to-b from-teal/5 to-transparent shadow-[0_0_20px_rgba(79,158,141,0.1)]'
+                  ? 'border-sienna/50 bg-gradient-to-b from-sienna/5 to-transparent shadow-[0_0_20px_rgba(93,42,26,0.1)]'
                   : 'opacity-50 grayscale'
               }`}
             >
               {/* Glow effect for earned badges */}
               {isEarned && (
-                <div className="absolute inset-0 rounded-[inherit] animate-pulse opacity-20 bg-gradient-to-b from-teal/20 to-transparent pointer-events-none" />
+                <div className="absolute inset-0 rounded-[inherit] animate-pulse opacity-20 bg-gradient-to-b from-sienna/20 to-transparent pointer-events-none" />
               )}
               
               {/* Lock overlay for unearned */}
@@ -103,7 +103,7 @@ export function AchievementsPage() {
               
               {/* Earned indicator */}
               {isEarned && (
-                <div className="mt-3 font-mono text-[10px] text-teal font-bold tracking-wider">
+                <div className="mt-3 font-mono text-[10px] text-sienna font-bold tracking-wider">
                   ✓ UNLOCKED
                 </div>
               )}

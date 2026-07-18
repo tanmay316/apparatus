@@ -79,12 +79,12 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
         <img src={imageUrl} alt={`${exercise.name} correct form`} className="h-48 w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
       ) : (
         <div className="flex h-32 items-center justify-center gap-3 px-5 text-center text-xs text-bone-dim">
-          {loading ? <><LoaderCircle size={18} className="animate-spin text-teal" /> Finding an exercise reference…</> : <>No image reference is available for this movement yet.</>}
+          {loading ? <><LoaderCircle size={18} className="animate-spin text-sienna" /> Finding an exercise reference…</> : <>No image reference is available for this movement yet.</>}
         </div>
       )}
       <div className="flex items-center justify-between gap-3 border-t border-line/60 px-4 py-3">
-        <div><div className="text-[10px] font-mono uppercase tracking-widest text-teal">Technique reference</div><div className="mt-1 text-xs text-bone-dim">{imageUrl ? 'Exercise-specific media' : 'Open the exercise demo'}</div></div>
-        <a href={formUrl} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-teal/40 px-3 py-1.5 text-[10px] font-bold text-teal hover:bg-teal/10"><ExternalLink size={12} /> Demo</a>
+        <div><div className="text-[10px] font-mono uppercase tracking-widest text-sienna">Technique reference</div><div className="mt-1 text-xs text-bone-dim">{imageUrl ? 'Exercise-specific media' : 'Open the exercise demo'}</div></div>
+        <a href={formUrl} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/10"><ExternalLink size={12} /> Demo</a>
       </div>
     </div>
   );
@@ -235,7 +235,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
           <div className="flex items-center gap-2">
             {!isReadOnly && (
               <>
-                <button onClick={() => setIsEditingEx(!isEditingEx)} className="text-xs font-mono text-teal hover:underline px-2 py-1">
+                <button onClick={() => setIsEditingEx(!isEditingEx)} className="text-xs font-mono text-sienna hover:underline px-2 py-1">
                   Edit
                 </button>
                 <button onClick={handleDelete} className="text-xs font-mono text-danger hover:underline px-2 py-1">
@@ -296,7 +296,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                 <div className="space-y-1 text-xs text-bone-dim leading-relaxed">
                   {exercise.cues.map((cue, i) => (
                     <div key={i} className="flex gap-1.5">
-                      <span className="text-teal">—</span>
+                      <span className="text-sienna">—</span>
                       <span>{cue}</span>
                     </div>
                   ))}
@@ -324,7 +324,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
 
                 <div className="space-y-3">
                   {log.sets.map((set: any, idx: number) => (
-                    <div key={idx} className={`grid grid-cols-[auto_1fr_auto] items-center gap-4 p-2 rounded border ${set.completed ? 'bg-teal/10 border-teal/30' : 'bg-ink border-line'}`}>
+                    <div key={idx} className={`grid grid-cols-[auto_1fr_auto] items-center gap-4 p-2 rounded border ${set.completed ? 'bg-amber/10 border-amber/30' : 'bg-ink border-line'}`}>
                       <div className="w-8 text-center font-mono text-sm text-bone-dim font-bold">#{idx + 1}</div>
                       
                       <div className="grid grid-cols-2 gap-3">
@@ -369,7 +369,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                           }
                         }}
                         disabled={isReadOnly}
-                        className={`w-8 h-8 rounded flex items-center justify-center font-mono text-sm font-bold border transition-all ${set.completed ? 'bg-teal text-ink border-teal' : 'bg-line/50 border-line hover:border-teal'}`}
+                        className={`w-8 h-8 rounded flex items-center justify-center font-mono text-sm font-bold border transition-all ${set.completed ? 'bg-sienna text-bone border-sienna' : 'bg-line/50 border-line hover:border-sienna'}`}
                       >
                         {set.completed ? '✓' : '✕'}
                       </button>
@@ -379,7 +379,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
 
                 {!isReadOnly && (
                   <div className="flex justify-between items-center mt-3">
-                    <button onClick={() => store.addSet(exercise.name, log.mode)} className="text-teal text-sm font-mono flex items-center gap-1 hover:underline">
+                    <button onClick={() => store.addSet(exercise.name, log.mode)} className="text-sienna text-sm font-mono flex items-center gap-1 hover:underline">
                       <Plus size={14} /> Add set
                     </button>
                     {log.sets.length > 0 && (
@@ -407,17 +407,17 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
               <div className="border border-line rounded-lg p-4 bg-ink space-y-4">
                 <div className="flex border-b border-line pb-2">
                   <div className="text-xs font-mono text-bone-dim tracking-wider uppercase flex-1">Timers</div>
-                  <div className="flex gap-2 text-xs font-mono">
-                    <button onClick={() => setTimerMode('rest')} className={`px-2 py-0.5 rounded ${timerMode === 'rest' ? 'bg-teal text-ink font-bold' : 'text-bone-dim'}`}>Rest</button>
-                    <button onClick={() => setTimerMode('stopwatch')} className={`px-2 py-0.5 rounded ${timerMode === 'stopwatch' ? 'bg-teal text-ink font-bold' : 'text-bone-dim'}`}>Stopwatch</button>
-                    <button onClick={() => setTimerMode('countdown')} className={`px-2 py-0.5 rounded ${timerMode === 'countdown' ? 'bg-teal text-ink font-bold' : 'text-bone-dim'}`}>Countdown</button>
+                  <div className="flex gap-2 text-xs font-mono overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    <button onClick={() => setTimerMode('rest')} className={`px-2 py-0.5 rounded whitespace-nowrap ${timerMode === 'rest' ? 'bg-sienna text-bone font-bold' : 'text-bone-dim'}`}>Rest</button>
+                    <button onClick={() => setTimerMode('stopwatch')} className={`px-2 py-0.5 rounded whitespace-nowrap ${timerMode === 'stopwatch' ? 'bg-sienna text-bone font-bold' : 'text-bone-dim'}`}>Stopwatch</button>
+                    <button onClick={() => setTimerMode('countdown')} className={`px-2 py-0.5 rounded whitespace-nowrap ${timerMode === 'countdown' ? 'bg-sienna text-bone font-bold' : 'text-bone-dim'}`}>Countdown</button>
                   </div>
                 </div>
 
                 {/* Rest Timer Block */}
                 {timerMode === 'rest' && (
                   <div className="space-y-4 text-center">
-                    <div className="flex justify-center gap-2">
+                    <div className="flex flex-wrap justify-center gap-2">
                       {[30, 45, 60, 75, 90, 120].map(s => (
                         <button 
                           key={s} 
@@ -426,7 +426,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                             setRestTimeLeft(s);
                             setIsRestRunning(false);
                           }}
-                          className={`px-3 py-1 font-mono text-xs rounded-full border ${restDuration === s ? 'bg-amber text-ink border-amber font-bold' : 'border-line text-bone-dim hover:border-bone-dim'}`}
+                          className={`px-3 py-1 font-mono text-xs rounded-full border ${restDuration === s ? 'bg-sienna text-bone border-sienna font-bold' : 'border-line text-bone-dim hover:border-bone-dim'}`}
                         >
                           {s}s
                         </button>
@@ -485,7 +485,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                 {/* Countdown Block */}
                 {timerMode === 'countdown' && (
                   <div className="space-y-4 text-center">
-                    <div className="flex justify-center gap-2">
+                    <div className="flex flex-wrap justify-center gap-2">
                       {[60, 180, 300, 600].map(s => (
                         <button 
                           key={s} 
@@ -494,7 +494,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                             setCountdownTimeLeft(s);
                             setIsCountdownRunning(false);
                           }}
-                          className={`px-3 py-1 font-mono text-xs rounded-full border ${countdownDuration === s ? 'bg-amber text-ink border-amber font-bold' : 'border-line text-bone-dim hover:border-bone-dim'}`}
+                          className={`px-3 py-1 font-mono text-xs rounded-full border ${countdownDuration === s ? 'bg-sienna text-bone border-sienna font-bold' : 'border-line text-bone-dim hover:border-bone-dim'}`}
                         >
                           {s === 60 ? '1m' : s === 180 ? '3m' : s === 300 ? '5m' : '10m'}
                         </button>

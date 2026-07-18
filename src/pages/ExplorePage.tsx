@@ -7,10 +7,11 @@ import { getSamplePlans, clonePlan } from '@/services/plans';
 import { searchUsers, followUser, unfollowUser, isFollowing } from '@/services/social';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
+import { getAvatarUrl } from '@/lib/avatar';
 
 function AthleteCard({ athlete, myUid }: { athlete: any; myUid: string }) {
   const queryClient = useQueryClient();
-  const { showToast } = useUIStore();
+  const { showToast, theme } = useUIStore();
   
   const { data: following = false } = useQuery({
     queryKey: ['isFollowing', myUid, athlete.uid],
@@ -37,19 +38,19 @@ function AthleteCard({ athlete, myUid }: { athlete: any; myUid: string }) {
     >
       <Link to={`/profile/${athlete.username}`}>
         <img
-          src={athlete.photoURL || `https://ui-avatars.com/api/?name=${athlete.displayName}&background=4F9E8D&color=14151A&bold=true`}
+          src={athlete.photoURL || getAvatarUrl(athlete.displayName, theme)}
           alt={athlete.displayName}
-          className="w-12 h-12 rounded-full border border-teal flex-none object-cover"
+          className="w-12 h-12 rounded-full border border-sienna/40 flex-none object-cover"
           referrerPolicy="no-referrer"
         />
       </Link>
       <div className="flex-1 min-w-0">
-        <Link to={`/profile/${athlete.username}`} className="font-bold text-sm hover:text-teal transition-colors block truncate">
+        <Link to={`/profile/${athlete.username}`} className="font-bold text-sm hover:text-sienna transition-colors block truncate">
           {athlete.displayName}
         </Link>
-        <div className="text-xs text-teal font-mono truncate">@{athlete.username}</div>
+        <div className="text-xs text-sienna font-mono truncate">@{athlete.username}</div>
         {athlete.experienceLevel && (
-          <span className="tag-teal text-[9px] mt-1 inline-block">{athlete.experienceLevel}</span>
+          <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-sienna/10 text-sienna border border-sienna/20 mt-1 inline-block">{athlete.experienceLevel}</span>
         )}
       </div>
       <button
@@ -111,15 +112,15 @@ export function ExplorePage() {
           <h1 className="font-display text-2xl">Explore</h1>
         </div>
         
-        <div className="flex bg-ink-2 border border-line rounded-md p-1">
+        <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1">
           <button 
-            className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-mono transition-colors ${tab === 'plans' ? 'bg-teal text-ink font-bold' : 'text-bone-dim hover:text-bone'}`}
+            className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'plans' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
             onClick={() => setTab('plans')}
           >
             <LayoutTemplate size={14} /> Programs
           </button>
           <button 
-            className={`flex items-center gap-2 px-4 py-2 rounded text-sm font-mono transition-colors ${tab === 'users' ? 'bg-teal text-ink font-bold' : 'text-bone-dim hover:text-bone'}`}
+            className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'users' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
             onClick={() => setTab('users')}
           >
             <Users size={14} /> Athletes
@@ -135,7 +136,7 @@ export function ExplorePage() {
           
           {isLoading ? (
             <div className="flex justify-center py-20">
-              <div className="w-8 h-8 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
             </div>
           ) : plans.length === 0 ? (
             <div className="text-center py-10 border border-line border-dashed rounded-lg">
@@ -160,7 +161,7 @@ export function ExplorePage() {
                   
                   <div className="flex flex-wrap gap-2 mb-3">
                     {plan.tags?.map(tag => (
-                      <span key={tag} className="tag-teal opacity-80">{tag}</span>
+                      <span key={tag} className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-amber/20 text-amber/80 border border-amber/30">{tag}</span>
                     ))}
                   </div>
                   
@@ -210,7 +211,7 @@ export function ExplorePage() {
             </div>
           ) : searchLoading ? (
             <div className="flex justify-center py-20">
-              <div className="w-8 h-8 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+              <div className="w-8 h-8 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
             </div>
           ) : searchResults.length === 0 ? (
             <div className="text-center py-16 border border-dashed border-line rounded-lg">

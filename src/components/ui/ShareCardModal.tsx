@@ -59,7 +59,8 @@ function drawAnatomyCard(
   volume: number,
   totalSets: number,
   highlightColor: HighlightColor,
-  units?: 'metric' | 'imperial'
+  units?: 'metric' | 'imperial',
+  gender: 'male' | 'female' = 'male'
 ) {
   const W = 1080;
   const H = 1920;
@@ -126,8 +127,8 @@ function drawAnatomyCard(
   const figureY = cursorY + 20;
 
   // Front View on Left, Back View on Right (Standard Anatomy Presentation)
-  drawAnatomyOnCanvas(ctx, 'front', activeMuscles, startX, figureY, figureScale, highlightColor.fill, highlightColor.glow);
-  drawAnatomyOnCanvas(ctx, 'back', activeMuscles, startX + figureW + gap, figureY, figureScale, highlightColor.fill, highlightColor.glow);
+  drawAnatomyOnCanvas(ctx, 'front', activeMuscles, startX, figureY, figureScale, highlightColor.fill, highlightColor.glow, gender);
+  drawAnatomyOnCanvas(ctx, 'back', activeMuscles, startX + figureW + gap, figureY, figureScale, highlightColor.fill, highlightColor.glow, gender);
 
   cursorY = figureY + figureH + 50;
 
@@ -221,17 +222,17 @@ function drawExercisePill(
   ctx.fill();
 
   // Display name
-  ctx.font = '700 24px Oswald, sans-serif';
+  ctx.font = '700 32px Oswald, sans-serif';
   ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'left';
-  const displayName = exName.length > 25 ? exName.substring(0, 23) + '...' : exName;
-  ctx.fillText(displayName.toUpperCase(), cardX + 24, cardY + 38);
+  const displayName = exName.length > 22 ? exName.substring(0, 20) + '...' : exName;
+  ctx.fillText(displayName.toUpperCase(), cardX + 28, cardY + 48);
 
   // Display sets info
-  ctx.font = '400 16px "JetBrains Mono", monospace';
+  ctx.font = '400 20px "JetBrains Mono", monospace';
   ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
   const setsCount = exLog ? exLog.sets.length : 3;
-  ctx.fillText(`${setsCount} SETS COMPLETED`, cardX + 24, cardY + cardH - 18);
+  ctx.fillText(`${setsCount} SETS COMPLETED`, cardX + 28, cardY + cardH - 24);
 }
 
 function drawMoreExercisesPill(
@@ -255,10 +256,10 @@ function drawMoreExercisesPill(
   roundRect(ctx, cardX, cardY, 6, cardH, 2);
   ctx.fill();
 
-  ctx.font = '700 26px Oswald, sans-serif';
+  ctx.font = '700 34px Oswald, sans-serif';
   ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'left';
-  ctx.fillText(`+${moreCount} MORE EXERCISES`, cardX + 24, cardY + cardH / 2 + 10);
+  ctx.fillText(`+${moreCount} MORE EXERCISES`, cardX + 28, cardY + cardH / 2 + 12);
 }
 
 // ─── Canvas Drawing — Exercises List Card ─────────────────────
@@ -358,9 +359,9 @@ function drawExercisesCard(
   // 2-Column Grid of Exercises (Fits up to 14 pills)
   const maxExercises = 14;
   const items = data.exerciseNames.slice(0, maxExercises);
-  const cardH = 92;
+  const cardH = 114;
   const cardW = 440;
-  const rowGap = 16;
+  const rowGap = 20;
   const colGap = 40;
 
   items.forEach((exName, index) => {
@@ -422,7 +423,8 @@ function drawCombinedCard(
   totalSets: number,
   highlightColor: HighlightColor,
   units?: 'metric' | 'imperial',
-  calories?: number
+  calories?: number,
+  gender: 'male' | 'female' = 'male'
 ) {
   const W = 1080;
   const H = 1920;
@@ -503,7 +505,7 @@ function drawCombinedCard(
   cursorY += 30;
 
   // ─── Dual Muscle Visualizer ───
-  const figureScale = 0.44;
+  const figureScale = 0.65;
   const figureW = 727 * figureScale;
   const figureH = 1280 * figureScale;
   const gap = 40;
@@ -511,8 +513,8 @@ function drawCombinedCard(
   const startX = (W - totalW) / 2;
   const figureY = cursorY + 20;
 
-  drawAnatomyOnCanvas(ctx, 'front', activeMuscles, startX, figureY, figureScale, highlightColor.fill, highlightColor.glow);
-  drawAnatomyOnCanvas(ctx, 'back', activeMuscles, startX + figureW + gap, figureY, figureScale, highlightColor.fill, highlightColor.glow);
+  drawAnatomyOnCanvas(ctx, 'front', activeMuscles, startX, figureY, figureScale, highlightColor.fill, highlightColor.glow, gender);
+  drawAnatomyOnCanvas(ctx, 'back', activeMuscles, startX + figureW + gap, figureY, figureScale, highlightColor.fill, highlightColor.glow, gender);
 
   cursorY = figureY + figureH + 60;
 
@@ -529,9 +531,9 @@ function drawCombinedCard(
   // ─── Grid of Exercises (2 Columns, up to 6 cards) ───
   const maxExercises = 6;
   const items = data.exerciseNames.slice(0, maxExercises);
-  const cardH = 92;
+  const cardH = 114;
   const cardW = 440;
-  const rowGap = 16;
+  const rowGap = 20;
   const colGap = 40;
 
   items.forEach((exName, index) => {
@@ -603,6 +605,7 @@ export function ShareCardModal({ data, onClose }: Props) {
   const [sharing, setSharing] = useState(false);
   const [variant, setVariant] = useState<CardVariant>('combined'); // Default to combined!
   const [transparent, setTransparent] = useState(false);
+  const [anatomyGender, setAnatomyGender] = useState<'male' | 'female'>('male');
   const [selectedColor, setSelectedColor] = useState<HighlightColor>(HIGHLIGHT_COLORS[0]);
   const [colorDropdownOpen, setColorDropdownOpen] = useState(false);
 
@@ -645,15 +648,14 @@ export function ShareCardModal({ data, onClose }: Props) {
     if (!canvasRef.current) return;
 
     if (variant === 'anatomy') {
-      drawAnatomyCard(canvasRef.current, data, activeMuscles, transparent, volume, totalSets, selectedColor, units);
+      drawAnatomyCard(canvasRef.current, data, activeMuscles, transparent, volume, totalSets, selectedColor, units, anatomyGender);
     } else if (variant === 'exercises') {
       drawExercisesCard(canvasRef.current, data, transparent, volume, totalSets, selectedColor, units, calculatedCalories);
     } else {
-      drawCombinedCard(canvasRef.current, data, activeMuscles, transparent, volume, totalSets, selectedColor, units, calculatedCalories);
+      drawCombinedCard(canvasRef.current, data, activeMuscles, transparent, volume, totalSets, selectedColor, units, calculatedCalories, anatomyGender);
     }
     setPreviewUrl(canvasRef.current.toDataURL('image/png'));
-  }, [data, variant, transparent, volume, totalSets, selectedColor, units, calculatedCalories]);
-
+  }, [data, variant, transparent, volume, totalSets, selectedColor, units, calculatedCalories, anatomyGender]);
   const getBlob = (): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       if (!canvasRef.current) {
@@ -804,8 +806,8 @@ export function ShareCardModal({ data, onClose }: Props) {
             </button>
           </div>
 
-          {/* Secondary Controls: BG Toggler + Custom Color Dropdown */}
-          <div className="flex gap-2 mb-3 items-center flex-shrink-0">
+          {/* Secondary Controls: BG Toggler + Gender Selector + Custom Color Dropdown */}
+          <div className="flex gap-2 mb-3 items-center flex-shrink-0 flex-wrap sm:flex-nowrap">
             <button
               onClick={() => setTransparent(!transparent)}
               className={`text-xs font-mono py-2 px-3 rounded-lg transition-all flex-shrink-0 ${
@@ -816,6 +818,32 @@ export function ShareCardModal({ data, onClose }: Props) {
             >
               {transparent ? 'Transparent BG' : 'Dark BG'}
             </button>
+
+            {/* Model Gender Selector */}
+            <div className="flex items-center rounded-lg border border-line/20 bg-ink-3/45 p-0.5 text-xs font-mono shrink-0">
+              <button
+                type="button"
+                onClick={() => setAnatomyGender('male')}
+                className={`px-2.5 py-1.5 rounded-md transition-all ${
+                  anatomyGender === 'male'
+                    ? 'bg-sienna/20 text-sienna font-bold border border-sienna/30'
+                    : 'text-bone-dim hover:text-bone'
+                }`}
+              >
+                Male ♂
+              </button>
+              <button
+                type="button"
+                onClick={() => setAnatomyGender('female')}
+                className={`px-2.5 py-1.5 rounded-md transition-all ${
+                  anatomyGender === 'female'
+                    ? 'bg-danger/20 text-danger font-bold border border-danger/30'
+                    : 'text-bone-dim hover:text-bone'
+                }`}
+              >
+                Female ♀
+              </button>
+            </div>
 
             {/* Accent Color Custom Dropdown */}
             <div className="relative flex-1">
@@ -847,7 +875,7 @@ export function ShareCardModal({ data, onClose }: Props) {
                         <span className="w-3.5 h-3.5 rounded-full border border-white/10" style={{ backgroundColor: color.fill }} />
                         <span className="font-medium">{color.name}</span>
                         {selectedColor.name === color.name && (
-                          <span className="ml-auto text-teal text-sm">✓</span>
+                          <span className="ml-auto text-sienna text-sm">✓</span>
                         )}
                       </button>
                     ))}
@@ -900,7 +928,7 @@ export function ShareCardModal({ data, onClose }: Props) {
               disabled={!previewUrl}
               className="flex flex-col items-center gap-1.5 bg-ink-3 border border-line text-bone font-display font-bold uppercase tracking-wider px-3 py-3 rounded-lg text-xs hover:border-white/30 active:scale-[0.97] transition-all disabled:opacity-50"
             >
-              {copied ? <Check size={18} className="text-teal" /> : <Share2 size={18} />}
+              {copied ? <Check size={18} className="text-sienna" /> : <Share2 size={18} />}
               <span className="text-[10px]">{copied ? 'Copied' : 'Link'}</span>
             </button>
           </div>

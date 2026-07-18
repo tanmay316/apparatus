@@ -5,9 +5,9 @@
    ═══════════════════════════════════════════════════════════════ */
 
 @layer utilities {
-  .text-gradient-teal {
-    @apply bg-clip-text text-transparent;
-    background-image: var(--gradient-teal);
+  .text-gradient-sienna {
+    -webkit-background-clip: text;
+    background-image: var(--gradient-sienna);
   }
 
   .glass {

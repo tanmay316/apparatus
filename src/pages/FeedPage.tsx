@@ -68,23 +68,23 @@ export function FeedPage() {
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="max-w-2xl mx-auto">
-      <motion.div variants={item} className="pb-5 border-b border-white/[0.06] mb-6">
-        <div className="font-mono text-amber text-xs tracking-widest mb-1">COMMUNITY</div>
-        <h1 className="font-display text-3xl mb-1 text-bone">Activity Feed</h1>
-        <p className="text-bone-dim text-sm max-w-xl">See what you and other athletes have been up to.</p>
+      <motion.div variants={item} className="pb-5 border-b border-[#ececec] mb-6">
+        <div className="font-sans text-xs font-medium text-[#979799] tracking-widest mb-1 uppercase">COMMUNITY</div>
+        <h1 className="font-serif font-normal text-3xl mb-1 text-[#17191c]">Activity Feed</h1>
+        <p className="text-[#777b86] text-sm max-w-xl font-sans">See what you and other athletes have been up to.</p>
       </motion.div>
 
       {/* Tab switcher */}
-      <motion.div variants={item} className="flex bg-ink-2 border border-white/[0.06] rounded-xl p-1 mb-6 max-w-xs">
+      <motion.div variants={item} className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1 mb-6 max-w-xs">
         <button
           onClick={() => setTab('following')}
-          className={`flex-1 py-2 px-3 rounded-lg text-xs font-mono transition-colors ${tab === 'following' ? 'bg-teal text-ink font-bold' : 'text-bone-dim hover:text-bone'}`}
+          className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'following' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
         >
           Following
         </button>
         <button
           onClick={() => setTab('global')}
-          className={`flex-1 py-2 px-3 rounded-lg text-xs font-mono transition-colors ${tab === 'global' ? 'bg-teal text-ink font-bold' : 'text-bone-dim hover:text-bone'}`}
+          className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'global' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
         >
           Global
         </button>
@@ -97,10 +97,10 @@ export function FeedPage() {
           <ActivityPostCardSkeleton />
         </div>
       ) : visibleFeedItems.length === 0 ? (
-        <motion.div variants={item} className="text-center py-16 border border-dashed border-white/[0.08] rounded-2xl bg-ink-2/40">
-          <Users size={48} className="mx-auto text-bone-dim mb-4 opacity-50" />
-          <h3 className="font-display text-lg mb-2 text-bone">No Activity Yet</h3>
-          <p className="text-sm text-bone-dim max-w-sm mx-auto">
+        <motion.div variants={item} className="text-center py-16 border border-dashed border-[#ececec] rounded-[24px] bg-[#fafafb]">
+          <Users size={48} className="mx-auto text-[#979799] mb-4 opacity-50" />
+          <h3 className="font-serif font-normal text-lg mb-2 text-[#17191c]">No Activity Yet</h3>
+          <p className="text-sm text-[#777b86] max-w-sm mx-auto font-sans">
             {tab === 'following'
               ? 'Complete a workout or follow other athletes to see their activity here.'
               : 'No public activity yet. Be the first to post a workout!'

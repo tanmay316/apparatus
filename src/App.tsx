@@ -35,7 +35,7 @@ const queryClient = new QueryClient({
 function LoadingScreen() {
   return (
     <div className="min-h-screen bg-ink flex items-center justify-center">
-      <div className="w-10 h-10 border-2 border-teal border-t-transparent rounded-full animate-spin" />
+      <div className="w-10 h-10 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
     </div>
   );
 }

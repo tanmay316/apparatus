@@ -23,16 +23,16 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <BookOpen size={15} className="text-teal" />
-          <h3 className="font-mono text-[11px] text-bone-dim tracking-[0.15em] uppercase">Weekly Training Plan</h3>
+          <BookOpen size={15} className="text-bone-dim" />
+          <h3 className="font-sans text-xs font-medium text-bone-dim tracking-wider uppercase">Weekly Training Plan</h3>
         </div>
-        <Link to="/plans" className="flex items-center gap-1 text-[10px] text-teal font-mono hover:underline tracking-wider">
-          <BookOpen size={12} /> ALL PLANS →
+        <Link to="/plans" className="flex items-center gap-1 text-xs text-bone font-sans font-medium hover:underline">
+          All Plans →
         </Link>
       </div>
 
-      {/* Scrollable timeline with larger cards */}
-      <div className="flex gap-4 overflow-x-auto pb-3 snap-x snap-mandatory touch-pan-x scrollbar-thin scrollbar-thumb-line scrollbar-track-transparent">
+      {/* Scrollable timeline with separate floating cards & hidden scrollbar */}
+      <div className="flex gap-5 sm:gap-6 overflow-x-auto px-4 sm:px-6 -mx-4 sm:-mx-6 pb-8 pt-3 snap-x snap-mandatory touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {activeDays.map((day, index) => {
           const wasCompleted = todayWorkouts.some((w: any) => w.dayId === day.id)
             || recentWorkouts.some((w: any) => w.dayId === day.id);
@@ -40,83 +40,92 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
           const allExercises = [...(day.warmup || []), ...(day.skillWork || []), ...(day.strength || []), ...(day.cooldown || [])];
 
           return (
-            <Link
+            <motion.div
               key={day.id}
-              to={`/workout/${activePlan.id}/day/${day.id}`}
-              className={`snap-start shrink-0 w-[240px] sm:w-[270px] rounded-2xl border p-5 transition-all duration-200 group hover:-translate-y-1 relative flex flex-col justify-between ${
-                wasCompleted
-                  ? 'border-teal/30 bg-teal/[0.05] shadow-[0_4px_20px_rgba(79,158,141,0.08)]'
-                  : isToday
-                  ? 'border-teal/40 bg-gradient-to-b from-teal/[0.08] to-transparent shadow-[0_4px_20px_rgba(79,158,141,0.12)]'
-                  : 'border-white/[0.06] bg-ink-2/70 hover:border-white/15'
-              }`}
+              whileHover={{ y: -4 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className={`snap-start shrink-0 relative hover:z-20 ${isToday ? 'z-10' : 'z-0'}`}
             >
-              <div>
-                {/* Day header */}
-                <div className="flex items-center justify-between mb-3">
-                  <span className="font-mono text-xs font-bold text-bone-dim tracking-wider">
-                    DAY {String(day.dayNumber).padStart(2, '0')}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {wasCompleted ? (
-                      <span className="flex items-center gap-1 text-[11px] font-mono font-bold text-teal bg-teal/10 px-2 py-0.5 rounded-full">
-                        <Check size={12} /> LOGGED
-                      </span>
-                    ) : isToday ? (
-                      <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-teal">
-                        <span className="w-2 h-2 rounded-full bg-teal animate-pulse" /> TODAY
-                      </span>
-                    ) : null}
+              <Link
+                to={`/workout/${activePlan.id}/day/${day.id}`}
+                className={`relative w-[265px] sm:w-[295px] p-6 rounded-[24px] flex flex-col justify-between transition-all duration-200 group ${
+                  isToday
+                    ? 'bg-ink border border-line shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)]'
+                    : 'bg-ink-2 border border-transparent'
+                }`}
+              >
+                <div>
+                  {/* Day header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-sans text-xs font-normal uppercase text-bone-dim">
+                      DAY {String(day.dayNumber).padStart(2, '0')}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {wasCompleted ? (
+                        <span className="font-sans text-[11px] font-medium uppercase px-2.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 flex items-center gap-1">
+                          <Check size={11} strokeWidth={2.5} /> Logged
+                        </span>
+                      ) : isToday ? (
+                        <span className="font-sans text-[11px] font-medium uppercase px-2.5 py-0.5 rounded-full bg-bone text-ink flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-ink animate-ping" /> Today
+                        </span>
+                      ) : (
+                        <span className="font-sans text-[11px] font-normal uppercase text-bone-dim">
+                          Upcoming
+                        </span>
+                      )}
 
-                    {/* Share Button for logged workout */}
-                    {wasCompleted && onShareDay && (
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          onShareDay(day);
-                        }}
-                        className="w-7 h-7 rounded-full bg-teal/15 border border-teal/40 flex items-center justify-center text-teal hover:bg-teal/30 hover:scale-105 transition-all"
-                        title="Share this workout card"
-                      >
-                        <Share2 size={13} />
-                      </button>
-                    )}
+                      {/* Share Button */}
+                      {wasCompleted && onShareDay && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            onShareDay(day);
+                          }}
+                          className="w-6 h-6 rounded-full bg-ink flex items-center justify-center text-green-600 dark:text-green-400 hover:scale-110 transition-all border border-line"
+                          title="Share this workout card"
+                        >
+                          <Share2 size={12} strokeWidth={2} />
+                        </button>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Title */}
+                  <h4 className="font-sans font-medium text-lg text-bone leading-snug mb-3 line-clamp-2 group-hover:text-sienna transition-colors">
+                    {day.title}
+                  </h4>
+
+                  {/* Details Pills */}
+                  <div className="flex items-center gap-2 text-xs font-sans text-bone-dim mb-3 flex-wrap">
+                    <span className="flex items-center gap-1 bg-ink-3/50 px-2.5 py-1 rounded-full">
+                      <Clock size={12} /> ~{day.time}
+                    </span>
+                    <span className="flex items-center gap-1 bg-ink-3/50 px-2.5 py-1 rounded-full">
+                      <Layers size={12} /> {allExercises.length} ex
+                    </span>
+                  </div>
+
+                  {/* Skill tag */}
+                  {day.skill && (
+                    <div className="text-[11px] font-sans font-normal text-bone-dim inline-block truncate max-w-full">
+                      {day.skill}
+                    </div>
+                  )}
                 </div>
 
-                {/* Title */}
-                <h4 className="font-display text-lg text-bone leading-snug mb-3 line-clamp-2 group-hover:text-teal transition-colors">
-                  {day.title}
-                </h4>
-
-                {/* Details */}
-                <div className="flex items-center gap-3 text-xs font-mono text-bone-dim mb-3">
-                  <span className="flex items-center gap-1">
-                    <Clock size={12} className="text-teal" /> ~{day.time}
-                  </span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1">
-                    <Layers size={12} className="text-teal" /> {allExercises.length} ex
-                  </span>
+                {/* Progress Bar */}
+                <div className="w-full h-1.5 bg-line-solid rounded-full overflow-hidden mt-4">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      wasCompleted ? 'bg-[#2e7d32]' : isToday ? 'bg-sienna' : 'bg-transparent'
+                    }`}
+                    style={{ width: wasCompleted ? '100%' : isToday ? '35%' : '0%' }}
+                  />
                 </div>
-
-                {/* Skill tag */}
-                {day.skill && (
-                  <div className="text-[10px] font-mono text-amber tracking-wider uppercase mb-3 truncate">
-                    SKILL — {day.skill}
-                  </div>
-                )}
-              </div>
-
-              {/* Progress bar */}
-              <div className="w-full h-1 bg-white/[0.06] rounded-full overflow-hidden mt-2">
-                <div
-                  className="h-full bg-teal rounded-full transition-all duration-500"
-                  style={{ width: wasCompleted ? '100%' : '0%' }}
-                />
-              </div>
-            </Link>
+              </Link>
+            </motion.div>
           );
         })}
       </div>
