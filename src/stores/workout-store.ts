@@ -46,6 +46,7 @@ interface WorkoutState {
   logs: Record<string, ExerciseLog>; // Keyed by exercise name for easy lookup
   
   startWorkout: (plan: Plan, day: PlanDay) => void;
+  startTimer: () => void;
   updateSet: (exerciseName: string, mode: 'reps' | 'hold' | 'freeform', setIndex: number, data: SetData) => void;
   addSet: (exerciseName: string, mode: 'reps' | 'hold' | 'freeform') => void;
   removeSet: (exerciseName: string, setIndex: number) => void;
@@ -84,7 +85,8 @@ export const useWorkoutStore = create<WorkoutState>()(
             rpe: null,
             durationSec: 0,
             notes: '',
-            isPR: false
+            isPR: false,
+            muscleGroup: e.muscleGroup
           };
         });
 
@@ -94,13 +96,17 @@ export const useWorkoutStore = create<WorkoutState>()(
           dayId: day.id!,
           planTitle: plan.title,
           dayTitle: day.title,
-          startedAt: Date.now(),
+          startedAt: null,
           warmup: day.warmup || [],
           skillWork: day.skillWork || [],
           strength: day.strength || [],
           cooldown: day.cooldown || [],
           logs,
         });
+      },
+
+      startTimer: () => {
+        set({ startedAt: Date.now() });
       },
 
       updateSet: (exerciseName, mode, setIndex, data) => {
@@ -189,6 +195,7 @@ export const useWorkoutStore = create<WorkoutState>()(
             delete logs[oldName];
             logs[updated.name].name = updated.name;
           }
+          logs[updated.name].muscleGroup = updated.muscleGroup;
           
           return { [section]: list, logs };
         });

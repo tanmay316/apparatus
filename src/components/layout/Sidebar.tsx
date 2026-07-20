@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dumbbell, Calendar, TrendingUp, Target, Ruler, Trophy, Compass,
-  Users, ShieldCheck, Wind, Utensils, BookOpen, X,
+  Users, ShieldCheck, Wind, Utensils, BookOpen, X, Globe, MapPin
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -28,8 +28,10 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'measurements', path: '/measurements', label: 'Body Log', icon: <Ruler size={18} />, section: 'PERFORMANCE' },
   { id: 'achievements', path: '/achievements', label: 'Achievements', icon: <Trophy size={18} />, section: 'PERFORMANCE' },
   // Community
-  { id: 'explore', path: '/explore', label: 'Explore', icon: <Compass size={18} />, section: 'COMMUNITY' },
+  { id: 'explore', path: '/explore', label: 'Athletes', icon: <Compass size={18} />, section: 'COMMUNITY' },
   { id: 'feed', path: '/feed', label: 'Activity', icon: <Users size={18} />, section: 'COMMUNITY' },
+  { id: 'communities', path: '/communities', label: 'Communities', icon: <Globe size={18} />, section: 'COMMUNITY' },
+  { id: 'events', path: '/events', label: 'Events', icon: <MapPin size={18} />, section: 'COMMUNITY' },
   // Knowledge
   { id: 'warmup', path: '/guide/warmup', label: 'Warm-up', icon: <Wind size={18} />, section: 'KNOWLEDGE' },
   { id: 'nutrition', path: '/guide/nutrition', label: 'Nutrition', icon: <Utensils size={18} />, section: 'KNOWLEDGE' },

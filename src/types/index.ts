@@ -20,6 +20,7 @@ export interface UserProfile {
   isPublic: boolean;
   isAdmin: boolean;
   activePlanId?: string | null;
+  bookmarks?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
@@ -104,6 +105,7 @@ export interface ExerciseLog {
   durationSec: number;
   notes: string;
   isPR: boolean;
+  muscleGroup?: string;
 }
 
 export interface Workout {
@@ -149,7 +151,7 @@ export interface Activity {
   userName: string;
   username?: string; // added for profile routing
   userPhoto: string;
-  type: 'workout' | 'achievement' | 'streak' | 'pr' | 'follow';
+  type: 'workout' | 'achievement' | 'streak' | 'pr' | 'follow' | 'event_join';
   workoutId: string | null;
   summary: string;
   details: Record<string, unknown>;
@@ -253,5 +255,87 @@ export interface SystemLog {
   context?: string;
   url: string;
   userAgent: string;
+  createdAt: Timestamp | null;
+}
+
+// ─── Communities & Events ─────────────────────────────────────
+
+export interface Community {
+  id?: string;
+  name: string;
+  description: string;
+  banner: string;
+  ownerId: string;
+  membersCount: number;
+  isVerified: boolean;
+  tags: string[];
+  createdAt: Timestamp | null;
+}
+
+export type EventPricingType = 'free' | 'paid';
+export type EventStatus = 'draft' | 'pending' | 'published' | 'cancelled' | 'completed';
+export type EventCategory = 'Gym' | 'Calisthenics' | 'Yoga' | 'Running' | 'Meetup' | 'Workshop' | 'Competition' | 'Other';
+export type EventType = 'Competition' | 'Meetup' | 'Workshop' | 'Chill' | 'Class' | 'Other';
+export type GenderRestriction = 'Any' | 'Male Only' | 'Female Only';
+export type SkillLevel = 'All Levels' | 'Beginner' | 'Intermediate' | 'Advanced';
+
+export interface EventDetails {
+  ageRestriction: string;
+  language: string;
+  dressCode: string;
+  prerequisites: string[];
+  requiredItems?: string[];
+  faq?: { question: string; answer: string }[];
+}
+
+export interface AppEvent {
+  id?: string;
+  title: string;
+  description: string;
+  banner: string;
+  category: EventCategory;
+  eventType: EventType;
+  genderRestriction: GenderRestriction;
+  skillLevel: SkillLevel;
+  organizerId: string;
+  organizerName: string;
+  communityId: string | null;
+  communityName?: string;
+  dateTime: { start: Timestamp; end: Timestamp };
+  timeline?: { time: string; title: string; description?: string }[];
+  location: { venueName: string; address: string; mapLink?: string; isOnline?: boolean; onlineLink?: string };
+  capacity: number;
+  status: EventStatus;
+  pricing: { 
+    type: EventPricingType; 
+    basePrice?: number; 
+    currency?: string;
+    tiers?: { id: string, name: string, price: number, capacity?: number }[];
+  };
+  details: EventDetails;
+  stats: { registeredCount: number; checkInCount: number; views: number; clickRate?: number };
+  createdAt: Timestamp | null;
+}
+
+export interface EventRegistration {
+  id?: string;
+  eventId: string;
+  userId: string;
+  userName: string;
+  userPhoto: string;
+  status: 'registered' | 'waitlist' | 'cancelled' | 'checked_in';
+  qrCodeData: string;
+  purchasedAt: Timestamp | null;
+}
+
+export interface EventReview {
+  id?: string;
+  eventId: string;
+  userId: string;
+  userName: string;
+  userPhoto: string;
+  rating: number; // 1-5
+  review: string;
+  organizerReply: string | null;
   createdAt: Timestamp | null;
 }

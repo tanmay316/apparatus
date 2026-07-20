@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   Clock3, Flame, Heart, MessageCircle, Share2, TrendingUp, Dumbbell,
-  MoreHorizontal, Check, Bookmark, Send, ChevronDown, ChevronUp, Sparkles
+  MoreHorizontal, Check, Bookmark, Send, ChevronDown, ChevronUp, Sparkles, Calendar as CalendarIcon
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -37,8 +37,10 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
 
   const [showComments, setShowComments] = useState(false);
   const [showAllExercises, setShowAllExercises] = useState(false);
-  const [isSaved, setIsSaved] = useState(false);
   const [commentText, setCommentText] = useState('');
+
+  const bookmarks = profile?.bookmarks || [];
+  const isSaved = activity.id ? bookmarks.includes(activity.id) : false;
 
   const details = (activity.details || {}) as Record<string, any>;
   const exerciseNames = (details.exercises || []) as string[];
@@ -150,7 +152,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               )}
             </div>
             <div className="text-[11px] font-sans font-semibold text-[#777b86] tracking-wider uppercase mt-0.5">
-              COMPLETED A WORKOUT
+              {activity.type === 'event_join' ? 'REGISTERED FOR AN EVENT' : 'COMPLETED A WORKOUT'}
             </div>
           </div>
         </div>
@@ -169,12 +171,22 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
       <div
         className="relative overflow-hidden rounded-[20px] p-6 mb-5 bg-[#fafafb] border border-[#ececec] flex flex-col justify-between min-h-[130px]"
       >
-        <div className="flex items-start justify-between gap-3">
+        {activity.type === 'event_join' ? (
           <div>
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <span className="text-xs font-sans font-medium text-[#5d2a1a]">
-                {details.planTitle || 'Custom Program'}
-              </span>
+            <h2 className="font-serif text-2xl text-[#17191c] mb-1">{activity.summary}</h2>
+            <p className="text-sm text-[#777b86] font-sans flex items-center gap-1 mt-2">
+              <CalendarIcon size={14} className="text-[#5d2a1a]" />
+              Going to {details.eventTitle || 'an event'}
+            </p>
+          </div>
+        ) : (
+          <>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="text-xs font-sans font-medium text-[#5d2a1a]">
+                  {details.planTitle || 'Custom Program'}
+                </span>
               {details.skill && (
                 <span className="text-xs font-mono text-[#777b86]">
                   · Skill: {details.skill}
@@ -212,8 +224,12 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
             ))}
           </div>
         )}
+          </>
+        )}
       </div>
 
+      {activity.type !== 'event_join' && (
+        <>
       {/* ─── SECTION 3: METRICS ROW ────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
         {/* Duration */}
@@ -344,6 +360,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
           </AnimatePresence>
         </div>
       )}
+      </>)}
 
       {/* ─── SECTION 5: SOCIAL ACTIONS ─────────────────────────────────── */}
       <div className="flex items-center justify-between border-t border-[#ececec] pt-3 text-xs font-sans">
@@ -381,9 +398,20 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
 
         {/* Save Bookmark */}
         <button
-          onClick={() => {
-            setIsSaved(!isSaved);
-            showToast(isSaved ? 'Unsaved post' : 'Saved to bookmarks', 'info');
+          onClick={async () => {
+            if (!profile || !activity.id) return;
+            try {
+              const isCurrentlySaved = bookmarks.includes(activity.id);
+              const newBookmarks = isCurrentlySaved
+                ? bookmarks.filter((id: string) => id !== activity.id)
+                : [...bookmarks, activity.id];
+
+              await useAuthStore.getState().updateProfile({ bookmarks: newBookmarks });
+              showToast(isCurrentlySaved ? 'Removed from bookmarks' : 'Saved to bookmarks', 'info');
+              queryClient.invalidateQueries({ queryKey: ['feed'] });
+            } catch (err) {
+              showToast('Could not save bookmark', 'error');
+            }
           }}
           className={`p-1.5 rounded-lg transition-colors ${
             isSaved ? 'text-[#5d2a1a] bg-[#fbe1d1]/30' : 'text-[#777b86] hover:text-[#17191c]'

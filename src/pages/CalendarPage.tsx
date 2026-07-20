@@ -3,14 +3,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeft, ChevronRight, Calendar as CalIcon, Clock, TrendingUp, Flame,
-  BookOpen, Plus, User, Check, X, Search, ChevronDown, Download, Sparkles
+  BookOpen, Plus, User, Check, X, Search, ChevronDown, Download, Sparkles, MapPin
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getWorkoutsByDateRange } from '@/services/workouts';
 import { getUserPlans, getPlan, getPlanDays, getPublicPlansForUser, clonePlan } from '@/services/plans';
 import { getFollowing, getUsersByUids } from '@/services/social';
-import type { Workout, Plan, PlanDay } from '@/types';
+import { getUserEventRegistrations, getEventsByIds } from '@/services/events';
+import type { Workout, Plan, PlanDay, AppEvent } from '@/types';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -109,11 +110,37 @@ export function CalendarPage() {
     enabled: !!selectedFollowerPlanId,
   });
 
+  // 8. Fetch User's Event Registrations
+  const { data: eventRegistrations = [] } = useQuery({
+    queryKey: ['userEventRegistrations', profile?.uid],
+    queryFn: () => getUserEventRegistrations(profile!.uid),
+    enabled: !!profile?.uid,
+  });
+
+  const registeredEventIds = eventRegistrations.map(r => r.eventId);
+  
+  // 9. Fetch details for registered events
+  const { data: registeredEvents = [] } = useQuery({
+    queryKey: ['registeredEvents', registeredEventIds],
+    queryFn: () => getEventsByIds(registeredEventIds),
+    enabled: registeredEventIds.length > 0,
+  });
+
   // Build date → workouts map
   const dateMap: Record<string, Workout[]> = {};
   for (const w of workouts) {
     if (!dateMap[w.date]) dateMap[w.date] = [];
     dateMap[w.date].push(w);
+  }
+
+  // Build date → events map
+  const eventDateMap: Record<string, AppEvent[]> = {};
+  for (const e of registeredEvents) {
+    if (e.dateTime && e.dateTime.start) {
+      const dateStr = e.dateTime.start.toDate().toISOString().split('T')[0];
+      if (!eventDateMap[dateStr]) eventDateMap[dateStr] = [];
+      eventDateMap[dateStr].push(e);
+    }
   }
 
   // Calendar grid calculation
@@ -188,6 +215,7 @@ export function CalendarPage() {
   };
 
   const selectedWorkouts = selectedDate ? (dateMap[selectedDate] || []) : [];
+  const selectedEvents = selectedDate ? (eventDateMap[selectedDate] || []) : [];
   const scheduledDay = getScheduledDayForSelectedDate();
 
   // Filter followed athletes by search query
@@ -202,7 +230,7 @@ export function CalendarPage() {
         <div>
           <div className="font-mono text-amber text-xs tracking-widest mb-1">SCHEDULE</div>
           <h1 className="font-display text-3xl mb-1">Calendar</h1>
-          <p className="text-bone-dim text-sm max-w-xl">View scheduled training days and completed activity details.</p>
+          <p className="text-bone-dim text-sm max-w-xl">View scheduled training days, events, and completed activity details.</p>
         </div>
 
         {/* Top Actions: Selector & Follower Import */}
@@ -273,6 +301,8 @@ export function CalendarPage() {
                   return <div key={i} className="aspect-square" />;
                 }
                 const hasWorkout = !!dateMap[cell.dateStr];
+                const dayEvents = eventDateMap[cell.dateStr] || [];
+                const hasEvent = dayEvents.length > 0;
                 const isToday = cell.dateStr === todayStr;
                 const isSelected = cell.dateStr === selectedDate;
 
@@ -285,7 +315,7 @@ export function CalendarPage() {
                         ? 'bg-sienna text-bone font-bold ring-2 ring-sienna ring-offset-2 ring-offset-ink'
                         : isToday
                         ? 'bg-amber/15 text-amber font-bold border border-amber/30'
-                        : hasWorkout
+                        : (hasWorkout || hasEvent)
                         ? 'bg-sienna/10 text-bone hover:bg-sienna/20 border border-sienna/20'
                         : 'text-bone-dim hover:bg-ink-3 border border-transparent'
                     }`}
@@ -293,6 +323,9 @@ export function CalendarPage() {
                     {cell.day}
                     {hasWorkout && !isSelected && (
                       <div className="absolute bottom-1.5 w-1.5 h-1.5 rounded-full bg-sienna" />
+                    )}
+                    {hasEvent && !isSelected && (
+                      <div className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber shadow" />
                     )}
                   </button>
                 );
@@ -348,6 +381,28 @@ export function CalendarPage() {
                   </div>
                 )}
               </div>
+
+              {/* SECTION C: EVENTS */}
+              {selectedEvents.length > 0 && (
+                <div className="space-y-3 pt-2">
+                  <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider flex items-center gap-2">
+                    <MapPin size={12} className="text-amber" /> Registered Events
+                  </div>
+                  {selectedEvents.map(e => (
+                    <div key={e.id} className="bg-ink-2 rounded-xl p-4 border border-line/30 space-y-2">
+                      <div className="font-bold text-sm text-bone">{e.title}</div>
+                      <div className="flex items-center gap-2 text-xs text-bone-dim font-mono">
+                        <CalIcon size={12} />
+                        {e.dateTime?.start?.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-bone-dim font-mono">
+                        <MapPin size={12} />
+                        <span className="truncate">{e.location.venueName}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* SECTION B: LOGGED WORKOUTS */}
               <div className="space-y-3">

@@ -315,3 +315,23 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
   });
   await batch.commit();
 }
+
+export async function getBookmarkedActivities(bookmarkIds: string[]): Promise<Activity[]> {
+  if (!bookmarkIds || bookmarkIds.length === 0) return [];
+  const chunks = [];
+  for (let i = 0; i < bookmarkIds.length; i += 30) {
+    chunks.push(bookmarkIds.slice(i, i + 30));
+  }
+  
+  const results: Activity[] = [];
+  for (const chunk of chunks) {
+    const q = query(collection(db, 'activities'), where('__name__', 'in', chunk));
+    const snap = await getDocs(q);
+    results.push(...snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity)));
+  }
+  return results.sort((a, b) => {
+    const va = a.createdAt?.seconds || 0;
+    const vb = b.createdAt?.seconds || 0;
+    return vb - va;
+  });
+}

@@ -15,6 +15,10 @@ import { WorkoutSession } from '@/pages/WorkoutSession';
 import { ProgressPage } from '@/pages/ProgressPage';
 import { CalendarPage } from '@/pages/CalendarPage';
 import { FeedPage } from '@/pages/FeedPage';
+import { CommunitiesPage } from '@/pages/CommunitiesPage';
+import { EventsPage } from '@/pages/EventsPage';
+import { EventDetailPage } from '@/pages/EventDetailPage';
+import { EventDashboardPage } from '@/pages/EventDashboardPage';
 import { AchievementsPage } from '@/pages/AchievementsPage';
 import { SkillsPage } from '@/pages/SkillsPage';
 import { MeasurementsPage } from '@/pages/MeasurementsPage';
@@ -92,6 +96,10 @@ export function App() {
             <Route path="achievements" element={<AchievementsPage />} />
             <Route path="explore" element={<ExplorePage />} />
             <Route path="feed" element={<FeedPage />} />
+            <Route path="communities" element={<CommunitiesPage />} />
+            <Route path="events" element={<EventsPage />} />
+            <Route path="events/:eventId" element={<EventDetailPage />} />
+            <Route path="events/:eventId/dashboard" element={<EventDashboardPage />} />
             <Route path="profile/:username" element={<ProfilePage />} />
             <Route path="guide/:section" element={<GuidePage />} />
             <Route path="settings" element={<SettingsPage />} />

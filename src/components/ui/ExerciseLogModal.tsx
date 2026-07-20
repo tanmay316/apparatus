@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { X, Clock, RotateCcw, Plus, Trash2, ExternalLink, LoaderCircle } from 'lucide-react';
 import { useWorkoutStore } from '@/stores/workout-store';
 import type { Exercise, SetData } from '@/types';
+import { MUSCLE_GROUPS } from '@/lib/muscle-map';
 
 interface Props {
   exercise: Exercise;
@@ -102,6 +103,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
   const [editRest, setEditRest] = useState(exercise.rest || '');
   const [editCues, setEditCues] = useState(exercise.cues?.join('\n') || '');
   const [editYt, setEditYt] = useState(exercise.yt || '');
+  const [editMuscleGroup, setEditMuscleGroup] = useState(exercise.muscleGroup || '');
 
   // Timer Modes: 'rest' | 'stopwatch' | 'countdown'
   const [timerMode, setTimerMode] = useState<'rest' | 'stopwatch' | 'countdown'>('rest');
@@ -185,7 +187,8 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
       tempo: editTempo,
       rest: editRest,
       cues: editCues.split('\n').map(c => c.trim()).filter(Boolean),
-      yt: editYt
+      yt: editYt,
+      muscleGroup: editMuscleGroup || undefined
     });
     setIsEditingEx(false);
   };
@@ -281,6 +284,15 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
               <div>
                 <label className="text-xs font-mono text-bone-dim block mb-1">Cues (one per line)</label>
                 <textarea className="input-field w-full h-20 text-xs" value={editCues} onChange={e => setEditCues(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs font-mono text-bone-dim block mb-1">Target Muscle Group (Optional)</label>
+                <select className="input-field w-full" value={editMuscleGroup} onChange={e => setEditMuscleGroup(e.target.value)}>
+                  <option value="">Auto-detect</option>
+                  {MUSCLE_GROUPS.map(mg => (
+                    <option key={mg} value={mg}>{mg}</option>
+                  ))}
+                </select>
               </div>
               <div className="flex gap-2">
                 <button onClick={handleEditSave} className="btn-primary flex-1">Save changes</button>

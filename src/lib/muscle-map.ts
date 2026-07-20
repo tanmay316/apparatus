@@ -25,6 +25,11 @@ export type MuscleRegion =
   | 'calves';
 
 // Map library muscle group names → anatomy region IDs
+export const MUSCLE_GROUPS = [
+  'Chest', 'Back', 'Shoulders', 'Quads', 'Glutes', 
+  'Hamstrings', 'Calves', 'Biceps', 'Forearms', 'Triceps', 'Core'
+];
+
 const GROUP_TO_REGIONS: Record<string, MuscleRegion[]> = {
   'Chest':        ['chest'],
   'Back':         ['lats', 'traps'],
@@ -78,10 +83,11 @@ export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
     } else {
       // Fuzzy fallback for custom exercises not in library
       const n = normalizeExerciseName(name);
-      if (n.includes('squat') || n.includes('lunge')) { active.add('quads'); active.add('glutes'); }
-      if (n.includes('push') || n.includes('bench') || n.includes('press') || n.includes('fly')) active.add('chest');
-      if (n.includes('pull') || n.includes('row') || n.includes('lat')) active.add('lats');
-      if (n.includes('curl') || n.includes('bicep')) active.add('biceps');
+      if (n.includes('pike push') || n.includes('handstand push')) { active.add('front_delts'); active.add('triceps'); }
+      else if (n.includes('squat') || n.includes('lunge')) { active.add('quads'); active.add('glutes'); }
+      else if (n.includes('push') || n.includes('bench') || n.includes('press') || n.includes('fly')) active.add('chest');
+      else if (n.includes('pull') || n.includes('row') || n.includes('lat')) active.add('lats');
+      else if (n.includes('curl') || n.includes('bicep')) active.add('biceps');
       if (n.includes('tricep') || n.includes('dip') || n.includes('extension')) active.add('triceps');
       if (n.includes('deadlift') || n.includes('hip')) { active.add('hamstrings'); active.add('glutes'); active.add('lower_back'); }
       if (n.includes('shoulder') || n.includes('delt') || n.includes('press')) active.add('front_delts');
@@ -100,13 +106,29 @@ export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
  * exercises cannot appear as highlighted muscles.
  */
 export function getActiveMusclesFromLogs(
-  exerciseLogs: Array<{ name: string; sets: Array<{ completed?: boolean }> }>
+  exerciseLogs: Array<{ name: string; muscleGroup?: string; sets: Array<{ completed?: boolean }> }>
 ): Set<MuscleRegion> {
-  const completedExerciseNames = exerciseLogs
-    .filter(log => log.sets.some(set => set.completed === true))
-    .map(log => log.name);
+  const active = new Set<MuscleRegion>();
+  const completedExerciseNames: string[] = [];
 
-  return getActiveMuscles(completedExerciseNames);
+  exerciseLogs.forEach(log => {
+    if (log.sets.some(set => set.completed === true)) {
+      if (log.muscleGroup) {
+        const regions = GROUP_TO_REGIONS[log.muscleGroup];
+        if (regions) {
+          regions.forEach(r => active.add(r));
+        } else {
+          completedExerciseNames.push(log.name);
+        }
+      } else {
+        completedExerciseNames.push(log.name);
+      }
+    }
+  });
+
+  const libraryActive = getActiveMuscles(completedExerciseNames);
+  libraryActive.forEach(r => active.add(r));
+  return active;
 }
 
 // ─── Bodyweight exercises for volume calculation ─────────────

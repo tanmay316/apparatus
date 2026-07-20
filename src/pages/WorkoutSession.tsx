@@ -85,28 +85,30 @@ export function WorkoutSession() {
   });
 
   const currentDay = days.find(d => d.id === dayId);
-  const wasCompletedTodayInitial = todayWorkouts.some((w: any) => w.dayId === dayId);
-  const [forceRedo, setForceRedo] = useState(false);
-  const wasCompletedToday = wasCompletedTodayInitial && !forceRedo;
+  const todayCompletedWorkouts = todayWorkouts.filter((w: any) => w.dayId === dayId);
+  const hasCompletedToday = todayCompletedWorkouts.length > 0;
   
+  const [selectedWorkoutIndex, setSelectedWorkoutIndex] = useState(0);
+  const completedWorkoutForDay = todayCompletedWorkouts[selectedWorkoutIndex];
+
   // sessionFinished tracks if the user JUST finished the workout in this current view session
   const [sessionFinished, setSessionFinished] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Initialize workout if not active or if plan/day mismatch
   useEffect(() => {
-    if (todayWorkoutsLoading) return;
-    if (plan && currentDay) {
-      if (wasCompletedTodayInitial && !forceRedo) {
-        if (store.isActive) store.finishWorkout();
-        // Do NOT set sessionFinished to true here, otherwise the button says 'Saved' instead of 'Log Again'
-        return;
-      }
-      if (!store.isActive || store.planId !== plan.id || store.dayId !== currentDay.id) {
-        setSessionFinished(false);
-        store.startWorkout(plan, currentDay);
-      }
+    if (todayWorkoutsLoading || !plan || !currentDay) return;
+
+    if (store.isActive && (store.planId !== plan.id || store.dayId !== currentDay.id)) {
+      store.cancelWorkout();
+      return;
     }
-  }, [plan, currentDay, wasCompletedTodayInitial, forceRedo, todayWorkoutsLoading]); // Only re-run if plan/day/completion changes
+
+    if (!store.isActive && !hasCompletedToday) {
+      setSessionFinished(false);
+      store.startWorkout(plan, currentDay);
+    }
+  }, [plan, currentDay, hasCompletedToday, todayWorkoutsLoading, store.isActive, store.planId, store.dayId]);
 
   // Stopwatch state
   const [elapsedSec, setElapsedSec] = useState(0);
@@ -116,15 +118,16 @@ export function WorkoutSession() {
         setElapsedSec(Math.floor((Date.now() - store.startedAt!) / 1000));
       }, 1000);
       return () => clearInterval(interval);
+    } else if (store.isActive && !store.startedAt) {
+      setElapsedSec(0);
     }
   }, [store.isActive, store.startedAt, sessionFinished]);
 
   useEffect(() => {
-    const completedWorkout = todayWorkouts.find((workout: any) => workout.dayId === dayId) as any;
-    if (!todayWorkoutsLoading && completedWorkout) {
-      setElapsedSec(Math.max(0, Number(completedWorkout.durationMin || 0) * 60));
+    if (!store.isActive && completedWorkoutForDay) {
+      setElapsedSec(Math.max(0, Number(completedWorkoutForDay.durationMin || 0) * 60));
     }
-  }, [todayWorkoutsLoading, dayId, todayWorkouts]);
+  }, [store.isActive, completedWorkoutForDay]);
 
   const [activeExercise, setActiveExercise] = useState<{name: string, mode: 'reps'|'hold'|'freeform', index: number, section: 'warmup' | 'skillWork' | 'strength' | 'cooldown'} | null>(null);
   const [privacy, setPrivacy] = useState<'public' | 'followers' | 'private'>('followers');
@@ -185,6 +188,7 @@ export function WorkoutSession() {
 
   const handleFinish = async () => {
     if (!user || !store.isActive) return;
+    setIsSaving(true);
     
     const exLogs = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed));
     const allExercises = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown];
@@ -274,7 +278,7 @@ export function WorkoutSession() {
             exercises: exLogs.map(e => e.name),
             // Preserve completion state so shared anatomy reflects this
             // workout's actual completed sets, not the planned exercises.
-            exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets }))
+            exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets, muscleGroup: e.muscleGroup }))
           },
           visibility: privacy,
           likesCount: 0,
@@ -326,7 +330,7 @@ export function WorkoutSession() {
         volume: totalVol,
         calories,
         exerciseNames: filteredShareExLogs.map(e => e.name),
-        exerciseLogs: filteredShareExLogs.map(e => ({ name: e.name, sets: e.sets })),
+        exerciseLogs: filteredShareExLogs.map(e => ({ name: e.name, sets: e.sets, muscleGroup: e.muscleGroup })),
         bodyweight: userWeight || undefined,
       });
       // End and clear the persisted session immediately. The celebration and
@@ -336,6 +340,8 @@ export function WorkoutSession() {
     } catch (error) {
       console.error('Failed to save workout error details:', error);
       showToast('Failed to save workout', 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -350,7 +356,7 @@ export function WorkoutSession() {
     );
   }
 
-  if (!plan || !currentDay || (!store.isActive && !wasCompletedToday && !sessionFinished)) {
+  if (!plan || !currentDay || (!store.isActive && !hasCompletedToday && !sessionFinished)) {
     return (
       <div className="text-center py-20 text-bone-dim">
         Workout initializing...
@@ -434,7 +440,7 @@ export function WorkoutSession() {
                 : previousLog
                   ? `Last: ${previousLog.sets?.filter((s: any) => s.completed !== false).length || 0} sets${previousLog.sets?.[0]?.weight ? ` @ ${previousLog.sets[0].weight} kg` : ''}`
                   : 'No history yet';
-              const isDone = wasCompletedToday
+              const isDone = (!store.isActive && hasCompletedToday)
                 ? !!(histLog && histLog.sets?.some((s: any) => s.completed))
                 : !!(log && log.sets.some((s: any) => s.completed));
               
@@ -448,7 +454,7 @@ export function WorkoutSession() {
                     <button 
                       onClick={(event) => {
                         event.stopPropagation();
-                        if (wasCompletedToday) return;
+                        if (!store.isActive && hasCompletedToday) return;
                         const isCurrentlyDone = log && log.sets.some((s: any) => s.completed);
                         log?.sets.forEach((_: any, setIdx: number) => {
                           store.markSetComplete(e.name, setIdx, !isCurrentlyDone);
@@ -486,14 +492,32 @@ export function WorkoutSession() {
           <ArrowLeft size={16} /> Quit
         </Link>
         <div className="flex items-center gap-2 font-mono text-sienna">
+          {store.isActive && !store.startedAt && (
+            <button onClick={() => store.startTimer()} className="btn-primary py-1 px-3 mr-2 text-[10px] tracking-wider uppercase">Start</button>
+          )}
           <Clock size={16} />
           {formatStopwatch(elapsedSec)}
         </div>
       </div>
       
       <div className="mb-8 pb-6 border-b border-line">
-        <div className="font-mono text-amber text-[11px] tracking-widest mb-1 uppercase">
-          DAY {currentDay.dayNumber.toString().padStart(2, '0')} / 07 · ~{currentDay.time}
+        <div className="flex justify-between items-center mb-1">
+          <div className="font-mono text-amber text-[11px] tracking-widest uppercase">
+            DAY {currentDay.dayNumber.toString().padStart(2, '0')} / 07 · ~{currentDay.time}
+          </div>
+          {(!store.isActive && hasCompletedToday) && todayCompletedWorkouts.length > 0 && (
+            <select 
+              value={selectedWorkoutIndex} 
+              onChange={(e) => setSelectedWorkoutIndex(Number(e.target.value))}
+              className="bg-ink-2 border border-line text-bone text-xs font-mono rounded px-2 py-1"
+            >
+              {todayCompletedWorkouts.map((w: any, idx: number) => (
+                <option key={idx} value={idx}>
+                  {new Date(w.startedAt?.toMillis ? w.startedAt.toMillis() : Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         <h1 className="font-display text-3xl mb-2">{currentDay.title}</h1>
         <div className="text-sm text-bone-dim font-mono">
@@ -537,20 +561,21 @@ export function WorkoutSession() {
          </div>
           <button 
             onClick={() => {
-              if (wasCompletedToday) {
-                setForceRedo(true);
+              if (!store.isActive && hasCompletedToday) {
+                setSessionFinished(false);
+                store.startWorkout(plan, currentDay);
               } else {
                 handleFinish();
               }
             }}
-            disabled={sessionFinished}
-            className={`py-3.5 px-8 text-base w-full max-w-md font-bold tracking-wider rounded-lg transition-all ${sessionFinished ? 'bg-line text-bone-dim cursor-not-allowed opacity-50' : 'bg-sienna text-bone hover:bg-sienna/90'}`}
+            disabled={sessionFinished || isSaving}
+            className={`py-3.5 px-8 text-base w-full max-w-md font-bold tracking-wider rounded-lg transition-all ${sessionFinished || isSaving ? 'bg-line text-bone-dim cursor-not-allowed opacity-50' : 'bg-sienna text-bone hover:bg-sienna/90'}`}
           >
-            {sessionFinished ? '✓ Saved' : wasCompletedToday ? 'Log Again' : 'Finish Workout'}
+            {isSaving ? 'Saving...' : sessionFinished ? '✓ Saved' : (!store.isActive && hasCompletedToday) ? 'Log Again' : 'Finish Workout'}
           </button>
       </div>
 
-      {activeExercise && (store[activeExercise.section][activeExercise.index] || wasCompletedToday) && (
+      {activeExercise && (store[activeExercise.section][activeExercise.index] || (!store.isActive && hasCompletedToday)) && (
         <ExerciseLogModal 
           isOpen={true} 
           onClose={() => setActiveExercise(null)} 
@@ -560,7 +585,7 @@ export function WorkoutSession() {
           }
           section={activeExercise.section}
           index={activeExercise.index}
-            historicalLog={wasCompletedToday ? completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === activeExercise.name) : undefined}
+            historicalLog={(!store.isActive && hasCompletedToday) ? completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === activeExercise.name) : undefined}
             previousLog={workoutHistory.find((workout: any) => workout.dayId === dayId && workout.date !== completedWorkoutForDay?.date && workout.exercises?.some((ex: any) => ex.name === activeExercise.name))?.exercises?.find((ex: any) => ex.name === activeExercise.name)}
         />
       )}

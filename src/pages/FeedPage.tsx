@@ -6,15 +6,15 @@ import { Users } from 'lucide-react';
 import { ActivityPostCard, ActivityPostCardSkeleton } from '@/components/social/ActivityPostCard';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { useAuthStore } from '@/stores/auth-store';
-import { getActivity, getFeed, getFollowing, getPublicFeed } from '@/services/social';
+import { getActivity, getFeed, getFollowing, getPublicFeed, getBookmarkedActivities } from '@/services/social';
 import type { Activity } from '@/types';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
 export function FeedPage() {
-  const { user } = useAuthStore();
-  const [tab, setTab] = useState<'following' | 'global'>('following');
+  const { user, profile } = useAuthStore();
+  const [tab, setTab] = useState<'following' | 'global' | 'bookmarks'>('following');
   const [searchParams] = useSearchParams();
   const activityId = searchParams.get('activity');
   const [shareData, setShareData] = useState<ShareCardData | null>(null);
@@ -26,10 +26,12 @@ export function FeedPage() {
   });
 
   const { data: feedItems = [], isLoading } = useQuery({
-    queryKey: ['feed', tab, user?.uid, followingUids],
-    queryFn: () => tab === 'following'
-      ? getFeed(user!.uid, followingUids)
-      : getPublicFeed(),
+    queryKey: ['feed', tab, user?.uid, followingUids, profile?.bookmarks],
+    queryFn: () => {
+      if (tab === 'following') return getFeed(user!.uid, followingUids);
+      if (tab === 'global') return getPublicFeed();
+      return getBookmarkedActivities(profile?.bookmarks || []);
+    },
     enabled: !!user,
   });
 
@@ -75,7 +77,7 @@ export function FeedPage() {
       </motion.div>
 
       {/* Tab switcher */}
-      <motion.div variants={item} className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1 mb-6 max-w-xs">
+      <motion.div variants={item} className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1 mb-6 max-w-sm">
         <button
           onClick={() => setTab('following')}
           className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'following' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
@@ -88,6 +90,12 @@ export function FeedPage() {
         >
           Global
         </button>
+        <button
+          onClick={() => setTab('bookmarks')}
+          className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'bookmarks' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
+        >
+          Bookmarks
+        </button>
       </motion.div>
 
       {isLoading ? (
@@ -99,11 +107,15 @@ export function FeedPage() {
       ) : visibleFeedItems.length === 0 ? (
         <motion.div variants={item} className="text-center py-16 border border-dashed border-[#ececec] rounded-[24px] bg-[#fafafb]">
           <Users size={48} className="mx-auto text-[#979799] mb-4 opacity-50" />
-          <h3 className="font-serif font-normal text-lg mb-2 text-[#17191c]">No Activity Yet</h3>
+          <h3 className="font-serif font-normal text-lg mb-2 text-[#17191c]">
+            {tab === 'bookmarks' ? 'No Bookmarked Posts' : 'No Activity Yet'}
+          </h3>
           <p className="text-sm text-[#777b86] max-w-sm mx-auto font-sans">
             {tab === 'following'
               ? 'Complete a workout or follow other athletes to see their activity here.'
-              : 'No public activity yet. Be the first to post a workout!'
+              : tab === 'global'
+              ? 'No public activity yet. Be the first to post a workout!'
+              : 'You haven\'t bookmarked any posts yet. Save posts from the feed to view them here.'
             }
           </p>
         </motion.div>

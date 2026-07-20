@@ -15,7 +15,7 @@ import { StatsPills } from '@/components/dashboard/StatsPills';
 import { WeeklyTimeline } from '@/components/dashboard/WeeklyTimeline';
 import { XPPanel } from '@/components/dashboard/XPPanel';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
-import type { PlanDay } from '@/types';
+import type { PlanDay, Activity } from '@/types';
 
 // ─── Constants ───────────────────────────────────────────────
 
@@ -178,6 +178,24 @@ export function Dashboard() {
     });
   };
 
+  const handleShareActivity = (activity: Activity) => {
+    const details = (activity.details as Record<string, any>) || {};
+    const createdDate = activity.createdAt?.seconds
+      ? new Date(activity.createdAt.seconds * 1000)
+      : new Date();
+
+    setDashboardShareData({
+      dayTitle: details.dayTitle || activity.summary,
+      planTitle: details.planTitle || 'Workout',
+      date: createdDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+      durationMin: details.durationMin || 0,
+      volume: details.volume || 0,
+      calories: details.calories || 0,
+      exerciseNames: details.exercises || [],
+      exerciseLogs: details.exerciseLogs || undefined,
+    });
+  };
+
   return (
     <div className="max-w-[1200px] mx-auto w-full">
       {/* 1. Hero */}
@@ -223,7 +241,7 @@ export function Dashboard() {
       <XPPanel xp={xp} streak={streak} badges={badges} />
 
       {/* 6. Activity Feed */}
-      <ActivityFeed activities={followersActivity} />
+      <ActivityFeed activities={followersActivity} onShare={handleShareActivity} />
 
       {/* Share modal */}
       {dashboardShareData && (

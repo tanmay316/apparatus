@@ -8,6 +8,20 @@ function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function removeUndefined(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefined);
+  } else if (obj !== null && typeof obj === 'object') {
+    if (obj instanceof Timestamp) return obj;
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [k, removeUndefined(v)])
+    );
+  }
+  return obj;
+}
+
 export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) => {
   const workoutRef = doc(collection(db, 'workouts'));
   const newWorkoutId = workoutRef.id;
@@ -90,20 +104,15 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
       bestHold,
     };
 
-    // 4. Clean data of undefined fields which Firestore rejects
     const workoutData: any = { ...workout, id: newWorkoutId, finishedAt: Timestamp.now() };
     if (progressiveOverload !== undefined) {
       workoutData.progressiveOverload = progressiveOverload;
     }
     
-    // Deep clone/clean undefined (simple shallow clean for top level fields)
-    Object.keys(workoutData).forEach(key => {
-      if (workoutData[key] === undefined) {
-        delete workoutData[key];
-      }
-    });
+    // Deep clone/clean undefined to prevent Firestore errors
+    const cleanedWorkoutData = removeUndefined(workoutData);
 
-    transaction.set(workoutRef, workoutData);
+    transaction.set(workoutRef, cleanedWorkoutData);
     transaction.set(statsRef, newStats);
   });
 

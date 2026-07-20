@@ -12,9 +12,10 @@ import { seedLibraryExercises } from '@/services/library';
 import { getAdminBans, getAdminOverview, getAdminReports, getAdminUsers, setUserBan, updateReportStatus, type AdminReport } from '@/services/admin';
 import { deletePlan } from '@/services/plans';
 import { getSystemLogs, clearAllSystemLogs } from '@/services/logger';
+import { getPendingCommunities, approveCommunity, rejectCommunity, getPendingEvents, updateEventStatus } from '@/services/events';
 import { getAvatarUrl } from '@/lib/avatar';
 
-type AdminTab = 'overview' | 'users' | 'reports' | 'logs' | 'seed';
+type AdminTab = 'overview' | 'users' | 'reports' | 'logs' | 'seed' | 'communities' | 'events';
 
 function Metric({ label, value, detail, icon: Icon, color = 'text-sienna' }: { label: string; value: number; detail: string; icon: typeof Users; color?: string }) {
   return <div className="card p-4"><div className="flex items-start justify-between"><div className="font-mono text-[10px] text-bone-dim tracking-wider">{label}</div><Icon size={17} className={color} /></div><div className="font-display text-3xl mt-3">{value.toLocaleString()}</div><div className="text-[11px] text-bone-dim mt-1">{detail}</div></div>;
@@ -36,11 +37,37 @@ export function AdminPage() {
   const reports = useQuery({ queryKey: ['adminReports'], queryFn: getAdminReports, enabled: !!profile?.isAdmin });
   const plans = useQuery({ queryKey: ['adminPlans'], queryFn: async () => { const snap = await getDocs(collection(db, 'plans')); return snap.docs.map(item => ({ id: item.id, ...item.data() } as any)); }, enabled: !!profile?.isAdmin });
   const logs = useQuery({ queryKey: ['adminLogs'], queryFn: () => getSystemLogs(100), enabled: !!profile?.isAdmin });
+  const pendingCommunities = useQuery({ queryKey: ['adminPendingCommunities'], queryFn: getPendingCommunities, enabled: !!profile?.isAdmin });
+  const pendingEvents = useQuery({ queryKey: ['adminPendingEvents'], queryFn: getPendingEvents, enabled: !!profile?.isAdmin });
 
   const filteredUsers = useMemo(() => {
     const normalized = search.toLowerCase().trim();
     return (users.data || []).filter((user: any) => !normalized || user.displayName?.toLowerCase().includes(normalized) || user.username?.toLowerCase().includes(normalized) || user.email?.toLowerCase().includes(normalized));
   }, [users.data, search]);
+  
+  const approveCommunityMutation = useMutation({
+    mutationFn: (id: string) => approveCommunity(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminPendingCommunities'] }); showToast('Community approved'); },
+    onError: (err: any) => showToast(err?.message || 'Error approving community', 'error'),
+  });
+
+  const rejectCommunityMutation = useMutation({
+    mutationFn: (id: string) => rejectCommunity(id),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminPendingCommunities'] }); showToast('Community rejected'); },
+    onError: (err: any) => showToast(err?.message || 'Error rejecting community', 'error'),
+  });
+
+  const approveEventMutation = useMutation({
+    mutationFn: (id: string) => updateEventStatus(id, 'published'),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminPendingEvents'] }); showToast('Event published'); },
+    onError: (err: any) => showToast(err?.message || 'Error publishing event', 'error'),
+  });
+
+  const rejectEventMutation = useMutation({
+    mutationFn: (id: string) => updateEventStatus(id, 'cancelled'),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminPendingEvents'] }); showToast('Event rejected'); },
+    onError: (err: any) => showToast(err?.message || 'Error rejecting event', 'error'),
+  });
   const banIds = new Set((bans.data || []).map((ban: any) => ban.uid));
 
   const banMutation = useMutation({
@@ -118,6 +145,8 @@ export function AdminPage() {
     { id: 'overview', label: 'Overview', icon: Gauge },
     { id: 'users', label: 'Users & bans', icon: Users },
     { id: 'reports', label: 'Reports', icon: Flag },
+    { id: 'communities', label: 'Communities', icon: Users },
+    { id: 'events', label: 'Events', icon: Activity },
     { id: 'logs', label: 'System Logs', icon: Terminal },
     { id: 'seed', label: 'Database', icon: Database },
   ];
@@ -140,6 +169,10 @@ export function AdminPage() {
     {tab === 'users' && <section className="card p-5"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5"><div><h2 className="font-display text-xl">Users and bans</h2><p className="text-xs text-bone-dim mt-1">Showing up to 200 newest accounts. Bans prevent access on the next sign-in.</p></div><div className="relative w-full sm:w-72"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" /><input value={search} onChange={event => setSearch(event.target.value)} className="input-field pl-9" placeholder="Search name, handle, email" /></div></div>{users.isLoading ? <div className="py-10 text-center text-bone-dim">Loading users...</div> : <div className="space-y-2">{filteredUsers.map((user: any) => { const isBanned = banIds.has(user.uid); return <div key={user.uid} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-line/50 bg-ink-2"><img src={user.photoURL || getAvatarUrl(user.displayName, theme)} alt="" className="w-9 h-9 rounded-full object-cover" /><div className="flex-1 min-w-0"><div className="font-semibold text-sm truncate">{user.displayName || 'Athlete'} <span className="font-mono text-[10px] text-sienna ml-1">@{user.username}</span></div><div className="text-xs text-bone-dim truncate">{user.email || user.uid}</div></div><div className={`font-mono text-[10px] ${isBanned ? 'text-danger' : 'text-sienna'}`}>{isBanned ? 'BANNED' : 'ACTIVE'}</div><button onClick={() => banMutation.mutate({ uid: user.uid, banned: !isBanned })} disabled={banMutation.isPending || user.uid === profile.uid} className={`${isBanned ? 'btn-secondary hover:text-sienna' : 'btn-danger'} py-2 inline-flex items-center gap-2`}>{isBanned ? <><CheckCircle2 size={13} /> Lift ban</> : <><Ban size={13} /> Ban</>}</button></div>; })}</div>}</section>}
 
     {tab === 'reports' && <section className="card p-5"><div className="mb-5"><h2 className="font-display text-xl">Reports</h2><p className="text-xs text-bone-dim mt-1">Review user-submitted reports and record a moderation decision.</p></div>{reports.isLoading ? <div className="py-10 text-center text-bone-dim">Loading reports...</div> : reports.data?.length ? <div className="space-y-3">{reports.data.map(report => <div key={report.id} className="border border-line/50 rounded-lg p-4 bg-ink-2"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><div className="font-mono text-[10px] text-amber uppercase">{report.status} · {report.reason}</div><div className="text-sm mt-2">Reported user: <span className="font-mono text-sienna">{report.reportedUserId || 'Not specified'}</span></div><div className="text-xs text-bone-dim mt-1">Reporter: {report.reporterId}</div>{report.details && <p className="text-sm text-bone-dim mt-3">{report.details}</p>}</div><div className="flex gap-2 shrink-0"><button onClick={() => report.id && reportMutation.mutate({ id: report.id, status: 'reviewing' })} className="btn-secondary py-2">Review</button><button onClick={() => report.id && reportMutation.mutate({ id: report.id, status: 'resolved' })} className="btn-primary py-2">Resolve</button><button onClick={() => report.id && reportMutation.mutate({ id: report.id, status: 'dismissed' })} className="btn-secondary py-2"><XCircle size={14} /></button></div></div></div>)}</div> : <div className="py-10 text-center text-bone-dim">No reports in the queue.</div>}</section>}
+
+    {tab === 'communities' && <section className="card p-5"><div className="mb-5"><h2 className="font-display text-xl">Pending Communities</h2><p className="text-xs text-bone-dim mt-1">Review user requests to create communities.</p></div>{pendingCommunities.isLoading ? <div className="py-10 text-center text-bone-dim">Loading communities...</div> : pendingCommunities.data?.length ? <div className="space-y-3">{pendingCommunities.data.map((community: any) => <div key={community.id} className="border border-line/50 rounded-lg p-4 bg-ink-2"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><div className="font-semibold text-lg">{community.name}</div><div className="text-sm mt-1">{community.description}</div><div className="text-xs text-bone-dim mt-2">Owner ID: {community.ownerId}</div></div><div className="flex gap-2 shrink-0"><button onClick={() => community.id && approveCommunityMutation.mutate(community.id)} className="btn-primary py-2" disabled={approveCommunityMutation.isPending}>Approve</button><button onClick={() => community.id && rejectCommunityMutation.mutate(community.id)} className="btn-secondary py-2 border-danger text-danger hover:bg-danger/10" disabled={rejectCommunityMutation.isPending}>Reject</button></div></div></div>)}</div> : <div className="py-10 text-center text-bone-dim">No pending communities.</div>}</section>}
+
+    {tab === 'events' && <section className="card p-5"><div className="mb-5"><h2 className="font-display text-xl">Pending Events</h2><p className="text-xs text-bone-dim mt-1">Review user requests to host events outside of a community.</p></div>{pendingEvents.isLoading ? <div className="py-10 text-center text-bone-dim">Loading events...</div> : pendingEvents.data?.length ? <div className="space-y-3">{pendingEvents.data.map((event: any) => <div key={event.id} className="border border-line/50 rounded-lg p-4 bg-ink-2"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><div className="font-semibold text-lg">{event.title} <span className="text-xs font-normal text-amber ml-2">{event.category}</span></div><div className="text-sm mt-1">{event.description}</div><div className="text-xs text-bone-dim mt-2">Organizer: {event.organizerName} | Date: {event.dateTime?.start?.toDate().toLocaleString()}</div></div><div className="flex gap-2 shrink-0"><button onClick={() => event.id && approveEventMutation.mutate(event.id)} className="btn-primary py-2" disabled={approveEventMutation.isPending}>Approve</button><button onClick={() => event.id && rejectEventMutation.mutate(event.id)} className="btn-secondary py-2 border-danger text-danger hover:bg-danger/10" disabled={rejectEventMutation.isPending}>Reject</button></div></div></div>)}</div> : <div className="py-10 text-center text-bone-dim">No pending events.</div>}</section>}
 
     {tab === 'seed' && <section className="card p-6 border-danger/30 space-y-6"><div><h2 className="font-display text-xl mb-2 flex items-center gap-2"><Database size={18} /> Database tools</h2><p className="text-sm text-bone-dim">Seeding is idempotent: it uses stable document IDs, overwrites the expected catalog, and removes stale duplicate sample-plan documents.</p></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><button onClick={handleSeedSamplePlans} disabled={seeding} className="btn-secondary border-sienna text-sienna hover:bg-sienna hover:text-bone inline-flex items-center justify-center gap-2">{seeding ? 'Processing...' : <><CheckCircle2 size={15} /> Seed sample plans</>}</button><button onClick={handleSeedExerciseLibrary} disabled={seedingLib} className="btn-secondary border-sienna text-sienna hover:bg-sienna hover:text-bone inline-flex items-center justify-center gap-2">{seedingLib ? 'Processing...' : <><CheckCircle2 size={15} /> Seed exercise library</>}</button></div><div className="border-t border-line/50 pt-5"><div className="flex items-center justify-between mb-3"><div><h3 className="font-display text-lg">All user plans</h3><p className="text-xs text-bone-dim mt-1">Admin deletion permanently removes the plan and its day documents.</p></div></div>{plans.isLoading ? <div className="text-sm text-bone-dim">Loading plans...</div> : <div className="space-y-2">{plans.data?.length ? plans.data.map((plan: any) => <div key={plan.id} className="flex items-center justify-between gap-3 rounded-lg border border-line/50 bg-ink-2 p-3"><div className="min-w-0"><div className="font-semibold text-sm truncate">{plan.title}</div><div className="text-xs text-bone-dim truncate">{plan.ownerName || plan.ownerId} · {plan.isArchived ? 'archived' : 'active'}</div></div><button onClick={() => handleDeletePlan(plan.id, plan.title)} disabled={deletingPlanId === plan.id} className="btn-danger py-2 inline-flex items-center gap-2 shrink-0"><Trash2 size={13} /> {deletingPlanId === plan.id ? 'Deleting...' : 'Delete'}</button></div>) : <div className="text-sm text-bone-dim">No user plans found.</div>}</div>}</div></section>}
 
