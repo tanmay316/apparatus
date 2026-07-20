@@ -67,28 +67,30 @@ export const useWorkoutStore = create<WorkoutState>()(
 
       startWorkout: (plan, day) => {
         const logs: Record<string, ExerciseLog> = {};
-        const allExercises = [
-          ...(day.warmup || []),
-          ...(day.skillWork || []),
-          ...(day.strength || []),
-          ...(day.cooldown || []),
-        ];
+        
+        const initLogs = (exs: Exercise[], section: 'warmup' | 'skillWork' | 'strength' | 'cooldown') => {
+          exs.forEach((e) => {
+            const count = parseSetsCount(e.sets);
+            const mode = inferMode(e.sets);
+            logs[e.name] = {
+              name: e.name,
+              mode,
+              order: 0,
+              sets: Array.from({ length: count }, () => ({ completed: false })),
+              rpe: null,
+              durationSec: 0,
+              notes: '',
+              isPR: false,
+              muscleGroup: e.muscleGroup,
+              section
+            };
+          });
+        };
 
-        allExercises.forEach((e) => {
-          const count = parseSetsCount(e.sets);
-          const mode = inferMode(e.sets);
-          logs[e.name] = {
-            name: e.name,
-            mode,
-            order: 0,
-            sets: Array.from({ length: count }, () => ({ completed: false })),
-            rpe: null,
-            durationSec: 0,
-            notes: '',
-            isPR: false,
-            muscleGroup: e.muscleGroup
-          };
-        });
+        initLogs(day.warmup || [], 'warmup');
+        initLogs(day.skillWork || [], 'skillWork');
+        initLogs(day.strength || [], 'strength');
+        initLogs(day.cooldown || [], 'cooldown');
 
         set({
           isActive: true,
@@ -196,6 +198,7 @@ export const useWorkoutStore = create<WorkoutState>()(
             logs[updated.name].name = updated.name;
           }
           logs[updated.name].muscleGroup = updated.muscleGroup;
+          logs[updated.name].section = section;
           
           return { [section]: list, logs };
         });
@@ -232,7 +235,9 @@ export const useWorkoutStore = create<WorkoutState>()(
               rpe: null,
               durationSec: 0,
               notes: '',
-              isPR: false
+              isPR: false,
+              muscleGroup: exercise.muscleGroup,
+              section
             }
           };
 

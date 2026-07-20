@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Calendar as CalendarIcon, MapPin, Users, Plus, X, Search, Filter } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { getPublishedEvents, createEvent, getVerifiedCommunities } from '@/services/events';
+import { getPublishedEvents, createEvent, getVerifiedCommunities, getUserEventRegistrations, getEventsByIds } from '@/services/events';
 import type { AppEvent, EventCategory, EventType, GenderRestriction, SkillLevel } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
@@ -192,14 +192,36 @@ function CreateEventModal({ onClose }: { onClose: () => void }) {
 }
 
 export function EventsPage() {
+  const { user } = useAuthStore();
   const [showCreate, setShowCreate] = useState(false);
+  const [tab, setTab] = useState<'upcoming' | 'attending'>('upcoming');
   const [search, setSearch] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'free' | 'paid' | 'today' | 'tomorrow' | 'weekend' | 'online'>('all');
   
-  const { data: events = [], isLoading } = useQuery({
+  const { data: upcomingEvents = [], isLoading: loadingUpcoming } = useQuery({
     queryKey: ['events'],
     queryFn: getPublishedEvents
   });
+
+  const { data: myRegistrations = [] } = useQuery({
+    queryKey: ['myEventRegistrations', user?.uid],
+    queryFn: () => getUserEventRegistrations(user!.uid),
+    enabled: !!user,
+  });
+
+  const { data: attendingEvents = [], isLoading: loadingAttending } = useQuery({
+    queryKey: ['myEvents', myRegistrations],
+    queryFn: async () => {
+      if (!myRegistrations.length) return [];
+      const activeRegs = myRegistrations.filter(r => r.status === 'registered' || r.status === 'waitlist');
+      const eventIds = activeRegs.map(r => r.eventId);
+      return getEventsByIds(eventIds);
+    },
+    enabled: !!myRegistrations.length,
+  });
+
+  const events = tab === 'upcoming' ? upcomingEvents : attendingEvents;
+  const isLoading = tab === 'upcoming' ? loadingUpcoming : loadingAttending;
 
   const filteredEvents = useMemo(() => {
     let filtered = events;
@@ -244,6 +266,21 @@ export function EventsPage() {
         </div>
         <button onClick={() => setShowCreate(true)} className="btn-primary inline-flex items-center gap-2 self-start md:self-auto shrink-0">
           <Plus size={16} /> Host Event
+        </button>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1 max-w-sm mb-2">
+        <button
+          onClick={() => setTab('upcoming')}
+          className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'upcoming' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
+        >
+          Upcoming
+        </button>
+        <button
+          onClick={() => setTab('attending')}
+          className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'attending' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
+        >
+          Attending
         </button>
       </div>
 

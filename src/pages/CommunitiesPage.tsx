@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users, Plus, ShieldAlert, X, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { getVerifiedCommunities, createCommunity } from '@/services/events';
+import { getVerifiedCommunities, createCommunity, joinCommunity, leaveCommunity, getUserCommunities } from '@/services/events';
 import type { Community } from '@/types';
 
 function CreateCommunityModal({ onClose }: { onClose: () => void }) {
@@ -83,21 +83,70 @@ function CreateCommunityModal({ onClose }: { onClose: () => void }) {
 
 export function CommunitiesPage() {
   const [showCreate, setShowCreate] = useState(false);
-  const { data: communities = [], isLoading } = useQuery({
+  const [tab, setTab] = useState<'discover' | 'joined'>('discover');
+  const { user } = useAuthStore();
+  const { showToast } = useUIStore();
+  const queryClient = useQueryClient();
+
+  const { data: allCommunities = [], isLoading: loadingAll } = useQuery({
     queryKey: ['communities'],
     queryFn: getVerifiedCommunities
   });
+
+  const { data: userCommunities = [], isLoading: loadingUser } = useQuery({
+    queryKey: ['userCommunities', user?.uid],
+    queryFn: () => getUserCommunities(user!.uid),
+    enabled: !!user,
+  });
+
+  const joinMutation = useMutation({
+    mutationFn: (communityId: string) => joinCommunity(user!.uid, communityId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['communities'] });
+      queryClient.invalidateQueries({ queryKey: ['userCommunities', user?.uid] });
+      showToast('Joined community!');
+    },
+    onError: () => showToast('Failed to join', 'error')
+  });
+
+  const leaveMutation = useMutation({
+    mutationFn: (communityId: string) => leaveCommunity(user!.uid, communityId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['communities'] });
+      queryClient.invalidateQueries({ queryKey: ['userCommunities', user?.uid] });
+      showToast('Left community');
+    },
+    onError: () => showToast('Failed to leave', 'error')
+  });
+
+  const isLoading = tab === 'discover' ? loadingAll : loadingUser;
+  const communities = tab === 'discover' ? allCommunities : userCommunities;
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1200px] mx-auto w-full space-y-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-line">
         <div>
-          <div className="font-mono text-sienna text-xs tracking-widest mb-2 uppercase">Discover</div>
+          <div className="font-mono text-sienna text-xs tracking-widest mb-2 uppercase">Connect</div>
           <h1 className="font-display text-4xl text-bone">Communities</h1>
           <p className="text-bone-dim mt-2 max-w-xl">Find your tribe. Join local and global communities to discover events, meetups, and group workouts.</p>
         </div>
         <button onClick={() => setShowCreate(true)} className="btn-primary inline-flex items-center gap-2 self-start md:self-auto shrink-0">
           <Plus size={16} /> Start a Community
+        </button>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1 max-w-sm">
+        <button
+          onClick={() => setTab('discover')}
+          className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'discover' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
+        >
+          Discover
+        </button>
+        <button
+          onClick={() => setTab('joined')}
+          className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'joined' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
+        >
+          My Communities
         </button>
       </div>
 
@@ -111,31 +160,51 @@ export function CommunitiesPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {communities.map((community: Community) => (
-            <div key={community.id} className="card overflow-hidden group cursor-pointer hover:border-sienna/50 transition-colors">
-              <div className="h-32 bg-ink-3 relative overflow-hidden">
-                {community.banner && <img src={community.banner} alt={community.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />}
-                <div className="absolute inset-0 bg-gradient-to-t from-ink/80 to-transparent" />
-                <div className="absolute bottom-3 left-4 flex gap-2">
-                  {community.tags?.slice(0,2).map(tag => (
-                    <span key={tag} className="text-[10px] font-mono uppercase bg-ink/80 text-bone px-2 py-1 rounded backdrop-blur-sm">{tag}</span>
-                  ))}
+          {communities.map((community: Community) => {
+            const isJoined = userCommunities.some(c => c.id === community.id);
+            return (
+              <div key={community.id} className="card overflow-hidden group hover:border-sienna/50 transition-colors">
+                <div className="h-32 bg-ink-3 relative overflow-hidden cursor-pointer" onClick={() => {/* optionally nav to community page later */}}>
+                  {community.banner && <img src={community.banner} alt={community.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />}
+                  <div className="absolute inset-0 bg-gradient-to-t from-ink/80 to-transparent" />
+                  <div className="absolute bottom-3 left-4 flex gap-2">
+                    {community.tags?.slice(0,2).map(tag => (
+                      <span key={tag} className="text-[10px] font-mono uppercase bg-ink/80 text-bone px-2 py-1 rounded backdrop-blur-sm">{tag}</span>
+                    ))}
+                  </div>
+                </div>
+                <div className="p-5">
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <h3 className="font-display text-xl text-bone flex items-center gap-2">
+                      {community.name}
+                      {community.isVerified && <CheckCircle2 size={16} className="text-sienna" />}
+                    </h3>
+                  </div>
+                  <p className="text-sm text-bone-dim line-clamp-2 mb-4 h-10">{community.description}</p>
+                  <div className="flex items-center justify-between border-t border-line/30 pt-4">
+                    <div className="flex items-center gap-2 text-xs font-mono text-bone-dim">
+                      <Users size={14} className="text-sienna" /> {community.membersCount} Athletes
+                    </div>
+                    {user && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (community.id) {
+                            if (isJoined) leaveMutation.mutate(community.id);
+                            else joinMutation.mutate(community.id);
+                          }
+                        }}
+                        disabled={joinMutation.isPending || leaveMutation.isPending}
+                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${isJoined ? 'border-line text-bone-dim hover:border-danger hover:text-danger' : 'border-sienna text-sienna hover:bg-sienna hover:text-bone'}`}
+                      >
+                        {isJoined ? 'Leave' : 'Join'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="p-5">
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <h3 className="font-display text-xl text-bone flex items-center gap-2">
-                    {community.name}
-                    {community.isVerified && <CheckCircle2 size={16} className="text-sienna" />}
-                  </h3>
-                </div>
-                <p className="text-sm text-bone-dim line-clamp-2 mb-4 h-10">{community.description}</p>
-                <div className="flex items-center gap-2 text-xs font-mono text-bone-dim border-t border-line/30 pt-4">
-                  <Users size={14} className="text-sienna" /> {community.membersCount} Athletes
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

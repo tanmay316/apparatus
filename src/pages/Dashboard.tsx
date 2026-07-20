@@ -139,17 +139,38 @@ export function Dashboard() {
 
   // Session progress for TodayFocusCard
   let sessionProgress = 0;
-  if (store.isActive && activeDays.length > 0) {
-    const currentDay = activeDays.find(d => d.id === store.dayId);
-    if (currentDay) {
-      const completedEx = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed)).length;
-      const totalEx = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown].length;
-      sessionProgress = totalEx ? Math.round((completedEx / totalEx) * 100) : 0;
-    }
+  if (store.isActive) {
+    const completedEx = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed)).length;
+    const totalEx = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown].length;
+    sessionProgress = totalEx ? Math.round((completedEx / totalEx) * 100) : 0;
   }
 
-  // Find today's day index
-  const currentDayIndex = activeDays.findIndex(d => !todayWorkouts.some((w: any) => w.dayId === d.id)) || 0;
+  // Determine current day index based on active session, today's logged workout, or next queued day
+  const findDayIndex = (dayId: string) => {
+    return activeDays.findIndex(d => d.id === dayId || String(d.dayNumber) === String(dayId));
+  };
+
+  let currentDayIndex = 0;
+  if (store.isActive && store.dayId) {
+    const activeIdx = findDayIndex(store.dayId);
+    if (activeIdx !== -1) currentDayIndex = activeIdx;
+  } else {
+    const todayPlanWorkout = todayWorkouts.find((w: any) =>
+      w.planId === activePlan?.id || activeDays.some(d => d.id === w.dayId || String(d.dayNumber) === String(w.dayId))
+    );
+    if (todayPlanWorkout) {
+      const todayIdx = findDayIndex(todayPlanWorkout.dayId);
+      if (todayIdx !== -1) currentDayIndex = todayIdx;
+    } else {
+      const lastPlanWorkout = recentWorkouts.find((w: any) =>
+        w.planId === activePlan?.id || activeDays.some(d => d.id === w.dayId || String(d.dayNumber) === String(w.dayId))
+      );
+      const lastDayIndex = lastPlanWorkout ? findDayIndex(lastPlanWorkout.dayId) : -1;
+      if (lastDayIndex !== -1 && activeDays.length > 0) {
+        currentDayIndex = (lastDayIndex + 1) % activeDays.length;
+      }
+    }
+  }
 
   // Handle Share button click on a completed workout day
   const handleShareDay = (day: PlanDay) => {
@@ -173,7 +194,7 @@ export function Dashboard() {
       volume: todayWorkout?.volume || 0,
       calories: calculatedCalories,
       exerciseNames: filteredExLogs.map((ex: any) => ex.name),
-      exerciseLogs: filteredExLogs.map((ex: any) => ({ name: ex.name, sets: ex.sets || [] })),
+      exerciseLogs: filteredExLogs.map((ex: any) => ({ name: ex.name, sets: ex.sets || [], section: ex.section, muscleGroup: ex.muscleGroup })),
       bodyweight: workoutWeight || undefined,
     });
   };

@@ -13,7 +13,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
 import { useUserWeight } from '@/hooks/use-user-weight';
-import { followUser, unfollowUser, isFollowing, getFollowCounts, getFollowers, getFollowing, getUsersByUids } from '@/services/social';
+import { followUser, unfollowUser, isFollowing, getFollowCounts, getFollowers, getFollowing, getUsersByUids, getBookmarkedActivities } from '@/services/social';
 import type { Activity as ActivityType, UserProfile, UserStats } from '@/types';
 import { createReport } from '@/services/admin';
 import { getPublicWorkoutsForUser, getUserWorkouts } from '@/services/workouts';
@@ -22,7 +22,7 @@ import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardMod
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { ActivityPostCard } from '@/components/social/ActivityPostCard';
 import { getUserSkills } from '@/services/skills';
-
+import { getUserEventRegistrations, getEventsByIds, getUserCommunities } from '@/services/events';
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
@@ -72,6 +72,31 @@ export function ProfilePage() {
   const [publicPlans, setPublicPlans] = useState<any[]>([]);
   const [importingPlan, setImportingPlan] = useState<string | null>(null);
   const [profileShareData, setProfileShareData] = useState<ShareCardData | null>(null);
+  const [feedTab, setFeedTab] = useState<'posts' | 'bookmarks' | 'events' | 'communities'>('posts');
+
+  const { data: bookmarkedPosts = [] } = useQuery({
+    queryKey: ['bookmarkedPosts', viewProfile?.bookmarks],
+    queryFn: () => getBookmarkedActivities(viewProfile?.bookmarks || []),
+    enabled: isOwnProfile && !!viewProfile?.bookmarks?.length,
+  });
+
+  const { data: userEvents = [] } = useQuery({
+    queryKey: ['userEvents', viewProfile?.uid],
+    queryFn: async () => {
+      if (!viewProfile?.uid) return [];
+      const registrations = await getUserEventRegistrations(viewProfile.uid);
+      if (!registrations.length) return [];
+      const eventIds = registrations.map((r: any) => r.eventId);
+      return await getEventsByIds(eventIds);
+    },
+    enabled: isOwnProfile && !!viewProfile?.uid && feedTab === 'events',
+  });
+
+  const { data: userCommunities = [] } = useQuery({
+    queryKey: ['userCommunities', viewProfile?.uid],
+    queryFn: () => getUserCommunities(viewProfile!.uid),
+    enabled: isOwnProfile && !!viewProfile?.uid && feedTab === 'communities',
+  });
 
   // Theme support local properties mapping
   const themeStyles = theme === 'dark' ? {
@@ -608,36 +633,115 @@ export function ProfilePage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <div className="font-mono text-[10px] text-[var(--teal)] tracking-widest uppercase">
-                    {isOwnProfile ? 'TRAINING HISTORY' : 'PUBLIC TRAINING'}
+                    {isOwnProfile ? 'YOUR LIBRARY' : 'PUBLIC TRAINING'}
                   </div>
                   <h3 className="font-serif text-lg tracking-tight mt-1">
-                    {isOwnProfile ? 'Your Logged Workouts' : 'Public Workout Posts'}
+                    {isOwnProfile ? 'Activity & Bookmarks' : 'Public Workout Posts'}
                   </h3>
                 </div>
               </div>
 
-              {!isOwnProfile && publicPlans.length > 0 && (
-                <div className="mb-6">
-                  <h4 className="font-semibold text-xs text-[var(--muted)] uppercase tracking-wider mb-3">Public templates</h4>
-                  <div className="space-y-2">
-                    {publicPlans.map(plan => (
-                      <div key={plan.id} className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-4">
-                        <div>
-                          <div className="font-semibold text-sm text-[var(--text)]">{plan.title}</div>
-                          <div className="text-xs text-[var(--muted)] mt-0.5">{plan.daysPerWeek || 0} days/week · {plan.description || 'Training plan'}</div>
-                        </div>
-                        <button className="btn-secondary text-xs" disabled={importingPlan === plan.id} onClick={() => importPublicPlan(plan.id)}>
-                          {importingPlan === plan.id ? 'Importing...' : 'Import plan'}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+              {isOwnProfile && (
+                <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden mb-4 border-b border-[var(--border)] pb-2">
+                  <button
+                    onClick={() => setFeedTab('posts')}
+                    className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono transition-colors ${feedTab === 'posts' ? 'bg-[var(--teal)] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]'}`}
+                  >
+                    Your Posts
+                  </button>
+                  <button
+                    onClick={() => setFeedTab('bookmarks')}
+                    className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono transition-colors ${feedTab === 'bookmarks' ? 'bg-[var(--teal)] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]'}`}
+                  >
+                    Saved Bookmarks
+                  </button>
+                  <button
+                    onClick={() => setFeedTab('events')}
+                    className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono transition-colors ${feedTab === 'events' ? 'bg-[var(--teal)] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]'}`}
+                  >
+                    My Events
+                  </button>
+                  <button
+                    onClick={() => setFeedTab('communities')}
+                    className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono transition-colors ${feedTab === 'communities' ? 'bg-[var(--teal)] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]'}`}
+                  >
+                    My Communities
+                  </button>
                 </div>
               )}
 
-              {publicWorkouts.length === 0 ? (
-                <p className="text-sm text-[var(--muted)]">No workouts logged yet.</p>
+              {feedTab === 'bookmarks' && isOwnProfile ? (
+                bookmarkedPosts.length === 0 ? (
+                  <p className="text-sm text-[var(--muted)]">No bookmarks saved yet. Save posts from the activity feed.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {bookmarkedPosts.map(activity => (
+                      <ActivityPostCard
+                        key={activity.id}
+                        activity={activity}
+                        onShare={handleShareWorkout}
+                      />
+                    ))}
+                  </div>
+                )
+              ) : feedTab === 'events' && isOwnProfile ? (
+                userEvents.length === 0 ? (
+                  <p className="text-sm text-[var(--muted)]">No registered events yet. Find events in the Community section.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {userEvents.map((event: any) => (
+                      <div key={event.id} className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg)] flex items-start gap-4">
+                        <img src={event.banner || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-16 h-16 rounded-xl object-cover" />
+                        <div>
+                          <h4 className="font-semibold text-[var(--text)]">{event.title}</h4>
+                          <p className="text-xs text-[var(--muted)] line-clamp-2 mt-1">{event.description}</p>
+                          <Link to="/events" className="text-[var(--teal)] text-xs font-semibold inline-block mt-2 hover:underline">View in Events</Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
+              ) : feedTab === 'communities' && isOwnProfile ? (
+                userCommunities.length === 0 ? (
+                  <p className="text-sm text-[var(--muted)]">Not a member of any communities yet.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {userCommunities.map((community: any) => (
+                      <div key={community.id} className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg)] flex items-center gap-4">
+                        <img src={community.avatarUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-12 h-12 rounded-xl object-cover" />
+                        <div>
+                          <h4 className="font-semibold text-[var(--text)]">{community.name}</h4>
+                          <p className="text-xs text-[var(--muted)]">{community.membersCount} Members</p>
+                          <Link to="/communities" className="text-[var(--teal)] text-xs font-semibold inline-block mt-1 hover:underline">View in Communities</Link>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )
               ) : (
+                <>
+                  {!isOwnProfile && publicPlans.length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="font-semibold text-xs text-[var(--muted)] uppercase tracking-wider mb-3">Public templates</h4>
+                      <div className="space-y-2">
+                        {publicPlans.map(plan => (
+                          <div key={plan.id} className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg)] p-4">
+                            <div>
+                              <div className="font-semibold text-sm text-[var(--text)]">{plan.title}</div>
+                              <div className="text-xs text-[var(--muted)] mt-0.5">{plan.daysPerWeek || 0} days/week · {plan.description || 'Training plan'}</div>
+                            </div>
+                            <button className="btn-secondary text-xs" disabled={importingPlan === plan.id} onClick={() => importPublicPlan(plan.id)}>
+                              {importingPlan === plan.id ? 'Importing...' : 'Import plan'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {publicWorkouts.length === 0 ? (
+                    <p className="text-sm text-[var(--muted)]">No workouts logged yet.</p>
+                  ) : (
                 <div className="space-y-4">
                   {publicWorkouts.slice(0, 10).map(workout => {
                     const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
@@ -678,6 +782,8 @@ export function ProfilePage() {
                     );
                   })}
                 </div>
+              )}
+                </>
               )}
             </motion.div>
           </div>

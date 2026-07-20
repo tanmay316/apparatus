@@ -106,6 +106,7 @@ export interface ExerciseLog {
   notes: string;
   isPR: boolean;
   muscleGroup?: string;
+  section?: 'warmup' | 'skillWork' | 'strength' | 'cooldown';
 }
 
 export interface Workout {

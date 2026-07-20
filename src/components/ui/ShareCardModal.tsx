@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Share2, Check, Image as ImageIcon, List } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
-import { getActiveMuscles, getActiveMusclesFromLogs, calculateShareVolume, calculateBodyweightReps, calculateTotalSets } from '@/lib/muscle-map';
+import { getActiveMuscles, getActiveMusclesFromLogs, calculateShareVolume, calculateBodyweightReps, calculateTotalSets, isWarmupOrCooldown } from '@/lib/muscle-map';
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { drawAnatomyOnCanvas, ACTIVE_ORANGE } from '@/components/ui/AnatomySvg';
+import { format } from 'date-fns';
 import type { MuscleRegion } from '@/lib/muscle-map';
 
 export interface ShareCardData {
@@ -616,7 +617,28 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, maxWid
 }
 
 // ─── Component ───────────────────────────────────────────────
-export function ShareCardModal({ data, onClose }: Props) {
+export function ShareCardModal({ data: originalData, onClose }: Props) {
+  // Filter out warm-up and cool-down exercises
+  const filteredExerciseLogs = originalData.exerciseLogs
+    ? originalData.exerciseLogs.filter((log: any) => !isWarmupOrCooldown(log.name, log.section))
+    : undefined;
+
+  const filteredExerciseNames = originalData.exerciseNames
+    ? originalData.exerciseNames.filter(name => {
+        if (isWarmupOrCooldown(name)) return false;
+        if (filteredExerciseLogs) {
+          return filteredExerciseLogs.some(log => log.name === name);
+        }
+        return true;
+      })
+    : [];
+
+  const data = {
+    ...originalData,
+    exerciseNames: filteredExerciseNames,
+    exerciseLogs: filteredExerciseLogs,
+  };
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { units } = useUIStore();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);

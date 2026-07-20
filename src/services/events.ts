@@ -44,6 +44,46 @@ export async function rejectCommunity(id: string): Promise<void> {
   await deleteDoc(doc(db, 'communities', id));
 }
 
+export async function joinCommunity(userId: string, communityId: string): Promise<void> {
+  const memberId = `${communityId}_${userId}`;
+  await setDoc(doc(db, 'community_members', memberId), {
+    userId,
+    communityId,
+    joinedAt: serverTimestamp()
+  });
+  await updateDoc(doc(db, 'communities', communityId), {
+    membersCount: increment(1)
+  });
+}
+
+export async function leaveCommunity(userId: string, communityId: string): Promise<void> {
+  const memberId = `${communityId}_${userId}`;
+  await deleteDoc(doc(db, 'community_members', memberId));
+  await updateDoc(doc(db, 'communities', communityId), {
+    membersCount: increment(-1)
+  });
+}
+
+export async function getUserCommunities(userId: string): Promise<Community[]> {
+  const q = query(collection(db, 'community_members'), where('userId', '==', userId));
+  const snap = await getDocs(q);
+  const communityIds = snap.docs.map(d => d.data().communityId);
+  if (communityIds.length === 0) return [];
+  
+  const chunks = [];
+  for (let i = 0; i < communityIds.length; i += 10) {
+    chunks.push(communityIds.slice(i, i + 10));
+  }
+  
+  const results: Community[] = [];
+  for (const chunk of chunks) {
+    const cq = query(collection(db, 'communities'), where('__name__', 'in', chunk));
+    const cs = await getDocs(cq);
+    results.push(...cs.docs.map(d => ({ id: d.id, ...d.data() } as Community)));
+  }
+  return results;
+}
+
 // ─── Events ───────────────────────────────────────────────────────
 
 export async function createEvent(event: Omit<AppEvent, 'id' | 'createdAt' | 'status' | 'stats'>): Promise<string> {

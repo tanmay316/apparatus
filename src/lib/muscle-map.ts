@@ -5,6 +5,31 @@
 
 import { COMPACT_LIBRARY } from '@/services/library';
 
+export const isWarmupOrCooldown = (name: string, section?: string): boolean => {
+  if (section === 'warmup' || section === 'cooldown') return true;
+  const nameLower = name.toLowerCase();
+  const keywords = [
+    'warmup', 'warm-up', 'warm up',
+    'cooldown', 'cool-down', 'cool down',
+    'mobility', 'stretch', 'stretching',
+    'breathing', 'breath', 'meditation', 'shodhana', 'bhastrika', 'bhramari', 'pranayama',
+    'salutation', 'dislocation', 'pull-apart', 'wrist circle', 'arm circle', 'circles', 'prep',
+    'pose', 'fold', 'twist', 'opener', 'dog', 'flow', 'scapular'
+  ];
+  if (keywords.some(k => nameLower.includes(k))) return true;
+
+  const found = COMPACT_LIBRARY.find(ex => ex.name.toLowerCase() === nameLower);
+  if (found && found.tags) {
+    if (found.tags.some(t => {
+      const tl = t.toLowerCase();
+      return tl.includes('warmup') || tl.includes('stretch') || tl.includes('mobility') || tl.includes('yoga') || tl.includes('breathing') || tl.includes('meditation');
+    })) {
+      return true;
+    }
+  }
+  return false;
+};
+
 // Canonical muscle region IDs used by the anatomy SVG
 export type MuscleRegion =
   | 'chest'
@@ -172,13 +197,11 @@ export function calculateBodyweightReps(
 
 /** Calculate external-load volume for sharing. Bodyweight contributes to
  * calories, not kg·reps, so the displayed number stays meaningful. */
-export function calculateShareVolume(
-  exerciseLogs: Array<{ name: string; sets: Array<{ completed?: boolean; reps?: number; weight?: number; seconds?: number }> }>,
-  bodyweightKg: number = 70
-): number {
+export function calculateShareVolume(exerciseLogs: any[], bodyweightKg: number = 70): number {
   let totalVolume = 0;
   for (const log of exerciseLogs) {
-    const completedSets = log.sets.filter(isLoggedSet);
+    if (isWarmupOrCooldown(log.name, log.section)) continue;
+    let completedSets = log.sets.filter(isLoggedSet);
     for (const set of completedSets) {
       const reps = set.reps || 0;
       if (reps > 0) {

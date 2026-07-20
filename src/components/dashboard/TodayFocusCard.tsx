@@ -55,9 +55,8 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
 
   // Find today's target day
   const todayDay = activeDays[currentDayIndex] || activeDays[0];
-  const wasCompletedToday = todayWorkouts.some((w: any) => w.dayId === todayDay.id);
+  const wasCompletedToday = todayWorkouts.some((w: any) => w.dayId === todayDay.id || String(todayDay.dayNumber) === String(w.dayId));
   const allExercises = [...(todayDay.warmup || []), ...(todayDay.skillWork || []), ...(todayDay.strength || []), ...(todayDay.cooldown || [])];
-  const pct = wasCompletedToday ? 100 : isActive ? sessionProgress : 0;
 
   return (
     <motion.div
@@ -80,7 +79,7 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
           </div>
           <h2 className="font-serif font-normal text-3xl sm:text-4xl text-[#5d2a1a] mb-4 tracking-[-0.66px] leading-tight">{todayDay.title}</h2>
 
-          <div className="flex flex-wrap gap-2.5 mb-5">
+          <div className="flex flex-wrap gap-2.5">
             <span className="flex items-center gap-1.5 text-xs font-sans text-[#5d2a1a] bg-white/40 px-3.5 py-1.5 rounded-full">
               <Clock size={14} />
               ~{todayDay.time}
@@ -93,19 +92,6 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
               <Layers size={14} />
               {allExercises.length} exercises
             </span>
-          </div>
-
-          {/* Simple Gestural Progress Bar */}
-          <div className="w-full h-2.5 bg-white/40 rounded-full overflow-hidden mb-2">
-            <motion.div
-              className="h-full bg-[#5d2a1a] rounded-full"
-              initial={{ width: 0 }}
-              animate={{ width: `${pct}%` }}
-              transition={{ duration: 0.8, ease: 'easeOut' }}
-            />
-          </div>
-          <div className="font-sans text-xs text-[#5d2a1a] opacity-80 font-normal">
-            DAY {todayDay.dayNumber} / {activeDays.length} · <span className="font-medium">{activePlan.title}</span>
           </div>
         </div>
 

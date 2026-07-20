@@ -148,7 +148,6 @@ export function WorkoutSession() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const completedWorkoutForDay = todayWorkouts.find((w: any) => w.dayId === dayId);
   const historicalLogs = (completedWorkoutForDay?.exercises || []) as any[];
   const historicalExercises = historicalLogs.map(historicalLogToExercise);
   const planExercises = [...(currentDay?.warmup || []), ...(currentDay?.skillWork || []), ...(currentDay?.strength || []), ...(currentDay?.cooldown || [])];
@@ -228,7 +227,7 @@ export function WorkoutSession() {
         dayId: store.dayId!,
         dayTitle: store.dayTitle,
         date: localDateKey(new Date()),
-        startedAt: Timestamp.fromMillis(store.startedAt!),
+        startedAt: store.startedAt ? Timestamp.fromMillis(store.startedAt) : Timestamp.now(),
         finishedAt: null, // Set in backend
         durationMin: finalDurationMin,
         calories,
@@ -277,8 +276,7 @@ export function WorkoutSession() {
             bodyweight: userWeight || null,
             exercises: exLogs.map(e => e.name),
             // Preserve completion state so shared anatomy reflects this
-            // workout's actual completed sets, not the planned exercises.
-            exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets, muscleGroup: e.muscleGroup }))
+            exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets, muscleGroup: e.muscleGroup, section: e.section }))
           },
           visibility: privacy,
           likesCount: 0,
@@ -330,7 +328,7 @@ export function WorkoutSession() {
         volume: totalVol,
         calories,
         exerciseNames: filteredShareExLogs.map(e => e.name),
-        exerciseLogs: filteredShareExLogs.map(e => ({ name: e.name, sets: e.sets, muscleGroup: e.muscleGroup })),
+        exerciseLogs: filteredShareExLogs.map(e => ({ name: e.name, sets: e.sets, muscleGroup: e.muscleGroup, section: e.section })),
         bodyweight: userWeight || undefined,
       });
       // End and clear the persisted session immediately. The celebration and
@@ -511,17 +509,37 @@ export function WorkoutSession() {
               onChange={(e) => setSelectedWorkoutIndex(Number(e.target.value))}
               className="bg-ink-2 border border-line text-bone text-xs font-mono rounded px-2 py-1"
             >
-              {todayCompletedWorkouts.map((w: any, idx: number) => (
-                <option key={idx} value={idx}>
-                  {new Date(w.startedAt?.toMillis ? w.startedAt.toMillis() : Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </option>
-              ))}
+              {todayCompletedWorkouts.map((w: any, idx: number) => {
+                let ms = Date.now();
+                if (w.startedAt) {
+                  if (typeof w.startedAt.toMillis === 'function') ms = w.startedAt.toMillis();
+                  else if (w.startedAt.seconds) ms = w.startedAt.seconds * 1000;
+                  else if (typeof w.startedAt === 'number') ms = w.startedAt;
+                } else if (w.createdAt) {
+                  if (typeof w.createdAt.toMillis === 'function') ms = w.createdAt.toMillis();
+                  else if (w.createdAt.seconds) ms = w.createdAt.seconds * 1000;
+                  else if (typeof w.createdAt === 'number') ms = w.createdAt;
+                }
+                return (
+                  <option key={idx} value={idx}>
+                    {new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </option>
+                );
+              })}
             </select>
           )}
         </div>
         <h1 className="font-display text-3xl mb-2">{currentDay.title}</h1>
         <div className="text-sm text-bone-dim font-mono">
           SKILL: <span className="text-bone">{currentDay.skill || 'None'}</span> • PROGRESS: <span className="text-sienna">{activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length}/{activeExercises.length}</span>
+        </div>
+        <div className="w-full h-1.5 bg-line/20 rounded-full overflow-hidden mt-3 max-w-sm">
+          <motion.div 
+            className="h-full bg-sienna rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${activeExercises.length ? Math.round((activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length / activeExercises.length) * 100) : 0}%` }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+          />
         </div>
         
         {/* Dynamic metrics strip */}
