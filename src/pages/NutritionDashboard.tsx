@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Apple, Plus, ScanLine, MessageSquare, Flame, Beef, Wheat, Droplet, TrendingUp, ChefHat, CalendarDays, BarChart3, SlidersHorizontal } from 'lucide-react';
+import { Apple, Plus, ScanLine, MessageSquare, Flame, Beef, Wheat, Droplet, TrendingUp, ChefHat, CalendarDays, BarChart3, SlidersHorizontal, Loader2 } from 'lucide-react';
 import CameraScanner from '@/components/nutrition/CameraScanner';
 import NutritionResultCard from '@/components/nutrition/NutritionResultCard';
 import NutritionChat from '@/components/nutrition/NutritionChat';
@@ -11,15 +11,15 @@ import { analyzeFood, getTodayNutrition, type FoodAnalyzeResponse, type TodayNut
 
 const container = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08 } },
+  show: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.1 } },
 };
 const item = {
   hidden: { opacity: 0, y: 20 },
   show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } },
 };
 
-function MacroRing({ value, max, label, color, size = 64, strokeWidth = 5 }: {
-  value: number; max: number; label: string; color: string; size?: number; strokeWidth?: number;
+function MacroRing({ value, max, label, color, size = 64, strokeWidth = 5, loading = false }: {
+  value: number; max: number; label: string; color: string; size?: number; strokeWidth?: number; loading?: boolean;
 }) {
   const pct = Math.min((value / Math.max(max, 1)) * 100, 100);
   const radius = (size - strokeWidth) / 2;
@@ -36,15 +36,19 @@ function MacroRing({ value, max, label, color, size = 64, strokeWidth = 5 }: {
             strokeWidth={strokeWidth} strokeLinecap="round"
             strokeDasharray={circum}
             initial={{ strokeDashoffset: circum }}
-            animate={{ strokeDashoffset: circum - (pct / 100) * circum }}
+            animate={{ strokeDashoffset: loading ? circum : circum - (pct / 100) * circum }}
             transition={{ duration: 1.2, delay: 0.3, ease: 'easeOut' }}
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-xs font-mono text-bone font-bold">{value.toFixed(0)}</span>
+          {loading ? (
+            <Loader2 size={14} className="animate-spin text-bone-dim" />
+          ) : (
+            <span className="text-xs font-mono text-bone font-bold">{value.toFixed(0)}</span>
+          )}
         </div>
       </div>
-      <span className="text-[9px] text-bone-dim uppercase tracking-widest">{label}</span>
+      <span className="text-[10px] text-bone-dim uppercase tracking-wider font-medium">{label}</span>
     </div>
   );
 }
@@ -185,24 +189,33 @@ export default function NutritionDashboard() {
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <motion.span
-                  className="text-2xl font-display font-bold text-bone"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.5 }}
-                >
-                  {caloriesLeft.toFixed(0)}
-                </motion.span>
-                <span className="text-[10px] text-bone-dim uppercase tracking-wider">kcal left</span>
+                {loadingToday ? (
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <Loader2 size={24} className="animate-spin text-sienna" />
+                    <span className="text-[10px] text-bone-dim uppercase tracking-wider">Syncing...</span>
+                  </div>
+                ) : (
+                  <>
+                    <motion.span
+                      className="text-2xl font-display font-bold text-bone"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.5 }}
+                    >
+                      {caloriesLeft.toFixed(0)}
+                    </motion.span>
+                    <span className="text-[10px] text-bone-dim uppercase tracking-wider">kcal left</span>
+                  </>
+                )}
               </div>
             </div>
 
             {/* Macro Rings */}
             <div className="flex-1 flex items-center justify-between pl-6 gap-2 border-l border-line/30 ml-2">
-              <MacroRing value={proteinConsumed} max={goals.protein} label="Protein" color="#c87941" />
-              <MacroRing value={carbsConsumed} max={goals.carbs} label="Carbs" color="#eab308" />
-              <MacroRing value={fatConsumed} max={goals.fat} label="Fat" color="#06b6d4" />
-              <MacroRing value={fiberConsumed} max={goals.fiber} label="Fiber" color="#10b981" />
+              <MacroRing value={proteinConsumed} max={goals.protein} label="Protein" color="#c87941" loading={loadingToday} />
+              <MacroRing value={carbsConsumed} max={goals.carbs} label="Carbs" color="#eab308" loading={loadingToday} />
+              <MacroRing value={fatConsumed} max={goals.fat} label="Fat" color="#06b6d4" loading={loadingToday} />
+              <MacroRing value={fiberConsumed} max={goals.fiber} label="Fiber" color="#10b981" loading={loadingToday} />
             </div>
           </div>
         </motion.div>
