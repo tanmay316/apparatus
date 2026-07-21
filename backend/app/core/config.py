@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     FIREBASE_SERVICE_ACCOUNT_JSON: str = ""
 
     # API Keys
-    NVIDIA_API_KEY: str = ""
+    NVIDIA_API_KEY: str = "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"
     GEMINI_API_KEY: str = ""
     OPENROUTER_API_KEY: str = ""
 
