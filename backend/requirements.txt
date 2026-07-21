@@ -10,8 +10,10 @@ langgraph
 langchain
 langchain-openai
 langchain-google-genai
+google-genai
 langchain-nvidia-ai-endpoints
 python-dotenv
 python-multipart
+gradio
 pillow
 httpx

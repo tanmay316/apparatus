@@ -14,8 +14,13 @@ class Settings(BaseSettings):
     def cors_origins(self) -> List[str]:
         return [s.strip() for s in self.BACKEND_CORS_ORIGINS.split(",") if s.strip()]
 
-    # Database setup (PostgreSQL / SQLite fallback)
-    SQLALCHEMY_DATABASE_URI: str = os.getenv("DATABASE_URL", "sqlite:///./apparatus.db")
+    SQLALCHEMY_DATABASE_URI: str = "sqlite:///./apparatus.db"
+
+    def get_database_uri(self) -> str:
+        url = os.getenv("DATABASE_URL", self.SQLALCHEMY_DATABASE_URI)
+        if url and url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        return url
 
     # Firebase Admin SDK credentials
     FIREBASE_SERVICE_ACCOUNT_JSON: str = ""
