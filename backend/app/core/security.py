@@ -54,11 +54,16 @@ def _decode_jwt_payload_fallback(token: str) -> dict:
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
     token = credentials.credentials
+    # Fast path: direct JWT decode when service account JSON is not configured
+    if not settings.FIREBASE_SERVICE_ACCOUNT_JSON:
+        payload = _decode_jwt_payload_fallback(token)
+        if payload.get("uid") and payload["uid"] != "unknown_user":
+            return payload
+
     try:
         decoded_token = auth.verify_id_token(token)
         return decoded_token
     except Exception as e:
-        logger.warning(f"Firebase token verification failed: {e}. Trying JWT fallback.")
         payload = _decode_jwt_payload_fallback(token)
         if payload.get("uid") and payload["uid"] != "unknown_user":
             return payload

@@ -5,6 +5,8 @@ import CameraScanner from '@/components/nutrition/CameraScanner';
 import NutritionResultCard from '@/components/nutrition/NutritionResultCard';
 import NutritionChat from '@/components/nutrition/NutritionChat';
 import NutritionProfileModal from '@/components/nutrition/NutritionProfileModal';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import { analyzeFood, getTodayNutrition, type FoodAnalyzeResponse, type TodayNutrition } from '@/services/nutrition-api';
 
 const container = {
@@ -81,6 +83,10 @@ export default function NutritionDashboard() {
 
   useEffect(() => {
     loadToday();
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) loadToday();
+    });
+    return () => unsubscribe();
   }, [loadToday]);
 
   // Listen for refresh event from chat
