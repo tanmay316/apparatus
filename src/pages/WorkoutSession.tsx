@@ -186,7 +186,7 @@ export function WorkoutSession() {
   const maxWeightDisplay = maxWeight > 0 ? `${maxWeight.toLocaleString()} ${displayWeightUnit}` : `0 ${displayWeightUnit}`;
 
   const handleFinish = async () => {
-    if (!user || !store.isActive) return;
+    if (!user || !store.isActive || isSaving) return;
     setIsSaving(true);
     
     const exLogs = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed));

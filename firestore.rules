@@ -38,6 +38,12 @@ service cloud.firestore {
         || (activity.visibility == 'followers' && isFollower(activity.userId));
     }
 
+    // ─── Admin Settings ─────────────────────────────────────────
+    match /admin_settings/{document} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
     // ─── User Profiles ──────────────────────────────────────────
     // Profiles are public only when the owner opts in. Stats follow the same rule.
     match /users/{uid} {

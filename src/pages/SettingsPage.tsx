@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Save, LogOut, Check, User, Scale, Eye, Upload, Download, Trash2, Sun, Moon, Globe, Ruler } from 'lucide-react';
 import { deleteUser, reauthenticateWithPopup } from 'firebase/auth';
 import { useAuthStore } from '@/stores/auth-store';
+import PersonalAISettings from '@/components/settings/PersonalAISettings';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { googleProvider } from '@/lib/firebase';
@@ -244,6 +245,8 @@ export function SettingsPage() {
                 onChange={(e) => setBio(e.target.value)}
               />
             </div>
+            
+            <PersonalAISettings />
           </motion.div>
 
           {/* right: Avatar preview & Actions */}

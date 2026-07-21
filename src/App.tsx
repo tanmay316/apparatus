@@ -10,6 +10,7 @@ import { PlanList } from '@/pages/PlanList';
 import { PlanDetail } from '@/pages/PlanDetail';
 import { DayView } from '@/pages/DayView';
 import { ExplorePage } from '@/pages/ExplorePage';
+import NutritionDashboard from './pages/NutritionDashboard';
 import { AdminPage } from '@/pages/AdminPage';
 import { WorkoutSession } from '@/pages/WorkoutSession';
 import { ProgressPage } from '@/pages/ProgressPage';
@@ -99,11 +100,11 @@ export function App() {
             <Route path="feed" element={<FeedPage />} />
             <Route path="communities" element={<CommunitiesPage />} />
             <Route path="communities/:communityId" element={<CommunityDetailPage />} />
+            <Route path="nutrition" element={<NutritionDashboard />} />
             <Route path="events" element={<EventsPage />} />
             <Route path="events/:eventId" element={<EventDetailPage />} />
             <Route path="events/:eventId/dashboard" element={<EventDashboardPage />} />
             <Route path="profile/:username" element={<ProfilePage />} />
-            <Route path="guide/:section" element={<GuidePage />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="admin" element={<AdminPage />} />
           </Route>

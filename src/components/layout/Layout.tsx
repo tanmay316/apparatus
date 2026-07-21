@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { ReminderManager } from './ReminderManager';
+import FloatingAIBot from '../nutrition/FloatingAIBot';
 
 export function Layout() {
   const location = useLocation();
@@ -17,6 +18,7 @@ export function Layout() {
       <Sidebar />
       <Topbar />
       <ReminderManager />
+      <FloatingAIBot />
 
       <main className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 relative z-0">
         <AnimatePresence mode="wait">

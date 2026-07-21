@@ -14,6 +14,7 @@ import { deletePlan } from '@/services/plans';
 import { getSystemLogs, clearAllSystemLogs } from '@/services/logger';
 import { getPendingCommunities, approveCommunity, rejectCommunity, getPendingEvents, updateEventStatus } from '@/services/events';
 import { getAvatarUrl } from '@/lib/avatar';
+import AdminNutritionSettings from '../components/admin/AdminNutritionSettings';
 
 type AdminTab = 'overview' | 'users' | 'reports' | 'logs' | 'seed' | 'communities' | 'events';
 
@@ -181,6 +182,13 @@ export function AdminPage() {
     {tab === 'overview' && <div className="space-y-5">
       {overview.isLoading ? <div className="card p-10 text-center text-bone-dim">Loading analytics...</div> : overview.data && <>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3"><Metric label="USERS" value={overview.data.users} detail={`${overview.data.activeUsers30d} active in 30 days`} icon={Users} /><Metric label="WORKOUTS" value={overview.data.workouts} detail={`${overview.data.workouts30d} in 30 days`} icon={Activity} /><Metric label="ACTIVITIES" value={overview.data.activities} detail="Published feed records" icon={Gauge} color="text-amber" /><Metric label="OPEN REPORTS" value={overview.data.openReports} detail={`${overview.data.bannedUsers} active bans`} icon={Flag} color="text-danger" /></div>
+        
+        {/* Global AI Nutrition Settings */}
+        <section className="mb-10">
+          <h2 className="text-xl font-display font-semibold text-bone mb-6 uppercase tracking-wider">AI Nutrition Agent</h2>
+          <AdminNutritionSettings />
+        </section>
+
         <div className="card p-5"><div className="flex items-center gap-2 mb-4"><Activity size={18} className="text-sienna" /><h2 className="font-display text-xl">Platform health</h2></div><div className="grid grid-cols-1 md:grid-cols-3 gap-3"><div className="bg-ink-2 border border-line/50 rounded-lg p-4"><div className="font-mono text-[10px] text-bone-dim">30-DAY USER ACTIVITY</div><div className="font-display text-2xl mt-2 text-sienna">{overview.data.activeUsers30d} users</div><div className="text-xs text-bone-dim mt-1">Profiles updated recently</div></div><div className="bg-ink-2 border border-line/50 rounded-lg p-4"><div className="font-mono text-[10px] text-bone-dim">30-DAY TRAINING</div><div className="font-display text-2xl mt-2 text-amber">{overview.data.workouts30d} sessions</div><div className="text-xs text-bone-dim mt-1">Completed workouts logged</div></div><div className="bg-ink-2 border border-line/50 rounded-lg p-4"><div className="font-mono text-[10px] text-bone-dim">MODERATION QUEUE</div><div className="font-display text-2xl mt-2 text-danger">{overview.data.openReports} reports</div><div className="text-xs text-bone-dim mt-1">Open or being reviewed</div></div></div></div>
       </>}
     </div>}

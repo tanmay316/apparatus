@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Dumbbell, Calendar, TrendingUp, Target, Ruler, Trophy, Compass,
-  Users, ShieldCheck, Wind, Utensils, BookOpen, X, Globe, MapPin
+  Users, ShieldCheck, Wind, Utensils, BookOpen, X, Globe, MapPin, Apple
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -23,6 +23,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'plans', path: '/plans', label: 'Plans', icon: <BookOpen size={18} />, section: 'TRAIN' },
   { id: 'calendar', path: '/calendar', label: 'Calendar', icon: <Calendar size={18} />, section: 'TRAIN' },
   { id: 'progress', path: '/progress', label: 'Progress', icon: <TrendingUp size={18} />, section: 'TRAIN' },
+  { id: 'nutrition', path: '/nutrition', label: 'Nutrition', icon: <Apple size={18} />, section: 'TRAIN' },
   // Performance
   { id: 'skills', path: '/skills', label: 'Skills', icon: <Target size={18} />, section: 'PERFORMANCE' },
   { id: 'measurements', path: '/measurements', label: 'Body Log', icon: <Ruler size={18} />, section: 'PERFORMANCE' },
@@ -34,7 +35,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'events', path: '/events', label: 'Events', icon: <MapPin size={18} />, section: 'COMMUNITY' },
   // Knowledge
   { id: 'warmup', path: '/guide/warmup', label: 'Warm-up', icon: <Wind size={18} />, section: 'KNOWLEDGE' },
-  { id: 'nutrition', path: '/guide/nutrition', label: 'Nutrition', icon: <Utensils size={18} />, section: 'KNOWLEDGE' },
 ];
 
 export function Sidebar() {
