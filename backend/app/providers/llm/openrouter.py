@@ -15,10 +15,10 @@ from app.core.config import settings
 class OpenRouterLLMProvider(BaseLLMProvider):
     provider_name = "openrouter"
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: str = "google/gemma-4-31b-it:free"):
         self.api_key = api_key or settings.OPENROUTER_API_KEY
         self.base_url = "https://openrouter.ai/api/v1"
-        self.model = "google/gemini-2.0-flash-001"
+        self.model = model
 
     async def chat(
         self,

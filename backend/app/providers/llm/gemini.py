@@ -15,10 +15,10 @@ from app.core.config import settings
 class GeminiLLMProvider(BaseLLMProvider):
     provider_name = "gemini"
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.0-flash-lite"):
         self.api_key = api_key or settings.GEMINI_API_KEY
-        self.client = genai.Client(api_key=self.api_key)
-        self.model = "gemini-2.0-flash"
+        self.client = genai.Client(api_key=self.api_key) if self.api_key else None
+        self.model = model
 
     async def chat(
         self,
@@ -28,6 +28,8 @@ class GeminiLLMProvider(BaseLLMProvider):
         max_tokens: int = 2048,
         json_mode: bool = False,
     ) -> LLMResponse:
+        if not self.client:
+            return LLMResponse(content="Error: Gemini API key not provided", provider_used=self.provider_name)
         start = time.time()
         try:
             contents = []
