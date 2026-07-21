@@ -27,6 +27,7 @@ class UserRepository:
         return self.db.query(UserPreference).filter(UserPreference.user_id == uid).first()
 
     def upsert_preferences(self, uid: str, data: dict) -> UserPreference:
+        self.get_or_create_user(uid)
         pref = self.get_preferences(uid)
         if pref:
             for k, v in data.items():
@@ -42,6 +43,7 @@ class UserRepository:
         return self.db.query(UserGoal).filter(UserGoal.user_id == uid).first()
 
     def upsert_goals(self, uid: str, data: dict) -> UserGoal:
+        self.get_or_create_user(uid)
         goal = self.get_goals(uid)
         if goal:
             for k, v in data.items():

@@ -181,7 +181,9 @@ async def update_nutrition_profile(
     db: Session = Depends(get_db),
 ):
     uid = current_user["uid"]
+    email = current_user.get("email", "")
     user_repo = UserRepository(db)
+    user_repo.get_or_create_user(uid, email)
     
     # Calculate TDEE
     from app.tools.tdee_calculator import calculate_tdee_and_macros
