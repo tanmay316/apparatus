@@ -65,7 +65,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     reader.readAsDataURL(file);
   };
 
-  const handleLogMeal = async (msgId: string, nutritionData: FoodAnalyzeResponse) => {
+  const handleLogMeal = async (msgId: string, nutritionData?: FoodAnalyzeResponse) => {
     if (!nutritionData) return;
     setLoggingMessageId(msgId);
     try {
