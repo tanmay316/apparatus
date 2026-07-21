@@ -225,7 +225,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
       <motion.div
         initial={{ y: '100%', opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="relative w-full max-w-lg bg-ink-2 rounded-t-xl sm:rounded-xl border border-line flex flex-col max-h-[90vh]"
+        className="relative w-full max-w-lg bg-ink-2 rounded-t-3xl sm:rounded-3xl border border-line flex flex-col max-h-[90dvh] sm:max-h-[90vh]"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-line">

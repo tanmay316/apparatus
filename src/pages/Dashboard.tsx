@@ -42,6 +42,13 @@ function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function getMonday(d: Date) {
+  const date = new Date(d);
+  const day = date.getDay() || 7; // Sunday is 0, make it 7
+  date.setDate(date.getDate() - (day - 1));
+  return date;
+}
+
 // ─── Dashboard ───────────────────────────────────────────────
 
 export function Dashboard() {
@@ -131,9 +138,12 @@ export function Dashboard() {
     });
   }
 
+  const currentWeekStart = localDateKey(getMonday(new Date()));
+  const currentWeekWorkouts = recentWorkouts.filter((w: any) => w.date >= currentWeekStart);
+
   const completedCount = activePlan
-    ? new Set(recentWorkouts.filter((w: any) => w.planId === activePlan.id).map((w: any) => w.dayId)).size
-    : streakDays.filter(s => s.done).length;
+    ? new Set(currentWeekWorkouts.filter((w: any) => w.planId === activePlan.id || activeDays.some(d => d.id === w.dayId)).map((w: any) => w.dayId)).size
+    : currentWeekWorkouts.length;
   const targetDays = activePlan?.daysPerWeek || 6;
   const followersActivity = feed.filter((act: any) => act.userId !== profile.uid);
 
@@ -251,7 +261,7 @@ export function Dashboard() {
         activePlan={activePlan}
         activeDays={activeDays}
         todayWorkouts={todayWorkouts}
-        recentWorkouts={recentWorkouts}
+        recentWorkouts={currentWeekWorkouts}
         onShareDay={handleShareDay}
         isActive={store.isActive}
         sessionProgress={sessionProgress}

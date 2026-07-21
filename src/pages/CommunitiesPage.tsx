@@ -1,10 +1,11 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users, Plus, ShieldAlert, X, CheckCircle2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { getVerifiedCommunities, createCommunity, joinCommunity, leaveCommunity, getUserCommunities } from '@/services/events';
+import { getVerifiedCommunities, createCommunity, joinCommunity, leaveCommunity, getUserCommunities, getUserSubmittedCommunities } from '@/services/events';
 import type { Community } from '@/types';
 
 function CreateCommunityModal({ onClose }: { onClose: () => void }) {
@@ -30,6 +31,7 @@ function CreateCommunityModal({ onClose }: { onClose: () => void }) {
       });
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userSubmittedCommunities'] });
       showToast('Community request submitted to Admin for approval.', 'info');
       onClose();
     },
@@ -43,17 +45,17 @@ function CreateCommunityModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80 backdrop-blur-sm">
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-ink rounded-[32px] p-8 max-w-lg w-full border border-line shadow-2xl overflow-hidden">
-        <div className="flex justify-between items-start mb-6">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/80 backdrop-blur-sm sm:overflow-y-auto">
+      <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} className="bg-ink rounded-t-[32px] sm:rounded-[32px] p-5 sm:p-8 max-w-lg w-full sm:border border-t border-line shadow-2xl max-h-[90dvh] sm:max-h-[90vh] flex flex-col">
+        <div className="flex justify-between items-start mb-4 sm:mb-6 shrink-0">
           <div>
-            <h2 className="font-display text-2xl text-bone">Start a Community</h2>
-            <p className="text-sm text-bone-dim mt-1">Submit your community for admin verification.</p>
+            <h2 className="font-display text-xl sm:text-2xl text-bone">Start a Community</h2>
+            <p className="text-xs sm:text-sm text-bone-dim mt-0.5 sm:mt-1">Submit your community for admin verification.</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-ink-2 text-bone-dim transition-colors"><X size={20} /></button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-1">
           <div>
             <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Name</label>
             <input required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Mumbai Calisthenics" className="input-field w-full" />
@@ -71,7 +73,7 @@ function CreateCommunityModal({ onClose }: { onClose: () => void }) {
             <input value={banner} onChange={e => setBanner(e.target.value)} placeholder="https://..." className="input-field w-full" />
           </div>
 
-          <div className="pt-4 border-t border-line/30 flex gap-3 justify-end">
+          <div className="pt-4 border-t border-line/30 flex gap-3 justify-end shrink-0">
             <button type="button" onClick={onClose} className="btn-secondary px-6 py-2">Cancel</button>
             <button type="submit" disabled={createMutation.isPending || !name.trim() || !description.trim()} className="btn-primary px-6 py-2">{createMutation.isPending ? 'Submitting...' : 'Submit Request'}</button>
           </div>
@@ -83,7 +85,7 @@ function CreateCommunityModal({ onClose }: { onClose: () => void }) {
 
 export function CommunitiesPage() {
   const [showCreate, setShowCreate] = useState(false);
-  const [tab, setTab] = useState<'discover' | 'joined'>('discover');
+  const [tab, setTab] = useState<'discover' | 'joined' | 'submitted'>('discover');
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
@@ -97,6 +99,12 @@ export function CommunitiesPage() {
     queryKey: ['userCommunities', user?.uid],
     queryFn: () => getUserCommunities(user!.uid),
     enabled: !!user,
+  });
+
+  const { data: submittedCommunities = [], isLoading: loadingSubmitted } = useQuery({
+    queryKey: ['userSubmittedCommunities', user?.uid],
+    queryFn: () => getUserSubmittedCommunities(user!.uid),
+    enabled: !!user && tab === 'submitted',
   });
 
   const joinMutation = useMutation({
@@ -119,8 +127,8 @@ export function CommunitiesPage() {
     onError: () => showToast('Failed to leave', 'error')
   });
 
-  const isLoading = tab === 'discover' ? loadingAll : loadingUser;
-  const communities = tab === 'discover' ? allCommunities : userCommunities;
+  const isLoading = tab === 'discover' ? loadingAll : tab === 'joined' ? loadingUser : loadingSubmitted;
+  const communities = tab === 'discover' ? allCommunities : tab === 'joined' ? userCommunities : submittedCommunities;
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1200px] mx-auto w-full space-y-8">
@@ -135,7 +143,7 @@ export function CommunitiesPage() {
         </button>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1 max-w-sm">
+      <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1 max-w-md">
         <button
           onClick={() => setTab('discover')}
           className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'discover' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
@@ -148,6 +156,14 @@ export function CommunitiesPage() {
         >
           My Communities
         </button>
+        {user && (
+          <button
+            onClick={() => setTab('submitted')}
+            className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'submitted' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
+          >
+            My Submissions
+          </button>
+        )}
       </div>
 
       {isLoading ? (
@@ -155,54 +171,84 @@ export function CommunitiesPage() {
       ) : communities.length === 0 ? (
         <div className="text-center py-20 border border-dashed border-line rounded-[32px] bg-ink-2">
           <Users size={48} className="mx-auto text-bone-dim mb-4 opacity-50" />
-          <h3 className="font-display text-xl mb-2 text-bone">No Communities Yet</h3>
-          <p className="text-sm text-bone-dim max-w-sm mx-auto">Be the first to start a verified fitness community in your area.</p>
+          <h3 className="font-display text-xl mb-2 text-bone">
+            {tab === 'submitted' ? 'No Submissions Yet' : 'No Communities Yet'}
+          </h3>
+          <p className="text-sm text-bone-dim max-w-sm mx-auto">
+            {tab === 'submitted' ? 'You have not submitted any community requests.' : 'Be the first to start a verified fitness community in your area.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {communities.map((community: Community) => {
             const isJoined = userCommunities.some(c => c.id === community.id);
+            const isOwner = user?.uid === community.ownerId;
+            const status = community.status || (community.isVerified ? 'approved' : 'pending');
+
             return (
-              <div key={community.id} className="card overflow-hidden group hover:border-sienna/50 transition-colors">
-                <div className="h-32 bg-ink-3 relative overflow-hidden cursor-pointer" onClick={() => {/* optionally nav to community page later */}}>
-                  {community.banner && <img src={community.banner} alt={community.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />}
-                  <div className="absolute inset-0 bg-gradient-to-t from-ink/80 to-transparent" />
-                  <div className="absolute bottom-3 left-4 flex gap-2">
-                    {community.tags?.slice(0,2).map(tag => (
-                      <span key={tag} className="text-[10px] font-mono uppercase bg-ink/80 text-bone px-2 py-1 rounded backdrop-blur-sm">{tag}</span>
-                    ))}
-                  </div>
-                </div>
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <h3 className="font-display text-xl text-bone flex items-center gap-2">
-                      {community.name}
-                      {community.isVerified && <CheckCircle2 size={16} className="text-sienna" />}
-                    </h3>
-                  </div>
-                  <p className="text-sm text-bone-dim line-clamp-2 mb-4 h-10">{community.description}</p>
-                  <div className="flex items-center justify-between border-t border-line/30 pt-4">
-                    <div className="flex items-center gap-2 text-xs font-mono text-bone-dim">
-                      <Users size={14} className="text-sienna" /> {community.membersCount} Athletes
+              <Link to={`/communities/${community.id}`} key={community.id} className="card overflow-hidden group hover:border-sienna/50 transition-colors flex flex-col justify-between cursor-pointer">
+                <div>
+                  <div className="h-32 bg-ink-3 relative overflow-hidden">
+                    {community.banner && <img src={community.banner} alt={community.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />}
+                    <div className="absolute inset-0 bg-gradient-to-t from-ink/80 to-transparent" />
+                    <div className="absolute bottom-3 left-4 flex gap-2">
+                      {community.tags?.slice(0,2).map(tag => (
+                        <span key={tag} className="text-[10px] font-mono uppercase bg-ink/80 text-bone px-2 py-1 rounded backdrop-blur-sm">{tag}</span>
+                      ))}
                     </div>
-                    {user && (
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (community.id) {
-                            if (isJoined) leaveMutation.mutate(community.id);
-                            else joinMutation.mutate(community.id);
-                          }
-                        }}
-                        disabled={joinMutation.isPending || leaveMutation.isPending}
-                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${isJoined ? 'border-line text-bone-dim hover:border-danger hover:text-danger' : 'border-sienna text-sienna hover:bg-sienna hover:text-bone'}`}
-                      >
-                        {isJoined ? 'Leave' : 'Join'}
-                      </button>
+                  </div>
+                  <div className="p-5">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <h3 className="font-display text-xl text-bone flex items-center gap-2">
+                        {community.name}
+                        {community.isVerified && <CheckCircle2 size={16} className="text-sienna" />}
+                      </h3>
+                      {tab === 'submitted' && (
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded uppercase font-bold shrink-0 ${
+                          status === 'approved' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                          status === 'rejected' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                          'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                        }`}>
+                          {status === 'approved' ? '✓ Approved' : status === 'rejected' ? '✕ Rejected' : '⏳ Pending'}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-bone-dim line-clamp-2 mb-3">{community.description}</p>
+                    
+                    {status === 'rejected' && community.rejectionReason && (
+                      <div className="bg-rose-500/10 border border-rose-500/30 p-2.5 rounded-lg text-xs text-rose-300 mb-3">
+                        <span className="font-bold">Reason:</span> {community.rejectionReason}
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
+
+                <div className="p-5 pt-0 border-t border-line/30 flex items-center justify-between mt-auto">
+                  <div className="flex items-center gap-2 text-xs font-mono text-bone-dim">
+                    <Users size={14} className="text-sienna" /> {community.membersCount} Athletes
+                  </div>
+                  {isOwner ? (
+                    <span className="text-xs px-3 py-1 rounded-full bg-sienna/20 text-sienna border border-sienna/40 font-mono font-bold">
+                      Leader
+                    </span>
+                  ) : user && tab !== 'submitted' ? (
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (community.id) {
+                          if (isJoined) leaveMutation.mutate(community.id);
+                          else joinMutation.mutate(community.id);
+                        }
+                      }}
+                      disabled={joinMutation.isPending || leaveMutation.isPending}
+                      className={`text-xs px-3 py-1 rounded-full border transition-colors ${isJoined ? 'border-line text-bone-dim hover:border-danger hover:text-danger' : 'border-sienna text-sienna hover:bg-sienna hover:text-bone'}`}
+                    >
+                      {isJoined ? 'Leave' : 'Join'}
+                    </button>
+                  ) : null}
+                </div>
+              </Link>
             );
           })}
         </div>

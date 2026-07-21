@@ -25,6 +25,10 @@
     box-shadow: 0 0 10px rgba(var(--color-sienna), 0.5);
   }
 
+  [data-theme='dark'] .brand-logo-img {
+    filter: invert(1) brightness(1.2);
+  }
+
   /* Sienna background text contrast overrides (forces legible light brown/peach text) */
   .bg-sienna,
   .bg-sienna-dim,

@@ -84,9 +84,11 @@ export function Sidebar() {
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-line">
-          <div className="flex items-baseline gap-2.5">
-            <div className="brand-mark flex-none" />
-            <span className="brand-wordmark text-[15px]">APPARATUS</span>
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="Apparatus" className="h-6 w-auto brand-logo-img" />
+            <span className="font-sans tracking-[0.3em] text-[13px] font-light text-bone mt-0.5" style={{ textShadow: '0 0 10px rgba(93,42,26,0.3)' }}>
+              ΛPPΛRΛTUS
+            </span>
           </div>
           <button
             onClick={closeSidebar}

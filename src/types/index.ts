@@ -261,6 +261,8 @@ export interface SystemLog {
 
 // ─── Communities & Events ─────────────────────────────────────
 
+export type CommunityStatus = 'pending' | 'approved' | 'rejected';
+
 export interface Community {
   id?: string;
   name: string;
@@ -269,12 +271,14 @@ export interface Community {
   ownerId: string;
   membersCount: number;
   isVerified: boolean;
+  status?: CommunityStatus;
+  rejectionReason?: string;
   tags: string[];
   createdAt: Timestamp | null;
 }
 
 export type EventPricingType = 'free' | 'paid';
-export type EventStatus = 'draft' | 'pending' | 'published' | 'cancelled' | 'completed';
+export type EventStatus = 'draft' | 'pending' | 'published' | 'cancelled' | 'rejected' | 'completed';
 export type EventCategory = 'Gym' | 'Calisthenics' | 'Yoga' | 'Running' | 'Meetup' | 'Workshop' | 'Competition' | 'Other';
 export type EventType = 'Competition' | 'Meetup' | 'Workshop' | 'Chill' | 'Class' | 'Other';
 export type GenderRestriction = 'Any' | 'Male Only' | 'Female Only';
@@ -301,12 +305,13 @@ export interface AppEvent {
   organizerId: string;
   organizerName: string;
   communityId: string | null;
-  communityName?: string;
+  communityName?: string | null;
   dateTime: { start: Timestamp; end: Timestamp };
   timeline?: { time: string; title: string; description?: string }[];
   location: { venueName: string; address: string; mapLink?: string; isOnline?: boolean; onlineLink?: string };
   capacity: number;
   status: EventStatus;
+  rejectionReason?: string;
   pricing: { 
     type: EventPricingType; 
     basePrice?: number; 
@@ -339,4 +344,81 @@ export interface EventReview {
   review: string;
   organizerReply: string | null;
   createdAt: Timestamp | null;
+}
+
+export interface CommunityAnnouncement {
+  id?: string;
+  communityId: string;
+  title: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+  isPinned: boolean;
+  createdAt: Timestamp | null;
+}
+
+export interface CommunityPollOption {
+  id: string;
+  text: string;
+  votesCount: number;
+}
+
+export interface CommunityPoll {
+  id?: string;
+  communityId: string;
+  question: string;
+  options: CommunityPollOption[];
+  votedUserIds: string[];
+  userVotes: Record<string, string>; // userId -> optionId
+  createdAt: Timestamp | null;
+}
+
+export interface CommunityChallenge {
+  id?: string;
+  communityId: string;
+  title: string;
+  description: string;
+  durationDays: number;
+  targetCount: number;
+  dailyTarget: string;
+  participantsCount: number;
+  completedPercent: number;
+  rewards: string;
+  rules: string;
+  joinedUserIds: string[];
+  createdAt: Timestamp | null;
+}
+
+export interface CommunityPost {
+  id?: string;
+  communityId: string;
+  authorId: string;
+  authorName: string;
+  authorPhoto?: string;
+  title: string;
+  text: string;
+  likesCount: number;
+  likedUserIds?: string[];
+  commentsCount: number;
+  createdAt: Timestamp | null;
+}
+
+export type AppNotificationType = 
+  | 'event_reminder' 
+  | 'friend_joined' 
+  | 'nearby_event' 
+  | 'registration_approved' 
+  | 'ticket_confirmed' 
+  | 'event_cancelled'
+  | 'community_announcement';
+
+export interface AppNotificationItem {
+  id?: string;
+  userId: string;
+  title: string;
+  body: string;
+  type: AppNotificationType;
+  read: boolean;
+  createdAt: Timestamp | null;
+  link?: string;
 }

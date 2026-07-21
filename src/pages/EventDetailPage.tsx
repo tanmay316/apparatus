@@ -1,17 +1,18 @@
 import { useState, useMemo, useEffect } from 'react';
 import { updateDoc, doc, increment } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Calendar as CalendarIcon, MapPin, Users, Ticket, CheckCircle2, Link as LinkIcon, QrCode } from 'lucide-react';
+import { Calendar as CalendarIcon, MapPin, Users, Ticket, CheckCircle2, Link as LinkIcon, QrCode, Edit3, Trash2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { getEvent, registerForEvent, getEventRegistrations, updateEventStatus, cancelRegistration } from '@/services/events';
+import { getEvent, registerForEvent, getEventRegistrations, updateEventStatus, cancelRegistration, deleteEvent, getCommunity } from '@/services/events';
 import { getAvatarUrl } from '@/lib/avatar';
 import { EventDiscussion } from '@/components/events/EventDiscussion';
 import { EventReviews } from '@/components/events/EventReviews';
+import { EditEventModal } from '@/components/events/EditEventModal';
 
 function formatGoogleCalendarUrl(event: any) {
   if (!event || !event.dateTime) return '#';
@@ -30,18 +31,26 @@ function formatGoogleCalendarUrl(event: any) {
 
 export function EventDetailPage() {
   const { eventId } = useParams();
+  const navigate = useNavigate();
   const { user, profile } = useAuthStore();
   const { showToast, theme } = useUIStore();
   const queryClient = useQueryClient();
   
   const [showQRModal, setShowQRModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
 
   const { data: event, isLoading: eventLoading } = useQuery({
     queryKey: ['event', eventId],
     queryFn: () => getEvent(eventId!),
     enabled: !!eventId
+  });
+
+  const { data: community } = useQuery({
+    queryKey: ['community', event?.communityId],
+    queryFn: () => getCommunity(event!.communityId!),
+    enabled: !!event?.communityId,
   });
 
   const { data: registrations = [], isLoading: regLoading } = useQuery({
@@ -58,11 +67,26 @@ export function EventDetailPage() {
     }
   }, [eventId]);
 
-  const isOrganizer = user?.uid === event?.organizerId;
+  const isHostOrLeader = user?.uid === event?.organizerId || 
+    (!!community && community.ownerId === user?.uid) || 
+    profile?.isAdmin === true;
+
   const myRegistration = registrations.find(r => r.userId === user?.uid);
   const isRegistered = !!myRegistration;
 
   const isWaitlist = event ? event.stats.registeredCount >= event.capacity : false;
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteEvent(eventId!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      queryClient.invalidateQueries({ queryKey: ['publishedEvents'] });
+      queryClient.invalidateQueries({ queryKey: ['userSubmittedEvents'] });
+      showToast('Event deleted');
+      navigate('/events');
+    },
+    onError: (err: any) => showToast(err?.message || 'Failed to delete event', 'error')
+  });
 
   const registerMutation = useMutation({
     mutationFn: async () => {
@@ -126,8 +150,8 @@ export function EventDetailPage() {
             <p className="text-bone-dim">Organized by <span className="text-sienna">@{event.organizerName}</span> <span className="text-amber text-xs ml-2">★ 4.9 (Pro Host)</span></p>
           </div>
           
-          <div className="flex gap-2">
-            {!isRegistered && !isOrganizer && (
+          <div className="flex flex-wrap gap-2">
+            {!isHostOrLeader && !isRegistered && (
               <button 
                 onClick={() => event.pricing.type === 'paid' ? setShowPaymentModal(true) : registerMutation.mutate()} 
                 disabled={registerMutation.isPending}
@@ -137,7 +161,7 @@ export function EventDetailPage() {
               </button>
             )}
             
-            {isRegistered && (
+            {!isHostOrLeader && isRegistered && (
               <div className="flex gap-2">
                 <button onClick={() => setShowQRModal(true)} className="btn-secondary border-sienna text-sienna hover:bg-sienna hover:text-bone py-3 px-6 inline-flex items-center gap-2">
                   <QrCode size={18} /> {myRegistration.status === 'waitlist' ? 'Waitlist Status' : 'View Ticket'}
@@ -146,6 +170,28 @@ export function EventDetailPage() {
                   Cancel
                 </button>
               </div>
+            )}
+
+            {isHostOrLeader && (
+              <>
+                <Link to={`/events/${eventId}/dashboard`} className="btn-primary py-3 px-5 inline-flex items-center gap-2 text-xs font-mono shadow-xl">
+                  Manage Event
+                </Link>
+                <button onClick={() => setShowEditModal(true)} className="btn-secondary py-3 px-4 inline-flex items-center gap-1.5 text-xs font-mono">
+                  <Edit3 size={15} /> Edit
+                </button>
+                <button 
+                  onClick={() => {
+                    if (confirm(`Are you sure you want to delete ${event.title}?`)) {
+                      deleteMutation.mutate();
+                    }
+                  }} 
+                  disabled={deleteMutation.isPending}
+                  className="btn-secondary py-3 px-4 inline-flex items-center gap-1.5 text-xs font-mono border-danger/50 text-danger hover:bg-danger/10"
+                >
+                  <Trash2 size={15} /> Delete
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -229,21 +275,14 @@ export function EventDetailPage() {
               </div>
             </div>
           </section>
-          
-          {isOrganizer && (
-             <section className="card p-6 border-sienna/30">
-               <h3 className="font-display text-lg mb-3">Organizer Tools</h3>
-               <Link to={`/events/${eventId}/dashboard`} className="btn-secondary w-full justify-center">Manage Event Dashboard</Link>
-             </section>
-          )}
         </div>
       </div>
 
       {/* Simulated Payment Modal */}
       <AnimatePresence>
         {showPaymentModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-ink rounded-[32px] p-8 max-w-sm w-full border border-line shadow-2xl text-center">
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/80 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="bg-ink rounded-t-[32px] sm:rounded-[32px] p-6 sm:p-8 max-w-sm w-full sm:border border-t border-line shadow-2xl text-center">
               <div className="mx-auto w-12 h-12 rounded-full bg-sienna/20 flex items-center justify-center text-sienna mb-4">
                 <Ticket size={24} />
               </div>
@@ -299,8 +338,8 @@ export function EventDetailPage() {
       {/* QR Ticket Modal */}
       <AnimatePresence>
         {showQRModal && myRegistration && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-ink/90 backdrop-blur-md">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="bg-white rounded-3xl overflow-hidden max-w-sm w-full shadow-2xl">
+          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/90 backdrop-blur-md">
+            <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className="bg-white rounded-t-[32px] sm:rounded-[32px] overflow-hidden max-w-sm w-full shadow-2xl">
               <div className="bg-sienna p-6 text-center text-bone">
                 <h2 className="font-display text-2xl mb-1 truncate">{event.title}</h2>
                 <p className="text-xs opacity-80 uppercase tracking-widest">{event.dateTime?.start?.toDate().toLocaleDateString()}</p>
@@ -316,6 +355,10 @@ export function EventDetailPage() {
             </motion.div>
           </div>
         )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showEditModal && <EditEventModal event={event} onClose={() => setShowEditModal(false)} />}
       </AnimatePresence>
 
     </motion.div>

@@ -165,52 +165,20 @@ function drawAnatomyCard(
   // ─── Bottom Watermark ───
   ctx.font = '400 24px "JetBrains Mono", monospace';
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.textAlign = 'center';
-  ctx.fillText('Tracked with APPARATUS', W / 2, H - 55);
 }
 
-// ─── Shared Icon & Branding Drawers ───────────────────────────
-function drawDumbbellIcon(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
-  ctx.save();
-  // Central bar
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillRect(x - 30, y - 3, 60, 6);
-
-  // Inner collars
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillRect(x - 18, y - 8, 4, 16);
-  ctx.fillRect(x + 14, y - 8, 4, 16);
-
-  // Outer plates (rounded plates in theme accent color)
-  ctx.fillStyle = color;
-  roundRect(ctx, x - 14, y - 20, 10, 40, 4);
-  ctx.fill();
-  roundRect(ctx, x + 4, y - 20, 10, 40, 4);
-  ctx.fill();
-
-  // Smaller outer plates (white)
-  ctx.fillStyle = '#FFFFFF';
-  roundRect(ctx, x - 26, y - 14, 8, 28, 3);
-  ctx.fill();
-  roundRect(ctx, x + 18, y - 14, 8, 28, 3);
-  ctx.fill();
-
-  ctx.restore();
-}
 
 function drawCardHeader(ctx: CanvasRenderingContext2D, W: number, cursorY: number, highlightColor: HighlightColor) {
   ctx.save();
   ctx.textAlign = 'left';
   // Futuristic geometric monospace look with custom letter-spacing
-  ctx.letterSpacing = '8px';
-  ctx.font = '400 48px "Suez One", serif';
+  ctx.letterSpacing = '14px';
+  ctx.font = '300 48px Inter, sans-serif';
   ctx.fillStyle = '#FFFFFF';
-  ctx.fillText('APPARATUS', 80, cursorY);
+  ctx.shadowColor = 'rgba(93,42,26,0.3)';
+  ctx.shadowBlur = 10;
+  ctx.fillText('ΛPPΛRΛTUS', 80, cursorY);
   ctx.restore();
-
-  // Draw modern dumbbell logo
-  const iconX = W - 140;
-  drawDumbbellIcon(ctx, iconX, cursorY - 14, highlightColor.fill);
 }
 
 function drawExercisePill(
@@ -402,8 +370,6 @@ function drawExercisesCard(
   // Watermark
   ctx.font = '400 22px "JetBrains Mono", monospace';
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.textAlign = 'center';
-  ctx.fillText('Tracked with APPARATUS', W / 2, H - 50);
 }
 
 // ─── Highlight Color Types & Presets ─────────────────────────
@@ -576,8 +542,6 @@ function drawCombinedCard(
   // ─── Bottom Watermark ───
   ctx.font = '400 22px "JetBrains Mono", monospace';
   ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.textAlign = 'center';
-  ctx.fillText('Tracked with APPARATUS', W / 2, H - 45);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -744,7 +708,7 @@ export function ShareCardModal({ data: originalData, onClose }: Props) {
       if (canShareFiles) {
         await navigator.share({
           title: `${data.dayTitle} — Apparatus`,
-          text: `Crushed it 💪 Tracked with Apparatus`,
+          text: `Crushed it 💪`,
           files: [file],
         });
       } else {
@@ -797,7 +761,7 @@ export function ShareCardModal({ data: originalData, onClose }: Props) {
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 50 }}
           transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-          className="relative z-10 w-full max-w-lg flex flex-col h-[90vh] md:h-auto md:max-h-[95vh] bg-ink rounded-t-2xl md:rounded-2xl border-t border-line/20 md:border border-line/30 p-4 pb-6 md:pb-4 shadow-2xl"
+          className="relative z-10 w-full max-w-lg flex flex-col h-[90dvh] md:h-auto md:max-h-[95vh] bg-ink rounded-t-2xl md:rounded-2xl border-t border-line/20 md:border border-line/30 p-4 pb-6 md:pb-4 shadow-2xl"
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-3 flex-shrink-0">

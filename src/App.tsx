@@ -16,6 +16,7 @@ import { ProgressPage } from '@/pages/ProgressPage';
 import { CalendarPage } from '@/pages/CalendarPage';
 import { FeedPage } from '@/pages/FeedPage';
 import { CommunitiesPage } from '@/pages/CommunitiesPage';
+import { CommunityDetailPage } from '@/pages/CommunityDetailPage';
 import { EventsPage } from '@/pages/EventsPage';
 import { EventDetailPage } from '@/pages/EventDetailPage';
 import { EventDashboardPage } from '@/pages/EventDashboardPage';
@@ -97,6 +98,7 @@ export function App() {
             <Route path="explore" element={<ExplorePage />} />
             <Route path="feed" element={<FeedPage />} />
             <Route path="communities" element={<CommunitiesPage />} />
+            <Route path="communities/:communityId" element={<CommunityDetailPage />} />
             <Route path="events" element={<EventsPage />} />
             <Route path="events/:eventId" element={<EventDetailPage />} />
             <Route path="events/:eventId/dashboard" element={<EventDashboardPage />} />

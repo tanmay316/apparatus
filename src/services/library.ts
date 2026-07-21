@@ -362,7 +362,7 @@ export const COMPACT_LIBRARY: CompactExercise[] = [
   {
     name: 'Chin-Up',
     muscleGroup: 'Back',
-    secondaryMuscles: ['Biceps', 'Chest'],
+    secondaryMuscles: ['Biceps', 'Core'],
     equipment: 'Pull-up Bar',
     difficulty: 'beginner',
     tags: ['back', 'biceps', 'pull-up', 'bodyweight']
@@ -1904,7 +1904,7 @@ export const COMPACT_LIBRARY: CompactExercise[] = [
   {
     name: 'Bar Muscle-Up',
     muscleGroup: 'Back',
-    secondaryMuscles: ['Triceps', 'Chest', 'Shoulders', 'Biceps'],
+    secondaryMuscles: ['Triceps', 'Shoulders', 'Biceps'],
     equipment: 'Pull-up Bar',
     difficulty: 'advanced',
     tags: ['back', 'chest', 'explosive', 'bodyweight']
@@ -1912,7 +1912,7 @@ export const COMPACT_LIBRARY: CompactExercise[] = [
   {
     name: 'Ring Muscle-Up',
     muscleGroup: 'Back',
-    secondaryMuscles: ['Triceps', 'Chest', 'Shoulders', 'Biceps', 'Stabilizers'],
+    secondaryMuscles: ['Triceps', 'Shoulders', 'Biceps', 'Stabilizers'],
     equipment: 'Gymnastic Rings',
     difficulty: 'advanced',
     tags: ['back', 'rings', 'explosive', 'bodyweight']

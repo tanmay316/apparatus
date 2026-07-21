@@ -136,9 +136,8 @@ export function Topbar() {
             <Menu size={18} />
           </button>
 
-          <Link to="/" className="flex items-baseline gap-2 group">
-            <div className="brand-mark flex-none group-hover:scale-110 transition-transform" />
-            <span className="brand-wordmark text-lg leading-none hidden sm:block">APPARATUS</span>
+          <Link to="/" className="flex items-center gap-2 group">
+            <img src="/logo.png" alt="Apparatus" className="h-6 w-auto sm:h-7 brand-logo-img group-hover:scale-105 transition-transform" />
           </Link>
         </div>
 
