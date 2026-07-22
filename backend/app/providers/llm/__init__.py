@@ -18,14 +18,20 @@ def get_llm_providers(
     gemini_key: str = "",
     openrouter_key: str = "",
 ) -> List[BaseLLMProvider]:
-    """Build an ordered list of available LLM providers."""
+    """Build an ordered list of available LLM providers with automatic environment key fallbacks."""
+    from app.core.config import settings
+
+    nk = nvidia_key or settings.NVIDIA_API_KEY
+    gk = gemini_key or settings.GEMINI_API_KEY
+    ok = openrouter_key or settings.OPENROUTER_API_KEY
+
     providers: List[BaseLLMProvider] = []
-    if nvidia_key:
-        providers.append(NvidiaLLMProvider(api_key=nvidia_key))
-    if gemini_key:
-        providers.append(GeminiLLMProvider(api_key=gemini_key))
-    if openrouter_key:
-        providers.append(OpenRouterLLMProvider(api_key=openrouter_key))
+    if nk:
+        providers.append(NvidiaLLMProvider(api_key=nk))
+    if gk:
+        providers.append(GeminiLLMProvider(api_key=gk))
+    if ok:
+        providers.append(OpenRouterLLMProvider(api_key=ok))
     return providers
 
 
