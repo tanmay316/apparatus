@@ -314,13 +314,16 @@ async def chat(
             assistant_msg = result_state.response["chat"]
         elif result_state.recipe_result:
             r = result_state.recipe_result
-            md = f"### {r.get('name', 'Recipe')}\n\n"
-            md += f"**Prep Time:** {r.get('prep_time_minutes', '?')} mins\n"
-            m = r.get('macros', {})
-            md += f"**Macros:** {m.get('calories', 0)} kcal | {m.get('protein', 0)}g P | {m.get('carbs', 0)}g C | {m.get('fat', 0)}g F\n\n"
+            md = f"### {r.get('title', 'Recipe')}\n\n"
+            md += f"**Prep Time:** {r.get('prep_time_min', '?')} mins\n"
+            md += f"**Macros:** {r.get('calories_per_serving', 0)} kcal | {r.get('protein_per_serving', 0)}g P | {r.get('carbs_per_serving', 0)}g C | {r.get('fat_per_serving', 0)}g F\n\n"
             md += "**Ingredients:**\n"
             for ing in r.get("ingredients", []):
-                md += f"- {ing.get('amount', '')} {ing.get('unit', '')} {ing.get('item', '')}\n"
+                # Handle both dict and string ingredients for robustness
+                if isinstance(ing, dict):
+                    md += f"- {ing.get('amount', '')} {ing.get('item', '')}\n"
+                else:
+                    md += f"- {ing}\n"
             md += "\n**Instructions:**\n"
             for i, step in enumerate(r.get("instructions", []), 1):
                 md += f"{i}. {step}\n"
