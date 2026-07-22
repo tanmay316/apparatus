@@ -11,7 +11,28 @@ from app.providers.llm.nvidia import NvidiaLLMProvider
 from app.providers.llm.gemini import GeminiLLMProvider
 from app.providers.llm.openrouter import OpenRouterLLMProvider
 
+import hashlib
+import time
+
 logger = logging.getLogger(__name__)
+
+# In-memory TTL cache for identical LLM queries (30 minutes TTL)
+_llm_cache = {}
+CACHE_TTL_SECONDS = 1800
+
+
+def _compute_cache_key(messages: List[ChatMessage], system_prompt: Optional[str], json_mode: bool) -> str:
+    msg_str = "|".join(f"{m.role}:{m.content.strip().lower()}" for m in messages)
+    sys_str = (system_prompt or "").strip().lower()
+    raw = f"{msg_str}__sys:{sys_str}__json:{json_mode}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def clear_llm_cache():
+    """Invalidate all cached LLM responses when new user data or meals arrive."""
+    global _llm_cache
+    _llm_cache.clear()
+    logger.info("Cleared LLM response cache.")
 
 
 def get_llm_providers(
@@ -49,7 +70,17 @@ async def chat_with_fallback(
     max_tokens: int = 2048,
     json_mode: bool = False,
 ) -> LLMResponse:
-    """Try each LLM provider in order until one succeeds."""
+    """Try each LLM provider in order until one succeeds, with 0ms response caching for repeated queries."""
+    cache_key = None
+    if len(messages) <= 2 and not json_mode and temperature <= 0.8:
+        cache_key = _compute_cache_key(messages, system_prompt, json_mode)
+        cached = _llm_cache.get(cache_key)
+        if cached:
+            ts, cached_res = cached
+            if time.time() - ts < CACHE_TTL_SECONDS:
+                logger.info(f"⚡ Returning cached LLM response for query (0ms latency)")
+                return cached_res
+
     last_error = "No LLM providers configured"
     for provider in providers:
         try:
@@ -59,9 +90,11 @@ async def chat_with_fallback(
             )
             
             if not result.content.startswith("Error:"):
+                if cache_key:
+                    _llm_cache[cache_key] = (time.time(), result)
                 # Extract and print detailed usage/rate limits
                 print(f"\n" + "="*50)
-                print(f"🤖 LLM CALL SUCCESS")
+                print(f"🤖 LLM CALL SUCCESS (Cached)")
                 print(f"Provider & Model : {result.provider_used}")
                 print(f"Tokens Used      : {result.tokens_used}")
                 print(f"Latency          : {result.latency_ms / 1000:.2f}s")

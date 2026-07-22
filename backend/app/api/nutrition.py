@@ -129,15 +129,15 @@ async def log_food(
             provider_used=req.vision_data.get("provider_used", ""),
             latency_ms=req.vision_data.get("latency_ms", 0),
         )
-        meal_svc = MealService(db)
-        meal_svc.log_meal_from_vision(
-            user_id=uid,
-            vision_result=vision,
-            meal_type=req.meal_type,
-            calorie_goal=calorie_goal,
-            protein_goal=protein_goal,
-        )
-        return {"success": True}
+        from app.repositories.meal_repository import MealRepository
+        meal_repo = MealRepository(db)
+        meal = meal_repo.save_meal_log(uid, req.meal_type, vision, calorie_goal, protein_goal)
+        db.commit()
+
+        from app.providers.llm import clear_llm_cache
+        clear_llm_cache()
+
+        return {"success": True, "meal_id": meal.id}
     except Exception as e:
         logger.error(f"Failed to persist meal manually: {e}")
         return {"success": False, "error": str(e)}

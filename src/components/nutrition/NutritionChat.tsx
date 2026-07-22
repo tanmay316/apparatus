@@ -74,29 +74,49 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  // Load active session from localStorage on open
+  // Prefetch active session & history in background on mount for zero-delay UX
   useEffect(() => {
-    if (!isOpen) return;
-    const savedSessionId = localStorage.getItem('apparatus_active_session_id');
-    if (savedSessionId) {
-      const sid = parseInt(savedSessionId, 10);
-      if (!isNaN(sid)) {
-        setSessionId(sid);
-        loadSessionMessages(sid);
+    initChatSession();
+  }, []);
+
+  const initChatSession = async () => {
+    setLoadingHistory(true);
+    try {
+      const data = await getChatSessions();
+      setSessions(data);
+
+      const savedSessionId = localStorage.getItem('apparatus_active_session_id');
+      let targetSid: number | null = null;
+      if (savedSessionId) {
+        const sid = parseInt(savedSessionId, 10);
+        if (!isNaN(sid) && data.some(s => s.id === sid)) {
+          targetSid = sid;
+        }
       }
+
+      // If no valid saved session, automatically pick the most recent session
+      if (!targetSid && data.length > 0) {
+        targetSid = data[0].id;
+      }
+
+      if (targetSid) {
+        setSessionId(targetSid);
+        localStorage.setItem('apparatus_active_session_id', String(targetSid));
+        await loadSessionMessages(targetSid);
+      }
+    } catch (err) {
+      console.error("Failed to load chat sessions", err);
+    } finally {
+      setLoadingHistory(false);
     }
-    loadSessions();
-  }, [isOpen]);
+  };
 
   const loadSessions = async () => {
-    setLoadingHistory(true);
     try {
       const data = await getChatSessions();
       setSessions(data);
     } catch (err) {
       console.error("Failed to load chat sessions", err);
-    } finally {
-      setLoadingHistory(false);
     }
   };
 
@@ -264,15 +284,15 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     "Compare paneer vs chicken",
   ];
 
-  if (!isOpen) return null;
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
-      className="fixed inset-0 h-[100dvh] z-[999] flex flex-col bg-ink sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[420px] sm:h-[600px] sm:max-h-[calc(100vh-120px)] sm:rounded-3xl sm:border sm:border-line sm:shadow-2xl sm:shadow-black/60"
-    >
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          className="fixed inset-0 h-[100dvh] z-[999] flex flex-col bg-ink sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[420px] sm:h-[600px] sm:max-h-[calc(100vh-120px)] sm:rounded-3xl sm:border sm:border-line sm:shadow-2xl sm:shadow-black/60"
+        >
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3.5 bg-ink-2/90 backdrop-blur-xl border-b border-line/30 sm:rounded-t-3xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-sienna/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
@@ -584,5 +604,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         )}
       </AnimatePresence>
     </motion.div>
+  )}
+</AnimatePresence>
   );
 }

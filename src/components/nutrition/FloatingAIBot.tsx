@@ -70,11 +70,7 @@ export default function FloatingAIBot() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {isOpen && (
-          <NutritionChat isOpen={isOpen} onClose={() => setIsOpen(false)} />
-        )}
-      </AnimatePresence>
+      <NutritionChat isOpen={isOpen} onClose={() => setIsOpen(false)} />
     </>
   );
 }
