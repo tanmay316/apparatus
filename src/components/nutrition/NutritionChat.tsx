@@ -453,11 +453,11 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
           >
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-1 ${
-              msg.role === 'user' ? 'bg-sienna/20 shadow-lg shadow-sienna/10' : 'bg-white/[0.04] border border-white/[0.08]'
+              msg.role === 'user' ? 'bg-sienna/20 shadow-lg shadow-sienna/10' : 'bg-gradient-to-tr from-sienna to-orange-500 shadow-sm shadow-sienna/20'
             }`}>
               {msg.role === 'user'
                 ? <User size={14} className="text-sienna" />
-                : <Bot size={14} className="text-bone-dim" />
+                : <Sparkles size={14} className="text-white" />
               }
             </div>
             
@@ -487,12 +487,12 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
                   {msg.role === 'user' ? (
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                   ) : (
-                    <div className="text-[14px] leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:ml-5 [&>ul]:mb-3 [&>ol]:list-decimal [&>ol]:ml-5 [&>ol]:mb-3 [&>li]:mb-1 [&>h1]:font-semibold [&>h1]:text-bone [&>h1]:mb-2 [&>h2]:font-semibold [&>h2]:text-bone [&>h2]:mb-2 [&>h3]:font-semibold [&>h3]:text-bone [&>h3]:mb-2 [&_strong]:text-bone [&_strong]:font-semibold [&_table]:w-full [&_table]:text-left [&_table]:border-collapse [&_table]:mb-3 [&_th]:border-b [&_th]:border-white/10 [&_th]:pb-2 [&_th]:font-semibold [&_th]:min-w-[100px] [&_td]:py-2 [&_td]:border-b [&_td]:border-white/5">
+                    <div className="text-[14px] leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:ml-5 [&>ul]:mb-3 [&>ol]:list-decimal [&>ol]:ml-5 [&>ol]:mb-3 [&>li]:mb-1 [&>h1]:font-semibold [&>h1]:text-bone [&>h1]:mb-2 [&>h2]:font-semibold [&>h2]:text-bone [&>h2]:mb-2 [&>h3]:font-semibold [&>h3]:text-bone [&>h3]:mb-2 [&_strong]:text-bone [&_strong]:font-semibold [&_table]:w-full [&_table]:text-[13px] [&_table]:text-left [&_table]:border-collapse [&_table]:mb-3 [&_th]:border-b [&_th]:border-white/10 [&_th]:pb-2 [&_th]:font-semibold [&_th]:min-w-[90px] [&_td]:py-2 [&_td]:border-b [&_td]:border-white/5">
                       <ReactMarkdown 
                         remarkPlugins={[remarkGfm]}
                         components={{
                           table: ({node, ...props}) => (
-                            <div className="w-full overflow-x-auto scrollbar-thin pb-2 mb-3 max-w-full">
+                            <div className="w-full overflow-x-auto scrollbar-none pb-2 mb-3 max-w-full">
                               <table {...props} />
                             </div>
                           )
@@ -637,9 +637,9 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
           <button
             type="submit"
             disabled={(!input.trim() && !previewImage) || loading}
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] bg-sienna text-white shadow-[0_0_15px_rgba(200,121,65,0.3)] disabled:opacity-30 disabled:shadow-none disabled:cursor-not-allowed hover:bg-sienna/90 active:scale-95 transition-all shrink-0 flex items-center justify-center mr-0.5"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] bg-sienna text-white shadow-[0_0_15px_rgba(200,121,65,0.3)] disabled:opacity-30 disabled:shadow-none disabled:cursor-not-allowed hover:bg-sienna/90 active:scale-95 transition-all shrink-0 flex items-center justify-center"
           >
-            {loading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="ml-1" />}
+            {loading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
           </button>
         </form>
       </div>
