@@ -13,10 +13,10 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 # Edit these models to test different ones
-GROQ_MODEL = "openai/gpt-oss-120b"
-NVIDIA_MODEL = "meta/llama-3.2-11b-vision-instruct" 
+GROQ_MODEL = "qwen/qwen3.6-27b"
+NVIDIA_MODEL = "thinkingmachines/inkling" 
 GEMINI_MODEL = "gemini-3.1-flash-lite"
-OPENROUTER_MODEL = "google/gemma-4-31b-it:free"
+OPENROUTER_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
 
 async def test_groq():
     print(f"\n--- Testing Groq ({GROQ_MODEL}) ---")

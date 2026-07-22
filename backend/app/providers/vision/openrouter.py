@@ -47,7 +47,7 @@ class OpenRouterVisionProvider(BaseVisionProvider):
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.OPENROUTER_API_KEY
         self.base_url = "https://openrouter.ai/api/v1"
-        self.model = "google/gemini-2.0-flash-001"
+        self.model = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
 
     async def _call(self, prompt: str, image_base64: str, mime_type: str = "image/jpeg") -> str:
         headers = {

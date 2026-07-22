@@ -6,6 +6,7 @@ from typing import List, Optional
 import logging
 
 from app.providers.vision.base import BaseVisionProvider, VisionResult, DetectedFood
+from app.providers.vision.groq import GroqVisionProvider
 from app.providers.vision.nvidia import NvidiaVisionProvider
 from app.providers.vision.gemini import GeminiVisionProvider
 from app.providers.vision.openrouter import OpenRouterVisionProvider
@@ -14,18 +15,21 @@ logger = logging.getLogger(__name__)
 
 
 def get_vision_providers(
+    groq_key: str = "",
     nvidia_key: str = "",
     gemini_key: str = "",
     openrouter_key: str = "",
 ) -> List[BaseVisionProvider]:
     """Build an ordered list of available vision providers."""
     providers: List[BaseVisionProvider] = []
-    if nvidia_key:
-        providers.append(NvidiaVisionProvider(api_key=nvidia_key))
-    if gemini_key:
-        providers.append(GeminiVisionProvider(api_key=gemini_key))
-    if openrouter_key:
-        providers.append(OpenRouterVisionProvider(api_key=openrouter_key))
+    if groq_key and groq_key.strip():
+        providers.append(GroqVisionProvider(api_key=groq_key.strip()))
+    if nvidia_key and nvidia_key.strip():
+        providers.append(NvidiaVisionProvider(api_key=nvidia_key.strip()))
+    if gemini_key and gemini_key.strip():
+        providers.append(GeminiVisionProvider(api_key=gemini_key.strip()))
+    if openrouter_key and openrouter_key.strip():
+        providers.append(OpenRouterVisionProvider(api_key=openrouter_key.strip()))
     return providers
 
 

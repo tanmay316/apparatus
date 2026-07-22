@@ -13,7 +13,7 @@ from app.core.config import settings
 class GroqLLMProvider(BaseLLMProvider):
     provider_name = "groq"
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "llama-3.3-70b-versatile"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "openai/gpt-oss-120b"):
         self.api_key = api_key or settings.GROQ_API_KEY
         self.base_url = "https://api.groq.com/openai/v1"
         self.model = model

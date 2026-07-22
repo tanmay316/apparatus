@@ -73,7 +73,7 @@ class GeminiVisionProvider(BaseVisionProvider):
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.GEMINI_API_KEY
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
-        self.model = "gemini-2.0-flash-lite"
+        self.model = "gemini-3.1-flash-lite"
 
     async def detect_food(self, image_base64: str, mime_type: str = "image/jpeg") -> VisionResult:
         start = time.time()

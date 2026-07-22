@@ -10,7 +10,7 @@ from app.providers.llm.base import BaseLLMProvider, ChatMessage, LLMResponse
 class NvidiaLLMProvider(BaseLLMProvider):
     """Nvidia LLM Provider using ChatNVIDIA with automatic fallback to meta/llama-3.3-70b-instruct."""
     
-    def __init__(self, api_key: Optional[str] = None, model: str = "meta/llama-3.2-11b-vision-instruct"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "thinkingmachines/inkling"):
         from app.core.config import settings
         self.api_key = api_key or settings.NVIDIA_API_KEY or "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"
         self.model = model
