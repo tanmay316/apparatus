@@ -158,6 +158,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
           role: m.role,
           content: m.content,
           timestamp: new Date(),
+          nutritionData: m.metadata_?.nutrition_data,
         }));
         setMessages(formatted);
         setCachedData(`apparatus_cached_messages_${sid}`, formatted);
@@ -289,8 +290,14 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         const currentPreview = previewImage;
         setPreviewImage(null);
         
-        const res = await analyzeFood(currentPreview.base64, currentPreview.mime);
+        const res = await analyzeFood(currentPreview.base64, currentPreview.mime, getMealType(), sessionId);
         
+        if (res.session_id && res.session_id !== sessionId) {
+          setSessionId(res.session_id);
+          localStorage.setItem('apparatus_active_session_id', String(res.session_id));
+          loadSessions();
+        }
+
         setMessages(prev => [
           ...prev,
           {

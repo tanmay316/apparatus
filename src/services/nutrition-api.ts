@@ -86,20 +86,7 @@ export interface FoodAnalyzeResponse {
   errors?: string[];
 }
 
-export async function analyzeFood(
-  imageBase64: string,
-  mimeType: string = 'image/jpeg',
-  mealType: string = 'snack',
-): Promise<FoodAnalyzeResponse> {
-  return apiRequest<FoodAnalyzeResponse>('/nutrition/food/analyze', {
-    method: 'POST',
-    body: JSON.stringify({
-      image_base64: imageBase64,
-      mime_type: mimeType,
-      meal_type: mealType,
-    }),
-  });
-}
+
 
 // ─── Chat ────────────────────────────────────────────────
 
@@ -130,8 +117,8 @@ export async function getChatSessions(): Promise<ChatSessionItem[]> {
   return apiRequest<ChatSessionItem[]>('/nutrition/chat/sessions');
 }
 
-export async function getChatSessionMessages(sessionId: number): Promise<Array<{ id: string; role: 'user' | 'assistant'; content: string }>> {
-  return apiRequest<Array<{ id: string; role: 'user' | 'assistant'; content: string }>>(`/nutrition/chat/sessions/${sessionId}/messages`);
+export async function getChatSessionMessages(sessionId: number): Promise<Array<{ id: string; role: 'user' | 'assistant'; content: string; metadata_?: any }>> {
+  return apiRequest<Array<{ id: string; role: 'user' | 'assistant'; content: string; metadata_?: any }>>(`/nutrition/chat/sessions/${sessionId}/messages`);
 }
 
 export async function deleteChatSession(sessionId: number): Promise<{ success: boolean }> {
@@ -155,6 +142,15 @@ export async function generateMealPlan(planType: string = 'daily') {
   return apiRequest<any>('/nutrition/meal-plan/generate', {
     method: 'POST',
     body: JSON.stringify({ plan_type: planType }),
+  });
+}
+
+// ─── Food Logging ────────────────────────────────────────
+
+export async function analyzeFood(base64Data: string, mimeType: string, mealType: string = 'snack', sessionId?: number) {
+  return apiRequest<any>('/nutrition/food/analyze', {
+    method: 'POST',
+    body: JSON.stringify({ base64_image: base64Data, mime_type: mimeType, meal_type: mealType, session_id: sessionId }),
   });
 }
 
