@@ -56,7 +56,7 @@ class ImageService:
         openrouter_key: str = "",
     ) -> VisionResult:
         """Run vision analysis with fallback chain."""
-        providers = get_vision_providers(nvidia_key, gemini_key, openrouter_key)
+        providers = get_vision_providers("", nvidia_key, gemini_key, openrouter_key)
         result = await detect_food_with_fallback(base64_data, providers, mime_type)
 
         # Cache the result

@@ -30,14 +30,14 @@ def get_llm_providers(
 
     providers: List[BaseLLMProvider] = []
     # Priority Order: Groq -> NVIDIA -> Gemini -> OpenRouter
-    if grk:
-        providers.append(GroqLLMProvider(api_key=grk))
-    if nk:
-        providers.append(NvidiaLLMProvider(api_key=nk))
-    if gk:
-        providers.append(GeminiLLMProvider(api_key=gk))
-    if ok:
-        providers.append(OpenRouterLLMProvider(api_key=ok))
+    if grk and grk.strip():
+        providers.append(GroqLLMProvider(api_key=grk.strip()))
+    if nk and nk.strip():
+        providers.append(NvidiaLLMProvider(api_key=nk.strip()))
+    if gk and gk.strip():
+        providers.append(GeminiLLMProvider(api_key=gk.strip()))
+    if ok and ok.strip():
+        providers.append(OpenRouterLLMProvider(api_key=ok.strip()))
     return providers
 
 
@@ -58,15 +58,14 @@ async def chat_with_fallback(
                 messages, system_prompt, temperature, max_tokens, json_mode
             )
             
-            # Extract and print detailed usage/rate limits
-            print(f"\n" + "="*50)
-            print(f"🤖 LLM CALL SUCCESS")
-            print(f"Provider & Model : {result.provider_used}")
-            print(f"Tokens Used      : {result.tokens_used}")
-            print(f"Latency          : {result.latency_ms / 1000:.2f}s")
-            print("="*50 + "\n")
-            
             if not result.content.startswith("Error:"):
+                # Extract and print detailed usage/rate limits
+                print(f"\n" + "="*50)
+                print(f"🤖 LLM CALL SUCCESS")
+                print(f"Provider & Model : {result.provider_used}")
+                print(f"Tokens Used      : {result.tokens_used}")
+                print(f"Latency          : {result.latency_ms / 1000:.2f}s")
+                print("="*50 + "\n")
                 return result
             last_error = result.content
         except Exception as e:

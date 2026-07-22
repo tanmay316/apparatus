@@ -63,7 +63,7 @@ class NutritionGraphOrchestrator:
             intents = await classify_intent(
                 state.user_message,
                 has_image,
-                get_llm_providers(state.nvidia_key, state.gemini_key, state.openrouter_key),
+                get_llm_providers(state.groq_key, state.nvidia_key, state.gemini_key, state.openrouter_key),
             )
             state.intent = intents[0] if intents else "chat"
             logger.info(f"Classified intents: {intents}")
@@ -124,7 +124,7 @@ class NutritionGraphOrchestrator:
             return state
 
         vision_providers = get_vision_providers(
-            state.nvidia_key, state.gemini_key, state.openrouter_key
+            state.groq_key, state.nvidia_key, state.gemini_key, state.openrouter_key
         )
 
         result = await self.scanner.run(
@@ -149,7 +149,7 @@ class NutritionGraphOrchestrator:
             DetectedFood(**f) for f in state.vision_result["detected_foods"]
         ]
 
-        llm_providers = get_llm_providers(state.nvidia_key, state.gemini_key, state.openrouter_key)
+        llm_providers = get_llm_providers(state.groq_key, state.nvidia_key, state.gemini_key, state.openrouter_key)
 
         goals = state.user_goals
         result = await self.nutrition.run(
@@ -166,7 +166,7 @@ class NutritionGraphOrchestrator:
 
     async def _run_chat(self, state: GraphState) -> GraphState:
         """Execute Chat Agent."""
-        llm_providers = get_llm_providers(state.nvidia_key, state.gemini_key, state.openrouter_key)
+        llm_providers = get_llm_providers(state.groq_key, state.nvidia_key, state.gemini_key, state.openrouter_key)
 
         user_context = {
             "goal": state.user_goals.get("fitness_goal", ""),
@@ -194,7 +194,7 @@ class NutritionGraphOrchestrator:
 
     async def _run_recipe(self, state: GraphState) -> GraphState:
         """Execute Recipe Agent."""
-        llm_providers = get_llm_providers(state.nvidia_key, state.gemini_key, state.openrouter_key)
+        llm_providers = get_llm_providers(state.groq_key, state.nvidia_key, state.gemini_key, state.openrouter_key)
 
         query = state.user_message
         if not query and state.vision_result:
@@ -217,7 +217,7 @@ class NutritionGraphOrchestrator:
 
     async def _run_plan(self, state: GraphState) -> GraphState:
         """Execute Planner Agent (simplified for now)."""
-        llm_providers = get_llm_providers(state.nvidia_key, state.gemini_key, state.openrouter_key)
+        llm_providers = get_llm_providers(state.groq_key, state.nvidia_key, state.gemini_key, state.openrouter_key)
         from app.providers.llm import chat_with_fallback
         from app.providers.llm.base import ChatMessage
         import json
