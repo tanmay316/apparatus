@@ -109,6 +109,13 @@ export interface ChatMessageResponse {
   tokens_used: number;
 }
 
+export interface ChatSessionItem {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export async function sendChatMessage(
   message: string,
   sessionId?: number,
@@ -116,6 +123,20 @@ export async function sendChatMessage(
   return apiRequest<ChatMessageResponse>('/nutrition/chat', {
     method: 'POST',
     body: JSON.stringify({ message, session_id: sessionId }),
+  });
+}
+
+export async function getChatSessions(): Promise<ChatSessionItem[]> {
+  return apiRequest<ChatSessionItem[]>('/nutrition/chat/sessions');
+}
+
+export async function getChatSessionMessages(sessionId: number): Promise<Array<{ id: string; role: 'user' | 'assistant'; content: string }>> {
+  return apiRequest<Array<{ id: string; role: 'user' | 'assistant'; content: string }>>(`/nutrition/chat/sessions/${sessionId}/messages`);
+}
+
+export async function deleteChatSession(sessionId: number): Promise<{ success: boolean }> {
+  return apiRequest<{ success: boolean }>(`/nutrition/chat/sessions/${sessionId}`, {
+    method: 'DELETE',
   });
 }
 

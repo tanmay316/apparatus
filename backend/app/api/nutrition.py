@@ -234,9 +234,14 @@ async def chat(
     if req.session_id:
         session = chat_repo.get_session(req.session_id)
         if not session:
-            session = chat_repo.create_session(uid)
+            title = req.message[:35] if req.message else "New Chat"
+            session = chat_repo.create_session(uid, title=title)
     else:
-        session = chat_repo.create_session(uid)
+        title = req.message[:35] if req.message else "New Chat"
+        session = chat_repo.create_session(uid, title=title)
+
+    if session.title == "New Chat" and req.message:
+        session.title = req.message[:35]
 
     # Load recent messages
     messages = chat_repo.get_recent_messages(session.id, limit=15)
@@ -335,6 +340,75 @@ async def chat(
         reasoning=result_state.response.get("reasoning"),
         session_id=session.id,
     )
+
+
+# ─── GET /chat/sessions ──────────────────────────────────────────
+
+@router.get("/chat/sessions")
+async def get_chat_sessions(
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all past chat sessions for current user."""
+    uid = current_user["uid"]
+    chat_repo = ChatRepository(db)
+    sessions = chat_repo.get_user_sessions(uid, limit=30)
+    return [
+        {
+            "id": s.id,
+            "title": s.title,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+        }
+        for s in sessions
+    ]
+
+
+# ─── GET /chat/sessions/{session_id}/messages ────────────────────
+
+@router.get("/chat/sessions/{session_id}/messages")
+async def get_chat_session_messages(
+    session_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get all messages for a specific session."""
+    uid = current_user["uid"]
+    chat_repo = ChatRepository(db)
+    session = chat_repo.get_session(session_id)
+    if not session or session.user_id != uid:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    messages = chat_repo.get_recent_messages(session_id, limit=50)
+    return [
+        {
+            "id": f"msg-{m.id}",
+            "role": m.role,
+            "content": m.content,
+            "created_at": m.created_at.isoformat() if m.created_at else None,
+        }
+        for m in messages
+    ]
+
+
+# ─── DELETE /chat/sessions/{session_id} ──────────────────────────
+
+@router.delete("/chat/sessions/{session_id}")
+async def delete_chat_session(
+    session_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a chat session."""
+    uid = current_user["uid"]
+    chat_repo = ChatRepository(db)
+    session = chat_repo.get_session(session_id)
+    if not session or session.user_id != uid:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    chat_repo.delete_session(session_id)
+    db.commit()
+    return {"success": True}
 
 
 # ─── POST /recipe/generate ───────────────────────────────────────
