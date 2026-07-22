@@ -4,6 +4,7 @@ import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2,
 import { sendChatMessage, analyzeFood, logMeal, type FoodAnalyzeResponse } from '@/services/nutrition-api';
 import NutritionResultCard from './NutritionResultCard';
 import CameraScanner from './CameraScanner';
+import ReactMarkdown from 'react-markdown';
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -246,9 +247,17 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
                 <div className={`rounded-3xl px-4 py-3 text-[14px] leading-relaxed shadow-sm ${
                   msg.role === 'user'
                     ? 'bg-sienna/90 text-white rounded-tr-sm self-end'
-                    : 'bg-white/[0.04] border border-white/[0.06] text-bone rounded-tl-sm self-start'
+                    : 'bg-white/[0.04] border border-white/[0.06] text-bone rounded-tl-sm self-start w-full sm:w-auto'
                 }`}>
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                  {msg.role === 'user' ? (
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                  ) : (
+                    <div className="text-[14px] leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:ml-5 [&>ul]:mb-3 [&>ol]:list-decimal [&>ol]:ml-5 [&>ol]:mb-3 [&>li]:mb-1 [&>h1]:font-semibold [&>h1]:text-white [&>h1]:mb-2 [&>h2]:font-semibold [&>h2]:text-white [&>h2]:mb-2 [&>h3]:font-semibold [&>h3]:text-white [&>h3]:mb-2 [&_strong]:text-white [&_strong]:font-semibold">
+                      <ReactMarkdown>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -320,7 +329,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       )}
 
       {/* Input Area */}
-      <div className="p-4 pb-8 sm:pb-4 bg-ink-2 border-t border-line/30 sm:rounded-b-3xl">
+      <div className="p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 bg-ink-2 border-t border-line/30 sm:rounded-b-3xl">
         
         {/* Image Preview Area */}
         <AnimatePresence>
@@ -344,23 +353,23 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
         <form
           onSubmit={e => { e.preventDefault(); handleSend(); }}
-          className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-1.5 focus-within:border-sienna/50 focus-within:bg-white/[0.05] transition-colors w-full"
+          className="flex items-center gap-1 sm:gap-2 bg-white/[0.03] border border-white/[0.06] rounded-[24px] p-1.5 focus-within:border-sienna/50 focus-within:bg-white/[0.05] transition-colors w-full"
         >
           {/* Attachment Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 sm:p-2.5 rounded-xl text-bone-dim hover:bg-white/10 hover:text-bone transition-colors shrink-0"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] text-bone-dim hover:bg-white/10 hover:text-bone transition-colors shrink-0 flex items-center justify-center"
           >
-            <Paperclip size={18} />
+            <Paperclip size={20} />
           </button>
           
           <button
             type="button"
             onClick={() => setShowCamera(true)}
-            className="p-2 sm:p-2.5 rounded-xl text-bone-dim hover:bg-white/10 hover:text-sienna transition-colors shrink-0"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] text-bone-dim hover:bg-white/10 hover:text-sienna transition-colors shrink-0 flex items-center justify-center"
           >
-            <Camera size={18} />
+            <Camera size={20} />
           </button>
           
           <input
@@ -378,15 +387,15 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             onChange={e => setInput(e.target.value)}
             placeholder={previewImage ? "Add a message..." : "Message AI Agent..."}
             disabled={loading}
-            className="flex-1 min-w-0 bg-transparent px-1.5 py-2 text-sm text-bone placeholder-bone-dim focus:outline-none"
+            className="flex-1 min-w-0 bg-transparent px-2 py-2.5 text-[15px] text-bone placeholder-bone-dim focus:outline-none"
           />
           
           <button
             type="submit"
             disabled={(!input.trim() && !previewImage) || loading}
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-sienna text-white shadow-[0_0_15px_rgba(200,121,65,0.3)] disabled:opacity-30 disabled:shadow-none disabled:cursor-not-allowed hover:bg-sienna/90 active:scale-95 transition-all shrink-0 flex items-center justify-center"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] bg-sienna text-white shadow-[0_0_15px_rgba(200,121,65,0.3)] disabled:opacity-30 disabled:shadow-none disabled:cursor-not-allowed hover:bg-sienna/90 active:scale-95 transition-all shrink-0 flex items-center justify-center mr-0.5"
           >
-            {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+            {loading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} className="ml-1" />}
           </button>
         </form>
       </div>
