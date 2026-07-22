@@ -182,12 +182,13 @@ export async function getNutritionHistory(days: number = 7) {
   return apiRequest<any>(`/nutrition/history?days=${days}`);
 }
 
-export async function logMeal(visionData: any, mealType: string = 'snack') {
+export async function logMeal(visionData: any, mealType: string = 'snack', messageId?: string) {
   return apiRequest<any>('/nutrition/food/log', {
     method: 'POST',
     body: JSON.stringify({
       vision_data: visionData,
-      meal_type: mealType
+      meal_type: mealType,
+      message_id: messageId
     }),
   });
 }

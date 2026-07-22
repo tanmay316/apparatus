@@ -159,6 +159,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
           content: m.content,
           timestamp: new Date(),
           nutritionData: m.metadata_?.nutrition_data,
+          logged: m.metadata_?.logged,
         }));
         setMessages(formatted);
         setCachedData(`apparatus_cached_messages_${sid}`, formatted);
@@ -258,7 +259,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     setLoggingMessageId(msgId);
     try {
       const mealType = getMealType();
-      await logMeal(nutritionData, mealType);
+      await logMeal(nutritionData, mealType, msgId);
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, logged: true } : m));
       window.dispatchEvent(new Event('refresh-nutrition'));
     } catch (err) {

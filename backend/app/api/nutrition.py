@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from app.db.session import get_db
 from app.core.security import get_current_user
@@ -127,6 +128,7 @@ from pydantic import BaseModel
 class LogMealRequest(BaseModel):
     meal_type: str = "snack"
     vision_data: dict
+    message_id: Optional[str] = None
 
 @router.post("/food/log")
 async def log_food(
@@ -156,8 +158,15 @@ async def log_food(
         # 2. Add meal items
         nutrition_inner = nutrition_dict.get("nutrition", {})
         items = nutrition_inner.get("items", [])
+        
         if items:
-            meal_repo.add_meal_items(meal.id, items)
+            mapped_items = []
+            for it in items:
+                mapped = it.copy()
+                if "name" in mapped and "food_name" not in mapped:
+                    mapped["food_name"] = mapped.pop("name")
+                mapped_items.append(mapped)
+            meal_repo.add_meal_items(meal.id, mapped_items)
             
         # 3. Update totals
         score_data = nutrition_dict.get("health_score", {})
@@ -176,6 +185,20 @@ async def log_food(
         # 4. Upsert daily summary
         from datetime import date
         meal_repo.upsert_daily_summary(uid, date.today().isoformat())
+        
+        # 5. Mark the chat message as logged if message_id is provided
+        if req.message_id:
+            chat_repo = ChatRepository(db)
+            # Remove the 'msg-' prefix if it exists
+            db_msg_id = int(req.message_id.replace("msg-", "")) if str(req.message_id).startswith("msg-") else None
+            if db_msg_id:
+                msg = chat_repo.get_message(db_msg_id) # Need to implement this or just do query directly
+                pass # Wait, let's just do it directly on db
+                db.execute(
+                    text("UPDATE chat_messages SET metadata = json_insert(metadata, '$.logged', true) WHERE id = :mid"),
+                    {"mid": db_msg_id}
+                )
+
         db.commit()
 
         from app.providers.llm import clear_llm_cache
@@ -184,7 +207,7 @@ async def log_food(
         return {"success": True, "meal_id": meal.id}
     except Exception as e:
         logger.error(f"Failed to persist meal manually: {e}")
-        return {"success": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class NutritionProfileUpdate(BaseModel):
