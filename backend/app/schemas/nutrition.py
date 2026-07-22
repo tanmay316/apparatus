@@ -11,6 +11,7 @@ class FoodAnalyzeRequest(BaseModel):
     image_base64: str
     mime_type: str = "image/jpeg"
     meal_type: str = "snack"  # breakfast, lunch, dinner, snack
+    session_id: Optional[int] = None
 
 class ChatRequest(BaseModel):
     message: str
