@@ -30,6 +30,7 @@ def _build_state(user: dict, keys: dict, **kwargs) -> GraphState:
     return GraphState(
         user_id=user.get("uid", ""),
         user_email=user.get("email", ""),
+        groq_key=keys.get("groq_key", ""),
         nvidia_key=keys.get("nvidia_key", ""),
         gemini_key=keys.get("gemini_key", ""),
         openrouter_key=keys.get("openrouter_key", ""),
@@ -50,7 +51,7 @@ async def analyze_food(
     Pipeline: Scanner Agent → Nutrition Agent → Health Score → Save Meal.
     """
     uid = current_user["uid"]
-    keys = await resolve_api_keys(uid)
+    keys = await resolve_api_keys(current_user)
 
     # Load user goals from DB
     user_repo = UserRepository(db)
@@ -226,7 +227,7 @@ async def chat(
 ):
     """Chat with the AI nutrition assistant."""
     uid = current_user["uid"]
-    keys = await resolve_api_keys(uid)
+    keys = await resolve_api_keys(current_user)
 
     # Chat history from DB
     chat_repo = ChatRepository(db)
@@ -331,6 +332,7 @@ async def chat(
 
     return ChatResponse(
         response=assistant_msg.strip(),
+        reasoning=result_state.response.get("reasoning"),
         session_id=session.id,
     )
 
@@ -345,7 +347,7 @@ async def generate_recipe(
 ):
     """Generate a recipe using the Recipe Agent."""
     uid = current_user["uid"]
-    keys = await resolve_api_keys(uid)
+    keys = await resolve_api_keys(current_user)
 
     user_repo = UserRepository(db)
     user_repo.get_or_create_user(uid)
@@ -379,7 +381,7 @@ async def generate_recipe(
     from app.providers.llm import get_llm_providers
 
     recipe_agent = RecipeAgent()
-    llm_providers = get_llm_providers(keys.get("nvidia_key", ""), keys.get("gemini_key", ""), keys.get("openrouter_key", ""))
+    llm_providers = get_llm_providers(keys.get("groq_key", ""), keys.get("nvidia_key", ""), keys.get("gemini_key", ""), keys.get("openrouter_key", ""))
 
     result = await recipe_agent.generate_recipe(
         query=req.query,
@@ -405,7 +407,7 @@ async def generate_meal_plan(
 ):
     """Generate a meal plan."""
     uid = current_user["uid"]
-    keys = await resolve_api_keys(uid)
+    keys = await resolve_api_keys(current_user)
 
     user_repo = UserRepository(db)
     user_repo.get_or_create_user(uid)

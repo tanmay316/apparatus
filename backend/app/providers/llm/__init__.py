@@ -6,6 +6,7 @@ from typing import List, Optional
 import logging
 
 from app.providers.llm.base import BaseLLMProvider, LLMResponse, ChatMessage
+from app.providers.llm.groq import GroqLLMProvider
 from app.providers.llm.nvidia import NvidiaLLMProvider
 from app.providers.llm.gemini import GeminiLLMProvider
 from app.providers.llm.openrouter import OpenRouterLLMProvider
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_llm_providers(
+    groq_key: str = "",
     nvidia_key: str = "",
     gemini_key: str = "",
     openrouter_key: str = "",
@@ -21,11 +23,15 @@ def get_llm_providers(
     """Build an ordered list of available LLM providers with automatic environment key fallbacks."""
     from app.core.config import settings
 
+    grk = groq_key or settings.GROQ_API_KEY
     nk = nvidia_key or settings.NVIDIA_API_KEY
     gk = gemini_key or settings.GEMINI_API_KEY
     ok = openrouter_key or settings.OPENROUTER_API_KEY
 
     providers: List[BaseLLMProvider] = []
+    # Priority Order: Groq -> NVIDIA -> Gemini -> OpenRouter
+    if grk:
+        providers.append(GroqLLMProvider(api_key=grk))
     if nk:
         providers.append(NvidiaLLMProvider(api_key=nk))
     if gk:
@@ -51,11 +57,21 @@ async def chat_with_fallback(
             result = await provider.chat(
                 messages, system_prompt, temperature, max_tokens, json_mode
             )
+            
+            # Extract and print detailed usage/rate limits
+            print(f"\n" + "="*50)
+            print(f"🤖 LLM CALL SUCCESS")
+            print(f"Provider & Model : {result.provider_used}")
+            print(f"Tokens Used      : {result.tokens_used}")
+            print(f"Latency          : {result.latency_ms / 1000:.2f}s")
+            print("="*50 + "\n")
+            
             if not result.content.startswith("Error:"):
                 return result
             last_error = result.content
         except Exception as e:
             last_error = f"{provider.provider_name}: {str(e)}"
+            print(f"\n❌ [LLM CALL FAILED] {provider.provider_name} -> {str(e)}\n")
             logger.warning(f"LLM provider {provider.provider_name} failed: {e}")
             continue
 

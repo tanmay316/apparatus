@@ -14,6 +14,7 @@ class ChatMessage(BaseModel):
 
 class LLMResponse(BaseModel):
     content: str
+    reasoning: Optional[str] = None
     provider_used: str = ""
     model_used: str = ""
     tokens_used: int = 0

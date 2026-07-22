@@ -34,6 +34,7 @@ class GraphState(BaseModel):
     recipe_result: Optional[dict] = None
     meal_plan: Optional[dict] = None
     chat_response: str = ""
+    chat_reasoning: Optional[str] = None
     insights_result: Optional[dict] = None
 
     # ─── Final ────────────────────────────────────────
@@ -41,6 +42,7 @@ class GraphState(BaseModel):
     errors: List[str] = Field(default_factory=list)
 
     # ─── Provider Keys ────────────────────────────────
+    groq_key: str = ""
     nvidia_key: str = ""
     gemini_key: str = ""
     openrouter_key: str = ""

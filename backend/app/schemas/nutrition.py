@@ -53,6 +53,7 @@ class FoodAnalyzeResponse(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+    reasoning: Optional[str] = None
     session_id: int
     tokens_used: int = 0
 

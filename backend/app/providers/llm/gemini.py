@@ -15,7 +15,7 @@ from app.core.config import settings
 class GeminiLLMProvider(BaseLLMProvider):
     provider_name = "gemini"
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-3.5-flash-lite"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-2.0-flash"):
         self.api_key = api_key or settings.GEMINI_API_KEY
         self.client = genai.Client(api_key=self.api_key) if self.api_key else None
         self.model = model

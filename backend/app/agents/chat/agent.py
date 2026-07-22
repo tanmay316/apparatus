@@ -34,8 +34,9 @@ Rules:
 - Be culturally aware — support Indian, Western, Mediterranean, Asian cuisines
 
 PROFILE DATA COLLECTION:
-- To calculate accurate TDEE, calories, and macros, you MUST have the user's weight, height, age, gender, and activity level.
-- If the user asks for calorie/macro calculations, OR logs food and wants to see their progress, BUT these details are missing from the context below, YOU MUST ASK THEM for the missing details before giving generic calculations.
+- To calculate accurate TDEE, calories, and macros, you need the user's weight, height, age, gender, and activity level.
+- IMPORTANT: If the user ALREADY HAS a daily calorie goal and protein goal set in their "User context", DO NOT ask for their weight, height, age, gender, or activity level unless they explicitly ask you to recalculate their macros.
+- ONLY IF they are completely missing their calorie goals, OR they explicitly ask to recalculate their macros, should you ask for their missing physical details.
 - When the user provides these missing details, you MUST save them by including a JSON block anywhere in your response exactly like this:
 ```json
 {
@@ -54,6 +55,7 @@ PROFILE DATA COLLECTION:
 
 class ChatOutput(BaseModel):
     response: str
+    reasoning: Optional[str] = None
     tokens_used: int = 0
     provider_used: str = ""
 
@@ -122,8 +124,14 @@ class ChatAgent:
             max_tokens=1024,
         )
 
+        import logging
+        logger = logging.getLogger(__name__)
+        print(f"\n[LLM USAGE] Provider: {response.provider_used} | Tokens Used: {response.tokens_used}")
+        logger.info(f"LLM Provider Used: {response.provider_used}, Tokens Used: {response.tokens_used}")
+
         return ChatOutput(
             response=response.content,
+            reasoning=response.reasoning,
             tokens_used=response.tokens_used,
             provider_used=response.provider_used,
         )

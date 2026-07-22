@@ -20,15 +20,9 @@ def init_firebase():
                 options = {"projectId": service_account_info.get("project_id", "apparatus-46b1b")}
                 firebase_admin.initialize_app(cred, options=options)
             else:
-                try:
-                    cred = credentials.ApplicationDefault()
-                    options = {"projectId": "apparatus-46b1b"}
-                    firebase_admin.initialize_app(cred, options=options)
-                except Exception as ex:
-                    logger.warning(f"ApplicationDefault credentials warning: {ex}")
-                    # Initialize unauthenticated fallback app for token decoding
-                    options = {"projectId": "apparatus-46b1b"}
-                    firebase_admin.initialize_app(options=options)
+                # Direct initialization without GCP metadata server lookup
+                options = {"projectId": "apparatus-46b1b"}
+                firebase_admin.initialize_app(options=options)
         except Exception as e:
             logger.error(f"Failed to initialize Firebase Admin SDK: {e}")
 
@@ -58,14 +52,17 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
     if not settings.FIREBASE_SERVICE_ACCOUNT_JSON:
         payload = _decode_jwt_payload_fallback(token)
         if payload.get("uid") and payload["uid"] != "unknown_user":
+            payload["_token"] = token
             return payload
 
     try:
         decoded_token = auth.verify_id_token(token)
+        decoded_token["_token"] = token
         return decoded_token
     except Exception as e:
         payload = _decode_jwt_payload_fallback(token)
         if payload.get("uid") and payload["uid"] != "unknown_user":
+            payload["_token"] = token
             return payload
             
         raise HTTPException(

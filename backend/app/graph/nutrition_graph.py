@@ -172,6 +172,11 @@ class NutritionGraphOrchestrator:
             "goal": state.user_goals.get("fitness_goal", ""),
             "calorie_goal": state.user_goals.get("calorie_goal", 2000),
             "protein_goal": state.user_goals.get("protein_goal", 140),
+            "weight_kg": state.user_goals.get("weight_kg"),
+            "height_cm": state.user_goals.get("height_cm"),
+            "age": state.user_goals.get("age"),
+            "gender": state.user_goals.get("gender"),
+            "activity_level": state.user_goals.get("activity_level"),
             "dietary_restrictions": state.user_preferences.get("dietary_restrictions", []),
             "allergies": state.user_preferences.get("allergies", []),
         }
@@ -184,6 +189,7 @@ class NutritionGraphOrchestrator:
         )
 
         state.chat_response = result.response
+        state.chat_reasoning = result.reasoning
         return state
 
     async def _run_recipe(self, state: GraphState) -> GraphState:
@@ -307,6 +313,8 @@ Return JSON: {{
 
         if state.chat_response:
             response["chat"] = state.chat_response
+            if state.chat_reasoning:
+                response["reasoning"] = state.chat_reasoning
 
         if state.recipe_result:
             response["recipe"] = state.recipe_result
