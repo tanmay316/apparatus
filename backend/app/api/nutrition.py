@@ -120,18 +120,39 @@ async def log_food(
     protein_goal = goals.protein_goal if goals else 140.0
 
     try:
-        from app.providers.vision.base import VisionResult, DetectedFood
-        vision = VisionResult(
-            detected_foods=[DetectedFood(**f) for f in req.vision_data.get("detected_foods", [])],
-            raw_description=req.vision_data.get("raw_description", ""),
-            is_food=req.vision_data.get("is_food", True),
-            plate_count=req.vision_data.get("plate_count", 1),
-            provider_used=req.vision_data.get("provider_used", ""),
-            latency_ms=req.vision_data.get("latency_ms", 0),
-        )
         from app.repositories.meal_repository import MealRepository
         meal_repo = MealRepository(db)
-        meal = meal_repo.save_meal_log(uid, req.meal_type, vision, calorie_goal, protein_goal)
+        
+        # req.vision_data contains the full FoodAnalyzeResponse from frontend
+        vision_dict = req.vision_data.get("vision", {})
+        nutrition_dict = req.vision_data.get("nutrition", {})
+        
+        # 1. Create the MealLog
+        meal = meal_repo.create_meal(user_id=uid, meal_type=req.meal_type)
+        
+        # 2. Add meal items
+        nutrition_inner = nutrition_dict.get("nutrition", {})
+        items = nutrition_inner.get("items", [])
+        if items:
+            meal_repo.add_meal_items(meal.id, items)
+            
+        # 3. Update totals
+        score_data = nutrition_dict.get("health_score", {})
+        meal_repo.update_meal_totals(
+            meal_id=meal.id,
+            calories=nutrition_inner.get("total_calories", 0.0),
+            protein=nutrition_inner.get("total_protein", 0.0),
+            carbs=nutrition_inner.get("total_carbs", 0.0),
+            fat=nutrition_inner.get("total_fat", 0.0),
+            fiber=nutrition_inner.get("total_fiber", 0.0),
+            health_score=score_data.get("score", 0),
+            health_grade=score_data.get("grade", "C"),
+            suggestions=score_data.get("suggestions", []),
+        )
+        
+        # 4. Upsert daily summary
+        from datetime import date
+        meal_repo.upsert_daily_summary(uid, date.today().isoformat())
         db.commit()
 
         from app.providers.llm import clear_llm_cache
@@ -286,7 +307,38 @@ async def chat(
 
     try:
         result_state = await orchestrator.run(state)
-        assistant_msg = result_state.chat_response or result_state.response.get("chat", "I couldn't generate a response.")
+        
+        if result_state.chat_response:
+            assistant_msg = result_state.chat_response
+        elif result_state.response.get("chat"):
+            assistant_msg = result_state.response["chat"]
+        elif result_state.recipe_result:
+            r = result_state.recipe_result
+            md = f"### {r.get('name', 'Recipe')}\n\n"
+            md += f"**Prep Time:** {r.get('prep_time_minutes', '?')} mins\n"
+            m = r.get('macros', {})
+            md += f"**Macros:** {m.get('calories', 0)} kcal | {m.get('protein', 0)}g P | {m.get('carbs', 0)}g C | {m.get('fat', 0)}g F\n\n"
+            md += "**Ingredients:**\n"
+            for ing in r.get("ingredients", []):
+                md += f"- {ing.get('amount', '')} {ing.get('unit', '')} {ing.get('item', '')}\n"
+            md += "\n**Instructions:**\n"
+            for i, step in enumerate(r.get("instructions", []), 1):
+                md += f"{i}. {step}\n"
+            assistant_msg = md.strip()
+        elif result_state.meal_plan:
+            p = result_state.meal_plan
+            md = f"### {p.get('plan_name', 'Meal Plan')}\n\n"
+            for meal in p.get("meals", []):
+                md += f"**{str(meal.get('meal_type')).title()}:** {meal.get('suggestion')}\n"
+                md += f"*~{meal.get('estimated_calories', 0)} kcal, {meal.get('estimated_protein', 0)}g protein*\n\n"
+            tips = p.get("tips", [])
+            if tips:
+                md += "**Tips:**\n"
+                for tip in tips:
+                    md += f"- {tip}\n"
+            assistant_msg = md.strip()
+        else:
+            assistant_msg = "I couldn't generate a response."
     except Exception as e:
         logger.error(f"Error during AI chat generation: {e}")
         assistant_msg = "I'm sorry, I encountered an error while processing your request. Please try again."

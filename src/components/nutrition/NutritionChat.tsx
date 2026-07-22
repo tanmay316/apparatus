@@ -244,11 +244,20 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     reader.readAsDataURL(file);
   };
 
+  const getMealType = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 11) return 'breakfast';
+    if (hour >= 11 && hour < 16) return 'lunch';
+    if (hour >= 16 && hour < 19) return 'snack';
+    return 'dinner';
+  };
+
   const handleLogMeal = async (msgId: string, nutritionData?: FoodAnalyzeResponse) => {
     if (!nutritionData) return;
     setLoggingMessageId(msgId);
     try {
-      await logMeal(nutritionData, 'snack');
+      const mealType = getMealType();
+      await logMeal(nutritionData, mealType);
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, logged: true } : m));
       window.dispatchEvent(new Event('refresh-nutrition'));
     } catch (err) {
