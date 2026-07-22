@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Key, Shield, Save } from 'lucide-react';
+import { Key, Shield, Save, Eye, EyeOff } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth-store';
 
 export default function AdminNutritionSettings() {
@@ -10,11 +10,17 @@ export default function AdminNutritionSettings() {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
     use_admin_keys: false,
+    groq_api_key: '',
     nvidia_api_key: '',
     gemini_api_key: '',
     openrouter_api_key: ''
   });
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [message, setMessage] = useState('');
+
+  const toggleShowKey = (keyName: string) => {
+    setShowKeys(prev => ({ ...prev, [keyName]: !prev[keyName] }));
+  };
 
   useEffect(() => {
     async function loadSettings() {
@@ -23,7 +29,7 @@ export default function AdminNutritionSettings() {
         const docRef = doc(db, 'admin_settings', 'api_keys');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setSettings(docSnap.data() as any);
+          setSettings(prev => ({ ...prev, ...(docSnap.data() as any) }));
         }
       } catch (err) {
         console.error("Error loading admin settings:", err);
@@ -60,7 +66,7 @@ export default function AdminNutritionSettings() {
         </div>
         <div>
           <h2 className="text-lg font-display text-bone font-semibold">Global AI Settings</h2>
-          <p className="text-xs text-bone-dim">Manage the API keys for the AI Nutrition Agent.</p>
+          <p className="text-xs text-bone-dim">Manage the global API keys for the AI Nutrition Agent (Priority: Groq → NVIDIA → Gemini → OpenRouter).</p>
         </div>
       </div>
 
@@ -86,44 +92,86 @@ export default function AdminNutritionSettings() {
         {settings.use_admin_keys && (
           <div className="space-y-4 pt-2">
             <div>
-              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">Nvidia API Key (Primary)</label>
+              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">Groq API Key (Primary)</label>
               <div className="relative">
                 <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" size={16} />
                 <input
-                  type="password"
+                  type={showKeys.groq ? "text" : "password"}
+                  value={settings.groq_api_key}
+                  onChange={(e) => setSettings({ ...settings, groq_api_key: e.target.value })}
+                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-10 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors font-mono"
+                  placeholder="gsk_..."
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('groq')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
+                >
+                  {showKeys.groq ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">Nvidia API Key (Fallback 1)</label>
+              <div className="relative">
+                <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" size={16} />
+                <input
+                  type={showKeys.nvidia ? "text" : "password"}
                   value={settings.nvidia_api_key}
                   onChange={(e) => setSettings({ ...settings, nvidia_api_key: e.target.value })}
-                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-4 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors"
+                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-10 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors font-mono"
                   placeholder="nvapi-..."
                 />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('nvidia')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
+                >
+                  {showKeys.nvidia ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">Gemini API Key (Fallback)</label>
+              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">Gemini API Key (Fallback 2)</label>
               <div className="relative">
                 <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" size={16} />
                 <input
-                  type="password"
+                  type={showKeys.gemini ? "text" : "password"}
                   value={settings.gemini_api_key}
                   onChange={(e) => setSettings({ ...settings, gemini_api_key: e.target.value })}
-                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-4 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors"
+                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-10 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors font-mono"
                   placeholder="AIza..."
                 />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('gemini')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
+                >
+                  {showKeys.gemini ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
 
             <div>
-              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">OpenRouter API Key (Fallback)</label>
+              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">OpenRouter API Key (Fallback 3)</label>
               <div className="relative">
                 <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" size={16} />
                 <input
-                  type="password"
+                  type={showKeys.openrouter ? "text" : "password"}
                   value={settings.openrouter_api_key}
                   onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
-                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-4 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors"
+                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-10 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors font-mono"
                   placeholder="sk-or-v1-..."
                 />
+                <button
+                  type="button"
+                  onClick={() => toggleShowKey('openrouter')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
+                >
+                  {showKeys.openrouter ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
               </div>
             </div>
           </div>

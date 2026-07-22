@@ -34,8 +34,8 @@ export default function FloatingAIBot() {
 
   if (!isAllowedRoute) return null;
 
-  // Show if: chat is open OR scrolling up OR at the very top
-  const isVisible = isOpen || scrollDirection === 'up';
+  // Show floating button only when chat is closed AND (scrolling up OR at top)
+  const isVisible = !isOpen && scrollDirection === 'up';
 
   return (
     <>

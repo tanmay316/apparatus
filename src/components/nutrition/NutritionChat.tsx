@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2 } from 'lucide-react';
+import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2, Brain, ChevronDown, ChevronUp } from 'lucide-react';
 import { sendChatMessage, analyzeFood, logMeal, type FoodAnalyzeResponse } from '@/services/nutrition-api';
 import NutritionResultCard from './NutritionResultCard';
 import CameraScanner from './CameraScanner';
@@ -8,6 +8,7 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  reasoning?: string;
   timestamp: Date;
   isImage?: boolean;
   imageUrl?: string;
@@ -20,6 +21,29 @@ interface ChatMessage {
 interface NutritionChatProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+function ReasoningCard({ reasoning }: { reasoning: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mb-2 rounded-2xl bg-sienna/10 border border-sienna/20 overflow-hidden text-xs">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-3 py-2 text-sienna font-medium hover:bg-sienna/10 transition-colors"
+      >
+        <div className="flex items-center gap-1.5">
+          <Brain size={14} className="animate-pulse" />
+          <span>Thought Process (Reasoning)</span>
+        </div>
+        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 pt-1 text-bone-dim text-[11px] font-mono leading-relaxed whitespace-pre-wrap border-t border-sienna/15 bg-black/20">
+          {reasoning}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
@@ -124,6 +148,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             id: `ai-${Date.now()}`,
             role: 'assistant',
             content: res.response,
+            reasoning: (res as any).reasoning,
             timestamp: new Date(),
           },
         ]);
@@ -157,7 +182,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 20 }}
-      className="fixed inset-0 z-50 flex flex-col bg-ink sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[420px] sm:h-[600px] sm:max-h-[calc(100vh-120px)] sm:rounded-3xl sm:border sm:border-line sm:shadow-2xl sm:shadow-black/60"
+      className="fixed inset-0 h-[100dvh] z-[999] flex flex-col bg-ink sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[420px] sm:h-[600px] sm:max-h-[calc(100vh-120px)] sm:rounded-3xl sm:border sm:border-line sm:shadow-2xl sm:shadow-black/60"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 bg-ink-2/90 backdrop-blur-xl border-b border-line/30 sm:rounded-t-3xl relative overflow-hidden">
@@ -211,6 +236,11 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
                 </div>
               )}
               
+              {/* Reasoning Block */}
+              {msg.role === 'assistant' && msg.reasoning && (
+                <ReasoningCard reasoning={msg.reasoning} />
+              )}
+
               {/* Text Content */}
               {msg.content && (
                 <div className={`rounded-3xl px-4 py-3 text-[14px] leading-relaxed shadow-sm ${
@@ -314,13 +344,13 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
         <form
           onSubmit={e => { e.preventDefault(); handleSend(); }}
-          className="flex items-center gap-2 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-1.5 focus-within:border-sienna/50 focus-within:bg-white/[0.05] transition-colors"
+          className="flex items-center gap-1.5 sm:gap-2 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-1.5 focus-within:border-sienna/50 focus-within:bg-white/[0.05] transition-colors w-full"
         >
           {/* Attachment Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="p-2.5 rounded-xl text-bone-dim hover:bg-white/10 hover:text-bone transition-colors"
+            className="p-2 sm:p-2.5 rounded-xl text-bone-dim hover:bg-white/10 hover:text-bone transition-colors shrink-0"
           >
             <Paperclip size={18} />
           </button>
@@ -328,7 +358,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
           <button
             type="button"
             onClick={() => setShowCamera(true)}
-            className="p-2.5 rounded-xl text-bone-dim hover:bg-white/10 hover:text-sienna transition-colors"
+            className="p-2 sm:p-2.5 rounded-xl text-bone-dim hover:bg-white/10 hover:text-sienna transition-colors shrink-0"
           >
             <Camera size={18} />
           </button>
@@ -341,22 +371,20 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             className="hidden"
           />
 
-
-
           <input
             ref={inputRef}
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={previewImage ? "Add a message about this food..." : "Message AI Agent..."}
+            placeholder={previewImage ? "Add a message..." : "Message AI Agent..."}
             disabled={loading}
-            className="flex-1 bg-transparent px-2 py-2.5 text-sm text-bone placeholder-bone-dim focus:outline-none"
+            className="flex-1 min-w-0 bg-transparent px-1.5 py-2 text-sm text-bone placeholder-bone-dim focus:outline-none"
           />
           
           <button
             type="submit"
             disabled={(!input.trim() && !previewImage) || loading}
-            className="p-3 rounded-xl bg-sienna text-white shadow-[0_0_15px_rgba(200,121,65,0.3)] disabled:opacity-30 disabled:shadow-none disabled:cursor-not-allowed hover:bg-sienna/90 active:scale-95 transition-all"
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-sienna text-white shadow-[0_0_15px_rgba(200,121,65,0.3)] disabled:opacity-30 disabled:shadow-none disabled:cursor-not-allowed hover:bg-sienna/90 active:scale-95 transition-all shrink-0 flex items-center justify-center"
           >
             {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
           </button>

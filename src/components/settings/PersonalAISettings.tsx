@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Key, Save, AlertCircle } from 'lucide-react';
+import { Key, Save, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth-store';
 
 export default function PersonalAISettings() {
@@ -9,12 +9,18 @@ export default function PersonalAISettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [keys, setKeys] = useState({
+    groq_api_key: '',
     nvidia_api_key: '',
     gemini_api_key: '',
     openrouter_api_key: ''
   });
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [globalMode, setGlobalMode] = useState(false);
   const [message, setMessage] = useState('');
+
+  const toggleShowKey = (keyName: string) => {
+    setShowKeys(prev => ({ ...prev, [keyName]: !prev[keyName] }));
+  };
 
   useEffect(() => {
     async function loadKeys() {
@@ -30,7 +36,7 @@ export default function PersonalAISettings() {
         const docRef = doc(db, 'users', user.uid, 'private', 'api_keys');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setKeys(docSnap.data() as any);
+          setKeys(prev => ({ ...prev, ...(docSnap.data() as any) }));
         }
       } catch (err) {
         console.error("Error loading personal AI settings:", err);
@@ -80,40 +86,87 @@ export default function PersonalAISettings() {
       ) : (
         <form onSubmit={handleSave} className="space-y-4">
           <p className="text-xs text-bone-dim">
-            To use the AI Nutrition features, you must provide your own API keys. These are stored securely in your private profile.
+            To use the AI Nutrition features, you must provide your own API keys. These are stored securely in your private profile. Priority: Groq → NVIDIA → Gemini → OpenRouter.
           </p>
 
           <div>
-            <label className="label">Nvidia API Key (Primary)</label>
-            <input
-              type="password"
-              className="input-field font-mono text-sm"
-              value={keys.nvidia_api_key}
-              onChange={e => setKeys({ ...keys, nvidia_api_key: e.target.value })}
-              placeholder="nvapi-..."
-            />
+            <label className="label">Groq API Key (Primary)</label>
+            <div className="relative">
+              <input
+                type={showKeys.groq ? "text" : "password"}
+                className="input-field font-mono text-sm pr-10"
+                value={keys.groq_api_key}
+                onChange={e => setKeys({ ...keys, groq_api_key: e.target.value })}
+                placeholder="gsk_..."
+              />
+              <button
+                type="button"
+                onClick={() => toggleShowKey('groq')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
+              >
+                {showKeys.groq ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
 
           <div>
-            <label className="label">Gemini API Key (Fallback)</label>
-            <input
-              type="password"
-              className="input-field font-mono text-sm"
-              value={keys.gemini_api_key}
-              onChange={e => setKeys({ ...keys, gemini_api_key: e.target.value })}
-              placeholder="AIza..."
-            />
+            <label className="label">Nvidia API Key (Fallback 1)</label>
+            <div className="relative">
+              <input
+                type={showKeys.nvidia ? "text" : "password"}
+                className="input-field font-mono text-sm pr-10"
+                value={keys.nvidia_api_key}
+                onChange={e => setKeys({ ...keys, nvidia_api_key: e.target.value })}
+                placeholder="nvapi-..."
+              />
+              <button
+                type="button"
+                onClick={() => toggleShowKey('nvidia')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
+              >
+                {showKeys.nvidia ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
 
           <div>
-            <label className="label">OpenRouter API Key (Fallback)</label>
-            <input
-              type="password"
-              className="input-field font-mono text-sm"
-              value={keys.openrouter_api_key}
-              onChange={e => setKeys({ ...keys, openrouter_api_key: e.target.value })}
-              placeholder="sk-or-v1-..."
-            />
+            <label className="label">Gemini API Key (Fallback 2)</label>
+            <div className="relative">
+              <input
+                type={showKeys.gemini ? "text" : "password"}
+                className="input-field font-mono text-sm pr-10"
+                value={keys.gemini_api_key}
+                onChange={e => setKeys({ ...keys, gemini_api_key: e.target.value })}
+                placeholder="AIza..."
+              />
+              <button
+                type="button"
+                onClick={() => toggleShowKey('gemini')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
+              >
+                {showKeys.gemini ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="label">OpenRouter API Key (Fallback 3)</label>
+            <div className="relative">
+              <input
+                type={showKeys.openrouter ? "text" : "password"}
+                className="input-field font-mono text-sm pr-10"
+                value={keys.openrouter_api_key}
+                onChange={e => setKeys({ ...keys, openrouter_api_key: e.target.value })}
+                placeholder="sk-or-v1-..."
+              />
+              <button
+                type="button"
+                onClick={() => toggleShowKey('openrouter')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
+              >
+                {showKeys.openrouter ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center justify-between pt-2">
