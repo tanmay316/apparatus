@@ -339,11 +339,13 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
-          className="fixed inset-0 h-[100dvh] z-[999] flex flex-col bg-ink sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[420px] sm:h-[600px] sm:max-h-[calc(100vh-120px)] sm:rounded-3xl sm:border sm:border-line sm:shadow-2xl sm:shadow-black/60"
+          className="fixed inset-0 h-[100dvh] z-[999] flex flex-col bg-ink/70 backdrop-blur-2xl sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[420px] sm:h-[600px] sm:max-h-[calc(100vh-120px)] sm:rounded-3xl sm:border sm:border-white/10 sm:shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden"
         >
+          {/* Subtle Ambient Background Gradients */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full blur-[80px] pointer-events-none" />
+          <div className="absolute bottom-1/4 -left-1/4 w-64 h-64 bg-sienna/20 rounded-full blur-[80px] pointer-events-none" />
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 bg-ink-2/90 backdrop-blur-xl border-b border-line/30 sm:rounded-t-3xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-sienna/10 rounded-full blur-2xl -translate-y-1/2 translate-x-1/4 pointer-events-none" />
+      <div className="flex items-center justify-between px-5 py-3.5 bg-white/[0.03] border-b border-white/[0.05] relative z-10">
         <div className="flex items-center gap-3 relative z-10">
           <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-sienna to-orange-500 p-[1px]">
             <div className="w-full h-full rounded-2xl bg-ink-2 flex items-center justify-center">
@@ -443,7 +445,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       </AnimatePresence>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6 scrollbar-thin bg-gradient-to-b from-ink to-ink-2">
+      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6 scrollbar-thin bg-transparent relative z-10">
         {messages.map((msg, i) => (
           <motion.div
             key={msg.id}
@@ -481,8 +483,8 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
               {msg.content && (
                 <div className={`rounded-3xl px-4 py-3 text-[14px] leading-relaxed shadow-sm ${
                   msg.role === 'user'
-                    ? 'bg-sienna/90 text-white rounded-tr-sm self-end'
-                    : 'bg-white/[0.04] border border-white/[0.06] text-bone rounded-tl-sm self-start w-full sm:w-auto'
+                    ? 'bg-gradient-to-tr from-sienna to-orange-500 text-white rounded-tr-sm self-end'
+                    : 'bg-white/[0.05] backdrop-blur-md border border-white/10 text-bone rounded-tl-sm self-start w-full sm:w-auto shadow-[0_4px_12px_rgba(0,0,0,0.1)]'
                 }`}>
                   {msg.role === 'user' ? (
                     <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -573,7 +575,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       )}
 
       {/* Input Area */}
-      <div className="p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 bg-ink-2 border-t border-line/30 sm:rounded-b-3xl">
+      <div className="p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 bg-white/[0.03] backdrop-blur-lg border-t border-white/[0.05] relative z-10">
         
         {/* Image Preview Area */}
         <AnimatePresence>
