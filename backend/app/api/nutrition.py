@@ -284,10 +284,12 @@ async def chat(
         user_preferences=user_prefs,
     )
 
-    result_state = await orchestrator.run(state)
-
-    # Save assistant response and check for profile update
-    assistant_msg = result_state.chat_response or result_state.response.get("chat", "")
+    try:
+        result_state = await orchestrator.run(state)
+        assistant_msg = result_state.chat_response or result_state.response.get("chat", "I couldn't generate a response.")
+    except Exception as e:
+        logger.error(f"Error during AI chat generation: {e}")
+        assistant_msg = "I'm sorry, I encountered an error while processing your request. Please try again."
     
     # Check if AI collected profile data
     if "_update_profile" in assistant_msg:
@@ -335,9 +337,15 @@ async def chat(
     chat_repo.add_message(session.id, "assistant", assistant_msg.strip())
     db.commit()
 
+    reasoning_text = None
+    try:
+        reasoning_text = result_state.response.get("reasoning")
+    except Exception:
+        pass
+
     return ChatResponse(
         response=assistant_msg.strip(),
-        reasoning=result_state.response.get("reasoning"),
+        reasoning=reasoning_text,
         session_id=session.id,
     )
 

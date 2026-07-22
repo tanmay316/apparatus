@@ -5,6 +5,7 @@ import { sendChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionM
 import NutritionResultCard from './NutritionResultCard';
 import CameraScanner from './CameraScanner';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatMessage {
   id: string;
@@ -486,8 +487,8 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
                   {msg.role === 'user' ? (
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                   ) : (
-                    <div className="text-[14px] leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:ml-5 [&>ul]:mb-3 [&>ol]:list-decimal [&>ol]:ml-5 [&>ol]:mb-3 [&>li]:mb-1 [&>h1]:font-semibold [&>h1]:text-bone [&>h1]:mb-2 [&>h2]:font-semibold [&>h2]:text-bone [&>h2]:mb-2 [&>h3]:font-semibold [&>h3]:text-bone [&>h3]:mb-2 [&_strong]:text-bone [&_strong]:font-semibold">
-                      <ReactMarkdown>
+                    <div className="text-[14px] leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:ml-5 [&>ul]:mb-3 [&>ol]:list-decimal [&>ol]:ml-5 [&>ol]:mb-3 [&>li]:mb-1 [&>h1]:font-semibold [&>h1]:text-bone [&>h1]:mb-2 [&>h2]:font-semibold [&>h2]:text-bone [&>h2]:mb-2 [&>h3]:font-semibold [&>h3]:text-bone [&>h3]:mb-2 [&_strong]:text-bone [&_strong]:font-semibold [&>table]:w-full [&>table]:text-left [&>table]:border-collapse [&>table]:mb-3 [&_th]:border-b [&_th]:border-white/10 [&_th]:pb-2 [&_th]:font-semibold [&_td]:py-2 [&_td]:border-b [&_td]:border-white/5">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {msg.content}
                       </ReactMarkdown>
                     </div>
