@@ -372,14 +372,19 @@ async def get_chat_session_messages(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get all messages for a specific session."""
+    """Get all messages for a specific session in strict chronological order."""
     uid = current_user["uid"]
     chat_repo = ChatRepository(db)
     session = chat_repo.get_session(session_id)
     if not session or session.user_id != uid:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    messages = chat_repo.get_recent_messages(session_id, limit=50)
+    messages = (
+        db.query(ChatMessage)
+        .filter(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.id.asc())
+        .all()
+    )
     return [
         {
             "id": f"msg-{m.id}",
@@ -399,15 +404,14 @@ async def delete_chat_session(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Delete a chat session."""
+    """Delete a chat session idempotently."""
     uid = current_user["uid"]
     chat_repo = ChatRepository(db)
     session = chat_repo.get_session(session_id)
-    if not session or session.user_id != uid:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    chat_repo.delete_session(session_id)
-    db.commit()
+    if session:
+        if session.user_id == uid:
+            chat_repo.delete_session(session_id)
+            db.commit()
     return {"success": True}
 
 

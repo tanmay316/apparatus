@@ -144,12 +144,13 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     e.stopPropagation();
     try {
       await deleteChatSession(sid);
+    } catch (err) {
+      console.error("Failed to delete session on backend", err);
+    } finally {
       setSessions(prev => prev.filter(s => s.id !== sid));
       if (sessionId === sid) {
         handleNewChat();
       }
-    } catch (err) {
-      console.error("Failed to delete session", err);
     }
   };
 
@@ -418,7 +419,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
                   {msg.role === 'user' ? (
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                   ) : (
-                    <div className="text-[14px] leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:ml-5 [&>ul]:mb-3 [&>ol]:list-decimal [&>ol]:ml-5 [&>ol]:mb-3 [&>li]:mb-1 [&>h1]:font-semibold [&>h1]:text-white [&>h1]:mb-2 [&>h2]:font-semibold [&>h2]:text-white [&>h2]:mb-2 [&>h3]:font-semibold [&>h3]:text-white [&>h3]:mb-2 [&_strong]:text-white [&_strong]:font-semibold">
+                    <div className="text-[14px] leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:ml-5 [&>ul]:mb-3 [&>ol]:list-decimal [&>ol]:ml-5 [&>ol]:mb-3 [&>li]:mb-1 [&>h1]:font-semibold [&>h1]:text-bone [&>h1]:mb-2 [&>h2]:font-semibold [&>h2]:text-bone [&>h2]:mb-2 [&>h3]:font-semibold [&>h3]:text-bone [&>h3]:mb-2 [&_strong]:text-bone [&_strong]:font-semibold">
                       <ReactMarkdown>
                         {msg.content}
                       </ReactMarkdown>
