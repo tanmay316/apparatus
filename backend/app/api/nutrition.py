@@ -379,12 +379,7 @@ async def get_chat_session_messages(
     if not session or session.user_id != uid:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    messages = (
-        db.query(ChatMessage)
-        .filter(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.id.asc())
-        .all()
-    )
+    messages = chat_repo.get_recent_messages(session_id, limit=500)
     return [
         {
             "id": f"msg-{m.id}",

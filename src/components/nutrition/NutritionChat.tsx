@@ -160,6 +160,8 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         }));
         setMessages(formatted);
         setCachedData(`apparatus_cached_messages_${sid}`, formatted);
+      } else {
+        setMessages([]);
       }
     } catch (err) {
       console.error("Failed to fetch fresh session messages", err);
@@ -171,6 +173,15 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   const handleSelectSession = (sid: number) => {
     setSessionId(sid);
     localStorage.setItem('apparatus_active_session_id', String(sid));
+    
+    // Instant cache restore
+    const cachedMsgs = getCachedData(`apparatus_cached_messages_${sid}`);
+    if (cachedMsgs && cachedMsgs.length > 0) {
+      setMessages(cachedMsgs.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })));
+    } else {
+      setMessages([]); // Clear current messages while loading
+    }
+
     loadSessionMessages(sid);
     setShowHistory(false);
   };
