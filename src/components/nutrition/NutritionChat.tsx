@@ -74,29 +74,55 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper to safely get/set cache
+  const getCachedData = (key: string) => {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  };
+  const setCachedData = (key: string, data: any) => {
+    try { localStorage.setItem(key, JSON.stringify(data)); } catch {}
+  };
+
   // Prefetch active session & history in background on mount for zero-delay UX
   useEffect(() => {
     initChatSession();
   }, []);
 
   const initChatSession = async () => {
+    // 1. INSTANT CACHE RESTORE
+    const cachedSessions = getCachedData('apparatus_cached_sessions');
+    if (cachedSessions && cachedSessions.length > 0) {
+      setSessions(cachedSessions);
+    }
+    
+    let targetSid: number | null = null;
+    const savedSessionId = localStorage.getItem('apparatus_active_session_id');
+    if (savedSessionId) {
+      const sid = parseInt(savedSessionId, 10);
+      if (!isNaN(sid)) {
+        targetSid = sid;
+        const cachedMsgs = getCachedData(`apparatus_cached_messages_${sid}`);
+        if (cachedMsgs && cachedMsgs.length > 0) {
+          setSessionId(sid);
+          // Restore timestamps from string
+          setMessages(cachedMsgs.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) })));
+        }
+      }
+    }
+
+    // 2. BACKGROUND NETWORK FETCH
     setLoadingHistory(true);
     try {
       const data = await getChatSessions();
       setSessions(data);
+      setCachedData('apparatus_cached_sessions', data);
 
-      const savedSessionId = localStorage.getItem('apparatus_active_session_id');
-      let targetSid: number | null = null;
-      if (savedSessionId) {
-        const sid = parseInt(savedSessionId, 10);
-        if (!isNaN(sid) && data.some(s => s.id === sid)) {
-          targetSid = sid;
-        }
-      }
-
-      // If no valid saved session, automatically pick the most recent session
       if (!targetSid && data.length > 0) {
         targetSid = data[0].id;
+      } else if (targetSid && !data.some(s => s.id === targetSid)) {
+        targetSid = data.length > 0 ? data[0].id : null;
       }
 
       if (targetSid) {
@@ -105,7 +131,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         await loadSessionMessages(targetSid);
       }
     } catch (err) {
-      console.error("Failed to load chat sessions", err);
+      console.error("Failed to fetch fresh chat sessions (might be auth delay)", err);
     } finally {
       setLoadingHistory(false);
     }
@@ -115,6 +141,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     try {
       const data = await getChatSessions();
       setSessions(data);
+      setCachedData('apparatus_cached_sessions', data);
     } catch (err) {
       console.error("Failed to load chat sessions", err);
     }
@@ -125,15 +152,17 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     try {
       const msgs = await getChatSessionMessages(sid);
       if (msgs && msgs.length > 0) {
-        setMessages(msgs.map(m => ({
+        const formatted = msgs.map(m => ({
           id: m.id,
           role: m.role,
           content: m.content,
           timestamp: new Date(),
-        })));
+        }));
+        setMessages(formatted);
+        setCachedData(`apparatus_cached_messages_${sid}`, formatted);
       }
     } catch (err) {
-      console.error("Failed to load session messages", err);
+      console.error("Failed to fetch fresh session messages", err);
     } finally {
       setLoading(false);
     }
@@ -177,6 +206,13 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Sync messages to local cache automatically when they change
+  useEffect(() => {
+    if (sessionId && messages.length > 0) {
+      setCachedData(`apparatus_cached_messages_${sessionId}`, messages);
+    }
+  }, [messages, sessionId]);
 
   useEffect(() => {
     if (isOpen && !previewImage) inputRef.current?.focus();
