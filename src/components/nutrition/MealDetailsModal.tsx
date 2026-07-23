@@ -12,10 +12,12 @@ interface MealDetailsModalProps {
 export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetailsModalProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [mealType, setMealType] = useState(meal.meal_type);
+  const [hasChanged, setHasChanged] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     setMealType(meal.meal_type);
+    setHasChanged(false);
   }, [meal.meal_type]);
 
   useEffect(() => {
@@ -26,17 +28,20 @@ export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetail
     }
   }, [meal.image_id]);
 
-  const handleTypeChange = async (newType: string) => {
-    const previousType = mealType;
+  const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newType = e.target.value;
+    setMealType(newType);
+    setHasChanged(newType !== meal.meal_type);
+  };
+
+  const handleSave = async () => {
     try {
       setIsUpdating(true);
-      setMealType(newType);
-      if (onUpdate) onUpdate(meal.id, newType);
-      await updateMealType(meal.id, newType);
+      await updateMealType(meal.id, mealType);
+      setHasChanged(false);
+      if (onUpdate) onUpdate(meal.id, mealType);
     } catch (err) {
       console.error('Failed to update meal type', err);
-      setMealType(previousType); // revert on error
-      if (onUpdate) onUpdate(meal.id, previousType);
     } finally {
       setIsUpdating(false);
     }
@@ -63,19 +68,30 @@ export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetail
               <Apple className="text-sienna w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-1.5 relative group cursor-pointer">
-                <select 
-                  value={mealType}
-                  onChange={(e) => handleTypeChange(e.target.value)}
-                  disabled={isUpdating}
-                  className={`bg-transparent text-lg font-display font-bold text-bone capitalize focus:outline-none appearance-none cursor-pointer pr-5 ${isUpdating ? 'opacity-50' : ''}`}
-                >
-                  <option value="breakfast" className="bg-ink text-bone">Breakfast Details</option>
-                  <option value="lunch" className="bg-ink text-bone">Lunch Details</option>
-                  <option value="dinner" className="bg-ink text-bone">Dinner Details</option>
-                  <option value="snack" className="bg-ink text-bone">Snack Details</option>
-                </select>
-                <ChevronDown size={14} className="text-bone-dim absolute right-0 pointer-events-none group-hover:text-bone transition-colors" />
+              <div className="flex items-center gap-1.5 relative">
+                <div className="relative group cursor-pointer flex items-center pr-5">
+                  <select 
+                    value={mealType}
+                    onChange={handleTypeChange}
+                    disabled={isUpdating}
+                    className={`bg-transparent text-lg font-display font-bold text-bone capitalize focus:outline-none appearance-none cursor-pointer ${isUpdating ? 'opacity-50' : ''}`}
+                  >
+                    <option value="breakfast" className="bg-ink text-bone">Breakfast Details</option>
+                    <option value="lunch" className="bg-ink text-bone">Lunch Details</option>
+                    <option value="dinner" className="bg-ink text-bone">Dinner Details</option>
+                    <option value="snack" className="bg-ink text-bone">Snack Details</option>
+                  </select>
+                  <ChevronDown size={14} className="text-bone-dim absolute right-0 pointer-events-none group-hover:text-bone transition-colors" />
+                </div>
+                {hasChanged && (
+                  <button 
+                    onClick={handleSave}
+                    disabled={isUpdating}
+                    className="ml-2 px-3 py-1 bg-sienna/20 text-sienna hover:bg-sienna/30 text-xs font-display tracking-wide uppercase font-bold rounded-lg transition-colors border border-sienna/30 disabled:opacity-50"
+                  >
+                    {isUpdating ? 'Saving' : 'Save'}
+                  </button>
+                )}
               </div>
               <p className="text-xs text-bone-dim">{new Date(meal.logged_at).toLocaleString()}</p>
             </div>
