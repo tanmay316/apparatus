@@ -416,6 +416,8 @@ async def chat(
                 for tip in tips:
                     md += f"- {tip}\n"
             assistant_msg = md.strip()
+        elif result_state.response.get("nutrition"):
+            assistant_msg = "Here are the macros for your meal!"
         else:
             assistant_msg = "I couldn't generate a response."
     except Exception as e:
@@ -465,19 +467,25 @@ async def chat(
             except Exception as e:
                 logger.error(f"Failed to parse profile update: {e}")
 
-    chat_repo.add_message(session.id, "assistant", assistant_msg.strip())
+    # Save assistant message
+    chat_repo.add_message(session.id, "assistant", assistant_msg)
     db.commit()
 
-    reasoning_text = None
-    try:
-        reasoning_text = result_state.response.get("reasoning")
-    except Exception:
-        pass
+    nutrition_data = None
+    if result_state.response and "nutrition" in result_state.response:
+        # Reconstruct FoodAnalyzeResponse structure for the UI
+        nutrition_data = {
+            "success": True,
+            "vision": result_state.response.get("vision"),
+            "nutrition": result_state.response.get("nutrition"),
+        }
 
     return ChatResponse(
-        response=assistant_msg.strip(),
-        reasoning=reasoning_text,
+        response=assistant_msg,
+        reasoning=result_state.chat_reasoning,
         session_id=session.id,
+        tokens_used=0,
+        nutritionData=nutrition_data,
     )
 
 

@@ -327,6 +327,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             role: 'assistant',
             content: res.response,
             reasoning: (res as any).reasoning,
+            nutritionData: (res as any).nutritionData,
             timestamp: new Date(),
           },
         ]);

@@ -115,6 +115,9 @@ class NutritionGraphOrchestrator:
         elif intent == "insights":
             state = await self._run_insights(state)
 
+        elif intent == "log":
+            state = await self._run_log(state)
+
         return state
 
     async def _run_scanner(self, state: GraphState) -> GraphState:
@@ -213,6 +216,43 @@ class NutritionGraphOrchestrator:
 
         if result:
             state.recipe_result = result.model_dump()
+        return state
+
+    async def _run_log(self, state: GraphState) -> GraphState:
+        """Parse manual text meal logging into a format the nutrition agent can process."""
+        llm_providers = get_llm_providers(state.groq_key, state.nvidia_key, state.gemini_key, state.openrouter_key)
+        from app.providers.llm import chat_with_fallback
+        from app.providers.llm.base import ChatMessage
+        import json
+        
+        prompt = f"""Extract the list of foods and their estimated weights/quantities from the following text.
+Return a JSON object with a single key 'detected_foods' which is a list of objects containing 'name' (string) and 'estimated_weight_grams' (number or null). Make a reasonable guess for weight if not provided but standard serving is known (e.g. 1 mango ~ 200g, 1 glass milk ~ 240g).
+Text: "{state.user_message}"
+        """
+        messages = [ChatMessage(role="user", content=prompt)]
+        response = await chat_with_fallback(
+            messages, llm_providers,
+            system_prompt="You are a data extraction bot. Return only valid JSON.",
+            temperature=0,
+            json_mode=True,
+        )
+        
+        try:
+            text = response.content.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1]
+                if text.endswith("```"):
+                    text = text[:-3].strip()
+            parsed = json.loads(text)
+            if "detected_foods" in parsed:
+                state.vision_result = {"detected_foods": parsed["detected_foods"], "is_food": True}
+                # Now run nutrition agent on these foods
+                state = await self._run_nutrition(state)
+            else:
+                state.errors.append("Failed to parse foods from log text")
+        except Exception as e:
+            state.errors.append(f"Failed to log meal: {str(e)}")
+            
         return state
 
     async def _run_plan(self, state: GraphState) -> GraphState:

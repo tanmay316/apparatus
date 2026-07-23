@@ -59,6 +59,7 @@ class ChatResponse(BaseModel):
     reasoning: Optional[str] = None
     session_id: int
     tokens_used: int = 0
+    nutritionData: Optional[dict] = None
 
 class TodayNutritionResponse(BaseModel):
     date: str
