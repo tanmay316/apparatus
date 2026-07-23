@@ -6,13 +6,17 @@ import { getNutritionImage, updateMealType } from '@/services/nutrition-api';
 interface MealDetailsModalProps {
   meal: any;
   onClose: () => void;
-  onUpdate?: () => void;
+  onUpdate?: (mealId: number, newType: string) => void;
 }
 
 export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetailsModalProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [mealType, setMealType] = useState(meal.meal_type);
   const [isUpdating, setIsUpdating] = useState(false);
+
+  useEffect(() => {
+    setMealType(meal.meal_type);
+  }, [meal.meal_type]);
 
   useEffect(() => {
     if (meal.image_id) {
@@ -23,14 +27,16 @@ export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetail
   }, [meal.image_id]);
 
   const handleTypeChange = async (newType: string) => {
+    const previousType = mealType;
     try {
       setIsUpdating(true);
-      await updateMealType(meal.id, newType);
       setMealType(newType);
-      if (onUpdate) onUpdate();
+      if (onUpdate) onUpdate(meal.id, newType);
+      await updateMealType(meal.id, newType);
     } catch (err) {
       console.error('Failed to update meal type', err);
-      setMealType(meal.meal_type); // revert on error
+      setMealType(previousType); // revert on error
+      if (onUpdate) onUpdate(meal.id, previousType);
     } finally {
       setIsUpdating(false);
     }

@@ -142,6 +142,23 @@ export default function NutritionDashboard() {
     }
   };
 
+  const handleMealTypeUpdate = useCallback((mealId: number, newType: string) => {
+    setSelectedMeal((prev: any) => (prev && prev.id === mealId ? { ...prev, meal_type: newType } : prev));
+    setTodayData((prev: any) => {
+      if (!prev || !prev.meals) return prev;
+      return {
+        ...prev,
+        meals: prev.meals.map((m: any) => (m.id === mealId ? { ...m, meal_type: newType } : m)),
+      };
+    });
+    setHistoryData((prev: any[]) => {
+      if (!prev) return prev;
+      return prev.map((m: any) => (m.id === mealId ? { ...m, meal_type: newType } : m));
+    });
+    loadToday();
+    loadHistory();
+  }, [loadToday, loadHistory]);
+
   const caloriesConsumed = todayData?.total_calories || 0;
   const proteinConsumed = todayData?.total_protein || 0;
   const carbsConsumed = todayData?.total_carbs || 0;
@@ -252,7 +269,7 @@ export default function NutritionDashboard() {
           {todayData?.meals && todayData.meals.length > 0 ? (
             todayData.meals.map((meal: any, i: number) => (
               <div 
-                key={i} 
+                key={meal.id || i} 
                 onClick={() => setSelectedMeal(meal)}
                 className="card p-4 flex items-center justify-between cursor-pointer hover:bg-ink-2 transition-colors"
               >
@@ -297,7 +314,7 @@ export default function NutritionDashboard() {
               })
               .map((meal: any, i: number) => (
                 <div 
-                  key={i} 
+                  key={meal.id || i} 
                   onClick={() => setSelectedMeal(meal)}
                   className="card p-4 flex items-center justify-between cursor-pointer hover:bg-ink-2 transition-colors"
                 >
@@ -339,10 +356,7 @@ export default function NutritionDashboard() {
           <MealDetailsModal
             meal={selectedMeal}
             onClose={() => setSelectedMeal(null)}
-            onUpdate={() => {
-              loadToday();
-              loadHistory();
-            }}
+            onUpdate={handleMealTypeUpdate}
           />
         )}
       </AnimatePresence>
