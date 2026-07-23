@@ -46,6 +46,14 @@ class MealRepository:
             meal.ai_suggestions = suggestions
             self.db.flush()
 
+    def update_meal_type(self, meal_id: int, user_id: str, new_type: str) -> bool:
+        meal = self.db.query(MealLog).filter(MealLog.id == meal_id, MealLog.user_id == user_id).first()
+        if meal:
+            meal.meal_type = new_type
+            self.db.flush()
+            return True
+        return False
+
     def get_meal(self, meal_id: int) -> Optional[MealLog]:
         return self.db.query(MealLog).filter(MealLog.id == meal_id).first()
 
