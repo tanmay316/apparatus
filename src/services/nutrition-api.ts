@@ -96,6 +96,7 @@ export interface ChatMessageResponse {
   response: string;
   session_id: number;
   tokens_used: number;
+  nutritionData?: FoodAnalyzeResponse;
 }
 
 export interface ChatSessionItem {

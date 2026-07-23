@@ -244,13 +244,22 @@ Text: "{state.user_message}"
                 if text.endswith("```"):
                     text = text[:-3].strip()
             parsed = json.loads(text)
-            if "detected_foods" in parsed:
-                state.vision_result = {"detected_foods": parsed["detected_foods"], "is_food": True}
+            logger.info(f"_run_log parsed foods: {parsed}")
+            if "detected_foods" in parsed and parsed["detected_foods"]:
+                # Ensure each food has the 'confidence' field that DetectedFood requires
+                enriched_foods = []
+                for food in parsed["detected_foods"]:
+                    if "confidence" not in food:
+                        food["confidence"] = 1.0
+                    enriched_foods.append(food)
+                state.vision_result = {"detected_foods": enriched_foods, "is_food": True}
                 # Now run nutrition agent on these foods
                 state = await self._run_nutrition(state)
+                logger.info(f"_run_log nutrition result: {state.nutrition_result is not None}")
             else:
                 state.errors.append("Failed to parse foods from log text")
         except Exception as e:
+            logger.error(f"_run_log error: {e}", exc_info=True)
             state.errors.append(f"Failed to log meal: {str(e)}")
             
         return state

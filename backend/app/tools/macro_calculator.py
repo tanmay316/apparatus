@@ -60,11 +60,21 @@ NUTRITION_DB = {
     "mango": {"calories": 60, "protein": 0.8, "carbs": 15.0, "fat": 0.4, "fiber": 1.6},
     "grapes": {"calories": 69, "protein": 0.7, "carbs": 18.1, "fat": 0.2, "fiber": 0.9},
     "watermelon": {"calories": 30, "protein": 0.6, "carbs": 7.6, "fat": 0.2, "fiber": 0.4},
+    "pomegranate": {"calories": 83, "protein": 1.7, "carbs": 18.7, "fat": 1.2, "fiber": 4.0},
+    "pear": {"calories": 57, "protein": 0.4, "carbs": 15.2, "fat": 0.1, "fiber": 3.1},
+    "papaya": {"calories": 43, "protein": 0.5, "carbs": 10.8, "fat": 0.3, "fiber": 1.7},
+    "pineapple": {"calories": 50, "protein": 0.5, "carbs": 13.1, "fat": 0.1, "fiber": 1.4},
+    "strawberry": {"calories": 32, "protein": 0.7, "carbs": 7.7, "fat": 0.3, "fiber": 2.0},
+    "blueberry": {"calories": 57, "protein": 0.7, "carbs": 14.5, "fat": 0.3, "fiber": 2.4},
+    "guava": {"calories": 68, "protein": 2.6, "carbs": 14.3, "fat": 1.0, "fiber": 5.4},
+    "kiwi": {"calories": 61, "protein": 1.1, "carbs": 14.7, "fat": 0.5, "fiber": 3.0},
 
-    # Dairy
+    # Dairy & Milk alternatives
     "whole milk": {"calories": 61, "protein": 3.2, "carbs": 4.8, "fat": 3.3, "fiber": 0.0},
     "toned milk": {"calories": 58, "protein": 3.1, "carbs": 4.8, "fat": 3.0, "fiber": 0.0},
     "skim milk": {"calories": 35, "protein": 3.4, "carbs": 5.0, "fat": 0.1, "fiber": 0.0},
+    "almond milk": {"calories": 13, "protein": 0.4, "carbs": 0.3, "fat": 1.1, "fiber": 0.2},
+    "unsweetened almond milk": {"calories": 13, "protein": 0.4, "carbs": 0.3, "fat": 1.1, "fiber": 0.2},
     "curd": {"calories": 61, "protein": 3.5, "carbs": 4.7, "fat": 3.3, "fiber": 0.0},
     "cheese": {"calories": 402, "protein": 25.0, "carbs": 1.3, "fat": 33.0, "fiber": 0.0},
     "butter": {"calories": 717, "protein": 0.9, "carbs": 0.1, "fat": 81.0, "fiber": 0.0},
