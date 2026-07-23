@@ -705,3 +705,30 @@ async def get_nutrition_history(
     uid = current_user["uid"]
     meal_svc = MealService(db)
     return {"history": meal_svc.get_history(uid, days)}
+
+
+class UpdateMealTypeRequest(BaseModel):
+    meal_type: str
+
+@router.patch("/meals/{meal_id}/type")
+async def update_meal_type(
+    meal_id: int,
+    req: UpdateMealTypeRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update the meal type of a logged meal."""
+    uid = current_user["uid"]
+    from app.repositories.meal_repository import MealRepository
+    meal_repo = MealRepository(db)
+    
+    # Validate allowed meal types
+    allowed_types = ["breakfast", "lunch", "dinner", "snack", "snacks"]
+    if req.meal_type.lower() not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid meal type")
+        
+    success = meal_repo.update_meal_type(meal_id, uid, req.meal_type.lower())
+    if not success:
+        raise HTTPException(status_code=404, detail="Meal not found or unauthorized")
+        
+    return {"success": True}

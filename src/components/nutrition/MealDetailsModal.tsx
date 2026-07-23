@@ -1,15 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Apple, Beef, Droplet, Flame, Wheat, Activity } from 'lucide-react';
-import { getNutritionImage } from '@/services/nutrition-api';
+import { X, Apple, Beef, Droplet, Flame, Wheat, Activity, ChevronDown } from 'lucide-react';
+import { getNutritionImage, updateMealType } from '@/services/nutrition-api';
 
 interface MealDetailsModalProps {
   meal: any;
   onClose: () => void;
+  onUpdate?: () => void;
 }
 
-export default function MealDetailsModal({ meal, onClose }: MealDetailsModalProps) {
+export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetailsModalProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [mealType, setMealType] = useState(meal.meal_type);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   useEffect(() => {
     if (meal.image_id) {
@@ -18,6 +21,20 @@ export default function MealDetailsModal({ meal, onClose }: MealDetailsModalProp
       }).catch(console.error);
     }
   }, [meal.image_id]);
+
+  const handleTypeChange = async (newType: string) => {
+    try {
+      setIsUpdating(true);
+      await updateMealType(meal.id, newType);
+      setMealType(newType);
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      console.error('Failed to update meal type', err);
+      setMealType(meal.meal_type); // revert on error
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -40,7 +57,20 @@ export default function MealDetailsModal({ meal, onClose }: MealDetailsModalProp
               <Apple className="text-sienna w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-display font-bold text-bone capitalize">{meal.meal_type} Details</h2>
+              <div className="flex items-center gap-1.5 relative group cursor-pointer">
+                <select 
+                  value={mealType}
+                  onChange={(e) => handleTypeChange(e.target.value)}
+                  disabled={isUpdating}
+                  className={`bg-transparent text-lg font-display font-bold text-bone capitalize focus:outline-none appearance-none cursor-pointer pr-5 ${isUpdating ? 'opacity-50' : ''}`}
+                >
+                  <option value="breakfast" className="bg-ink text-bone">Breakfast Details</option>
+                  <option value="lunch" className="bg-ink text-bone">Lunch Details</option>
+                  <option value="dinner" className="bg-ink text-bone">Dinner Details</option>
+                  <option value="snack" className="bg-ink text-bone">Snack Details</option>
+                </select>
+                <ChevronDown size={14} className="text-bone-dim absolute right-0 pointer-events-none group-hover:text-bone transition-colors" />
+              </div>
               <p className="text-xs text-bone-dim">{new Date(meal.logged_at).toLocaleString()}</p>
             </div>
           </div>

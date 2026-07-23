@@ -214,3 +214,10 @@ export async function updateNutritionProfile(data: any) {
     body: JSON.stringify(data),
   });
 }
+
+export async function updateMealType(mealId: number, mealType: string) {
+  return apiRequest<any>(`/nutrition/meals/${mealId}/type`, {
+    method: 'PATCH',
+    body: JSON.stringify({ meal_type: mealType }),
+  });
+}
