@@ -19,6 +19,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}${path}`, {
+    cache: 'no-store', // Prevent browser caching of GET requests
     ...options,
     headers: { ...headers, ...(options.headers || {}) },
   });
