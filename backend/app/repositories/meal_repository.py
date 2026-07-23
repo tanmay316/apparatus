@@ -50,7 +50,7 @@ class MealRepository:
         meal = self.db.query(MealLog).filter(MealLog.id == meal_id, MealLog.user_id == user_id).first()
         if meal:
             meal.meal_type = new_type
-            self.db.flush()
+            self.db.commit()
             return True
         return False
 
