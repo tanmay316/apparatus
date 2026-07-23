@@ -80,6 +80,8 @@ export default function NutritionResultCard({ result, onClose, onLogMeal }: Nutr
   const hydration = result.nutrition.hydration_suggestion;
   const vision = result.vision;
 
+  if (!nutrition || !healthScore) return null;
+
   return (
     <motion.div
       variants={container}
@@ -100,10 +102,10 @@ export default function NutritionResultCard({ result, onClose, onLogMeal }: Nutr
             <div className="flex items-center gap-4 mt-2">
               <div className="flex items-center gap-1.5">
                 <Flame size={14} className="text-sienna" />
-                <span className="text-sm font-semibold text-bone">{nutrition.total_calories.toFixed(0)}</span>
+                <span className="text-sm font-semibold text-bone">{(nutrition.total_calories ?? 0).toFixed(0)}</span>
                 <span className="text-[10px] text-bone-dim">kcal</span>
               </div>
-              {vision && (
+              {vision?.provider_used && vision?.latency_ms != null && (
                 <div className="text-[10px] text-bone-dim bg-white/[0.04] px-2 py-0.5 rounded-full">
                   via {vision.provider_used} • {vision.latency_ms.toFixed(0)}ms
                 </div>
@@ -117,10 +119,10 @@ export default function NutritionResultCard({ result, onClose, onLogMeal }: Nutr
       <motion.div variants={item} className="card p-5">
         <h3 className="text-xs font-display uppercase tracking-wider text-bone-dim mb-4">Macronutrients</h3>
         <div className="grid grid-cols-4 gap-3">
-          <MacroRing value={nutrition.total_protein} max={50} label="Protein" color="#c87941" icon={Beef} />
-          <MacroRing value={nutrition.total_carbs} max={80} label="Carbs" color="#eab308" icon={Wheat} />
-          <MacroRing value={nutrition.total_fat} max={30} label="Fat" color="#06b6d4" icon={Droplet} />
-          <MacroRing value={nutrition.total_fiber} max={10} label="Fiber" color="#10b981" icon={TrendingUp} />
+          <MacroRing value={nutrition.total_protein ?? 0} max={50} label="Protein" color="#c87941" icon={Beef} />
+          <MacroRing value={nutrition.total_carbs ?? 0} max={80} label="Carbs" color="#eab308" icon={Wheat} />
+          <MacroRing value={nutrition.total_fat ?? 0} max={30} label="Fat" color="#06b6d4" icon={Droplet} />
+          <MacroRing value={nutrition.total_fiber ?? 0} max={10} label="Fiber" color="#10b981" icon={TrendingUp} />
         </div>
       </motion.div>
 
@@ -128,17 +130,17 @@ export default function NutritionResultCard({ result, onClose, onLogMeal }: Nutr
       <motion.div variants={item} className="card p-5">
         <h3 className="text-xs font-display uppercase tracking-wider text-bone-dim mb-3">Detected Foods</h3>
         <div className="space-y-2">
-          {nutrition.items.map((food: any, i: number) => (
+          {(nutrition.items || []).map((food: any, i: number) => (
             <div key={i} className="flex items-center justify-between py-2 px-3 rounded-xl bg-white/[0.02] border border-line/30">
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-bone capitalize">{food.name}</div>
-                <div className="text-[10px] text-bone-dim">{food.weight_grams}g</div>
+                <div className="text-[10px] text-bone-dim">{food.weight_grams ?? 0}g</div>
               </div>
               <div className="flex items-center gap-3 text-[10px] font-mono">
-                <span className="text-sienna">{food.calories.toFixed(0)} kcal</span>
-                <span className="text-bone-dim">{food.protein.toFixed(1)}P</span>
-                <span className="text-bone-dim">{food.carbs.toFixed(1)}C</span>
-                <span className="text-bone-dim">{food.fat.toFixed(1)}F</span>
+                <span className="text-sienna">{(food.calories ?? 0).toFixed(0)} kcal</span>
+                <span className="text-bone-dim">{(food.protein ?? 0).toFixed(1)}P</span>
+                <span className="text-bone-dim">{(food.carbs ?? 0).toFixed(1)}C</span>
+                <span className="text-bone-dim">{(food.fat ?? 0).toFixed(1)}F</span>
               </div>
             </div>
           ))}
