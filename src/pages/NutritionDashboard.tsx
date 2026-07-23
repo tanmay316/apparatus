@@ -339,7 +339,10 @@ export default function NutritionDashboard() {
           <MealDetailsModal
             meal={selectedMeal}
             onClose={() => setSelectedMeal(null)}
-            onUpdate={loadToday}
+            onUpdate={() => {
+              loadToday();
+              loadHistory();
+            }}
           />
         )}
       </AnimatePresence>
