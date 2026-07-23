@@ -52,6 +52,7 @@ class FoodAnalyzeResponse(BaseModel):
     nutrition: Optional[dict] = None
     errors: List[str] = []
     session_id: Optional[int] = None
+    image_id: Optional[int] = None
 
 class ChatResponse(BaseModel):
     response: str

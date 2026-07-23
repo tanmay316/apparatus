@@ -43,3 +43,10 @@ class ImageRepository:
         self.db.add(cache)
         self.db.flush()
         return cache
+
+    def delete_old_images(self, days: int = 7):
+        from datetime import datetime, timedelta, timezone
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        deleted = self.db.query(ScannedImage).filter(ScannedImage.created_at < cutoff).delete()
+        self.db.flush()
+        return deleted

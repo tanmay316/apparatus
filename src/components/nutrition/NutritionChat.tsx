@@ -259,7 +259,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     setLoggingMessageId(msgId);
     try {
       const mealType = getMealType();
-      await logMeal(nutritionData, mealType, msgId);
+      await logMeal(nutritionData, mealType, msgId, nutritionData.image_id);
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, logged: true } : m));
       window.dispatchEvent(new Event('refresh-nutrition'));
     } catch (err) {

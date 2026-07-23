@@ -84,6 +84,8 @@ export interface FoodAnalyzeResponse {
   vision?: VisionResult;
   nutrition?: NutritionResult;
   errors?: string[];
+  session_id?: number;
+  image_id?: number;
 }
 
 
@@ -182,15 +184,20 @@ export async function getNutritionHistory(days: number = 7) {
   return apiRequest<any>(`/nutrition/history?days=${days}`);
 }
 
-export async function logMeal(visionData: any, mealType: string = 'snack', messageId?: string) {
+export async function logMeal(visionData: any, mealType: string = 'snack', messageId?: string, imageId?: number) {
   return apiRequest<any>('/nutrition/food/log', {
     method: 'POST',
     body: JSON.stringify({
       vision_data: visionData,
       meal_type: mealType,
-      message_id: messageId
+      message_id: messageId,
+      image_id: imageId
     }),
   });
+}
+
+export async function getNutritionImage(imageId: number) {
+  return apiRequest<any>(`/nutrition/images/${imageId}`);
 }
 
 export async function getNutritionProfile() {

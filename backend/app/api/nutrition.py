@@ -44,6 +44,7 @@ def _build_state(user: dict, keys: dict, **kwargs) -> GraphState:
 @router.post("/food/analyze", response_model=FoodAnalyzeResponse)
 async def analyze_food(
     req: FoodAnalyzeRequest,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -53,6 +54,13 @@ async def analyze_food(
     """
     uid = current_user["uid"]
     keys = await resolve_api_keys(current_user)
+
+    # Save image to db immediately and schedule cleanup
+    from app.repositories.image_repository import ImageRepository
+    image_repo = ImageRepository(db)
+    scanned_image = image_repo.save_image(uid, req.image_base64, req.mime_type)
+    
+    background_tasks.add_task(image_repo.delete_old_images, days=7)
 
     # Load user goals from DB
     user_repo = UserRepository(db)
@@ -89,13 +97,12 @@ async def analyze_food(
     # Run the graph
     result_state = await orchestrator.run(state)
 
-
-
     response_data = {
         "success": result_state.response.get("success", False),
         "vision": result_state.response.get("vision"),
         "nutrition": result_state.response.get("nutrition"),
         "errors": result_state.response.get("errors", []),
+        "image_id": scanned_image.id,
     }
     
     provider_used = response_data["vision"].get("provider_used", "Unknown") if response_data.get("vision") else "Unknown"
@@ -129,6 +136,7 @@ class LogMealRequest(BaseModel):
     meal_type: str = "snack"
     vision_data: dict
     message_id: Optional[str] = None
+    image_id: Optional[int] = None
 
 @router.post("/food/log")
 async def log_food(
@@ -153,7 +161,7 @@ async def log_food(
         nutrition_dict = req.vision_data.get("nutrition", {})
         
         # 1. Create the MealLog
-        meal = meal_repo.create_meal(user_id=uid, meal_type=req.meal_type)
+        meal = meal_repo.create_meal(user_id=uid, meal_type=req.meal_type, image_id=req.image_id)
         
         # 2. Add meal items
         nutrition_inner = nutrition_dict.get("nutrition", {})
@@ -208,6 +216,28 @@ async def log_food(
     except Exception as e:
         logger.error(f"Failed to persist meal manually: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ─── GET /images/{image_id} ──────────────────────────────────────
+
+@router.get("/images/{image_id}")
+async def get_image(
+    image_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.repositories.image_repository import ImageRepository
+    image_repo = ImageRepository(db)
+    img = image_repo.get_image(image_id)
+    
+    if not img or img.user_id != current_user["uid"]:
+        raise HTTPException(status_code=404, detail="Image not found")
+        
+    return {
+        "id": img.id,
+        "base64_data": img.base64_data,
+        "mime_type": img.mime_type
+    }
 
 
 class NutritionProfileUpdate(BaseModel):

@@ -163,8 +163,23 @@ class MealService:
                 "protein": m.total_protein,
                 "carbs": m.total_carbs,
                 "fat": m.total_fat,
+                "fiber": m.total_fiber,
                 "health_score": m.health_score,
+                "health_grade": m.health_grade,
                 "logged_at": str(m.logged_at),
+                "image_id": m.image_id,
+                "items": [
+                    {
+                        "food_name": item.food_name,
+                        "weight_grams": item.weight_grams,
+                        "calories": item.calories,
+                        "protein": item.protein,
+                        "carbs": item.carbs,
+                        "fat": item.fat,
+                        "fiber": item.fiber,
+                    }
+                    for item in m.items
+                ]
             }
             for m in meals
         ]

@@ -7,7 +7,8 @@ import NutritionChat from '@/components/nutrition/NutritionChat';
 import NutritionProfileModal from '@/components/nutrition/NutritionProfileModal';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { analyzeFood, getTodayNutrition, type FoodAnalyzeResponse, type TodayNutrition } from '@/services/nutrition-api';
+import { analyzeFood, getTodayNutrition, getNutritionHistory, type FoodAnalyzeResponse, type TodayNutrition } from '@/services/nutrition-api';
+import MealDetailsModal from '@/components/nutrition/MealDetailsModal';
 
 const container = {
   hidden: { opacity: 0 },
@@ -59,9 +60,12 @@ export default function NutritionDashboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [scanResult, setScanResult] = useState<FoodAnalyzeResponse | null>(null);
   const [todayData, setTodayData] = useState<TodayNutrition | null>(null);
+  const [historyData, setHistoryData] = useState<any[]>([]);
   const [loadingToday, setLoadingToday] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(true);
   const [error, setError] = useState('');
   const [showProfile, setShowProfile] = useState(false);
+  const [selectedMeal, setSelectedMeal] = useState<any>(null);
 
 
   // Goals from API or defaults
@@ -85,20 +89,41 @@ export default function NutritionDashboard() {
     }
   }, []);
 
+  const loadHistory = useCallback(async () => {
+    try {
+      const data = await getNutritionHistory(7);
+      if (data && data.history) {
+        // filter out today's meals from history if needed, or just show all
+        setHistoryData(data.history);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingHistory(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadToday();
+    loadHistory();
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) loadToday();
+      if (user) {
+        loadToday();
+        loadHistory();
+      }
     });
     return () => unsubscribe();
-  }, [loadToday]);
+  }, [loadToday, loadHistory]);
 
   // Listen for refresh event from chat
   useEffect(() => {
-    const handleRefresh = () => loadToday();
+    const handleRefresh = () => {
+      loadToday();
+      loadHistory();
+    };
     window.addEventListener('refresh-nutrition', handleRefresh);
     return () => window.removeEventListener('refresh-nutrition', handleRefresh);
-  }, [loadToday]);
+  }, [loadToday, loadHistory]);
 
   const handleCapture = async (base64: string, mimeType: string) => {
     setIsAnalyzing(true);
@@ -226,7 +251,11 @@ export default function NutritionDashboard() {
 
           {todayData?.meals && todayData.meals.length > 0 ? (
             todayData.meals.map((meal: any, i: number) => (
-              <div key={i} className="card p-4 flex items-center justify-between">
+              <div 
+                key={i} 
+                onClick={() => setSelectedMeal(meal)}
+                className="card p-4 flex items-center justify-between cursor-pointer hover:bg-ink-2 transition-colors"
+              >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-ink border border-line flex items-center justify-center">
                     <Apple size={16} className="text-sienna" />
@@ -256,6 +285,46 @@ export default function NutritionDashboard() {
           )}
         </motion.div>
 
+        {/* History (Past 7 Days) */}
+        {historyData && historyData.length > 0 && (
+          <motion.div variants={item} className="space-y-3 mt-8">
+            <h2 className="text-xs font-display uppercase tracking-wider text-bone-dim mb-2">Past 7 Days</h2>
+            {historyData
+              .filter(m => {
+                // Filter out today's meals since they are already shown above
+                const today = new Date().toDateString();
+                return new Date(m.logged_at).toDateString() !== today;
+              })
+              .map((meal: any, i: number) => (
+                <div 
+                  key={i} 
+                  onClick={() => setSelectedMeal(meal)}
+                  className="card p-4 flex items-center justify-between cursor-pointer hover:bg-ink-2 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-ink border border-line flex items-center justify-center">
+                      <CalendarDays size={16} className="text-bone-dim" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-bone text-sm capitalize">{meal.meal_type}</h3>
+                      <p className="text-xs text-bone-dim">
+                        {new Date(meal.logged_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {meal.calories?.toFixed(0)} kcal
+                      </p>
+                    </div>
+                  </div>
+                  {meal.health_grade && (
+                    <span className={`text-xs font-display font-bold px-2 py-1 rounded-lg ${
+                      ['A+', 'A'].includes(meal.health_grade) ? 'bg-emerald-500/20 text-emerald-400' :
+                      ['B+', 'B'].includes(meal.health_grade) ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-orange-500/20 text-orange-400'
+                    }`}>
+                      {meal.health_grade}
+                    </span>
+                  )}
+                </div>
+              ))}
+          </motion.div>
+        )}
 
       </motion.div>
 
@@ -264,6 +333,12 @@ export default function NutritionDashboard() {
           <NutritionProfileModal 
             onClose={() => setShowProfile(false)} 
             onSaved={loadToday}
+          />
+        )}
+        {selectedMeal && (
+          <MealDetailsModal
+            meal={selectedMeal}
+            onClose={() => setSelectedMeal(null)}
           />
         )}
       </AnimatePresence>
