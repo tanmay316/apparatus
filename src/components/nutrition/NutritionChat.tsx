@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2, Brain, ChevronDown, ChevronUp, History, Plus, Trash2, MessageSquare } from 'lucide-react';
+import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2, Brain, ChevronDown, ChevronUp, History, Plus, Trash2, MessageSquare, Square } from 'lucide-react';
 import { sendChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionMessages, deleteChatSession, type FoodAnalyzeResponse, type ChatSessionItem } from '@/services/nutrition-api';
 import NutritionResultCard from './NutritionResultCard';
 import CameraScanner from './CameraScanner';
@@ -74,6 +74,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Helper to safely get/set cache
   const getCachedData = (key: string) => {
@@ -285,13 +286,16 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     setInput('');
     setLoading(true);
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
       if (previewImage) {
         // Image Scan Flow
         const currentPreview = previewImage;
         setPreviewImage(null);
         
-        const res = await analyzeFood(currentPreview.base64, currentPreview.mime, getMealType(), sessionId);
+        const res = await analyzeFood(currentPreview.base64, currentPreview.mime, getMealType(), sessionId, controller.signal);
         
         if (res.session_id && res.session_id !== sessionId) {
           setSessionId(res.session_id);
@@ -311,7 +315,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         ]);
       } else {
         // Text Chat Flow
-        const res = await sendChatMessage(userMsg.content, sessionId);
+        const res = await sendChatMessage(userMsg.content, sessionId, controller.signal);
         setSessionId(res.session_id);
         localStorage.setItem('apparatus_active_session_id', String(res.session_id));
         loadSessions();
@@ -328,17 +332,45 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         ]);
       }
     } catch (err: any) {
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `err-${Date.now()}`,
-          role: 'assistant',
-          content: `Sorry, I encountered an error: ${err.message}. Please check your API keys in Settings.`,
-          timestamp: new Date(),
-        },
-      ]);
+      if (err.name === 'AbortError') {
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `sys-${Date.now()}`,
+            role: 'assistant',
+            content: "Request cancelled.",
+            timestamp: new Date(),
+          },
+        ]);
+      } else {
+        const errMsg = (err.message || '').toLowerCase();
+        let content = "Please provide your weight, height, age, activity level, etc. data from the profile icon filling.";
+        
+        if (errMsg.includes("failed to fetch") || errMsg.includes("network")) {
+          content = "Connection/Network issue. Please try again.";
+        } else if (errMsg.includes("api key") || errMsg.includes("unauthorized") || errMsg.includes("401")) {
+          content = "No API key in settings. Please configure it.";
+        }
+
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `err-${Date.now()}`,
+            role: 'assistant',
+            content,
+            timestamp: new Date(),
+          },
+        ]);
+      }
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const handleStop = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
   };
 
@@ -653,13 +685,23 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             className="flex-1 min-w-0 bg-transparent px-2 py-2.5 text-[15px] text-bone placeholder-bone-dim focus:outline-none"
           />
           
-          <button
-            type="submit"
-            disabled={(!input.trim() && !previewImage) || loading}
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] bg-sienna text-white shadow-[0_0_15px_rgba(200,121,65,0.3)] disabled:opacity-30 disabled:shadow-none disabled:cursor-not-allowed hover:bg-sienna/90 active:scale-95 transition-all shrink-0 flex items-center justify-center"
-          >
-            {loading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
-          </button>
+          {loading ? (
+            <button
+              type="button"
+              onClick={handleStop}
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 hover:text-red-300 active:scale-95 transition-all shrink-0 flex items-center justify-center"
+            >
+              <Square size={16} fill="currentColor" />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={!input.trim() && !previewImage}
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] bg-sienna text-white shadow-[0_0_15px_rgba(200,121,65,0.3)] disabled:opacity-30 disabled:shadow-none disabled:cursor-not-allowed hover:bg-sienna/90 active:scale-95 transition-all shrink-0 flex items-center justify-center"
+            >
+              <Send size={20} />
+            </button>
+          )}
         </form>
       </div>
 

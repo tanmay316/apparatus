@@ -196,7 +196,7 @@ export default function NutritionDashboard() {
         <motion.div variants={item} className="card p-6 bg-gradient-to-br from-ink-2 to-ink relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-sienna/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
           <h2 className="text-xs font-display uppercase tracking-wider text-bone-dim mb-4">Daily Progress</h2>
-          <div className="flex items-center gap-8">
+          <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8">
             {/* Calorie Ring */}
             <div className="relative w-32 h-32 shrink-0">
               <svg className="w-32 h-32 -rotate-90" viewBox="0 0 128 128">
@@ -236,7 +236,7 @@ export default function NutritionDashboard() {
             </div>
 
             {/* Macro Rings */}
-            <div className="flex-1 flex items-center justify-between pl-6 gap-2 border-l border-line/30 ml-2">
+            <div className="flex-1 flex flex-wrap md:flex-nowrap items-center justify-center md:justify-between w-full md:pl-6 gap-6 md:gap-2 md:border-l border-line/30 md:ml-2 pt-6 md:pt-0 border-t md:border-t-0">
               <MacroRing value={proteinConsumed} max={goals.protein} label="Protein" color="#c87941" loading={loadingToday} />
               <MacroRing value={carbsConsumed} max={goals.carbs} label="Carbs" color="#eab308" loading={loadingToday} />
               <MacroRing value={fatConsumed} max={goals.fat} label="Fat" color="#06b6d4" loading={loadingToday} />

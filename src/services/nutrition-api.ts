@@ -108,10 +108,12 @@ export interface ChatSessionItem {
 export async function sendChatMessage(
   message: string,
   sessionId?: number,
+  signal?: AbortSignal
 ): Promise<ChatMessageResponse> {
   return apiRequest<ChatMessageResponse>('/nutrition/chat', {
     method: 'POST',
     body: JSON.stringify({ message, session_id: sessionId }),
+    signal,
   });
 }
 
@@ -149,10 +151,11 @@ export async function generateMealPlan(planType: string = 'daily') {
 
 // ─── Food Logging ────────────────────────────────────────
 
-export async function analyzeFood(base64Data: string, mimeType: string, mealType: string = 'snack', sessionId?: number) {
+export async function analyzeFood(base64Data: string, mimeType: string, mealType: string = 'snack', sessionId?: number, signal?: AbortSignal) {
   return apiRequest<any>('/nutrition/food/analyze', {
     method: 'POST',
     body: JSON.stringify({ image_base64: base64Data, mime_type: mimeType, meal_type: mealType, session_id: sessionId }),
+    signal,
   });
 }
 
