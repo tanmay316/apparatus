@@ -403,7 +403,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             </div>
           </div>
           <div>
-            <h3 className="text-sm font-display font-semibold text-bone">AI Agent</h3>
+            <h3 className="text-sm font-display font-semibold text-bone">Appa</h3>
             <div className="text-[10px] text-bone-dim flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
               Ready to help
@@ -681,7 +681,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={previewImage ? "Add a message..." : "Message AI Agent..."}
+            placeholder={previewImage ? "Add a message..." : "Message Appa..."}
             disabled={loading}
             className="flex-1 min-w-0 bg-transparent px-2 py-2.5 text-[15px] text-bone placeholder-bone-dim focus:outline-none"
           />

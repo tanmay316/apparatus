@@ -10,46 +10,8 @@ from typing import List, Optional
 import httpx
 
 from app.providers.vision.base import BaseVisionProvider, VisionResult, DetectedFood
+from app.providers.vision.prompt import FOOD_DETECTION_PROMPT
 from app.core.config import settings
-
-
-FOOD_DETECTION_PROMPT = """You are an expert food and nutrition recognition system. Analyze this image and identify every food item visible, including cooked foods, complex dishes, and mixed plates.
-
-For each food item, provide:
-- name: The specific food name (e.g., "butter chicken", "paneer tikka", "grilled chicken breast")
-- confidence: Your confidence from 0.0 to 1.0
-- estimated_weight_grams: Estimated weight in grams based on visual portion size
-- category: One of [protein, grain, vegetable, fruit, dairy, fat, beverage, condiment, dessert, snack, other]
-- calories: Total estimated calories for this portion
-- protein: Total estimated protein in grams
-- carbs: Total estimated carbohydrates in grams
-- fat: Total estimated fat in grams
-- fiber: Total estimated fiber in grams
-
-Also determine:
-- is_food: Whether the image contains food at all (true/false)
-- plate_count: How many distinct plates/servings are visible
-- raw_description: A brief natural-language description of the entire meal
-
-Respond ONLY with valid JSON in this exact format:
-{
-  "is_food": true,
-  "plate_count": 1,
-  "raw_description": "A plate of grilled chicken with rice and steamed broccoli",
-  "detected_foods": [
-    {
-      "name": "grilled chicken breast",
-      "confidence": 0.95,
-      "estimated_weight_grams": 150,
-      "category": "protein",
-      "calories": 250,
-      "protein": 30,
-      "carbs": 0,
-      "fat": 5,
-      "fiber": 0
-    }
-  ]
-}"""
 
 
 class NvidiaVisionProvider(BaseVisionProvider):

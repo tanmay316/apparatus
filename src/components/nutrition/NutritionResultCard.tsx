@@ -131,10 +131,10 @@ export default function NutritionResultCard({ result, onClose, onLogMeal }: Nutr
         <h3 className="text-xs font-display uppercase tracking-wider text-bone-dim mb-3">Detected Foods</h3>
         <div className="space-y-2">
           {(nutrition.items || []).map((food: any, i: number) => (
-            <div key={i} className="flex items-center justify-between py-2 px-3 rounded-xl bg-white/[0.02] border border-line/30">
-              <div className="flex-1 min-w-0">
+            <div key={i} className="py-2.5 px-3 rounded-xl bg-white/[0.02] border border-line/30">
+              <div className="flex items-center justify-between mb-1.5">
                 <div className="text-sm font-medium text-bone capitalize">{food.name}</div>
-                <div className="text-[10px] text-bone-dim">{food.weight_grams ?? 0}g</div>
+                <div className="text-[10px] text-bone-dim shrink-0 ml-2">{food.weight_grams ?? 0}g</div>
               </div>
               <div className="flex items-center gap-3 text-[10px] font-mono">
                 <span className="text-sienna">{(food.calories ?? 0).toFixed(0)} kcal</span>

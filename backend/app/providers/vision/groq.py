@@ -9,7 +9,7 @@ import httpx
 
 from app.providers.vision.base import BaseVisionProvider, VisionResult, DetectedFood
 from app.core.config import settings
-from app.providers.vision.nvidia import FOOD_DETECTION_PROMPT
+from app.providers.vision.prompt import FOOD_DETECTION_PROMPT
 
 
 class GroqVisionProvider(BaseVisionProvider):
