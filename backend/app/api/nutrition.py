@@ -123,20 +123,25 @@ async def analyze_food(
     else:
         session = chat_repo.create_session(uid, title="Food Analysis")
         
-    chat_repo.add_message(session.id, "user", f"[Image Uploaded] Please analyze this {req.meal_type}.")
+    chat_repo.add_message(
+        session.id, 
+        "user", 
+        f"[Image Uploaded] Please analyze this {req.meal_type}.",
+        metadata={"nutrition_data": {"image_id": scanned_image.id}}
+    )
     
     # Save assistant message with metadata
-    assistant_msg = chat_repo.add_message(
+    chat_repo.add_message(
         session.id, 
         "assistant", 
         "Here's the analysis of your food:" if response_data["success"] else "I couldn't analyze that food. Please try again.",
+        metadata={"nutrition_data": response_data}
     )
-    assistant_msg.metadata_ = {"nutrition_data": response_data}
+    
     db.commit()
     response_data["session_id"] = session.id
 
     return FoodAnalyzeResponse(**response_data)
-
 
 # ─── POST /food/log ──────────────────────────────────────────────
 
