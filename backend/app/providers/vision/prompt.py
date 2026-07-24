@@ -119,6 +119,12 @@ STEP 4 — Portion estimation.
 
 Estimate REALISTIC serving sizes.
 
+COUNT COUNTABLE ITEMS:
+If the food contains distinct, countable pieces (e.g., 3 rotis, 2 dosas, 5 slices of bread, 2 gulab jamuns, 4 idlis), EXPLICITLY count them in your description and base your weight and macro calculation on that exact count. Never assume a generic weight if you can see the number of pieces.
+
+FACTOR IN HIDDEN INGREDIENTS:
+Always take into consideration hidden calories from oil, butter, and ghee, especially in Indian cuisine (e.g., parathas, curries, dosas, sweets). Adjust calories and fat macros higher to account for these cooking fats.
+
 Use common household references.
 
 Examples
@@ -132,10 +138,10 @@ Single pizza slice:
 Burger:
 180-350 g
 
-Chapati:
+1 Chapati/Roti:
 30-50 g
 
-Naan:
+1 Naan:
 70-120 g
 
 Paneer serving:
@@ -146,6 +152,9 @@ Dal bowl:
 
 Rice bowl:
 150-250 g
+
+1 Gulab Jamun:
+40-60 g
 
 Ice cream scoop:
 60-90 g

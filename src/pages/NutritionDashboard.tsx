@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Apple, Plus, ScanLine, MessageSquare, Flame, Beef, Wheat, Droplet, TrendingUp, ChefHat, CalendarDays, BarChart3, SlidersHorizontal, Loader2 } from 'lucide-react';
+import { Apple, Plus, ScanLine, MessageSquare, Flame, Beef, Wheat, Droplet, TrendingUp, ChefHat, CalendarDays, BarChart3, SlidersHorizontal, Loader2, User } from 'lucide-react';
 import CameraScanner from '@/components/nutrition/CameraScanner';
 import NutritionResultCard from '@/components/nutrition/NutritionResultCard';
 import NutritionChat from '@/components/nutrition/NutritionChat';
@@ -178,10 +178,11 @@ export default function NutritionDashboard() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowProfile(true)}
-              className="w-10 h-10 rounded-xl bg-white/[0.04] border border-line text-bone-dim flex items-center justify-center hover:bg-white/[0.08] hover:text-sienna transition-colors"
+              className="flex items-center gap-2 px-4 h-10 rounded-xl bg-sienna/10 border border-sienna/20 text-sienna hover:bg-sienna/20 transition-colors"
               title="Nutrition Profile & Goals"
             >
-              <SlidersHorizontal size={18} />
+              <User size={16} />
+              <span className="text-sm font-medium">Profile</span>
             </button>
           </div>
         </motion.div>

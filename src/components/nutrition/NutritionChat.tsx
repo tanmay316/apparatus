@@ -54,7 +54,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     {
       id: 'welcome',
       role: 'assistant',
-      content: "Hey! 👋 I'm your AI nutrition assistant.\n\nAsk me anything, scan your food by uploading a photo, or tell me to generate a personalized recipe or meal plan!",
+      content: "Hey! 👋 I'm Appa, your AI nutrition assistant.\n\nTo get started, please tap the **Profile** button (👤) at the top right to set up your body data.\n\nThen, ask me anything, upload a photo to scan your food, or ask for a personalized meal plan!\n\n*(Tip: When uploading a photo, add a message with details like counting pieces or ingredients for the most accurate calculation!)*",
       timestamp: new Date(),
     },
   ]);
@@ -356,9 +356,11 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         ]);
       } else {
         const errMsg = (err.message || '').toLowerCase();
-        let content = "Please provide your weight, height, age, activity level, etc. data from the profile icon filling.";
+        let content = "An error occurred. Please try again.";
         
-        if (errMsg.includes("failed to fetch") || errMsg.includes("network")) {
+        if (errMsg.includes("400") || errMsg.includes("provide your weight")) {
+          content = "To get started, please tap the Profile button (👤) at the top right and fill in your body data (weight, height, age, etc.) so I can calculate your nutrition accurately!";
+        } else if (errMsg.includes("failed to fetch") || errMsg.includes("network")) {
           content = "Connection/Network issue. Please try again.";
         } else if (errMsg.includes("api key") || errMsg.includes("unauthorized") || errMsg.includes("401")) {
           content = "No API key in settings. Please configure it.";
