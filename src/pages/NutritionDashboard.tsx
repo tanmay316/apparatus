@@ -179,10 +179,10 @@ export default function NutritionDashboard() {
             <button
               onClick={() => setShowProfile(true)}
               className="flex items-center gap-2 px-4 h-10 rounded-xl bg-sienna/10 border border-sienna/20 text-sienna hover:bg-sienna/20 transition-colors"
-              title="Nutrition Profile & Goals"
+              title="Body Metrics & Goals"
             >
               <User size={16} />
-              <span className="text-sm font-medium">Profile</span>
+              <span className="text-sm font-medium">Body Metrics</span>
             </button>
           </div>
         </motion.div>

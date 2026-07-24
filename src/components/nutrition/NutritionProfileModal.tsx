@@ -74,9 +74,9 @@ export default function NutritionProfileModal({ onClose, onSaved }: NutritionPro
         <div className="flex items-center justify-between p-4 border-b border-line">
           <div className="flex items-center gap-2 text-bone">
             <Settings size={18} className="text-sienna" />
-            <h2 className="font-display">Nutrition Profile</h2>
+            <h2 className="font-display">Body Metrics</h2>
           </div>
-          <button onClick={onClose} className="text-bone-dim hover:text-bone">
+          <button onClick={onClose} className="p-2 -mr-2 text-bone-dim hover:text-white transition-colors">
             <X size={20} />
           </button>
         </div>
