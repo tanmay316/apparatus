@@ -115,23 +115,25 @@ async def analyze_food(
     provider_used = response_data["vision"].get("provider_used", "Unknown") if response_data.get("vision") else "Unknown"
     logger.info(f"Food analysis complete. Provider used: {provider_used}")
 
+    chat_repo = ChatRepository(db)
     if req.session_id:
-        chat_repo = ChatRepository(db)
         session = chat_repo.get_session(req.session_id)
         if not session:
             session = chat_repo.create_session(uid, title="Food Analysis")
-            
-        chat_repo.add_message(session.id, "user", f"[Image Uploaded] Please analyze this {req.meal_type}.")
+    else:
+        session = chat_repo.create_session(uid, title="Food Analysis")
         
-        # Save assistant message with metadata
-        assistant_msg = chat_repo.add_message(
-            session.id, 
-            "assistant", 
-            "Here's the analysis of your food:" if response_data["success"] else "I couldn't analyze that food. Please try again.",
-        )
-        assistant_msg.metadata_ = {"nutrition_data": response_data}
-        db.commit()
-        response_data["session_id"] = session.id
+    chat_repo.add_message(session.id, "user", f"[Image Uploaded] Please analyze this {req.meal_type}.")
+    
+    # Save assistant message with metadata
+    assistant_msg = chat_repo.add_message(
+        session.id, 
+        "assistant", 
+        "Here's the analysis of your food:" if response_data["success"] else "I couldn't analyze that food. Please try again.",
+    )
+    assistant_msg.metadata_ = {"nutrition_data": response_data}
+    db.commit()
+    response_data["session_id"] = session.id
 
     return FoodAnalyzeResponse(**response_data)
 
