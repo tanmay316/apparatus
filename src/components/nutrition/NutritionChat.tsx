@@ -303,16 +303,23 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
           loadSessions();
         }
 
-        setMessages(prev => [
-          ...prev,
-          {
-            id: `ai-${Date.now()}`,
-            role: 'assistant',
-            content: res.success ? "Here's the analysis of your food:" : "I couldn't analyze that food. Please try again.",
-            timestamp: new Date(),
-            nutritionData: res.success ? res : undefined,
-          },
-        ]);
+        setMessages(prev => {
+          const newMessages = [
+            ...prev,
+            {
+              id: `ai-${Date.now()}`,
+              role: 'assistant' as const,
+              content: res.success ? "Here's the analysis of your food:" : "I couldn't analyze that food. Please try again.",
+              timestamp: new Date(),
+              nutritionData: res.success ? res : undefined,
+            },
+          ];
+          const activeSid = res.session_id || sessionId;
+          if (activeSid) {
+            setCachedData(`apparatus_cached_messages_${activeSid}`, newMessages);
+          }
+          return newMessages;
+        });
       } else {
         // Text Chat Flow
         const res = await sendChatMessage(userMsg.content, sessionId, controller.signal);
@@ -320,17 +327,21 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         localStorage.setItem('apparatus_active_session_id', String(res.session_id));
         loadSessions();
         
-        setMessages(prev => [
-          ...prev,
-          {
-            id: `ai-${Date.now()}`,
-            role: 'assistant',
-            content: res.response,
-            reasoning: (res as any).reasoning,
-            nutritionData: (res as any).nutritionData,
-            timestamp: new Date(),
-          },
-        ]);
+        setMessages(prev => {
+          const newMessages = [
+            ...prev,
+            {
+              id: `ai-${Date.now()}`,
+              role: 'assistant' as const,
+              content: res.response,
+              reasoning: (res as any).reasoning,
+              nutritionData: (res as any).nutritionData,
+              timestamp: new Date(),
+            },
+          ];
+          setCachedData(`apparatus_cached_messages_${res.session_id}`, newMessages);
+          return newMessages;
+        });
       }
     } catch (err: any) {
       if (err.name === 'AbortError') {
