@@ -22,7 +22,7 @@ class NvidiaVisionProvider(BaseVisionProvider):
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.NVIDIA_API_KEY
         self.base_url = "https://integrate.api.nvidia.com/v1"
-        self.model = "thinkingmachines/inkling"
+        self.model = "meta/llama-3.2-90b-vision-instruct"
 
     async def _call_nvidia(self, prompt: str, image_base64: str, mime_type: str = "image/jpeg") -> str:
         """Make a request to Nvidia NIM endpoint."""
