@@ -54,7 +54,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     {
       id: 'welcome',
       role: 'assistant',
-      content: "Hey! 👋 I'm Appa, your AI nutrition assistant.\n\nTo get started, please tap the **Body Metrics** button (👤) at the top right to set up your body data.\n\nThen, ask me anything, upload a photo to scan your food, or ask for a personalized meal plan!\n\n*(Tip: When uploading a photo, add a message with details like counting pieces or ingredients for the most accurate calculation!)*",
+      content: "Hey! 👋 I'm Astra AI, your AI nutrition assistant.\n\nTo get started, please tap the **Body Metrics** button (👤) at the top right to set up your body data.\n\nThen, ask me anything, upload a photo to scan your food, or ask for a personalized meal plan!\n\n*(Tip: When uploading a photo, add a message with details like counting pieces or ingredients for the most accurate calculation!)*",
       timestamp: new Date(),
     },
   ]);
@@ -416,7 +416,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             </div>
           </div>
           <div>
-            <h3 className="text-sm font-display font-semibold text-bone">Appa</h3>
+            <h3 className="text-sm font-display font-semibold text-bone">Astra AI</h3>
             <div className="text-[10px] text-bone-dim flex items-center gap-1.5">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
               Ready to help
@@ -694,7 +694,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={previewImage ? "Add a message..." : "Message Appa..."}
+            placeholder={previewImage ? "Add a message..." : "Message Astra AI..."}
             disabled={loading}
             className="flex-1 min-w-0 bg-transparent px-2 py-2.5 text-[15px] text-bone placeholder-bone-dim focus:outline-none"
           />
