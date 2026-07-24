@@ -227,7 +227,6 @@ export default function CameraScanner({ onCapture, onClose, isAnalyzing }: Camer
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
         onChange={handleFileUpload}
       />

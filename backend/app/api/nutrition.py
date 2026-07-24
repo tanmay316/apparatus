@@ -66,6 +66,13 @@ async def analyze_food(
     user_repo = UserRepository(db)
     user_repo.get_or_create_user(uid, current_user.get("email", ""))
     goals = user_repo.get_goals(uid)
+    
+    if not goals or not goals.calorie_goal:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide your weight, height, age, activity level, etc. data from the profile icon filling."
+        )
+        
     prefs = user_repo.get_preferences(uid)
 
     user_goals = {}
@@ -353,18 +360,22 @@ async def chat(
     goals = user_repo.get_goals(uid)
     prefs = user_repo.get_preferences(uid)
 
-    user_goals = {}
-    if goals:
-        user_goals = {
-            "calorie_goal": goals.calorie_goal,
-            "protein_goal": goals.protein_goal,
-            "fitness_goal": goals.fitness_goal,
-            "weight_kg": goals.weight_kg,
-            "height_cm": goals.height_cm,
-            "age": goals.age,
-            "gender": goals.gender,
-            "activity_level": goals.activity_level,
-        }
+    if not goals or not goals.calorie_goal:
+        raise HTTPException(
+            status_code=400,
+            detail="Please provide your weight, height, age, activity level, etc. data from the profile icon filling."
+        )
+
+    user_goals = {
+        "calorie_goal": goals.calorie_goal,
+        "protein_goal": goals.protein_goal,
+        "fitness_goal": goals.fitness_goal,
+        "weight_kg": goals.weight_kg,
+        "height_cm": goals.height_cm,
+        "age": goals.age,
+        "gender": goals.gender,
+        "activity_level": goals.activity_level,
+    }
 
     user_prefs = {}
     if prefs:
