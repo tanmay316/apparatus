@@ -96,6 +96,15 @@
   --scrollbar-track:  #ffffff;
   --scrollbar-thumb:  #a3a6af;
   --scrollbar-hover:  #777b86;
+
+  /* ─── Material 3 Mobile Tokens ─────────────────────────── */
+  --m3-card-radius: 16px;
+  --m3-card-padding: 16px;
+  --m3-gap-xs: 4px;
+  --m3-gap-sm: 8px;
+  --m3-gap-md: 12px;
+  --m3-gap-lg: 16px;
+  --m3-bottom-nav-height: 56px;
 }
 
 /* Steep Light Theme */

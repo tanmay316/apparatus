@@ -2,6 +2,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { BottomNav } from './BottomNav';
 import { ReminderManager } from './ReminderManager';
 import FloatingAIBot from '../nutrition/FloatingAIBot';
 
@@ -19,8 +20,9 @@ export function Layout() {
       <Topbar />
       <ReminderManager />
       <FloatingAIBot />
+      <BottomNav />
 
-      <main className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 relative z-0">
+      <main className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-[72px] relative z-0">
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -36,3 +38,4 @@ export function Layout() {
     </div>
   );
 }
+

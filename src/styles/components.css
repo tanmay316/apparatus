@@ -6,6 +6,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 @layer components {
+
   /* ─── Brand ─────────────────────────────────────────────── */
   .brand-wordmark {
     font-family: var(--font-brand);
@@ -36,6 +37,7 @@
   .hover\:bg-sienna-dim:hover {
     color: #fbe1d1 !important;
   }
+
   .bg-sienna.text-bone,
   .bg-sienna-dim.text-bone,
   .bg-sienna .text-bone,
@@ -49,29 +51,29 @@
 
   /* ─── Buttons (Tactile Clay Pill Buttons) ───────────────── */
   .btn-primary {
-    @apply text-white font-display font-semibold tracking-wide
-           px-6 py-3 rounded-2xl text-sm inline-flex items-center justify-center gap-2
-           disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply text-white font-display font-semibold tracking-wide px-6 py-3 rounded-2xl text-sm inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed;
     background: linear-gradient(135deg, rgb(var(--color-sienna)) 0%, rgb(var(--color-sienna-dim)) 100%);
     box-shadow: var(--clay-shadow-btn);
     transition: all var(--transition-base);
   }
+
   .btn-primary:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(112, 145, 230, 0.35), inset 2px 2px 4px rgba(255, 255, 255, 0.7);
   }
+
   .btn-primary:active:not(:disabled) {
     transform: translateY(0) scale(0.98);
   }
 
   .btn-secondary {
-    @apply text-bone font-display font-medium text-xs
-           px-5 py-2.5 rounded-2xl inline-flex items-center justify-center gap-2;
+    @apply text-bone font-display font-medium text-xs px-5 py-2.5 rounded-2xl inline-flex items-center justify-center gap-2;
     background: rgba(var(--color-ink-2), 0.8);
     border: 1px solid rgba(var(--color-line), 0.25);
     box-shadow: var(--clay-shadow-sm);
     transition: all var(--transition-base);
   }
+
   .btn-secondary:hover {
     color: rgb(var(--color-sienna));
     transform: translateY(-1.5px);
@@ -86,6 +88,7 @@
     box-shadow: var(--clay-shadow-sm);
     transition: all var(--transition-fast);
   }
+
   .btn-danger:hover {
     background: rgba(var(--color-danger), 0.15);
     transform: translateY(-1px);
@@ -95,6 +98,7 @@
     @apply bg-transparent text-bone-dim text-sm px-3.5 py-2 rounded-xl;
     transition: all var(--transition-fast);
   }
+
   .btn-ghost:hover {
     background-color: rgb(var(--color-sienna) / 0.1);
     color: rgb(var(--color-sienna));
@@ -116,6 +120,7 @@
     justify-content: center;
     gap: 0.5rem;
   }
+
   .btn-pill-filled:hover {
     opacity: 0.92;
     transform: translateY(-1px);
@@ -136,6 +141,7 @@
     justify-content: center;
     gap: 0.5rem;
   }
+
   .btn-pill-ghost:hover {
     background: rgba(23, 25, 28, 0.05);
   }
@@ -175,6 +181,7 @@
   .card-hover {
     @apply card cursor-pointer;
   }
+
   .card-hover:hover {
     transform: translateY(-2px);
     box-shadow: 0 0 0 1px rgba(4, 23, 43, 0.08), 0 24px 32px -5px rgba(0, 0, 0, 0.1), 0 10px 12px -6px rgba(0, 0, 0, 0.06);
@@ -199,15 +206,13 @@
 
   /* ─── Inputs ────────────────────────────────────────────── */
   .input-field {
-    @apply w-full text-bone rounded-2xl
-           px-4 py-3 text-sm font-sans
-           focus:outline-none focus:ring-2
-           placeholder:text-bone-dim/50;
+    @apply w-full text-bone rounded-2xl px-4 py-3 text-sm font-sans focus:outline-none focus:ring-2 placeholder:text-bone-dim/50;
     background: rgba(var(--color-ink-2), 0.9);
     border: 1px solid rgba(var(--color-line), 0.25);
     box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.06), inset -2px -2px 4px rgba(255, 255, 255, 0.8);
     transition: all var(--transition-fast);
   }
+
   .input-field:focus {
     --tw-ring-color: rgb(var(--color-sienna) / 0.5);
   }
@@ -218,8 +223,7 @@
 
   /* ─── Tags & Badges ─────────────────────────────────────── */
   .tag {
-    @apply font-mono text-[11px] tracking-wider font-bold
-           px-3 py-1 rounded-full inline-flex items-center gap-1;
+    @apply font-mono text-[11px] tracking-wider font-bold px-3 py-1 rounded-full inline-flex items-center gap-1;
   }
 
   .tag-sienna {
@@ -324,9 +328,11 @@
     background: linear-gradient(135deg, rgba(93, 42, 26, 0.26) 0%, rgba(31, 21, 12, 0.4) 50%, rgba(0, 0, 0, 0.55) 100%) !important;
     backdrop-filter: blur(24px) !important;
     -webkit-backdrop-filter: blur(24px) !important;
-    border: 1px solid rgba(215, 178, 157, 0.15) !important; /* Elegant glass outline */
+    border: 1px solid rgba(215, 178, 157, 0.15) !important;
+    /* Elegant glass outline */
     box-shadow: 0 16px 40px 0 rgba(0, 0, 0, 0.4) !important;
-    color: #f7f5f2 !important; /* Creamy bone */
+    color: #f7f5f2 !important;
+    /* Creamy bone */
   }
 
   [data-theme='dark'] .dashboard-hero-card h1,
@@ -336,7 +342,8 @@
 
   [data-theme='dark'] .dashboard-hero-card p,
   [data-theme='dark'] .dashboard-hero-card span.text-\[\#979799\] {
-    color: #bfaea5 !important; /* Muted creamy brown */
+    color: #bfaea5 !important;
+    /* Muted creamy brown */
   }
 
   [data-theme='dark'] .dashboard-hero-card span.bg-\[\#f2f2f3\] {
@@ -351,15 +358,18 @@
 
   /* Progress Ring inside Hero Dashboard */
   [data-theme='dark'] .hero-ring-container {
-    background-color: #33231c !important; /* Light brown inner background */
+    background-color: #33231c !important;
+    /* Light brown inner background */
   }
 
   [data-theme='dark'] .hero-ring-bg {
-    stroke: #523b30 !important; /* Light brown outer circle stroke */
+    stroke: #523b30 !important;
+    /* Light brown outer circle stroke */
   }
 
   [data-theme='dark'] .hero-ring-progress {
-    stroke: #ffffff !important; /* White progress stroke */
+    stroke: #ffffff !important;
+    /* White progress stroke */
   }
 
   [data-theme='dark'] .hero-ring-container .text-\[\#17191c\] {
@@ -392,12 +402,14 @@
   }
 
   [data-theme='dark'] .xp-panel-card .bg-\[\#17191c\] {
-    background-color: #d7b29d !important; /* Light brown */
+    background-color: #d7b29d !important;
+    /* Light brown */
     color: #1F150C !important;
   }
 
   [data-theme='dark'] .xp-panel-card .text-white {
-    color: #1F150C !important; /* Dark brown on light brown background */
+    color: #1F150C !important;
+    /* Dark brown on light brown background */
   }
 
   [data-theme='dark'] .xp-panel-card .bg-\[\#f2f2f3\] {
@@ -460,7 +472,8 @@
   /* ─── Activity Post Card Override (Full Black) ──────────── */
   [data-theme='dark'] .activity-post-card {
     background-color: #000000 !important;
-    border-color: #1a1a1a !important; /* Extremely dark border or transparent */
+    border-color: #1a1a1a !important;
+    /* Extremely dark border or transparent */
     box-shadow: none !important;
     color: #f7f5f2 !important;
   }

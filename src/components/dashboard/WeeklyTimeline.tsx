@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Check, Clock, Layers, Share2, BookOpen } from 'lucide-react';
+import { Check, Clock, Layers, Share2, BookOpen, ChevronRight, Activity } from 'lucide-react';
 import type { Plan, PlanDay } from '@/types';
+import { getActiveMuscles, type MuscleRegion } from '@/lib/muscle-map';
 
 interface WeeklyTimelineProps {
   activePlan: Plan | null | undefined;
@@ -22,117 +23,117 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
-      className="mb-6"
+      className="mb-8"
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <BookOpen size={15} className="text-bone-dim" />
-          <h3 className="font-sans text-xs font-medium text-bone-dim tracking-wider uppercase">Weekly Training Plan</h3>
+          <BookOpen size={16} className="text-gray-400" />
+          <h3 className="font-sans text-xs font-semibold text-gray-500 tracking-wider uppercase">Weekly Training</h3>
         </div>
-        <Link to="/plans" className="flex items-center gap-1 text-xs text-bone font-sans font-medium hover:underline">
-          All Plans →
+        <Link to="/plans" className="flex items-center gap-1 text-xs text-gray-600 font-sans font-medium hover:text-gray-900 transition-colors">
+          All Plans <ChevronRight size={12} />
         </Link>
       </div>
 
-      {/* Scrollable timeline with separate floating cards & hidden scrollbar */}
-      <div className="flex gap-5 sm:gap-6 overflow-x-auto px-4 sm:px-6 -mx-4 sm:-mx-6 pb-8 pt-3 snap-x snap-mandatory touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex gap-4 overflow-x-auto px-1 -mx-1 pb-6 pt-2 snap-x snap-mandatory touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {activeDays.map((day, index) => {
           const wasCompleted = todayWorkouts.some((w: any) => w.dayId === day.id)
             || recentWorkouts.some((w: any) => w.dayId === day.id);
-          
-          // Determine the first uncompleted day to highlight as "Next/Today"
-          const firstUncompletedIndex = activeDays.findIndex(d => 
+
+          const firstUncompletedIndex = activeDays.findIndex(d =>
             !todayWorkouts.some((w: any) => w.dayId === d.id) && !recentWorkouts.some((w: any) => w.dayId === d.id)
           );
           const activeIndex = firstUncompletedIndex === -1 ? activeDays.length - 1 : firstUncompletedIndex;
           const isToday = index === activeIndex;
 
           const allExercises = [...(day.warmup || []), ...(day.skillWork || []), ...(day.strength || []), ...(day.cooldown || [])];
+          
+          const exerciseNames = allExercises.map(ex => ex.name);
+          const activeMuscleSet = getActiveMuscles(exerciseNames);
+          const muscleIds = Array.from(activeMuscleSet) as MuscleRegion[];
+          const muscleString = muscleIds
+            .map(m => m.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()))
+            .slice(0, 2)
+            .join(' • ') || 'Full Body';
 
           return (
             <motion.div
               key={day.id}
               whileHover={{ y: -4 }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
-              className={`snap-start shrink-0 relative hover:z-20 ${isToday ? 'z-10' : 'z-0'}`}
+              className={`snap-start shrink-0 relative ${isToday ? 'z-10' : 'z-0'}`}
             >
               <Link
                 to={`/workout/${activePlan.id}/day/${day.id}`}
-                className={`weekly-plan-card relative w-[265px] sm:w-[295px] p-6 rounded-[24px] flex flex-col justify-between transition-all duration-200 group ${
+                className={`relative w-[82vw] sm:w-[260px] h-[264px] p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] shadow-sm hover:shadow-md ${
                   isToday
-                    ? 'bg-ink border border-line shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)]'
-                    : 'bg-ink-2 border border-transparent'
+                    ? 'bg-gradient-to-br from-white to-sienna-light/20'
+                    : 'bg-gradient-to-br from-white to-gray-50'
                 }`}
               >
                 <div>
-                  {/* Day header */}
                   <div className="flex items-center justify-between mb-3">
-                    <span className="font-sans text-xs font-normal uppercase text-bone-dim">
+                    <span className="font-sans text-[10px] font-bold uppercase tracking-widest text-gray-400">
                       DAY {String(day.dayNumber).padStart(2, '0')}
                     </span>
                     <div className="flex items-center gap-2">
                       {wasCompleted ? (
-                        <span className="font-sans text-[11px] font-medium uppercase px-2.5 py-0.5 rounded-full bg-green-500/10 text-green-600 dark:text-green-400 flex items-center gap-1">
-                          <Check size={11} strokeWidth={2.5} /> Logged
+                        <span className="font-sans text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1">
+                          <Check size={12} strokeWidth={2.5} /> Logged
                         </span>
                       ) : isToday ? (
-                        <span className="font-sans text-[11px] font-medium uppercase px-2.5 py-0.5 rounded-full bg-bone text-ink flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-ink animate-ping" /> Today
+                        <span className="font-sans text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-sienna-light/30 text-sienna flex items-center gap-1.5 shadow-sm border border-sienna-light/50">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sienna animate-pulse" /> Today
                         </span>
                       ) : (
-                        <span className="font-sans text-[11px] font-normal uppercase text-bone-dim">
+                        <span className="font-sans text-[10px] font-bold uppercase tracking-wide text-gray-500">
                           Upcoming
                         </span>
                       )}
-
-                      {/* Share Button */}
-                      {wasCompleted && onShareDay && (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            onShareDay(day);
-                          }}
-                          className="w-6 h-6 rounded-full bg-ink flex items-center justify-center text-green-600 dark:text-green-400 hover:scale-110 transition-all border border-line"
-                          title="Share this workout card"
-                        >
-                          <Share2 size={12} strokeWidth={2} />
-                        </button>
-                      )}
                     </div>
                   </div>
 
-                  {/* Title */}
-                  <h4 className="font-sans font-medium text-lg text-bone leading-snug mb-3 line-clamp-2 group-hover:text-sienna transition-colors">
+                  <h4 className={`font-sans font-bold text-lg leading-tight mb-2 line-clamp-2 ${isToday ? 'text-gray-900' : 'text-gray-800'}`}>
                     {day.title}
                   </h4>
+                  
+                  <p className={`font-sans text-xs font-semibold mb-4 truncate ${isToday ? 'text-sienna' : 'text-gray-500'}`}>
+                    {muscleString}
+                  </p>
 
-                  {/* Details Pills */}
-                  <div className="flex items-center gap-2 text-xs font-sans text-bone-dim mb-3 flex-wrap">
-                    <span className="flex items-center gap-1 bg-ink-3/50 px-2.5 py-1 rounded-full">
-                      <Clock size={12} /> ~{day.time}
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'}`}>
+                      <Clock size={12} /> {day.time}
                     </span>
-                    <span className="flex items-center gap-1 bg-ink-3/50 px-2.5 py-1 rounded-full">
+                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'}`}>
                       <Layers size={12} /> {allExercises.length} ex
                     </span>
+                    {day.skill && (
+                       <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'} truncate max-w-full`}>
+                         <Activity size={12} /> {day.skill}
+                       </span>
+                    )}
                   </div>
-
-                  {/* Skill tag */}
-                  {day.skill && (
-                    <div className="text-[11px] font-sans font-normal text-bone-dim inline-block truncate max-w-full">
-                      {day.skill}
-                    </div>
-                  )}
                 </div>
 
-                {/* Progress Bar */}
-                <div className="w-full h-1.5 bg-line-solid rounded-full overflow-hidden mt-4">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      wasCompleted ? 'bg-[#2e7d32]' : (isActive && activeSessionDayId === day.id) ? 'bg-sienna' : 'bg-transparent'
-                    }`}
-                    style={{ width: wasCompleted ? '100%' : (isActive && activeSessionDayId === day.id) ? `${sessionProgress || 0}%` : '0%' }}
-                  />
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  {isToday ? (
+                     <div className="w-full py-2.5 rounded-xl bg-sienna text-bone font-sans font-semibold text-sm flex items-center justify-center gap-2 shadow-sm hover:bg-sienna-dim transition-colors shadow-sienna/20">
+                       Start Workout
+                     </div>
+                  ) : (
+                    <div className="w-full">
+                      <div className="flex items-center justify-end text-[10px] font-sans font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
+                         <span>{wasCompleted ? '100%' : '0%'}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${wasCompleted ? 'bg-emerald-500' : 'bg-gray-300'}`}
+                          style={{ width: wasCompleted ? '100%' : '0%' }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Link>
             </motion.div>

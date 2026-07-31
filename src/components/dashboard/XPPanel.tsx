@@ -36,67 +36,57 @@ export function XPPanel({ xp, streak, badges }: XPPanelProps) {
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="xp-panel-card relative overflow-hidden p-8 mb-8 rounded-[24px] bg-white border border-[#ececec] shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] text-[#17191c]"
+      className="xp-panel-card relative overflow-hidden p-4 mb-3 rounded-[16px] bg-white border border-[#ececec] shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_8px_16px_-4px_rgba(0,0,0,0.06)] text-[#17191c]"
     >
-      <div className="relative flex flex-col sm:flex-row items-center gap-6">
-        {/* Level badge */}
-        <div className="flex items-center gap-4 shrink-0">
-          <div className="relative">
-            <div className="w-14 h-14 rounded-full bg-[#17191c] flex items-center justify-center font-serif font-normal text-2xl text-white">
-              {level}
-            </div>
-            <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-[#fbe1d1] text-[#5d2a1a] border-2 border-white flex items-center justify-center shadow-xs">
-              <span className="text-[10px]">⚡</span>
-            </div>
+      <div className="relative flex items-center gap-3">
+        {/* Level badge — compact */}
+        <div className="relative shrink-0">
+          <div className="w-10 h-10 rounded-full bg-[#17191c] flex items-center justify-center font-sans font-bold text-lg text-white">
+            {level}
           </div>
-          <div>
-            <h4 className="font-serif font-normal text-xl text-[#17191c] leading-tight">{title}</h4>
-            <div className="font-sans text-xs text-[#777b86] mt-0.5">{xp} / {nextLevelXp} XP</div>
+          <div className="absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-[#fbe1d1] text-[#5d2a1a] border-2 border-white flex items-center justify-center shadow-xs">
+            <span className="text-[8px]">⚡</span>
           </div>
         </div>
 
         {/* Progress + stats */}
-        <div className="flex-1 min-w-0 w-full">
-          {/* XP bar */}
-          <div className="mb-3.5">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="font-sans text-xs font-normal text-[#979799] uppercase tracking-wider">LEVEL {level} → {level + 1}</span>
-              <span className="font-sans text-xs font-medium text-[#17191c]">{Math.round(progress)}%</span>
-            </div>
-            {/* Minimal Progress Bar */}
-            <div className="h-2 bg-[#f2f2f3] rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-[#17191c] rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${progress}%` }}
-                transition={{ duration: 1, ease: 'easeOut', delay: 0.4 }}
-              />
-            </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-1">
+            <h4 className="font-sans font-semibold text-sm text-[#17191c] leading-tight truncate">{title}</h4>
+            <span className="font-sans text-[10px] font-medium text-[#979799] uppercase tracking-wider shrink-0 ml-2">LV {level} → {level + 1}</span>
           </div>
 
-          {/* Streak + recent badges */}
-          <div className="flex items-center gap-4 flex-wrap">
-            {/* Streak flames */}
-            <div className="px-3.5 py-1 rounded-full bg-[#fbe1d1] text-[#5d2a1a] font-sans text-xs font-medium flex items-center gap-1.5">
-              <Flame size={14} className="text-[#5d2a1a]" />
-              <span className="font-sans text-xs font-semibold">{streak}</span>
-              <span className="font-sans text-[11px] opacity-80">day streak</span>
+          {/* XP bar */}
+          <div className="h-1.5 bg-[#f2f2f3] rounded-full overflow-hidden mb-2">
+            <motion.div
+              className="h-full bg-[#17191c] rounded-full"
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              transition={{ duration: 1, ease: 'easeOut', delay: 0.4 }}
+            />
+          </div>
+
+          {/* Streak + badges + View All */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="px-2.5 py-0.5 rounded-full bg-[#fbe1d1] text-[#5d2a1a] font-sans text-[10px] font-medium flex items-center gap-1">
+              <Flame size={11} className="text-[#5d2a1a]" />
+              <span className="font-semibold">{streak}</span>
+              <span className="opacity-80">streak</span>
             </div>
 
-            {/* Recent achievements */}
             {recentBadges.length > 0 && (
-              <div className="flex items-center gap-1.5 bg-[#f2f2f3] px-3 py-1 rounded-full text-xs font-sans text-[#777b86]">
+              <div className="flex items-center gap-1 bg-[#f2f2f3] px-2 py-0.5 rounded-full text-[10px] font-sans text-[#777b86]">
                 {recentBadges.map((badge, i) => (
-                  <span key={i} className="text-sm" title={badge}>{badge}</span>
+                  <span key={i} className="text-xs" title={badge}>{badge}</span>
                 ))}
               </div>
             )}
 
             <Link
               to="/achievements"
-              className="ml-auto flex items-center gap-1 text-xs font-sans font-medium text-[#17191c] hover:underline transition-all"
+              className="ml-auto flex items-center gap-0.5 text-[11px] font-sans font-semibold text-[#17191c] hover:underline transition-all"
             >
-              All Achievements <ChevronRight size={14} />
+              View All <ChevronRight size={12} />
             </Link>
           </div>
         </div>

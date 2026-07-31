@@ -18,7 +18,7 @@ export function ActivityFeed({ activities, onShare }: ActivityFeedProps) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.35 }}
-      className="mb-6"
+      className="mb-3"
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
@@ -31,7 +31,7 @@ export function ActivityFeed({ activities, onShare }: ActivityFeedProps) {
       </div>
 
       {displayActivities.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {displayActivities.map((activity) => (
             <ActivityPostCard key={activity.id} activity={activity} onShare={onShare} />
           ))}
@@ -47,7 +47,7 @@ export function ActivityFeed({ activities, onShare }: ActivityFeedProps) {
           </div>
         </div>
       ) : (
-        <div className="rounded-[24px] border border-[#ececec] p-8 text-center bg-[#fafafb]">
+        <div className="rounded-[16px] border border-[#ececec] p-4 text-center bg-[#fafafb]">
           <Users size={24} className="text-[#979799] mx-auto mb-2" />
           <p className="text-xs text-[#777b86] mb-3 font-sans">No recent activity from followed athletes.</p>
           <Link

@@ -1,6 +1,4 @@
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { Plus } from 'lucide-react';
 
 interface HeroDashboardProps {
   displayName: string;
@@ -8,7 +6,6 @@ interface HeroDashboardProps {
   xp: number;
   completedCount: number;
   targetDays: number;
-  quote: string;
 }
 
 function getGreeting(): string {
@@ -29,64 +26,57 @@ function getLevelTitle(xp: number): string {
   return 'Apparatus Master';
 }
 
-export function HeroDashboard({ displayName, streak, xp, completedCount, targetDays, quote }: HeroDashboardProps) {
-  const progressPct = targetDays ? Math.min(Math.round((completedCount / targetDays) * 100), 100) : 0;
-  const circumference = 2 * Math.PI * 54;
-  const strokeDash = (progressPct / 100) * circumference;
+export function HeroDashboard({ displayName, streak, xp, completedCount, targetDays }: HeroDashboardProps) {
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  const progressPct = targetDays ? Math.min(Math.round((completedCount / targetDays) * 100), 100) : 0;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
-      className="dashboard-hero-card relative overflow-hidden mb-10 p-6 sm:p-8 md:p-10 rounded-[24px] bg-white border border-[#ececec] shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] text-[#17191c]"
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="mb-3"
     >
-      <div className="relative flex flex-col items-center md:flex-row md:items-center md:justify-between gap-6 md:gap-8">
-        {/* Left Editorial Copy */}
-        <div className="flex flex-col items-center md:items-start gap-4 max-w-2xl w-full">
-          {/* Badge row — wraps on mobile */}
-          <div className="flex items-center justify-center md:justify-start gap-2 flex-wrap">
-            <span className="text-[13px] font-sans font-normal text-[#979799] uppercase tracking-wider whitespace-nowrap">{today}</span>
-            {streak > 0 && (
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#fbe1d1] text-[#5d2a1a] text-xs font-sans font-medium whitespace-nowrap">
-                🔥 {streak} day streak
-              </span>
-            )}
-            <span className="inline-flex items-center px-3 py-1 rounded-full bg-[#f2f2f3] text-[#17191c] text-xs font-sans font-normal whitespace-nowrap">
-              LV {getLevel(xp)} · {getLevelTitle(xp)}
-            </span>
-          </div>
-
-          <h1 className="font-serif font-normal text-3xl sm:text-4xl md:text-5xl lg:text-6xl text-[#17191c] tracking-[-0.96px] leading-[1.25] text-center md:text-left">
-            {getGreeting()}, <span className="italic">{displayName.split(' ')[0]}</span>
+      {/* Greeting row */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="font-sans font-semibold text-xl text-bone leading-tight truncate">
+            {getGreeting()}, {displayName.split(' ')[0]} 👋
           </h1>
-
-          <p className="text-[15px] sm:text-[17px] font-sans font-normal text-[#777b86] leading-[1.4] max-w-xl text-center md:text-left">
-            "{quote}"
-          </p>
+          <p className="text-[12px] font-sans text-bone-dim mt-0.5">{today}</p>
         </div>
 
-        {/* Circular Gestural Progress Ring — centered on mobile */}
-        <div className="hero-ring-container relative w-28 h-28 sm:w-32 sm:h-32 md:w-36 md:h-36 shrink-0 p-3 rounded-full bg-[#f2f2f3] flex items-center justify-center mx-auto md:mx-0">
-          <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
-            <circle cx="60" cy="60" r="50" fill="none" stroke="#e0e0e2" strokeWidth="6" className="hero-ring-bg" />
+        {/* Weekly ring — tiny */}
+        <div className="relative w-11 h-11 shrink-0">
+          <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+            <circle cx="22" cy="22" r="18" fill="none" stroke="currentColor" strokeWidth="3" className="text-line" />
             <circle
-              cx="60" cy="60" r="50" fill="none"
-              stroke="#5d2a1a" strokeWidth="6"
+              cx="22" cy="22" r="18" fill="none"
+              stroke="currentColor" strokeWidth="3"
               strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference - strokeDash}
-              className="hero-ring-progress transition-all duration-1000 ease-out"
+              strokeDasharray={2 * Math.PI * 18}
+              strokeDashoffset={(2 * Math.PI * 18) * (1 - progressPct / 100)}
+              className="text-sienna transition-all duration-700 ease-out"
             />
           </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="font-serif font-normal text-2xl sm:text-3xl text-[#17191c] leading-none">{completedCount}</span>
-            <span className="text-[10px] sm:text-[11px] font-sans text-[#777b86] tracking-wider mt-1">/ {targetDays} DAYS</span>
-            <span className="text-[11px] sm:text-xs font-sans font-medium text-[#5d2a1a] mt-0.5">{progressPct}%</span>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-[10px] font-sans font-bold text-bone">{completedCount}/{targetDays}</span>
           </div>
         </div>
+      </div>
+
+      {/* Chips row */}
+      <div className="flex items-center gap-2 mt-2 flex-wrap">
+        {streak > 0 && (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#fbe1d1] text-[#5d2a1a] text-[11px] font-sans font-medium">
+            🔥 {streak} day streak
+          </span>
+        )}
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-ink-2 text-bone-dim text-[11px] font-sans font-medium border border-line">
+          LV {getLevel(xp)} · {getLevelTitle(xp)}
+        </span>
       </div>
     </motion.div>
   );
 }
+

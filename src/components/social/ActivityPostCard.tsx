@@ -181,186 +181,186 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
           </div>
         ) : (
           <>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <span className="text-xs font-sans font-medium text-[#5d2a1a]">
-                  {details.planTitle || 'Custom Program'}
-                </span>
-              {details.skill && (
-                <span className="text-xs font-mono text-[#777b86]">
-                  · Skill: {details.skill}
-                </span>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <span className="text-xs font-sans font-medium text-[#5d2a1a]">
+                    {details.planTitle || 'Custom Program'}
+                  </span>
+                  {details.skill && (
+                    <span className="text-xs font-mono text-[#777b86]">
+                      · Skill: {details.skill}
+                    </span>
+                  )}
+                </div>
+
+                <h3 className="font-serif font-normal text-2xl text-[#17191c] leading-tight">
+                  {details.dayTitle || activity.summary}
+                </h3>
+              </div>
+
+              {/* Small size Anatomy figure beside workout day title */}
+              {activeMuscleSet.size > 0 && (
+                <div className="flex items-center gap-1.5 shrink-0 bg-white p-2 rounded-2xl border border-[#ececec]" title="Muscles Targeted">
+                  <AnatomyFigureSVG view="front" activeMuscles={activeMuscleSet} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
+                  <AnatomyFigureSVG view="back" activeMuscles={activeMuscleSet} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
+                </div>
               )}
             </div>
 
-            <h3 className="font-serif font-normal text-2xl text-[#17191c] leading-tight">
-              {details.dayTitle || activity.summary}
-            </h3>
-          </div>
-
-          {/* Small size Anatomy figure beside workout day title */}
-          {activeMuscleSet.size > 0 && (
-            <div className="flex items-center gap-1.5 shrink-0 bg-white p-2 rounded-2xl border border-[#ececec]" title="Muscles Targeted">
-              <AnatomyFigureSVG view="front" activeMuscles={activeMuscleSet} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
-              <AnatomyFigureSVG view="back" activeMuscles={activeMuscleSet} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
-            </div>
-          )}
-        </div>
-
-        {/* Muscle Heatmap Text Strip */}
-        {activeMuscleList.length > 0 && (
-          <div className="mt-4 pt-3 border-t border-[#ececec] flex items-center gap-2 flex-wrap">
-            <span className="text-xs font-mono font-semibold text-[#777b86] flex items-center gap-1">
-              <Sparkles size={12} className="text-[#979799]" /> Trained:
-            </span>
-            {activeMuscleList.map((m, idx) => (
-              <span
-                key={idx}
-                className="text-xs font-sans text-[#17191c] bg-white px-2.5 py-0.5 rounded-md border border-[#ececec]"
-              >
-                {m.replace('_', ' ')}
-              </span>
-            ))}
-          </div>
-        )}
+            {/* Muscle Heatmap Text Strip */}
+            {activeMuscleList.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-[#ececec] flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-mono font-semibold text-[#777b86] flex items-center gap-1">
+                  <Sparkles size={12} className="text-[#979799]" /> Trained:
+                </span>
+                {activeMuscleList.map((m, idx) => (
+                  <span
+                    key={idx}
+                    className="text-xs font-sans text-[#17191c] bg-white px-2.5 py-0.5 rounded-md border border-[#ececec]"
+                  >
+                    {m.replace('_', ' ')}
+                  </span>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
 
       {activity.type !== 'event_join' && (
         <>
-      {/* ─── SECTION 3: METRICS ROW ────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-        {/* Duration */}
-        <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
-            <Clock3 size={15} />
-          </div>
-          <div>
-            <div className="font-mono text-sm font-bold text-[#17191c]">
-              {details.durationMin || 0} min
-            </div>
-            <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Duration</div>
-          </div>
-        </div>
-
-        {/* Volume */}
-        <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
-            <TrendingUp size={15} />
-          </div>
-          <div>
-            <div className="font-mono text-sm font-bold text-[#17191c]">
-              {displayVolume > 0 ? displayVolume.toLocaleString() : displayBodyweightReps > 0 ? displayBodyweightReps : '0'}
-            </div>
-            <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">
-              {displayVolume > 0 ? 'kg·reps' : repsLabel}
-            </div>
-          </div>
-        </div>
-
-        {/* Calories */}
-        <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
-            <Flame size={15} />
-          </div>
-          <div>
-            <div className="font-mono text-sm font-bold text-[#17191c]">
-              {displayCalories} kcal
-            </div>
-            <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Burned</div>
-          </div>
-        </div>
-
-        {/* Exercise count */}
-        <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
-            <Dumbbell size={15} />
-          </div>
-          <div>
-            <div className="font-mono text-sm font-bold text-[#17191c]">
-              {exerciseNames.length}
-            </div>
-            <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Exercises</div>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── SECTION 4: EXERCISE PREVIEW ───────────────────────────────── */}
-      {exerciseNames.length > 0 && (
-        <div className="mb-4">
-          {/* Default collapsed preview (shows first 2) */}
-          {!showAllExercises && (
-            <div className="space-y-2">
-              {exerciseNames.slice(0, 2).map((name, index) => (
-                <div
-                  key={`${name}-${index}`}
-                  className="flex items-center justify-between py-1.5 px-3 text-xs font-mono"
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <span className="w-4 h-4 rounded-full bg-[#e8f5e9] text-[#2e7d32] flex items-center justify-center shrink-0">
-                      <Check size={10} />
-                    </span>
-                    <span className="truncate text-[#17191c] font-medium">{name}</span>
-                  </div>
-                  <span className="text-[11px] text-[#777b86] shrink-0 ml-2">
-                    {getExerciseMuscleGroup(name)}
-                  </span>
+          {/* ─── SECTION 3: METRICS ROW ────────────────────────────────────── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+            {/* Duration */}
+            <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
+                <Clock3 size={15} />
+              </div>
+              <div>
+                <div className="font-mono text-sm font-bold text-[#17191c]">
+                  {details.durationMin || 0} min
                 </div>
-              ))}
-
-              {exerciseNames.length > 2 && (
-                <button
-                  onClick={() => setShowAllExercises(true)}
-                  className="w-full py-2 text-center text-xs font-sans text-[#17191c] hover:underline flex items-center justify-center gap-1"
-                >
-                  Show all {exerciseNames.length} exercises <ChevronDown size={14} />
-                </button>
-              )}
+                <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Duration</div>
+              </div>
             </div>
-          )}
 
-          {/* Expanded 2-column exercise grid */}
-          <AnimatePresence>
-            {showAllExercises && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                className="overflow-hidden"
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {exerciseNames.map((name, index) => (
+            {/* Volume */}
+            <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
+                <TrendingUp size={15} />
+              </div>
+              <div>
+                <div className="font-mono text-sm font-bold text-[#17191c]">
+                  {displayVolume > 0 ? displayVolume.toLocaleString() : displayBodyweightReps > 0 ? displayBodyweightReps : '0'}
+                </div>
+                <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">
+                  {displayVolume > 0 ? 'kg·reps' : repsLabel}
+                </div>
+              </div>
+            </div>
+
+            {/* Calories */}
+            <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
+                <Flame size={15} />
+              </div>
+              <div>
+                <div className="font-mono text-sm font-bold text-[#17191c]">
+                  {displayCalories} kcal
+                </div>
+                <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Burned</div>
+              </div>
+            </div>
+
+            {/* Exercise count */}
+            <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
+                <Dumbbell size={15} />
+              </div>
+              <div>
+                <div className="font-mono text-sm font-bold text-[#17191c]">
+                  {exerciseNames.length}
+                </div>
+                <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Exercises</div>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── SECTION 4: EXERCISE PREVIEW ───────────────────────────────── */}
+          {exerciseNames.length > 0 && (
+            <div className="mb-4">
+              {/* Default collapsed preview (shows first 2) */}
+              {!showAllExercises && (
+                <div className="space-y-2">
+                  {exerciseNames.slice(0, 2).map((name, index) => (
                     <div
                       key={`${name}-${index}`}
-                      className="flex items-center justify-between p-2 rounded-xl border border-white/[0.04] bg-white/[0.02] text-xs font-mono"
+                      className="flex items-center justify-between py-1.5 px-3 text-xs font-mono"
                     >
                       <div className="flex items-center gap-2 truncate">
                         <span className="w-4 h-4 rounded-full bg-[#e8f5e9] text-[#2e7d32] flex items-center justify-center shrink-0">
                           <Check size={10} />
                         </span>
-                        <span className="truncate text-[#17191c]">{name}</span>
+                        <span className="truncate text-[#17191c] font-medium">{name}</span>
                       </div>
-                      <span className="text-[10px] text-[#777b86] shrink-0 ml-2">
+                      <span className="text-[11px] text-[#777b86] shrink-0 ml-2">
                         {getExerciseMuscleGroup(name)}
                       </span>
                     </div>
                   ))}
+
+                  {exerciseNames.length > 2 && (
+                    <button
+                      onClick={() => setShowAllExercises(true)}
+                      className="w-full py-2 text-center text-xs font-sans text-[#17191c] hover:underline flex items-center justify-center gap-1"
+                    >
+                      Show all {exerciseNames.length} exercises <ChevronDown size={14} />
+                    </button>
+                  )}
                 </div>
-                <button
-                  onClick={() => setShowAllExercises(false)}
-                  className="w-full mt-2 py-1.5 text-center text-[11px] font-sans text-[#17191c] hover:underline flex items-center justify-center gap-1"
-                >
-                  Show less <ChevronUp size={14} />
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-      </>)}
+              )}
+
+              {/* Expanded 2-column exercise grid */}
+              <AnimatePresence>
+                {showAllExercises && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {exerciseNames.map((name, index) => (
+                        <div
+                          key={`${name}-${index}`}
+                          className="flex items-center justify-between p-2 rounded-xl border border-white/[0.04] bg-white/[0.02] text-xs font-mono"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="w-4 h-4 rounded-full bg-[#e8f5e9] text-[#2e7d32] flex items-center justify-center shrink-0">
+                              <Check size={10} />
+                            </span>
+                            <span className="truncate text-[#17191c]">{name}</span>
+                          </div>
+                          <span className="text-[10px] text-[#777b86] shrink-0 ml-2">
+                            {getExerciseMuscleGroup(name)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setShowAllExercises(false)}
+                      className="w-full mt-2 py-1.5 text-center text-[11px] font-sans text-[#17191c] hover:underline flex items-center justify-center gap-1"
+                    >
+                      Show less <ChevronUp size={14} />
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+        </>)}
 
       {/* ─── SECTION 5: SOCIAL ACTIONS ─────────────────────────────────── */}
       <div className="flex items-center justify-between border-t border-[#ececec] pt-3 text-xs font-sans">
@@ -369,9 +369,8 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
           <motion.button
             whileTap={{ scale: 1.25 }}
             onClick={() => likeMutation.mutate()}
-            className={`flex items-center gap-1.5 transition-colors ${
-              liked ? 'text-red-500 font-bold' : 'text-[#777b86] hover:text-red-500'
-            }`}
+            className={`flex items-center gap-1.5 transition-colors ${liked ? 'text-red-500 font-bold' : 'text-[#777b86] hover:text-red-500'
+              }`}
           >
             <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
             <span>{activity.likesCount || 0}</span>
@@ -413,9 +412,8 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               showToast('Could not save bookmark', 'error');
             }
           }}
-          className={`p-1.5 rounded-lg transition-colors ${
-            isSaved ? 'text-[#5d2a1a] bg-[#fbe1d1]/30' : 'text-[#777b86] hover:text-[#17191c]'
-          }`}
+          className={`p-1.5 rounded-lg transition-colors ${isSaved ? 'text-[#5d2a1a] bg-[#fbe1d1]/30' : 'text-[#777b86] hover:text-[#17191c]'
+            }`}
           title="Save post"
         >
           <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />

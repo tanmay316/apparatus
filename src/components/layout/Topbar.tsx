@@ -121,7 +121,6 @@ export function Topbar() {
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
-  const streak = stats?.currentStreak || 0;
 
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-ink/90 backdrop-blur-xl">
@@ -265,7 +264,7 @@ export function Topbar() {
           )}
         </div>
 
-        {/* Right — Search button (mobile), Streak, Notifications, Settings, Sign Out, Avatar */}
+        {/* Right — Search button (mobile), Notifications, Settings, Sign Out, Avatar */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Mobile search toggle button */}
           <button
@@ -275,14 +274,6 @@ export function Topbar() {
           >
             <Search size={16} />
           </button>
-
-          {/* Streak chip */}
-          {profile && streak > 0 && (
-            <div className="hidden sm:flex items-center gap-1.5 h-8 px-2.5 rounded-xl bg-[var(--color-blush-peach)] border border-[var(--color-sienna-brown)]/10">
-              <Flame size={14} className="text-[var(--color-sienna-brown)]" />
-              <span className="font-sans text-xs font-bold text-[var(--color-sienna-brown)]">{streak}</span>
-            </div>
-          )}
 
           {profile && (
             <>

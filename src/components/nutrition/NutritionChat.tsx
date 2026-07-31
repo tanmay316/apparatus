@@ -64,6 +64,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   const [sessionId, setSessionId] = useState<number | undefined>();
   const [previewImage, setPreviewImage] = useState<{ url: string; base64: string; mime: string } | null>(null);
   const [loggingMessageId, setLoggingMessageId] = useState<string | null>(null);
+  const [isWakingUp, setIsWakingUp] = useState(false);
   
   // History Drawer State
   const [showHistory, setShowHistory] = useState(false);
@@ -290,93 +291,110 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    try {
-      if (previewImage) {
-        // Image Scan Flow
-        const currentPreview = previewImage;
-        setPreviewImage(null);
-        
-        const res = await analyzeFood(currentPreview.base64, currentPreview.mime, getMealType(), sessionId, controller.signal);
-        
-        if (res.session_id && res.session_id !== sessionId) {
+    const currentPreview = previewImage;
+    setPreviewImage(null);
+
+    const attemptRequest = async (retryCount = 0): Promise<void> => {
+      try {
+        if (currentPreview) {
+          // Image Scan Flow
+          const res = await analyzeFood(currentPreview.base64, currentPreview.mime, getMealType(), sessionId, controller.signal);
+          
+          if (res.session_id && res.session_id !== sessionId) {
+            setSessionId(res.session_id);
+            localStorage.setItem('apparatus_active_session_id', String(res.session_id));
+            loadSessions();
+          }
+
+          setMessages(prev => {
+            const newMessages = [
+              ...prev,
+              {
+                id: `ai-${Date.now()}`,
+                role: 'assistant' as const,
+                content: res.success ? "Here's the analysis of your food:" : "I couldn't analyze that food. Please try again.",
+                timestamp: new Date(),
+                nutritionData: res.success ? res : undefined,
+              },
+            ];
+            const activeSid = res.session_id || sessionId;
+            if (activeSid) {
+              setCachedData(`apparatus_cached_messages_${activeSid}`, newMessages);
+            }
+            return newMessages;
+          });
+        } else {
+          // Text Chat Flow
+          const res = await sendChatMessage(userMsg.content, sessionId, controller.signal);
           setSessionId(res.session_id);
           localStorage.setItem('apparatus_active_session_id', String(res.session_id));
           loadSessions();
+          
+          setMessages(prev => {
+            const newMessages = [
+              ...prev,
+              {
+                id: `ai-${Date.now()}`,
+                role: 'assistant' as const,
+                content: res.response,
+                reasoning: (res as any).reasoning,
+                nutritionData: (res as any).nutritionData,
+                timestamp: new Date(),
+              },
+            ];
+            setCachedData(`apparatus_cached_messages_${res.session_id}`, newMessages);
+            return newMessages;
+          });
         }
-
-        setMessages(prev => {
-          const newMessages = [
+        setIsWakingUp(false);
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          setIsWakingUp(false);
+          setMessages(prev => [
             ...prev,
             {
-              id: `ai-${Date.now()}`,
-              role: 'assistant' as const,
-              content: res.success ? "Here's the analysis of your food:" : "I couldn't analyze that food. Please try again.",
+              id: `sys-${Date.now()}`,
+              role: 'assistant',
+              content: "Request cancelled.",
               timestamp: new Date(),
-              nutritionData: res.success ? res : undefined,
             },
-          ];
-          const activeSid = res.session_id || sessionId;
-          if (activeSid) {
-            setCachedData(`apparatus_cached_messages_${activeSid}`, newMessages);
+          ]);
+        } else {
+          const errMsg = (err.message || '').toLowerCase();
+          
+          // Auto-retry up to 12 times (60s) for cold starts
+          if ((errMsg.includes("failed to fetch") || errMsg.includes("network") || errMsg.includes("502") || errMsg.includes("503") || errMsg.includes("500")) && retryCount < 12) {
+            setIsWakingUp(true);
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            return attemptRequest(retryCount + 1);
           }
-          return newMessages;
-        });
-      } else {
-        // Text Chat Flow
-        const res = await sendChatMessage(userMsg.content, sessionId, controller.signal);
-        setSessionId(res.session_id);
-        localStorage.setItem('apparatus_active_session_id', String(res.session_id));
-        loadSessions();
-        
-        setMessages(prev => {
-          const newMessages = [
+
+          setIsWakingUp(false);
+          let content = "An error occurred. Please try again.";
+          
+          if (errMsg.includes("400") || errMsg.includes("provide your weight")) {
+            content = "To get started, please tap the **Body Metrics** button (👤) at the top right and fill in your body data (weight, height, age, etc.) so I can calculate your nutrition accurately!";
+          } else if (errMsg.includes("failed to fetch") || errMsg.includes("network")) {
+            content = "Connection/Network issue. Please try again.";
+          } else if (errMsg.includes("api key") || errMsg.includes("unauthorized") || errMsg.includes("401")) {
+            content = "No API key in settings. Please configure it.";
+          }
+
+          setMessages(prev => [
             ...prev,
             {
-              id: `ai-${Date.now()}`,
-              role: 'assistant' as const,
-              content: res.response,
-              reasoning: (res as any).reasoning,
-              nutritionData: (res as any).nutritionData,
+              id: `err-${Date.now()}`,
+              role: 'assistant',
+              content,
               timestamp: new Date(),
             },
-          ];
-          setCachedData(`apparatus_cached_messages_${res.session_id}`, newMessages);
-          return newMessages;
-        });
-      }
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        setMessages(prev => [
-          ...prev,
-          {
-            id: `sys-${Date.now()}`,
-            role: 'assistant',
-            content: "Request cancelled.",
-            timestamp: new Date(),
-          },
-        ]);
-      } else {
-        const errMsg = (err.message || '').toLowerCase();
-        let content = "An error occurred. Please try again.";
-        
-        if (errMsg.includes("400") || errMsg.includes("provide your weight")) {
-          content = "To get started, please tap the **Body Metrics** button (👤) at the top right and fill in your body data (weight, height, age, etc.) so I can calculate your nutrition accurately!";
-        } else if (errMsg.includes("failed to fetch") || errMsg.includes("network")) {
-          content = "⏳ **The AI server is waking up!**";
-        } else if (errMsg.includes("api key") || errMsg.includes("unauthorized") || errMsg.includes("401")) {
-          content = "No API key in settings. Please configure it.";
+          ]);
         }
-
-        setMessages(prev => [
-          ...prev,
-          {
-            id: `err-${Date.now()}`,
-            role: 'assistant',
-            content,
-            timestamp: new Date(),
-          },
-        ]);
       }
+    };
+
+    try {
+      await attemptRequest();
     } finally {
       setLoading(false);
       abortControllerRef.current = null;
@@ -608,14 +626,29 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             className="flex gap-3"
           >
             <div className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center shrink-0">
-              <Bot size={14} className="text-bone-dim" />
+              {isWakingUp ? <Loader2 size={14} className="text-sienna animate-spin" /> : <Bot size={14} className="text-bone-dim" />}
             </div>
-            <div className="bg-white/[0.04] border border-white/[0.06] rounded-3xl rounded-tl-sm px-5 py-4 self-start">
-              <div className="flex items-center gap-1.5">
-                <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0 }} className="w-2 h-2 rounded-full bg-sienna" />
-                <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0.2 }} className="w-2 h-2 rounded-full bg-sienna" />
-                <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0.4 }} className="w-2 h-2 rounded-full bg-sienna" />
-              </div>
+            <div className={`bg-white/[0.04] border border-white/[0.06] rounded-3xl rounded-tl-sm px-5 py-4 self-start ${isWakingUp ? 'w-64' : ''}`}>
+              {!isWakingUp ? (
+                <div className="flex items-center gap-1.5">
+                  <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0 }} className="w-2 h-2 rounded-full bg-sienna" />
+                  <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0.2 }} className="w-2 h-2 rounded-full bg-sienna" />
+                  <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0.4 }} className="w-2 h-2 rounded-full bg-sienna" />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <span className="text-sm font-medium text-bone">Waking up AI server...</span>
+                  <span className="text-xs text-bone-dim leading-relaxed">Hang tight for about 60s while it boots!</span>
+                  <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden mt-1 relative">
+                    <motion.div 
+                      className="absolute left-0 top-0 h-full bg-gradient-to-r from-sienna to-orange-500 rounded-full" 
+                      initial={{ width: '0%' }}
+                      animate={{ width: '95%' }}
+                      transition={{ duration: 60, ease: "linear" }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

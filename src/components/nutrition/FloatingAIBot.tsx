@@ -48,7 +48,7 @@ export default function FloatingAIBot() {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-4 sm:right-6 z-[60] w-12 h-12 rounded-full bg-gradient-to-tr from-sienna to-orange-500 shadow-xl shadow-sienna/30 flex items-center justify-center text-white"
+            className="fixed bottom-[80px] right-4 sm:right-6 z-[210] w-12 h-12 rounded-full bg-gradient-to-tr from-sienna to-orange-500 shadow-xl shadow-sienna/30 flex items-center justify-center text-white"
           >
             {/* Pulsing rings effect */}
             {!isOpen && (

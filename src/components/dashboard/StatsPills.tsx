@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Zap, TrendingUp, Clock } from 'lucide-react';
+import { Zap, TrendingUp, Clock, Flame } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 interface StatsPillsProps {
@@ -8,7 +8,7 @@ interface StatsPillsProps {
   totalHours: number;
 }
 
-function AnimatedCounter({ value, suffix = '' }: { value: number; suffix?: string }) {
+function AnimatedCounter({ value, formatter }: { value: number; formatter?: (v: number) => string | number }) {
   const [displayed, setDisplayed] = useState(0);
   const ref = useRef<HTMLSpanElement>(null);
   const hasAnimated = useRef(false);
@@ -26,85 +26,78 @@ function AnimatedCounter({ value, suffix = '' }: { value: number; suffix?: strin
     let step = 0;
     const interval = setInterval(() => {
       step++;
-      current = Math.min(Math.round(increment * step), value);
+      current = Math.min(increment * step, value);
       setDisplayed(current);
       if (step >= steps) clearInterval(interval);
     }, duration / steps);
     return () => clearInterval(interval);
   }, [value]);
 
-  return <span ref={ref}>{displayed.toLocaleString()}{suffix}</span>;
+  const displayValue = formatter ? formatter(displayed) : Math.round(displayed).toLocaleString();
+  return <span ref={ref}>{displayValue}</span>;
 }
 
-const pills = [
-  {
-    key: 'workouts',
-    label: 'Workouts Completed',
-    tag: 'Total Sessions',
-    icon: Zap,
-    iconBg: 'bg-[#edf4ff]',
-    iconColor: 'text-[#2563eb]',
-    suffix: '',
-  },
-  {
-    key: 'calories',
-    label: 'Calories Burned',
-    tag: 'Energy Output',
-    icon: TrendingUp,
-    iconBg: 'bg-[#fff4ed]',
-    iconColor: 'text-[#ea580c]',
-    suffix: '',
-  },
-  {
-    key: 'hours',
-    label: 'Training Hours',
-    tag: 'Time Invested',
-    icon: Clock,
-    iconBg: 'bg-[#f5f3ff]',
-    iconColor: 'text-[#9333ea]',
-    suffix: 'h',
-  },
-];
-
 export function StatsPills({ totalWorkouts, totalCalories, totalHours }: StatsPillsProps) {
-  const values: Record<string, number> = { workouts: totalWorkouts, calories: totalCalories, hours: totalHours };
+  const cards = [
+    {
+      key: 'workouts',
+      label: 'Workouts',
+      value: totalWorkouts,
+      icon: Zap,
+      iconBg: 'bg-blue-50 text-blue-600'
+    },
+    {
+      key: 'calories',
+      label: 'Calories',
+      value: totalCalories,
+      icon: TrendingUp,
+      iconBg: 'bg-orange-50 text-orange-600',
+      formatter: (v: number) => `${Math.round(v).toLocaleString()} kcal`
+    },
+    {
+      key: 'hours',
+      label: 'Time',
+      value: totalHours,
+      icon: Clock,
+      iconBg: 'bg-purple-50 text-purple-600',
+      formatter: (v: number) => v < 1 ? `${Math.round(v * 60)}m` : `${v.toFixed(1)}h`
+    },
+  ];
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15 }}
-      className="flex gap-4 overflow-x-auto px-4 -mx-4 pb-5 pt-1 sm:overflow-visible sm:px-0 sm:mx-0 sm:pb-0 sm:pt-0 sm:grid sm:grid-cols-3 sm:gap-5 mb-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+      className="grid grid-cols-3 gap-2 sm:gap-3 mb-8"
     >
-      {pills.map((pill) => {
-        const Icon = pill.icon;
+      {cards.map((card) => {
+        const Icon = card.icon;
         return (
           <motion.div
-            key={pill.key}
+            key={card.key}
             whileHover={{ y: -2 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="kpi-stat-card p-5 sm:p-6 min-w-[220px] sm:min-w-0 shrink-0 sm:shrink rounded-[24px] bg-ink border border-line shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.06),0_8px_10px_-6px_rgba(0,0,0,0.04)] flex items-center justify-between text-bone relative z-0 hover:z-10"
+            className="p-3 sm:p-4 rounded-[20px] sm:rounded-[24px] bg-white border border-[#ececec] shadow-sm flex flex-col justify-center overflow-hidden"
           >
-            <div className="flex items-center gap-4 min-w-0">
-              <div className={`w-12 h-12 rounded-full ${pill.iconBg} flex items-center justify-center ${pill.iconColor} shrink-0`}>
-                <Icon size={20} strokeWidth={2} />
+            <div className="flex flex-col xl:flex-row items-start xl:items-center gap-2 sm:gap-3 min-w-0">
+              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 ${card.iconBg}`}>
+                <Icon className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
               </div>
-
-              <div className="min-w-0">
-                <div className="text-[14px] font-sans font-normal text-bone-dim">
-                  {pill.label}
-                </div>
-                <div className="font-sans font-semibold text-2xl text-bone leading-tight mt-0.5">
-                  <AnimatedCounter value={values[pill.key]} suffix={pill.suffix} />
-                </div>
+              <div className="flex flex-col justify-center min-w-0 w-full">
+                <span className="text-[10px] sm:text-[11px] font-sans font-medium text-gray-500 uppercase tracking-wider truncate">
+                  {card.label}
+                </span>
+                <span className="font-sans font-bold text-lg sm:text-xl text-gray-900 leading-tight truncate">
+                  <AnimatedCounter value={card.value} formatter={card.formatter} />
+                </span>
               </div>
             </div>
-
-            <div className="hidden xl:block text-right">
-              <span className="text-xs font-sans text-bone-dim">
-                {pill.tag}
-              </span>
-            </div>
+            {card.trend && (
+              <div className="mt-2 sm:mt-3 flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-emerald-600 truncate w-full">
+                <TrendingUp size={12} className="shrink-0" /> <span className="truncate">{card.trend}</span>
+              </div>
+            )}
           </motion.div>
         );
       })}

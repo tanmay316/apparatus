@@ -236,7 +236,6 @@ export function Dashboard() {
         xp={xp}
         completedCount={completedCount}
         targetDays={targetDays}
-        quote={getTodayQuote()}
       />
 
       {/* 2. Today's Focus */}

@@ -63,59 +63,59 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="relative overflow-hidden p-8 sm:p-9 mb-8 rounded-[24px] bg-[#fbe1d1] text-[#5d2a1a]"
+      className="relative overflow-hidden p-4 mb-3 rounded-[16px] bg-[#fbe1d1] text-[#5d2a1a]"
     >
-      <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+      <div className="relative flex items-center justify-between gap-3">
         {/* Info */}
-        <div className="flex-1 min-w-0 w-full">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="font-sans text-xs font-semibold uppercase tracking-wider text-[#5d2a1a] opacity-80">Today's Focus</span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-sans text-[10px] font-semibold uppercase tracking-wider text-[#5d2a1a] opacity-80">Today's Focus</span>
             {wasCompletedToday && (
-              <span className="font-sans text-[11px] font-medium uppercase px-3 py-0.5 rounded-full bg-[#5d2a1a] text-[#fbe1d1]">
-                ✓ Completed
+              <span className="font-sans text-[10px] font-medium uppercase px-2 py-0.5 rounded-full bg-[#5d2a1a] text-[#fbe1d1]">
+                ✓ Done
               </span>
             )}
           </div>
-          <h2 className="font-serif font-normal text-3xl sm:text-4xl text-[#5d2a1a] mb-4 tracking-[-0.66px] leading-tight">{todayDay.title}</h2>
+          <h2 className="font-sans font-semibold text-lg text-[#5d2a1a] mb-2 tracking-tight leading-snug line-clamp-1">{todayDay.title}</h2>
 
-          <div className="flex flex-wrap gap-2.5">
-            <span className="flex items-center gap-1.5 text-xs font-sans text-[#5d2a1a] bg-white/40 px-3.5 py-1.5 rounded-full">
-              <Clock size={14} />
+          <div className="flex flex-wrap gap-1.5">
+            <span className="flex items-center gap-1 text-[11px] font-sans text-[#5d2a1a] bg-white/40 px-2.5 py-1 rounded-full">
+              <Clock size={12} />
               ~{todayDay.time}
             </span>
-            <span className="flex items-center gap-1.5 text-xs font-sans text-[#5d2a1a] bg-white/40 px-3.5 py-1.5 rounded-full">
-              <Target size={14} />
+            <span className="flex items-center gap-1 text-[11px] font-sans text-[#5d2a1a] bg-white/40 px-2.5 py-1 rounded-full">
+              <Target size={12} />
               {todayDay.skill || 'General'}
             </span>
-            <span className="flex items-center gap-1.5 text-xs font-sans text-[#5d2a1a] bg-white/40 px-3.5 py-1.5 rounded-full">
-              <Layers size={14} />
-              {allExercises.length} exercises
+            <span className="flex items-center gap-1 text-[11px] font-sans text-[#5d2a1a] bg-white/40 px-2.5 py-1 rounded-full">
+              <Layers size={12} />
+              {allExercises.length} ex
             </span>
           </div>
         </div>
 
-        {/* CTA Buttons Row — 3 Icon Buttons */}
-        <div className="w-full sm:w-auto shrink-0 pt-2 sm:pt-0 flex items-center justify-end gap-2.5">
+        {/* CTA Buttons — compact */}
+        <div className="shrink-0 flex items-center gap-2">
           <Link
             to={`/workout/${activePlan.id}/day/${todayDay.id}`}
-            className="w-12 h-12 rounded-full bg-[#5d2a1a] text-[#fbe1d1] inline-flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-sm"
+            className="w-10 h-10 rounded-full bg-[#5d2a1a] text-[#fbe1d1] inline-flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-sm"
             title={wasCompletedToday ? 'Redo Workout' : isActive ? 'Resume Workout' : 'Start Workout'}
           >
-            <Play size={20} fill="currentColor" className="ml-0.5" />
+            <Play size={18} fill="currentColor" className="ml-0.5" />
           </Link>
           <Link
             to="/explore"
-            className="w-12 h-12 rounded-full bg-white/60 text-[#5d2a1a] inline-flex items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all"
+            className="w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] inline-flex items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all"
             title="Explore Programs & Community Workouts"
           >
-            <Compass size={20} />
+            <Compass size={18} />
           </Link>
           <Link
             to="/plans"
-            className="w-12 h-12 rounded-full bg-white/60 text-[#5d2a1a] inline-flex items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all"
+            className="w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] inline-flex items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all"
             title="My Custom Plan"
           >
-            <Plus size={20} />
+            <Plus size={18} />
           </Link>
         </div>
       </div>
