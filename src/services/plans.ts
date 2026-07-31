@@ -27,19 +27,31 @@ export async function getPublicPlansForUser(uid: string): Promise<Plan[]> {
 
 /** Get a specific plan by ID */
 export async function getPlan(planId: string): Promise<Plan | null> {
-  const snap = await getDoc(doc(db, 'plans', planId));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as Plan;
+  const collectionName = planId.startsWith('sample_') ? 'samplePlans' : 'plans';
+  try {
+    const snap = await getDoc(doc(db, collectionName, planId));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() } as Plan;
+  } catch (error) {
+    console.error("Error fetching plan:", error);
+    return null;
+  }
 }
 
 /** Get the days for a specific plan */
 export async function getPlanDays(planId: string): Promise<PlanDay[]> {
-  const q = query(
-    collection(db, `plans/${planId}/days`),
-    orderBy('order', 'asc')
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as PlanDay));
+  const collectionName = planId.startsWith('sample_') ? 'samplePlans' : 'plans';
+  try {
+    const q = query(
+      collection(db, `${collectionName}/${planId}/days`),
+      orderBy('order', 'asc')
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as PlanDay));
+  } catch (error) {
+    console.error("Error fetching plan days:", error);
+    return [];
+  }
 }
 
 /** Create a new custom plan */

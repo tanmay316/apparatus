@@ -20,11 +20,10 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="relative overflow-hidden rounded-2xl border border-dashed border-white/[0.08] p-6 sm:p-8 mb-6 text-center"
-        style={{ background: 'rgba(17,21,34,0.6)' }}
+        className="relative overflow-hidden rounded-2xl border border-dashed border-line p-6 sm:p-8 mb-6 text-center bg-ink-2"
       >
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 rounded-full bg-sienna/[0.03] blur-3xl" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 rounded-full bg-sienna/5 blur-3xl" />
         </div>
         <div className="relative">
           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-sienna/10 border border-sienna/20 flex items-center justify-center mx-auto mb-3 sm:mb-4">
@@ -43,7 +42,7 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
             </Link>
             <Link
               to="/explore"
-              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-white/[0.08] text-bone-dim font-mono text-xs hover:text-bone hover:bg-white/[0.04] transition-all"
+              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-line text-bone-dim font-mono text-xs hover:text-bone hover:bg-ink-3 transition-all"
             >
               <Compass size={15} /> Explore
             </Link>

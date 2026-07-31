@@ -111,13 +111,13 @@ export function PlanDetail() {
   });
 
   const duplicateMutation = useMutation({
-    mutationFn: () => clonePlan(planId!, 'plans', user!.uid, profile?.displayName || user!.displayName || 'User'),
+    mutationFn: () => clonePlan(planId!, isSample ? 'samplePlans' : 'plans', user!.uid, profile?.displayName || user!.displayName || 'User'),
     onSuccess: (newPlanId) => {
       queryClient.invalidateQueries({ queryKey: ['plans'] });
-      showToast('Plan duplicated');
+      showToast(isSample ? 'Plan imported' : 'Plan duplicated');
       navigate(`/plans/${newPlanId}`);
     },
-    onError: () => showToast('Could not duplicate plan', 'error'),
+    onError: () => showToast(isSample ? 'Could not import plan' : 'Could not duplicate plan', 'error'),
   });
 
   const handleDropDay = (targetId: string) => {
@@ -187,32 +187,44 @@ export function PlanDetail() {
             <p className="text-bone-dim text-sm mt-3 max-w-2xl">{plan.description || (isOwner && !isSample ? "Add a description to summarize this program." : "")}</p>
           </div>
           
-          {isOwner && !isSample && (
-            <div className="flex gap-2 shrink-0">
-              {profile?.activePlanId === planId ? (
-                <div className="btn-secondary opacity-50 cursor-default flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-sienna" /> Active Program
-                </div>
-              ) : (
-                <button 
-                  onClick={handleSetActive}
-                  className="btn-primary"
-                >
-                  Set as Active
-                </button>
-              )}
-              <button onClick={() => duplicateMutation.mutate()} disabled={duplicateMutation.isPending} className="btn-secondary flex items-center gap-2" title="Duplicate plan">
-                <Copy size={15} /> Duplicate
-              </button>
+          <div className="flex gap-2 shrink-0">
+            {isSample && (
               <button 
-                onClick={() => { if(confirm('Delete this plan forever?')) archiveMutation.mutate() }}
-                className="btn-secondary hover:text-danger hover:border-danger"
-                title="Archive plan"
+                onClick={() => { if(confirm('Import this plan to your account?')) duplicateMutation.mutate(); }}
+                disabled={duplicateMutation.isPending}
+                className="btn-primary flex items-center gap-2"
               >
-                <Trash2 size={16} />
+                <Copy size={15} /> Import Plan
               </button>
-            </div>
-          )}
+            )}
+            
+            {isOwner && !isSample && (
+              <>
+                {profile?.activePlanId === planId ? (
+                  <div className="btn-secondary opacity-50 cursor-default flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-sienna" /> Active Program
+                  </div>
+                ) : (
+                  <button 
+                    onClick={handleSetActive}
+                    className="btn-primary"
+                  >
+                    Set as Active
+                  </button>
+                )}
+                <button onClick={() => duplicateMutation.mutate()} disabled={duplicateMutation.isPending} className="btn-secondary flex items-center gap-2" title="Duplicate plan">
+                  <Copy size={15} /> Duplicate
+                </button>
+                <button 
+                  onClick={() => { if(confirm('Delete this plan forever?')) archiveMutation.mutate() }}
+                  className="btn-secondary hover:text-danger hover:border-danger"
+                  title="Archive plan"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

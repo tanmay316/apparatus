@@ -150,37 +150,43 @@ export function ExplorePage() {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  className="card p-5 flex flex-col h-full"
+                  className="card flex flex-col h-full relative overflow-hidden group hover:ring-2 hover:ring-sienna/50 transition-all bg-gradient-to-br from-ink-2 via-ink to-ink-3"
                 >
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-display text-lg leading-tight">{plan.title}</h3>
-                    <div className="flex items-center gap-1 font-mono text-[10px] text-bone-dim bg-ink-3 px-2 py-1 rounded">
-                      <Download size={10} /> {plan.usageCount || 0}
+                  <Link to={`/plans/${plan.id}`} className="p-5 flex flex-col h-full relative z-10">
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-display text-lg leading-tight group-hover:text-sienna transition-colors">{plan.title}</h3>
+                      <div className="flex items-center gap-1 font-mono text-[10px] text-bone-dim bg-ink-3 px-2 py-1 rounded">
+                        <Download size={10} /> {plan.usageCount || 0}
+                      </div>
                     </div>
-                  </div>
-                  
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {plan.tags?.map(tag => (
-                      <span key={tag} className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-amber/20 text-amber/80 border border-amber/30">{tag}</span>
-                    ))}
-                  </div>
-                  
-                  <p className="text-sm text-bone-dim mb-6 flex-1">
-                    {plan.description}
-                  </p>
-                  
-                  <div className="flex items-center justify-between border-t border-line/50 pt-4 mt-auto">
-                    <div className="font-mono text-[11px] text-bone-dim">
-                      {plan.daysPerWeek} Days/Week • {plan.estimatedDuration}
+                    
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {plan.tags?.map(tag => (
+                        <span key={tag} className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-sienna/10 text-sienna border border-sienna/20 backdrop-blur-sm shadow-sm">{tag}</span>
+                      ))}
                     </div>
-                    <button 
-                      onClick={() => handleClone(plan.id!)}
-                      disabled={cloneMutation.isPending}
-                      className="btn-primary py-2 px-3 text-xs flex items-center gap-1.5"
-                    >
-                      <Copy size={14} /> Import
-                    </button>
-                  </div>
+                    
+                    <p className="text-sm text-bone-dim mb-6 flex-1">
+                      {plan.description}
+                    </p>
+                    
+                    <div className="flex items-center justify-between border-t border-line/50 pt-4 mt-auto">
+                      <div className="font-mono text-[11px] text-bone-dim">
+                        {plan.daysPerWeek} Days/Week • {plan.estimatedDuration}
+                      </div>
+                      <button 
+                        onClick={(e) => { 
+                          e.preventDefault(); 
+                          e.stopPropagation(); 
+                          handleClone(plan.id!); 
+                        }}
+                        disabled={cloneMutation.isPending}
+                        className="btn-primary py-2 px-3 text-xs flex items-center gap-1.5"
+                      >
+                        <Copy size={14} /> Import
+                      </button>
+                    </div>
+                  </Link>
                 </motion.div>
               ))}
             </div>
