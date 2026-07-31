@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2, Brain, ChevronDown, ChevronUp, History, Plus, Trash2, MessageSquare, Square } from 'lucide-react';
-import { sendChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionMessages, deleteChatSession, type FoodAnalyzeResponse, type ChatSessionItem } from '@/services/nutrition-api';
+import { sendChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionMessages, deleteChatSession, wakeUpServer, type FoodAnalyzeResponse, type ChatSessionItem } from '@/services/nutrition-api';
 import NutritionResultCard from './NutritionResultCard';
 import CameraScanner from './CameraScanner';
 import ReactMarkdown from 'react-markdown';
@@ -89,6 +89,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
   // Prefetch active session & history in background on mount for zero-delay UX
   useEffect(() => {
+    wakeUpServer(); // Proactively wake up free-tier backend
     initChatSession();
   }, []);
 
@@ -361,7 +362,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         if (errMsg.includes("400") || errMsg.includes("provide your weight")) {
           content = "To get started, please tap the **Body Metrics** button (👤) at the top right and fill in your body data (weight, height, age, etc.) so I can calculate your nutrition accurately!";
         } else if (errMsg.includes("failed to fetch") || errMsg.includes("network")) {
-          content = "Connection/Network issue. Please try again.";
+          content = "⏳ **The AI server is waking up!**";
         } else if (errMsg.includes("api key") || errMsg.includes("unauthorized") || errMsg.includes("401")) {
           content = "No API key in settings. Please configure it.";
         }

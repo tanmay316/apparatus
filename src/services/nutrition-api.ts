@@ -30,6 +30,15 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
   return res.json();
 }
 
+export async function wakeUpServer(): Promise<void> {
+  try {
+    // Fire a lightweight unauthenticated request just to wake up the Render instance
+    await fetch(`${API_BASE.replace('/api/v1', '')}/docs`, { mode: 'no-cors' });
+  } catch (e) {
+    // Ignore errors for this background ping
+  }
+}
+
 // ─── Food Scanner ────────────────────────────────────────
 
 export interface DetectedFood {
