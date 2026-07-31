@@ -340,6 +340,10 @@ async def chat(
     uid = current_user["uid"]
     keys = await resolve_api_keys(current_user)
 
+    # Ensure user exists in database before creating any sessions
+    user_repo = UserRepository(db)
+    user_repo.get_or_create_user(uid, current_user.get("email", ""))
+
     # Chat history from DB
     chat_repo = ChatRepository(db)
     if req.session_id:
@@ -362,8 +366,6 @@ async def chat(
     chat_repo.add_message(session.id, "user", req.message)
 
     # Load user context
-    user_repo = UserRepository(db)
-    user_repo.get_or_create_user(uid, current_user.get("email", ""))
     goals = user_repo.get_goals(uid)
     prefs = user_repo.get_preferences(uid)
 
