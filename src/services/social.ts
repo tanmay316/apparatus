@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, increment, limit, orderBy, runTransaction, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { validateComment } from '@/lib/validation';
 import type { Activity, Comment, Notification as AppNotification, UserProfile } from '@/types';
@@ -105,9 +105,9 @@ export async function getUsersByUids(uids: string[]): Promise<any[]> {
   
   const results = [];
   for (const chunk of chunks) {
-    const q = query(collection(db, 'users'), where('__name__', 'in', chunk), where('isPublic', '==', true));
+    const q = query(collection(db, 'users'), where('__name__', 'in', chunk));
     const snap = await getDocs(q);
-    results.push(...snap.docs.map(d => ({ uid: d.id, ...d.data() })));
+    results.push(...snap.docs.filter(d => d.data().isPublic === true).map(d => ({ uid: d.id, ...d.data() })));
   }
   return results;
 }
@@ -149,12 +149,26 @@ export async function searchUsers(queryStr: string): Promise<any[]> {
   return [...byUid.values()].slice(0, 20);
 }
 
+function removeUndefined(obj: any): any {
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefined);
+  } else if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [k, removeUndefined(v)])
+    );
+  }
+  return obj;
+}
+
 // ─── Activity Feed ──────────────────────────────────────────────
 
 export async function postActivity(activity: Omit<Activity, 'id' | 'createdAt'>): Promise<string> {
+  const cleanedActivity = removeUndefined(activity);
   const docRef = await addDoc(collection(db, 'activities'), {
-    ...activity,
-    createdAt: serverTimestamp(),
+    ...cleanedActivity,
+    createdAt: Timestamp.now(),
   });
   if (activity.visibility !== 'private') {
     const followerUids = await getFollowers(activity.userId);
@@ -181,13 +195,17 @@ export async function getFeed(userId: string, followingUids: string[]): Promise<
   // rule. A server-side fan-out worker can materialize a feed later without
   // changing the client contract.
   const ownerIds = [...new Set([userId, ...followingUids])].slice(0, 31);
-  const snapshots = await Promise.all(ownerIds.map(uid => {
-    const constraints = uid === userId
-      ? [where('userId', '==', uid), orderBy('createdAt', 'desc'), limit(50)]
-      : [where('userId', '==', uid), where('visibility', 'in', ['public', 'followers']), orderBy('createdAt', 'desc'), limit(20)];
-    return getDocs(query(collection(db, 'activities'), ...constraints));
+  const snapshots = await Promise.all(ownerIds.flatMap(uid => {
+    if (uid === userId) {
+      return [getDocs(query(collection(db, 'activities'), where('userId', '==', uid)))];
+    }
+    return [
+      getDocs(query(collection(db, 'activities'), where('userId', '==', uid), where('visibility', '==', 'public'))),
+      getDocs(query(collection(db, 'activities'), where('userId', '==', uid), where('visibility', '==', 'followers')))
+    ];
   }));
-  const allDocs = snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity)));
+  
+  let allDocs = snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity)));
   return allDocs
     .sort((a, b) => {
       const va = a.createdAt?.seconds || 0;
@@ -292,11 +310,17 @@ export async function getComments(activityId: string): Promise<Comment[]> {
 export async function getNotifications(userId: string): Promise<AppNotification[]> {
   const snap = await getDocs(query(
     collection(db, 'notifications'),
-    where('receiverId', '==', userId),
-    orderBy('createdAt', 'desc'),
-    limit(20),
+    where('receiverId', '==', userId)
   ));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification));
+  
+  const allNotes = snap.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification));
+  return allNotes
+    .sort((a, b) => {
+      const timeA = a.createdAt?.seconds || 0;
+      const timeB = b.createdAt?.seconds || 0;
+      return timeB - timeA;
+    })
+    .slice(0, 20);
 }
 
 export async function markNotificationRead(notificationId: string): Promise<void> {

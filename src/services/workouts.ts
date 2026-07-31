@@ -29,9 +29,10 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
   const statsRef = doc(db, 'users', userId, 'stats', 'current');
   let progressiveOverload;
   try {
-    const previousSnapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId), orderBy('startedAt', 'desc'), limit(250)));
+    const previousSnapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)));
     const previousWorkout = previousSnapshot.docs
-      .map(item => item.data() as Workout)
+      .map(item => ({ id: item.id, ...item.data() } as Workout))
+      .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0))
       .find(item => item.dayId === workout.dayId && item.date !== workout.date && (item.exercises || []).length > 0) || null;
     progressiveOverload = summarizeProgressiveOverload(workout, previousWorkout);
   } catch {
@@ -122,13 +123,18 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
 export const getUserWorkouts = async (userId: string, limitCount = 10): Promise<Workout[]> => {
   const q = query(
     collection(db, 'workouts'),
-    where('userId', '==', userId),
-    orderBy('startedAt', 'desc'),
-    limit(limitCount)
+    where('userId', '==', userId)
   );
   
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Workout));
+  const allWorkouts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Workout));
+  return allWorkouts
+    .sort((a, b) => {
+      const timeA = a.startedAt?.seconds || 0;
+      const timeB = b.startedAt?.seconds || 0;
+      return timeB - timeA;
+    })
+    .slice(0, limitCount);
 };
 
 /** Get the last N sessions for a specific exercise */
@@ -139,15 +145,18 @@ export const getExerciseHistory = async (
 ): Promise<{ date: string; sets: any[]; notes: string }[]> => {
   const q = query(
     collection(db, 'workouts'),
-    where('userId', '==', userId),
-    orderBy('startedAt', 'desc'),
-    limit(250)
+    where('userId', '==', userId)
   );
   const snapshot = await getDocs(q);
+  
+  const allDocs = snapshot.docs
+    .map(d => ({ id: d.id, ...d.data() } as Workout))
+    .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0))
+    .slice(0, 250);
+
   const results: { date: string; sets: any[]; notes: string; seconds: number }[] = [];
 
-  for (const d of snapshot.docs) {
-    const workout = d.data() as Workout;
+  for (const workout of allDocs) {
     const match = workout.exercises?.find(e => e.name === exerciseName);
     if (match) {
       results.push({
@@ -196,16 +205,16 @@ export const getPublicWorkoutsForUser = async (userId: string, viewerId?: string
   const publicQuery = query(
     collection(db, 'workouts'),
     where('userId', '==', userId),
-    where('visibility', '==', 'public'),
-    orderBy('date', 'desc'),
-    limit(limitCount),
+    where('visibility', '==', 'public')
   );
   const publicSnapshot = await getDocs(publicQuery);
   const visible = publicSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Workout));
+  
   if (viewerId && viewerId !== userId && await isFollowing(viewerId, userId)) {
-    const followerQuery = query(collection(db, 'workouts'), where('userId', '==', userId), where('visibility', '==', 'followers'), orderBy('date', 'desc'), limit(limitCount));
+    const followerQuery = query(collection(db, 'workouts'), where('userId', '==', userId), where('visibility', '==', 'followers'));
     const followerSnapshot = await getDocs(followerQuery);
     visible.push(...followerSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Workout)));
   }
+  
   return visible.sort((a, b) => b.date.localeCompare(a.date)).slice(0, limitCount);
 };

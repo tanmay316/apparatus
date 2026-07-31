@@ -108,16 +108,17 @@ export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
     } else {
       // Fuzzy fallback for custom exercises not in library
       const n = normalizeExerciseName(name);
-      if (n.includes('pike push') || n.includes('handstand push')) { active.add('front_delts'); active.add('triceps'); }
-      else if (n.includes('squat') || n.includes('lunge')) { active.add('quads'); active.add('glutes'); }
-      else if (n.includes('push') || n.includes('bench') || n.includes('press') || n.includes('fly')) active.add('chest');
-      else if (n.includes('pull') || n.includes('row') || n.includes('lat')) active.add('lats');
-      else if (n.includes('curl') || n.includes('bicep')) active.add('biceps');
-      if (n.includes('tricep') || n.includes('dip') || n.includes('extension')) active.add('triceps');
-      if (n.includes('deadlift') || n.includes('hip')) { active.add('hamstrings'); active.add('glutes'); active.add('lower_back'); }
-      if (n.includes('shoulder') || n.includes('delt') || n.includes('press')) active.add('front_delts');
-      if (n.includes('plank') || n.includes('crunch') || n.includes('sit') || n.includes('core') || n.includes('ab')) active.add('abs');
-      if (n.includes('calf') || n.includes('calve')) active.add('calves');
+      if (/\b(pike push|handstand push)\b/.test(n)) { active.add('front_delts'); active.add('triceps'); }
+      else if (/\b(squat|lunge)\b/.test(n)) { active.add('quads'); active.add('glutes'); }
+      else if (/\b(push|bench|press|fly)\b/.test(n)) active.add('chest');
+      else if (/\b(pull|row|lat|lats)\b/.test(n)) { active.add('lats'); active.add('traps'); active.add('rear_delts'); }
+      else if (/\b(curl|bicep|biceps)\b/.test(n)) active.add('biceps');
+      
+      if (/\b(tricep|triceps|dip|extension)\b/.test(n)) active.add('triceps');
+      if (/\b(deadlift|hip)\b/.test(n)) { active.add('hamstrings'); active.add('glutes'); active.add('lower_back'); }
+      if (/\b(shoulder|delt|delts|press)\b/.test(n)) active.add('front_delts');
+      if (/\b(plank|crunch|sit|core|ab|abs)\b/.test(n)) active.add('abs');
+      if (/\b(calf|calves|calve)\b/.test(n)) active.add('calves');
     }
   }
 
@@ -138,15 +139,12 @@ export function getActiveMusclesFromLogs(
 
   exerciseLogs.forEach(log => {
     if (log.sets.some(set => set.completed === true)) {
+      completedExerciseNames.push(log.name);
       if (log.muscleGroup) {
         const regions = GROUP_TO_REGIONS[log.muscleGroup];
         if (regions) {
           regions.forEach(r => active.add(r));
-        } else {
-          completedExerciseNames.push(log.name);
         }
-      } else {
-        completedExerciseNames.push(log.name);
       }
     }
   });

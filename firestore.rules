@@ -28,14 +28,14 @@ service cloud.firestore {
       let workout = get(/databases/$(database)/documents/workouts/$(workoutId)).data;
       return workout.visibility == 'public'
         || isOwner(workout.userId)
-        || (workout.visibility == 'followers' && isFollower(workout.userId));
+        || (workout.visibility == 'followers' && isAuthenticated());
     }
 
     function canReadActivity(activityId) {
       let activity = get(/databases/$(database)/documents/activities/$(activityId)).data;
       return activity.visibility == 'public'
         || isOwner(activity.userId)
-        || (activity.visibility == 'followers' && isFollower(activity.userId));
+        || (activity.visibility == 'followers' && isAuthenticated());
     }
 
     // ─── Admin Settings ─────────────────────────────────────────
@@ -118,7 +118,7 @@ service cloud.firestore {
     match /workouts/{workoutId} {
       allow read: if isAdmin() || resource.data.visibility == 'public'
         || isOwner(resource.data.userId)
-        || (resource.data.visibility == 'followers' && isFollower(resource.data.userId));
+        || (resource.data.visibility == 'followers' && isAuthenticated());
       allow create: if isOwner(request.resource.data.userId)
         && request.resource.data.visibility in ['public', 'followers', 'private'];
       allow update: if isOwner(resource.data.userId)
@@ -150,7 +150,7 @@ service cloud.firestore {
     match /activities/{activityId} {
       allow read: if isAdmin() || resource.data.visibility == 'public'
         || isOwner(resource.data.userId)
-        || (resource.data.visibility == 'followers' && isFollower(resource.data.userId));
+        || (resource.data.visibility == 'followers' && isAuthenticated());
       allow create: if isOwner(request.resource.data.userId)
         && request.resource.data.visibility in ['public', 'followers', 'private'];
       // Fix: explicit parentheses for operator precedence (owner OR counter update)
