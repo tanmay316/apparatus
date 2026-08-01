@@ -2,7 +2,7 @@ from typing import Dict, Any, List
 import random
 
 from app.engine.models import MovementPattern, ExerciseCategory
-from app.data.exercise_db import get_exercises_for_equipment
+from app.data.exercise_db import get_exercises_for_equipment, EXERCISES
 from app.engine.scoring import score_exercise
 from app.engine.fatigue_manager import FatigueManager
 from app.engine.weekly_volume import VolumeTracker
@@ -317,3 +317,83 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
         "description": blueprint.get("description", "A deterministically built, expert-level training program."),
         "days": assembled_days
     }
+
+def apply_llm_review_delta(assembled_plan: Dict[str, Any], delta: Dict[str, Any], goal: str) -> Dict[str, Any]:
+    """
+    Applies the LLM's suggested changes (delta) to the assembled_plan in-place.
+    Only valid exercises present in the database are allowed.
+    """
+    if delta.get("approved") is True:
+        return assembled_plan
+        
+    changes = delta.get("suggested_changes", [])
+    if not changes:
+        return assembled_plan
+        
+    # Build lookup table for O(1) exercise fetching
+    ex_db = {ex.name: ex for ex in EXERCISES}
+    
+    for change in changes:
+        action = change.get("action")
+        day_number = change.get("day_number")
+        section = change.get("section", "strength")
+        
+        # Find the specific day
+        target_day = next((d for d in assembled_plan["days"] if d["dayNumber"] == day_number), None)
+        if not target_day or section not in target_day:
+            continue
+            
+        exercises_list = target_day[section]
+        
+        if action == "remove":
+            target_name = change.get("target_exercise")
+            target_day[section] = [ex for ex in exercises_list if ex.get("name") != target_name]
+            
+        elif action == "add":
+            new_name = change.get("exercise_name")
+            if new_name in ex_db:
+                ex_meta = ex_db[new_name]
+                sets = "3 x 8-12" if goal == "hypertrophy" else "3 x 10"
+                if ex_meta.category == ExerciseCategory.PRIMARY_COMPOUND and goal == "strength":
+                    sets = "5 x 5"
+                
+                rest = "90s" if goal == "hypertrophy" else "3 min"
+                tempo = "31X1" if ex_meta.category == ExerciseCategory.PRIMARY_COMPOUND else "2011"
+                
+                new_ex = {
+                    "name": ex_meta.name,
+                    "sets": sets,
+                    "tempo": tempo,
+                    "rest": rest,
+                    "cues": [f"Focus on {ex_meta.primary_muscles[0]}"],
+                    "yt": ""
+                }
+                exercises_list.append(new_ex)
+                
+        elif action == "replace":
+            target_name = change.get("target_exercise")
+            new_name = change.get("exercise_name")
+            
+            if new_name in ex_db:
+                # Find index of target
+                idx = next((i for i, ex in enumerate(exercises_list) if ex.get("name") == target_name), -1)
+                if idx != -1:
+                    ex_meta = ex_db[new_name]
+                    sets = "3 x 8-12" if goal == "hypertrophy" else "3 x 10"
+                    if ex_meta.category == ExerciseCategory.PRIMARY_COMPOUND and goal == "strength":
+                        sets = "5 x 5"
+                    
+                    rest = "90s" if goal == "hypertrophy" else "3 min"
+                    tempo = "31X1" if ex_meta.category == ExerciseCategory.PRIMARY_COMPOUND else "2011"
+                    
+                    new_ex = {
+                        "name": ex_meta.name,
+                        "sets": sets,
+                        "tempo": tempo,
+                        "rest": rest,
+                        "cues": [f"Focus on {ex_meta.primary_muscles[0]}"],
+                        "yt": ""
+                    }
+                    exercises_list[idx] = new_ex
+
+    return assembled_plan

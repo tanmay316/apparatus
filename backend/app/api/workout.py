@@ -71,19 +71,30 @@ COACHING RULES:
 REVIEW_SYSTEM_PROMPT = """You are Apparatus AI, the world's best science-based elite performance coach (combining the philosophies of Dr. Mike Israetel, Greg Nuckols, and NSCA CSCS).
 
 Your job is to REVIEW, AUDIT, and PERFECT the assembled workout plan before it goes to the user.
-You are given the user's original request and the output of our deterministic python engine.
+You are given the user's original request, the output of our deterministic python engine, and a list of Available Exercises.
 
 Rules for your review:
 1. **Biomechanics & Science**: Audit the exercises. Ensure they are the absolute best choice for the target muscle and experience level. If an exercise is redundant or suboptimal, REPLACE it with a superior science-based alternative.
 2. **Volume & Time Management**: The user requested a specific `Session Duration` for their main strength block (excluding warmups). If the engine provided too few exercises for that time (assuming ~12 mins for heavy compounds and ~6 mins for isolations), ADD more highly-effective exercises to maximize growth without exceeding the time limit. If it provided too many, DELETE the least effective "junk volume" exercises. Ensure every muscle group assigned to that day is optimally stimulated.
 3. **Custom Requests**: If the user's CUSTOM INSTRUCTIONS mention specific exercises, skills (calisthenics), or preferences that the engine missed, FORCE them into the plan gracefully.
-4. **Equipment**: Ensure NO exercises require equipment the user does not have.
-5. **Variety & Fatigue**: Ensure there is no destructive overlap (e.g., Heavy Deadlifts followed by heavy bent-over rows the next day). Fix the exercise selection to manage systemic and local fatigue.
-6. **JSON Schema**: Keep the EXACT SAME JSON structure. Do NOT change the schema.
-7. Output the COMPLETE modified plan as strictly valid JSON. No commentary.
-8. If the plan is already 100% optimal, return it as-is.
+4. **Variety & Fatigue**: Ensure there is no destructive overlap (e.g., Heavy Deadlifts followed by heavy bent-over rows the next day). Fix the exercise selection to manage systemic and local fatigue.
+5. **Exact Names Only**: For any new exercises, you MUST use the EXACT NAME from the "Available Exercises" list provided in the prompt.
+6. **Output Format**: Do NOT output the entire workout plan. Output a Delta JSON object detailing only your changes.
 
-Act as the ultimate quality control. Output strictly valid JSON matching WorkoutPlanResponse schema."""
+OUTPUT STRICTLY VALID JSON MATCHING THIS SCHEMA:
+{
+  "approved": boolean, // true if plan is perfect as-is, false if it needs changes
+  "issues": ["list of specific issues found in the plan"],
+  "suggested_changes": [
+    {
+      "action": "add" | "remove" | "replace",
+      "day_number": integer, // e.g., 1
+      "section": "strength" | "skillWork",
+      "target_exercise": "name of exercise to replace or remove (if applicable)",
+      "exercise_name": "exact name of the new exercise to add (if applicable)"
+    }
+  ]
+}"""
 
 
 @router.post("/generate", response_model=WorkoutPlanResponse)
@@ -92,8 +103,8 @@ async def generate_workout_plan(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Generate a highly customized AI workout plan using a 2-step hybrid pipeline.
-    Step 1: LLM coaching blueprint → Step 2: Engine assembly
+    Generate a highly customized AI workout plan using a 3-step hybrid pipeline.
+    Step 1: LLM coaching blueprint → Step 2: Engine assembly → Step 3: LLM delta review
     """
     keys = await resolve_api_keys(current_user)
     providers = get_llm_providers(
@@ -167,12 +178,57 @@ Generate the coaching blueprint JSON for a {req.days}-day program. The "days" ar
     assembled_plan = assemble_plan(blueprint, user_request)
     logger.info(f"Assembled plan: {len(assembled_plan['days'])} days, title='{assembled_plan['title']}'")
 
-    # ── STEP 3: Return Deterministic Plan ───────────────────
-    # The deterministic python engine handles MRV, exact time slicing, 
-    # and biomechanics perfectly. Passing a massive 6-day JSON to the LLM 
-    # causes token truncation and hallucinated missing exercises.
-    logger.info("Step 3: Returning flawless deterministic plan (bypassing LLM truncation).")
-    return WorkoutPlanResponse(**assembled_plan)
+    # ── STEP 3: LLM Delta Review ───────────────────
+    # The LLM outputs a delta patch instead of the full JSON to save tokens and prevent truncation.
+    logger.info("Step 3: LLM reviewing assembled plan for delta changes...")
+    
+    from app.data.exercise_db import get_exercises_for_equipment
+    available_exercises = [ex.name for ex in get_exercises_for_equipment(req.equipment)]
+    
+    review_prompt = f"""Original User Request:
+- Goal: {req.goal}
+- Fitness Goal (from profile): {req.fitnessGoal or req.goal}
+- Training Style: {req.trainingStyle or 'general'}
+- Days: {req.days}
+- Equipment: {req.equipment}
+- Experience: {req.experience or 'intermediate'}
+- Session Duration: {req.sessionDuration} minutes (applies to strength portion only)
+- Custom Instructions: {req.customInfo or 'None'}
+- Injuries: {req.injuries or 'None'}
+
+Available Exercises:
+{', '.join(available_exercises)}
+
+Assembled Workout Plan:
+{json.dumps(assembled_plan, indent=2)}
+
+Review this plan and output the JSON Delta Schema detailing any additions, removals, or replacements needed."""
+
+    review_messages = [ChatMessage(role="user", content=review_prompt)]
+
+    from app.engine.workout_engine import apply_llm_review_delta
+
+    try:
+        review_response = await chat_with_fallback(
+            messages=review_messages,
+            providers=providers,
+            system_prompt=REVIEW_SYSTEM_PROMPT,
+            temperature=0.3,
+            json_mode=True
+        )
+        
+        delta = _parse_json(review_response.content)
+        if delta:
+            logger.info(f"Step 3: LLM output delta -> approved={delta.get('approved')}")
+            final_plan = apply_llm_review_delta(assembled_plan, delta, req.goal.lower())
+            return WorkoutPlanResponse(**final_plan)
+        else:
+            logger.warning("Step 3: LLM review returned invalid delta, using engine output.")
+            return WorkoutPlanResponse(**assembled_plan)
+            
+    except Exception as e:
+        logger.warning(f"Step 3 failed: {e}, using engine output as final.")
+        return WorkoutPlanResponse(**assembled_plan)
 
 def _parse_json(content: str) -> dict | None:
     """Safely parse JSON from LLM output, stripping markdown fences if present."""
