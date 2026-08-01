@@ -1,292 +1,144 @@
-"""
-Apparatus AI — Workout Engine
-Deterministic plan assembler that takes an LLM coaching blueprint
-and produces a complete, scientifically-sound workout plan from the exercise database.
-
-Flow: LLM Blueprint → Exercise Selection → Ordering → Sets/Reps → Warmup → Cooldown → Final JSON
-"""
-
+from typing import Dict, Any, List
 import random
-import logging
-from typing import Dict, List, Any, Optional
 
-from app.data.exercise_db import EXERCISES, EQUIPMENT_MAP, get_exercises_for_equipment
-from app.data.skill_progressions import get_skill_exercises, detect_skills_from_text
+from app.engine.models import MovementPattern, ExerciseCategory
+from app.data.exercise_db import get_exercises_for_equipment
+from app.engine.scoring import score_exercise
+from app.engine.fatigue_manager import FatigueManager
+from app.engine.weekly_volume import VolumeTracker
 from app.data.warmup_cooldown_db import get_warmup_for_day, get_cooldown_for_day
+from app.data.skill_progressions import get_skill_exercises
 
-logger = logging.getLogger(__name__)
-
-# ═══════════════════════════════════════════════════════════
-# SCIENTIFIC PROGRAMMING RULES
-# ═══════════════════════════════════════════════════════════
-
-GOAL_PARAMS = {
-    "hypertrophy": {
-        "compound_sets": "3 x 10",
-        "compound_rest": "90s",
-        "compound_tempo": "2010",
-        "accessory_sets": "3 x 12",
-        "accessory_rest": "60s",
-        "accessory_tempo": "2011",
-        "isolation_sets": "3 x 15",
-        "isolation_rest": "45s",
-        "isolation_tempo": "2010",
-        "core_sets": "3 x 15",
-        "core_rest": "30s",
-    },
-    "strength": {
-        "compound_sets": "5 x 5",
-        "compound_rest": "180s",
-        "compound_tempo": "2010",
-        "accessory_sets": "4 x 6",
-        "accessory_rest": "120s",
-        "accessory_tempo": "2010",
-        "isolation_sets": "3 x 10",
-        "isolation_rest": "60s",
-        "isolation_tempo": "2010",
-        "core_sets": "3 x 10",
-        "core_rest": "45s",
-    },
-    "endurance": {
-        "compound_sets": "3 x 15",
-        "compound_rest": "45s",
-        "compound_tempo": "1010",
-        "accessory_sets": "3 x 15",
-        "accessory_rest": "30s",
-        "accessory_tempo": "1010",
-        "isolation_sets": "2 x 20",
-        "isolation_rest": "30s",
-        "isolation_tempo": "1010",
-        "core_sets": "3 x 20",
-        "core_rest": "20s",
-    },
-    "weight_loss": {
-        "compound_sets": "3 x 12",
-        "compound_rest": "60s",
-        "compound_tempo": "2010",
-        "accessory_sets": "3 x 12",
-        "accessory_rest": "45s",
-        "accessory_tempo": "2010",
-        "isolation_sets": "2 x 15",
-        "isolation_rest": "30s",
-        "isolation_tempo": "2010",
-        "core_sets": "3 x 15",
-        "core_rest": "30s",
-    },
-}
-
-# Default split selections based on day count
-DEFAULT_SPLITS = {
-    2: "full_body",
-    3: "full_body",     # or push_pull_legs
-    4: "upper_lower",
-    5: "ppl_ul",
-    6: "ppl_ppl",
-}
-
-# Split templates — what muscle groups to focus on each day
+# Templates explicitly mapping day to its required categories and patterns
 SPLIT_TEMPLATES = {
-    "full_body": lambda n: [
-        {"title": f"Day {i+1} - Full Body {'A' if i % 2 == 0 else 'B'}",
-         "focus": ["chest", "back", "legs"],
-         "warmup_focus": ["full_body"],
-         "categories": ["compound_push", "compound_pull", "squat_pattern", "hinge_pattern", "core"],
-         "muscles_trained": ["chest", "back", "quads", "hamstrings", "glutes", "core"]}
-        for i in range(n)
+    "push_pull_legs": [
+        {
+            "title": "Push Day",
+            "slots": [
+                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.VERTICAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.MACHINE_COMPOUND),
+                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION), # Tricep
+                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION)  # Lateral Delt
+            ],
+            "warmup_focus": "upper_body_push",
+            "muscles_trained": ["chest", "shoulders", "triceps"]
+        },
+        {
+            "title": "Pull Day",
+            "slots": [
+                (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.VERTICAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.MACHINE_COMPOUND),
+                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION), # Bicep
+                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION)  # Rear Delt
+            ],
+            "warmup_focus": "upper_body_pull",
+            "muscles_trained": ["back", "biceps", "rear_delt"]
+        },
+        {
+            "title": "Leg Day",
+            "slots": [
+                (MovementPattern.SQUAT, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.HINGE, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.LUNGE, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION), # Quads/Hams
+                (MovementPattern.CORE, ExerciseCategory.CORE)
+            ],
+            "warmup_focus": "lower_body",
+            "muscles_trained": ["quads", "hamstrings", "glutes", "calves", "core"]
+        }
     ],
-    "upper_lower": lambda n: [
-        {"title": f"Day {i+1} - {'Upper' if i % 2 == 0 else 'Lower'} Body",
-         "focus": ["chest", "back", "shoulders"] if i % 2 == 0 else ["legs"],
-         "warmup_focus": ["upper_body"] if i % 2 == 0 else ["legs"],
-         "categories": ["compound_push", "compound_pull", "isolation_shoulder", "isolation_arms", "core"] if i % 2 == 0
-                        else ["squat_pattern", "hinge_pattern", "lunge_pattern", "isolation_legs", "core"],
-         "muscles_trained": ["chest", "back", "shoulders", "triceps", "biceps"] if i % 2 == 0
-                            else ["quads", "hamstrings", "glutes", "calves", "core"]}
-        for i in range(n)
+    "upper_lower": [
+        {
+            "title": "Upper Body",
+            "slots": [
+                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.VERTICAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.VERTICAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION)
+            ],
+            "warmup_focus": "full_upper",
+            "muscles_trained": ["chest", "back", "shoulders", "arms"]
+        },
+        {
+            "title": "Lower Body",
+            "slots": [
+                (MovementPattern.SQUAT, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.HINGE, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.LUNGE, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION),
+                (MovementPattern.CORE, ExerciseCategory.CORE)
+            ],
+            "warmup_focus": "lower_body",
+            "muscles_trained": ["quads", "hamstrings", "glutes", "calves", "core"]
+        }
     ],
-    "push_pull_legs": lambda n: [
-        {"title": f"Day {i+1} - {['Push', 'Pull', 'Legs'][i % 3]}",
-         "focus": [["chest", "shoulders"], ["back"], ["legs"]][i % 3],
-         "warmup_focus": [["chest", "shoulders"], ["back"], ["squat", "legs"]][i % 3],
-         "categories": [
-             ["compound_push", "isolation_shoulder", "isolation_chest", "isolation_arms"],
-             ["compound_pull", "isolation_arms", "isolation_shoulder"],
-             ["squat_pattern", "hinge_pattern", "lunge_pattern", "isolation_legs"],
-         ][i % 3],
-         "muscles_trained": [
-             ["chest", "shoulders", "triceps"],
-             ["back", "biceps", "rear_delt"],
-             ["quads", "hamstrings", "glutes", "calves"],
-         ][i % 3]}
-        for i in range(n)
-    ],
-    "ppl_ul": lambda n: [
-        *[{"title": f"Day {i+1} - {['Push', 'Pull', 'Legs'][i]}",
-           "focus": [["chest", "shoulders"], ["back"], ["legs"]][i],
-           "warmup_focus": [["chest", "shoulders"], ["back"], ["squat", "legs"]][i],
-           "categories": [
-               ["compound_push", "isolation_shoulder", "isolation_chest", "isolation_arms"],
-               ["compound_pull", "isolation_arms", "isolation_shoulder"],
-               ["squat_pattern", "hinge_pattern", "lunge_pattern", "isolation_legs"],
-           ][i],
-           "muscles_trained": [
-               ["chest", "shoulders", "triceps"],
-               ["back", "biceps"],
-               ["quads", "hamstrings", "glutes", "calves"],
-           ][i]}
-         for i in range(3)],
-        {"title": f"Day 4 - Upper Body",
-         "focus": ["chest", "back", "shoulders"],
-         "warmup_focus": ["upper_body"],
-         "categories": ["compound_push", "compound_pull", "isolation_shoulder", "isolation_arms"],
-         "muscles_trained": ["chest", "back", "shoulders", "triceps", "biceps"]},
-        {"title": f"Day 5 - Lower Body",
-         "focus": ["legs"],
-         "warmup_focus": ["legs"],
-         "categories": ["squat_pattern", "hinge_pattern", "lunge_pattern", "isolation_legs", "core"],
-         "muscles_trained": ["quads", "hamstrings", "glutes", "calves", "core"]},
-    ],
-    "ppl_ppl": lambda n: [
-        {"title": f"Day {i+1} - {['Push', 'Pull', 'Legs'][i % 3]} {'(Heavy)' if i < 3 else '(Volume)'}",
-         "focus": [["chest", "shoulders"], ["back"], ["legs"]][i % 3],
-         "warmup_focus": [["chest", "shoulders"], ["back"], ["squat", "legs"]][i % 3],
-         "categories": [
-             ["compound_push", "isolation_shoulder", "isolation_chest", "isolation_arms"],
-             ["compound_pull", "isolation_arms", "isolation_shoulder"],
-             ["squat_pattern", "hinge_pattern", "lunge_pattern", "isolation_legs"],
-         ][i % 3],
-         "muscles_trained": [
-             ["chest", "shoulders", "triceps"],
-             ["back", "biceps"],
-             ["quads", "hamstrings", "glutes", "calves"],
-         ][i % 3]}
-        for i in range(n)
-    ],
+    "full_body": [
+        {
+            "title": "Full Body",
+            "slots": [
+                (MovementPattern.SQUAT, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.HINGE, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION),
+                (MovementPattern.CORE, ExerciseCategory.CORE)
+            ],
+            "warmup_focus": "full_body",
+            "muscles_trained": ["full_body"]
+        }
+    ]
 }
 
-
-def _format_exercise(ex: Dict, params: Dict, ex_type: str = "compound") -> Dict:
-    """Format an exercise entry with the correct sets/reps/tempo/rest for the goal."""
-    key = "compound" if ex_type in ("compound", "power") else ("isolation" if ex_type == "isolation" else "accessory" if ex_type == "accessory" else "core")
-    return {
-        "name": ex["name"],
-        "sets": params.get(f"{key}_sets", "3 x 10"),
-        "tempo": params.get(f"{key}_tempo", "2010"),
-        "rest": params.get(f"{key}_rest", "60s"),
-        "cues": ex.get("cues", []),
-        "yt": "",
-    }
-
-
-def _select_exercises(
-    category: str,
-    available: Dict[str, list],
-    count: int,
-    used_names: set,
-    difficulty: str = "intermediate"
-) -> list:
-    """Select exercises from a category, avoiding duplicates and respecting difficulty."""
-    pool = available.get(category, [])
-    
-    # Filter by difficulty
-    diff_order = {"beginner": 0, "intermediate": 1, "advanced": 2}
-    max_diff = diff_order.get(difficulty, 1)
-    pool = [ex for ex in pool if diff_order.get(ex.get("difficulty", "beginner"), 0) <= max_diff]
-    
-    # Remove already-used exercises
-    pool = [ex for ex in pool if ex["name"] not in used_names]
-    
-    if not pool:
-        return []
-    
-    # Shuffle for variety
-    random.shuffle(pool)
-    selected = pool[:count]
-    
-    for ex in selected:
-        used_names.add(ex["name"])
-    
-    return selected
-
+def get_day_templates(split_key: str, days: int) -> List[Dict]:
+    base_templates = SPLIT_TEMPLATES.get(split_key)
+    if not base_templates:
+        base_templates = SPLIT_TEMPLATES["upper_lower"]
+        
+    result = []
+    for i in range(days):
+        template = dict(base_templates[i % len(base_templates)])
+        result.append(template)
+    return result
 
 def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Assemble a complete workout plan from an LLM coaching blueprint.
-    
-    blueprint: The LLM's coaching decisions (split type, muscle focus, volume, skills)
-    user_request: The original user request (goal, days, equipment, customInfo, experience)
-    
-    Returns: A complete plan dict ready for JSON serialization.
-    """
     goal = user_request.get("goal", "Hypertrophy").lower().replace(" ", "_")
     days = user_request.get("days", 4)
     equipment = user_request.get("equipment", "Full Gym")
     experience = user_request.get("experience", "intermediate").lower()
-    custom_info = user_request.get("customInfo", "")
-    session_duration = user_request.get("sessionDuration", 60)
     
-    # Get goal parameters
-    params = GOAL_PARAMS.get(goal, GOAL_PARAMS["hypertrophy"])
+    # 1. Initialize Expert Systems
+    fatigue_mgr = FatigueManager()
+    vol_tracker = VolumeTracker(goal, experience)
+    available_exs = get_exercises_for_equipment(equipment)
     
-    # Get the split from the blueprint (LLM decides), with fallback
-    split_type = blueprint.get("split_type", DEFAULT_SPLITS.get(days, "upper_lower"))
-    
-    # Normalize split type
-    split_key = split_type.lower().replace(" ", "_").replace("/", "_").replace("-", "_")
-    
-    # Map common LLM outputs to our template keys
+    split_type = blueprint.get("split_type", "upper_lower")
+    split_key = split_type.lower().replace(" ", "_").replace("-", "_")
     split_aliases = {
         "push_pull_legs": "push_pull_legs", "ppl": "push_pull_legs",
         "upper_lower": "upper_lower", "ul": "upper_lower",
-        "full_body": "full_body", "fullbody": "full_body",
-        "ppl_ppl": "ppl_ppl", "pplppl": "ppl_ppl",
-        "ppl_ul": "ppl_ul", "pplul": "ppl_ul",
+        "full_body": "full_body"
     }
-    split_key = split_aliases.get(split_key, split_key)
+    split_key = split_aliases.get(split_key, "upper_lower")
+    day_templates = get_day_templates(split_key, days)
     
-    # Fallback if LLM returned unknown split
-    if split_key not in SPLIT_TEMPLATES:
-        split_key = DEFAULT_SPLITS.get(days, "upper_lower")
-    
-    # Generate the day templates
-    template_fn = SPLIT_TEMPLATES[split_key]
-    day_templates = template_fn(days)
-    
-    # Get available exercises for the equipment
-    available = get_exercises_for_equipment(equipment)
-    
-    # Detect skills from custom info
-    requested_skills = detect_skills_from_text(custom_info)
-    # Also check blueprint for skills
+    # Requested skills
+    skills_req = user_request.get("customInfo", "").lower()
+    requested_skills = []
+    for s in ["planche", "front lever", "handstand", "muscle up", "l-sit", "pistol squat"]:
+        if s.replace(" ", "") in skills_req.replace(" ", ""):
+            requested_skills.append(s)
+            
     blueprint_skills = blueprint.get("skills", [])
     all_skills = list(set(requested_skills + blueprint_skills))
     
-    # Track used exercise names globally to avoid duplicates
     global_used = set()
-    
-    # Override day titles from blueprint if provided
-    blueprint_days = blueprint.get("days", [])
-    
-    # Build each day
     assembled_days = []
+    
     for i, template in enumerate(day_templates):
-        # Use blueprint title if available, otherwise template
-        bp_day = blueprint_days[i] if i < len(blueprint_days) else {}
-        day_title = bp_day.get("title", template["title"])
-        
-        # Determine exercise count based on session duration
-        if session_duration <= 30:
-            total_compounds, total_accessories = 1, 1
-        elif session_duration <= 45:
-            total_compounds, total_accessories = 2, 1
-        elif session_duration <= 60:
-            total_compounds, total_accessories = 2, 2
-        elif session_duration <= 75:
-            total_compounds, total_accessories = 3, 2
-        else:
-            total_compounds, total_accessories = 3, 3
-        
-        # Track per-day used names (allow some reuse across days)
         day_used = set()
         
         # ── WARMUP ──
@@ -294,10 +146,11 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
         
         # ── SKILL WORK ──
         skill_exercises = []
-        if all_skills:
-            for skill in all_skills:
+        for skill in all_skills:
+            if fatigue_mgr.can_train_skill(skill, max_frequency=2):  # Limit skills to 2x/week!
                 skill_exs = get_skill_exercises(skill, experience)
-                for sex in skill_exs:
+                # pick 1-2 exercises from the progression
+                for sex in skill_exs[:2]:
                     if sex["name"] not in day_used:
                         skill_exercises.append({
                             "name": sex["name"],
@@ -305,68 +158,65 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
                             "tempo": "",
                             "rest": sex.get("rest", "90s"),
                             "cues": sex.get("cues", []),
-                            "yt": "",
+                            "yt": ""
                         })
                         day_used.add(sex["name"])
-            # Distribute skills: not every day needs every skill
-            # Alternate skills across days
-            if len(skill_exercises) > 3:
-                start = (i * 2) % len(skill_exercises)
-                skill_exercises = skill_exercises[start:start + 3] or skill_exercises[:3]
-        
-        # ── STRENGTH (main exercises) ──
+                fatigue_mgr.register_skill_session(skill)
+                # Max 1 skill per day
+                break
+                
+        # ── STRENGTH ──
         strength_exercises = []
-        categories = template["categories"]
-        
-        # Primary compounds
-        compound_cats = [c for c in categories if "compound" in c or "squat" in c or "hinge" in c or "lunge" in c]
-        if compound_cats:
-            for i in range(total_compounds):
-                cat = compound_cats[i % len(compound_cats)]
-                selected = _select_exercises(cat, available, 1, day_used, experience)
-                for ex in selected:
-                    strength_exercises.append(_format_exercise(ex, params, "compound"))
-        
-        # Accessories
-        accessory_cats = [c for c in categories if "isolation" in c]
-        if accessory_cats:
-            for i in range(total_accessories):
-                cat = accessory_cats[i % len(accessory_cats)]
-                selected = _select_exercises(cat, available, 1, day_used, experience)
-                for ex in selected:
-                    strength_exercises.append(_format_exercise(ex, params, "isolation"))
-        
-        # Core
-        if "core" in categories or len(strength_exercises) < 4:
-            core_exs = _select_exercises("core", available, 1, day_used, experience)
-            for ex in core_exs:
-                strength_exercises.append(_format_exercise(ex, params, "core"))
-        
+        for pattern, category in template["slots"]:
+            # Score all available exercises for this slot
+            scored = []
+            for ex in available_exs:
+                score = score_exercise(ex, pattern, category, goal, experience, fatigue_mgr, global_used)
+                if score > 0:
+                    scored.append((score, ex))
+                    
+            if scored:
+                # Sort by score descending
+                scored.sort(key=lambda x: x[0], reverse=True)
+                # Pick the top exercise
+                best_ex = scored[0][1]
+                
+                # Format sets/reps based on goal
+                sets = "3 x 8-12" if goal == "hypertrophy" else "5 x 5" if category == ExerciseCategory.PRIMARY_COMPOUND else "3 x 10"
+                rest = "90s" if goal == "hypertrophy" else "3 min"
+                
+                strength_exercises.append({
+                    "name": best_ex.name,
+                    "sets": sets,
+                    "tempo": "31X1" if category == ExerciseCategory.PRIMARY_COMPOUND else "2011",
+                    "rest": rest,
+                    "cues": [f"Focus on {best_ex.primary_muscles[0]}"],
+                    "yt": ""
+                })
+                
+                global_used.add(best_ex.name)
+                fatigue_mgr.add_exercise_fatigue(best_ex)
+                vol_tracker.add_sets(best_ex.primary_muscles, 3)
+                
         # ── COOLDOWN ──
         cooldown = get_cooldown_for_day(template["muscles_trained"])
         
-        # Calculate estimated time (Warmup=5m, Cooldown=5m, Strength=10m/ex, Skill=5m/ex)
+        # Calculate accurate estimated time
         base_time = 10 + (len(strength_exercises) * 10) + (len(skill_exercises) * 5)
-        min_time = max(30, base_time - 10)
-        max_time = base_time + 10
-        est_time = f"{min_time}-{max_time} min"
+        est_time = f"{max(30, base_time - 10)}-{base_time + 10} min"
         
         assembled_days.append({
             "dayNumber": i + 1,
-            "title": day_title,
+            "title": template["title"],
             "time": est_time,
             "warmup": warmup,
             "skillWork": skill_exercises,
             "strength": strength_exercises,
-            "cooldown": cooldown,
+            "cooldown": cooldown
         })
-    
-    # Use blueprint title/description if provided
-    title = blueprint.get("title", f"{goal.replace('_', ' ').title()} Program")
-    description = blueprint.get("description", f"A {days}-day {goal.replace('_', ' ')} program tailored for {equipment}.")
-    
+        
     return {
-        "title": title,
-        "description": description,
-        "days": assembled_days,
+        "title": blueprint.get("title", f"{goal.replace('_', ' ').title()} Program"),
+        "description": blueprint.get("description", "A deterministically built, expert-level training program."),
+        "days": assembled_days
     }
