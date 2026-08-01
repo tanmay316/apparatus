@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -124,16 +124,22 @@ export function WorkoutSession() {
     }
   }, [store.isActive, store.startedAt, sessionFinished]);
 
+  const hasLoggedSets = Object.values(store.logs).some(ex => ex.sets.some(s => s.completed));
+  const hasLoggedSetsRef = useRef(hasLoggedSets);
+  useEffect(() => {
+    hasLoggedSetsRef.current = hasLoggedSets;
+  }, [hasLoggedSets]);
+
   // Sync active session with backend
   useEffect(() => {
     if (!user) return;
     
-    if (sessionFinished || !store.isActive) {
+    if (sessionFinished || !store.isActive || !store.startedAt) {
       endActiveSession(user.uid).catch(console.error);
       return;
     }
     
-    if (store.isActive && store.planId && store.dayId) {
+    if (store.isActive && store.planId && store.dayId && store.startedAt) {
       startActiveSession(user.uid, {
         planId: store.planId,
         dayId: store.dayId,
@@ -142,8 +148,14 @@ export function WorkoutSession() {
         caloriesBurned: 0,
       }).catch(console.error);
     }
-    // Intentionally no unmount cleanup: session persists if user navigates away
-  }, [store.isActive, sessionFinished, store.planId, store.dayId]);
+    
+    return () => {
+      if (store.isActive && !hasLoggedSetsRef.current) {
+        endActiveSession(user.uid).catch(console.error);
+        store.cancelWorkout();
+      }
+    };
+  }, [store.isActive, sessionFinished, store.planId, store.dayId, user, store, store.startedAt]);
 
   useEffect(() => {
     if (!store.isActive && completedWorkoutForDay) {

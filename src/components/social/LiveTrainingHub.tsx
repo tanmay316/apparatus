@@ -105,9 +105,9 @@ export function LiveTrainingHub() {
       <AnimatePresence>
         {selectedSession && (
           <LiveSessionModal
-            session={selectedSession}
             isOpen={!!selectedSession}
             onClose={() => setSelectedSession(null)}
+            session={selectedSession ? activeSessions.find(s => s.uid === selectedSession.uid) || selectedSession : null}
           />
         )}
       </AnimatePresence>
