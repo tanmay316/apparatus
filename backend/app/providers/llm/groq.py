@@ -100,15 +100,21 @@ class GroqLLMProvider(BaseLLMProvider):
                         latency_ms=latency,
                     )
                 except Exception as fallback_err:
+                    err_str = str(fallback_err)
+                    if hasattr(fallback_err, "response") and hasattr(fallback_err.response, "text"):
+                        err_str += f" - Body: {fallback_err.response.text}"
                     return LLMResponse(
-                        content=f"Error: {fallback_err}",
+                        content=f"Error: {err_str}",
                         provider_used=self.provider_name,
                         model_used=model_to_use,
                         latency_ms=(time.time() - start) * 1000,
                     )
 
+            err_str = str(e)
+            if hasattr(e, "response") and hasattr(e.response, "text"):
+                err_str += f" - Body: {e.response.text}"
             return LLMResponse(
-                content=f"Error: {str(e)}",
+                content=f"Error: {err_str}",
                 provider_used=self.provider_name,
                 model_used=model_to_use,
                 latency_ms=(time.time() - start) * 1000,

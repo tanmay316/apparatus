@@ -100,11 +100,18 @@ async def chat_with_fallback(
                 print(f"Latency          : {result.latency_ms / 1000:.2f}s")
                 print("="*50 + "\n")
                 return result
+                
             last_error = result.content
+            print(f"\n❌ [LLM CALL FAILED] {provider.provider_name} -> {last_error}\n")
+            logger.warning(f"LLM provider {provider.provider_name} failed: {last_error}")
+            
         except Exception as e:
-            last_error = f"{provider.provider_name}: {str(e)}"
-            print(f"\n❌ [LLM CALL FAILED] {provider.provider_name} -> {str(e)}\n")
-            logger.warning(f"LLM provider {provider.provider_name} failed: {e}")
+            error_msg = str(e)
+            if hasattr(e, "response") and hasattr(e.response, "text"):
+                error_msg += f" - Body: {e.response.text}"
+            last_error = f"{provider.provider_name}: {error_msg}"
+            print(f"\n❌ [LLM CALL FAILED EXCEPTION] {provider.provider_name} -> {error_msg}\n")
+            logger.warning(f"LLM provider {provider.provider_name} failed with exception: {error_msg}")
             continue
 
     return LLMResponse(content=f"All LLM providers failed: {last_error}", provider_used="none")
