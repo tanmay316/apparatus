@@ -15,6 +15,7 @@ import { StatsPills } from '@/components/dashboard/StatsPills';
 import { WeeklyTimeline } from '@/components/dashboard/WeeklyTimeline';
 import { XPPanel } from '@/components/dashboard/XPPanel';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
+import { LiveTrainingHub } from '@/components/social/LiveTrainingHub';
 import type { PlanDay, Activity } from '@/types';
 
 // ─── Constants ───────────────────────────────────────────────
@@ -217,7 +218,10 @@ export function Dashboard() {
   };
 
   return (
-    <div className="max-w-[1200px] mx-auto w-full">
+    <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+      {/* Live Training Hub (Stories-style) */}
+      <LiveTrainingHub />
+
       {/* 1. Hero */}
       <HeroDashboard
         displayName={profile.displayName}

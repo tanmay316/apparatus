@@ -1,7 +1,9 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Check, Clock, Layers, Share2, BookOpen, ChevronRight, Activity } from 'lucide-react';
+import { Check, Clock, Layers, Share2, BookOpen, ChevronRight, Activity, Sparkles } from 'lucide-react';
+import { useState } from 'react';
 import type { Plan, PlanDay } from '@/types';
+import { AiPlanGeneratorModal } from '@/components/ui/AiPlanGeneratorModal';
 import { getActiveMuscles, type MuscleRegion } from '@/lib/muscle-map';
 
 interface WeeklyTimelineProps {
@@ -16,6 +18,8 @@ interface WeeklyTimelineProps {
 }
 
 export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWorkouts, onShareDay, isActive, sessionProgress, activeSessionDayId }: WeeklyTimelineProps) {
+  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
+
   if (!activePlan || activeDays.length === 0) return null;
 
   return (
@@ -30,10 +34,17 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
           <BookOpen size={16} className="text-gray-400" />
           <h3 className="font-sans text-xs font-semibold text-gray-500 tracking-wider uppercase">Weekly Training</h3>
         </div>
-        <Link to="/plans" className="flex items-center gap-1 text-xs text-gray-600 font-sans font-medium hover:text-gray-900 transition-colors">
-          All Plans <ChevronRight size={12} />
-        </Link>
+        <div className="flex items-center gap-4">
+          <button onClick={() => setIsAiModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors text-xs font-bold font-sans">
+            <Sparkles size={14} className="animate-pulse" /> Generate AI Plan
+          </button>
+          <Link to="/plans" className="flex items-center gap-1 text-xs text-gray-600 font-sans font-medium hover:text-gray-900 transition-colors">
+            All Plans <ChevronRight size={12} />
+          </Link>
+        </div>
       </div>
+      
+      <AiPlanGeneratorModal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} />
 
       <div className="flex gap-4 overflow-x-auto px-1 -mx-1 pb-6 pt-2 snap-x snap-mandatory touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {activeDays.map((day, index) => {
@@ -65,7 +76,7 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
             >
               <Link
                 to={`/workout/${activePlan.id}/day/${day.id}`}
-                className={`relative w-[82vw] sm:w-[260px] h-[264px] p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] shadow-[6px_6px_14px_rgba(0,0,0,0.05),-6px_-6px_14px_rgba(255,255,255,0.8)] ${
+                className={`relative w-[82vw] sm:w-[260px] min-h-[264px] h-auto p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] shadow-[6px_6px_14px_rgba(0,0,0,0.05),-6px_-6px_14px_rgba(255,255,255,0.8)] ${
                   isToday
                     ? 'bg-gradient-to-br from-[#fdfbfb] to-[#f4ebe6]'
                     : 'bg-gradient-to-br from-[#fdfbfb] to-[#f5f5f5]'

@@ -237,11 +237,11 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
                 <Clock3 size={13} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-mono text-[11px] sm:text-sm font-bold text-[#17191c] leading-tight break-words">
+              <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
+                <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
                   {details.durationMin || 0} min
                 </div>
-                <div className="font-mono text-[8px] sm:text-[9px] text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 break-words">Duration</div>
+                <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>Duration</div>
               </div>
             </div>
 
@@ -250,11 +250,11 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
                 <TrendingUp size={13} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-mono text-[11px] sm:text-sm font-bold text-[#17191c] leading-tight break-words">
+              <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
+                <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
                   {displayVolume > 0 ? displayVolume.toLocaleString() : displayBodyweightReps > 0 ? displayBodyweightReps : '0'}
                 </div>
-                <div className="font-mono text-[8px] sm:text-[9px] text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 break-words">
+                <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>
                   {displayVolume > 0 ? 'kg·reps' : repsLabel}
                 </div>
               </div>
@@ -265,11 +265,11 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
                 <Flame size={13} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-mono text-[11px] sm:text-sm font-bold text-[#17191c] leading-tight break-words">
+              <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
+                <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
                   {displayCalories} kcal
                 </div>
-                <div className="font-mono text-[8px] sm:text-[9px] text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 break-words">Burned</div>
+                <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>Burned</div>
               </div>
             </div>
 
@@ -278,11 +278,11 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
                 <Dumbbell size={13} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-mono text-[11px] sm:text-sm font-bold text-[#17191c] leading-tight break-words">
+              <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
+                <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
                   {exerciseNames.length}
                 </div>
-                <div className="font-mono text-[8px] sm:text-[9px] text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 break-words">Exercises</div>
+                <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>Exercises</div>
               </div>
             </div>
           </div>

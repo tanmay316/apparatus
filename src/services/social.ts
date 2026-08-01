@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { validateComment } from '@/lib/validation';
 import type { Activity, Comment, Notification as AppNotification, UserProfile } from '@/types';
@@ -357,5 +357,52 @@ export async function getBookmarkedActivities(bookmarkIds: string[]): Promise<Ac
     const va = a.createdAt?.seconds || 0;
     const vb = b.createdAt?.seconds || 0;
     return vb - va;
+  });
+}
+
+// ─── Live Training Sessions ──────────────────────────────────
+
+export interface ActiveSession {
+  uid: string;
+  planId: string;
+  dayId: string;
+  dayTitle: string;
+  currentExercise: string;
+  startedAt: any;
+  updatedAt: any;
+  caloriesBurned: number;
+}
+
+export async function startActiveSession(uid: string, sessionData: Omit<ActiveSession, 'uid' | 'startedAt' | 'updatedAt'>) {
+  const ref = doc(db, 'activeSessions', uid);
+  await setDoc(ref, {
+    ...sessionData,
+    uid,
+    startedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function updateActiveSession(uid: string, data: Partial<ActiveSession>) {
+  const ref = doc(db, 'activeSessions', uid);
+  await updateDoc(ref, {
+    ...data,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function endActiveSession(uid: string) {
+  const ref = doc(db, 'activeSessions', uid);
+  await deleteDoc(ref).catch(() => {});
+}
+
+export async function sendLiveMessage(sessionUid: string, senderUid: string, senderName: string, senderPhoto: string, text: string) {
+  const chatRef = collection(db, 'activeSessions', sessionUid, 'chat');
+  await addDoc(chatRef, {
+    senderUid,
+    senderName,
+    senderPhoto,
+    text,
+    createdAt: serverTimestamp(),
   });
 }

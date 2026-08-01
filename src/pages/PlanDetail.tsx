@@ -141,6 +141,10 @@ export function PlanDetail() {
     );
   }
 
+  if (archiveMutation.isPending || archiveMutation.isSuccess) {
+    return null;
+  }
+
   if (!plan) {
     return <div className="text-center py-20 text-bone-dim">Plan not found or you don't have access.</div>;
   }

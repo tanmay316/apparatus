@@ -199,6 +199,17 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // ─── Active Sessions (Live Training) ────────────────────────
+    match /activeSessions/{uid} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(uid);
+      
+      match /chat/{chatId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+      }
+    }
+
     // ─── Bans ───────────────────────────────────────────────────
     match /bans/{uid} {
       allow read: if isAdmin() || isOwner(uid);

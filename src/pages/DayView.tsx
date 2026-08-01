@@ -199,7 +199,7 @@ export function DayView() {
 
       <div className="border-b border-line pb-6 mb-8">
         <div className="font-mono text-amber text-xs tracking-widest mb-1 flex justify-between">
-          <span>DAY {day.dayNumber} • {day.type.toUpperCase()}</span>
+          <span>DAY {day.dayNumber} • {(day.type || 'STRENGTH').toUpperCase()}</span>
           {isOwner && <span>{day.time}</span>}
         </div>
         
@@ -222,10 +222,10 @@ export function DayView() {
         )}
       </div>
 
-      <ExerciseSection title="Warm-up" exercises={day.warmup} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ warmup: exs })} />
-      <ExerciseSection title="Skill Work" exercises={day.skillWork} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ skillWork: exs })} />
-      <ExerciseSection title="Strength" exercises={day.strength} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ strength: exs })} />
-      <ExerciseSection title="Cool-down" exercises={day.cooldown} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ cooldown: exs })} />
+      <ExerciseSection title="Warm-up" exercises={day.warmup || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ warmup: exs })} />
+      <ExerciseSection title="Skill Work" exercises={day.skillWork || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ skillWork: exs })} />
+      <ExerciseSection title="Strength" exercises={day.strength || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ strength: exs })} />
+      <ExerciseSection title="Cool-down" exercises={day.cooldown || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ cooldown: exs })} />
 
       {/* Save FAB */}
       <AnimatePresence>

@@ -82,11 +82,11 @@ export function StatsPills({ totalWorkouts, totalCalories, totalHours }: StatsPi
               <span className="text-lg sm:text-2xl w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-[var(--bg)] flex items-center justify-center shadow-inner shrink-0">
                 {card.emoji}
               </span>
-              <div className="flex flex-col justify-center min-w-0 flex-1">
-                <span className="text-[9px] sm:text-[11px] font-mono text-[var(--muted)] uppercase tracking-wider sm:tracking-widest truncate">
+              <div className="flex flex-col justify-center min-w-0 flex-1" style={{ containerType: 'inline-size' }}>
+                <span className="font-mono text-[var(--muted)] uppercase tracking-wider sm:tracking-widest truncate" style={{ fontSize: 'clamp(7px, 10cqw, 11px)' }}>
                   {card.label}
                 </span>
-                <span className="font-mono font-bold text-base sm:text-xl text-[var(--text)] leading-tight mt-0.5 truncate">
+                <span className="font-mono font-bold text-[var(--text)] leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(10px, 13cqw, 20px)' }}>
                   <AnimatedCounter value={card.value} formatter={card.formatter} />
                 </span>
               </div>

@@ -7,11 +7,12 @@ import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardMod
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { getPlan, getPlanDays, savePlanDay } from '@/services/plans';
 import { getUserWorkouts, saveWorkout } from '@/services/workouts';
-import { createSelfNotification, postActivity } from '@/services/social';
+import { startActiveSession, updateActiveSession, endActiveSession, createSelfNotification, postActivity } from '@/services/social';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { ExerciseLogModal } from '@/components/ui/ExerciseLogModal';
+import { LiveChatOverlay } from '@/components/social/LiveChatOverlay';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
@@ -123,6 +124,28 @@ export function WorkoutSession() {
     }
   }, [store.isActive, store.startedAt, sessionFinished]);
 
+  // Sync active session with backend
+  useEffect(() => {
+    if (!user || sessionFinished) {
+      if (user) endActiveSession(user.uid).catch(console.error);
+      return;
+    }
+    
+    if (store.isActive && store.planId && store.dayId) {
+      startActiveSession(user.uid, {
+        planId: store.planId,
+        dayId: store.dayId,
+        dayTitle: store.dayTitle,
+        currentExercise: '',
+        caloriesBurned: 0,
+      }).catch(console.error);
+    }
+    
+    return () => {
+      if (user) endActiveSession(user.uid).catch(console.error);
+    };
+  }, [store.isActive, sessionFinished, store.planId, store.dayId]);
+
   useEffect(() => {
     if (!store.isActive && completedWorkoutForDay) {
       setElapsedSec(Math.max(0, Number(completedWorkoutForDay.durationMin || 0) * 60));
@@ -172,6 +195,18 @@ export function WorkoutSession() {
     ? estimatedCalories
     : Number(completedWorkoutForDay?.calories || 0);
   const externalVolume = calculateWorkoutVolume(activeExercises, activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)), userWeight || 70);
+  
+  // Periodically update the active session's stats
+  useEffect(() => {
+    if (!user || !store.isActive || sessionFinished) return;
+    const interval = setInterval(() => {
+      updateActiveSession(user.uid, {
+        currentExercise: activeExercise?.name || 'Warming up...',
+        caloriesBurned: Math.round(displayCalories) || 0,
+      }).catch(console.error);
+    }, 10000); // Update every 10s
+    return () => clearInterval(interval);
+  }, [store.isActive, sessionFinished, activeExercise?.name, displayCalories]);
   
   let maxWeight = 0;
   activeLogs.forEach(log => {
@@ -768,6 +803,8 @@ export function WorkoutSession() {
           }}
         />
       )}
+
+      <LiveChatOverlay />
     </motion.div>
   );
 }

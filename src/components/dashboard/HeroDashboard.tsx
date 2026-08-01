@@ -39,7 +39,7 @@ export function HeroDashboard({ displayName, streak, xp, completedCount, targetD
     >
       {/* Greeting row */}
       <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 w-full">
           <h1 className="font-sans font-semibold text-xl text-bone leading-tight truncate">
             {getGreeting()},{' '}
             <span className="font-serif italic tracking-wide text-2xl text-premium-animated pr-1">
@@ -47,24 +47,6 @@ export function HeroDashboard({ displayName, streak, xp, completedCount, targetD
             </span>
           </h1>
           <p className="text-[12px] font-sans text-bone-dim mt-0.5">{today}</p>
-        </div>
-
-        {/* Weekly ring — tiny */}
-        <div className="relative w-11 h-11 shrink-0">
-          <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
-            <circle cx="22" cy="22" r="18" fill="none" stroke="currentColor" strokeWidth="3" className="text-line" />
-            <circle
-              cx="22" cy="22" r="18" fill="none"
-              stroke="currentColor" strokeWidth="3"
-              strokeLinecap="round"
-              strokeDasharray={2 * Math.PI * 18}
-              strokeDashoffset={(2 * Math.PI * 18) * (1 - progressPct / 100)}
-              className="text-sienna transition-all duration-700 ease-out"
-            />
-          </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-[10px] font-sans font-bold text-bone">{completedCount}/{targetDays}</span>
-          </div>
         </div>
       </div>
 
@@ -78,6 +60,24 @@ export function HeroDashboard({ displayName, streak, xp, completedCount, targetD
         <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-ink-2 text-bone-dim text-[11px] font-sans font-medium border border-line">
           LV {getLevel(xp)} · {getLevelTitle(xp)}
         </span>
+
+        {/* Weekly ring — tiny */}
+        <div className="relative w-8 h-8 shrink-0 ml-1">
+          <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
+            <circle cx="22" cy="22" r="18" fill="none" stroke="currentColor" strokeWidth="4" className="text-line" />
+            <circle
+              cx="22" cy="22" r="18" fill="none"
+              stroke="currentColor" strokeWidth="4"
+              strokeLinecap="round"
+              strokeDasharray={2 * Math.PI * 18}
+              strokeDashoffset={(2 * Math.PI * 18) * (1 - progressPct / 100)}
+              className="text-sienna transition-all duration-700 ease-out"
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-[8px] font-sans font-bold text-bone">{completedCount}/{targetDays}</span>
+          </div>
+        </div>
       </div>
     </motion.div>
   );

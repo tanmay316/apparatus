@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -351,6 +352,28 @@ export function ProfilePage() {
         
         {/* SECTION 1: ATHLETE HERO (WHOOP & Nike Run style) */}
         <motion.div variants={item} className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)]/60 backdrop-blur-md p-6 sm:p-8 shadow-xl min-h-[280px] flex flex-col justify-between">
+          {/* Share icon — top right */}
+          {isOwnProfile && !editing && (
+            <button
+              onClick={async () => {
+                const profileUrl = `${window.location.origin}/profile/${p.username}`;
+                try {
+                  if (navigator.share) {
+                    await navigator.share({ title: `${p.displayName} on Apparatus`, url: profileUrl });
+                  } else {
+                    await navigator.clipboard.writeText(profileUrl);
+                    useUIStore.getState().showToast('Profile link copied!', 'success');
+                  }
+                } catch {
+                  // user cancelled share
+                }
+              }}
+              className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full flex items-center justify-center hover:bg-[var(--bg)] transition-colors"
+              title="Share Profile"
+            >
+              <Share2 size={18} className="text-[#5d2a1a] dark:text-[#d7b29d]" />
+            </button>
+          )}
           <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[var(--teal)]/10 blur-[100px] pointer-events-none" />
           <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-[var(--amber)]/10 blur-[100px] pointer-events-none" />
           
@@ -406,8 +429,6 @@ export function ProfilePage() {
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs font-mono text-[var(--muted)]">
                 <span className="flex items-center gap-1"><CalendarIcon size={12} /> Joined {joinDate}</span>
                 <span>•</span>
-                <span>Level {calculatedLevel}</span>
-                <span>•</span>
                 <span>{stats?.xp || 0} XP</span>
               </div>
             </div>
@@ -424,21 +445,7 @@ export function ProfilePage() {
                       <X size={14} /> Cancel
                     </button>
                   </>
-                ) : (
-                  <>
-                    <button onClick={() => setProfileShareData({
-                      dayTitle: `${p.displayName}'s Profile`,
-                      planTitle: 'Apparatus Athlete',
-                      date: new Date().toLocaleDateString(),
-                      durationMin: Math.round((stats?.totalDurationMin || 0) / 60),
-                      volume: stats?.totalVolume || 0,
-                      calories: displayTotalCalories,
-                      exerciseNames: ['Total Workouts: ' + (stats?.totalWorkouts || 0)],
-                    })} className="btn-primary py-2.5 px-5 flex items-center justify-center gap-1.5 text-xs w-full">
-                      <Share2 size={14} /> Share Profile
-                    </button>
-                  </>
-                )
+                ) : null
               ) : (
                 <>
                   <FollowButton myUid={myProfile!.uid} targetUid={viewProfile.uid} />
@@ -471,34 +478,7 @@ export function ProfilePage() {
           </div>
         </motion.div>
 
-        {/* SECTION 2: STATS ROW */}
-        <motion.div variants={item} className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: 'Workouts', value: stats?.totalWorkouts || 0, emoji: '🔥', color: 'from-[#ff6b6b]/10 to-transparent' },
-            { label: 'Calories', value: Math.round(displayTotalCalories), emoji: '⚡', color: 'from-[#ffbe0b]/10 to-transparent' },
-            { label: 'Hours', value: Math.round((stats?.totalDurationMin || 0) / 60), emoji: '⏱', color: 'from-[#4ea8de]/10 to-transparent', suffix: 'h' },
-            { label: 'Level', value: calculatedLevel, emoji: '🏆', color: 'from-[#ffd166]/10 to-transparent' },
-          ].map(card => (
-            <motion.div
-              key={card.label}
-              whileHover={{ y: -4, scale: 1.02 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
-              className={`rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 flex items-center justify-between shadow-md relative overflow-hidden bg-gradient-to-br ${card.color}`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-2xl w-10 h-10 rounded-xl bg-[var(--bg)] flex items-center justify-center shadow-inner">
-                  {card.emoji}
-                </span>
-                <div>
-                  <div className="text-xs font-mono text-[var(--muted)] uppercase tracking-wider">{card.label}</div>
-                  <div className="text-xl font-bold font-mono text-[var(--text)] mt-0.5">
-                    <AnimatedCounter value={card.value} suffix={card.suffix} />
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </motion.div>
+
 
         {/* PROFILE DETAIL EDITING EXPANSION */}
         {editing && (
@@ -991,51 +971,80 @@ function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'f
     enabled: isOpen && !!type,
   });
 
+  const themeStyles = theme === 'dark' ? {
+    '--bg': '#0a0d14',
+    '--card': '#141720',
+    '--border': '#222736',
+    '--text': '#f3f4f6',
+    '--muted': '#8b92a5',
+    '--teal': '#d7b29d',
+    '--amber': '#d9a441',
+  } as React.CSSProperties : {
+    '--bg': '#f7f8fb',
+    '--card': '#ffffff',
+    '--border': '#e5e7eb',
+    '--text': '#111827',
+    '--muted': '#6b7280',
+    '--teal': '#2f7a6d',
+    '--amber': '#c98a1f',
+  } as React.CSSProperties;
+
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="rounded-3xl border border-[var(--border)] bg-[var(--card)] w-full max-w-sm max-h-[80vh] flex flex-col shadow-2xl overflow-hidden text-[var(--text)]">
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
-          <h2 className="font-serif text-lg capitalize">{type}</h2>
-          <button onClick={onClose} className="p-1 hover:bg-[var(--bg)] rounded-lg transition-colors text-[var(--muted)] hover:text-[var(--text)]">
-            <X size={20} />
+  return createPortal(
+    <div style={themeStyles} className="fixed inset-0 z-[999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60" onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, y: '100%' }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: '100%' }}
+        transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+        className="rounded-t-3xl sm:rounded-3xl border border-[var(--border)] bg-[var(--bg)] w-full sm:max-w-[420px] max-h-[85vh] sm:max-h-[70vh] flex flex-col shadow-2xl overflow-hidden text-[var(--text)] relative"
+      >
+        {/* Header - Solid background */}
+        <div className="flex items-center justify-between px-6 py-5 border-b border-[var(--border)] bg-[var(--bg)] sticky top-0 z-10">
+          <h2 className="font-serif text-2xl font-medium capitalize text-[var(--text)]">{type}</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--card)] transition-colors text-[var(--text)]">
+            <X size={18} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+        {/* List - Added pb-safe for mobile */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 pb-8 sm:pb-3 [&::-webkit-scrollbar]:hidden">
           {isLoading ? (
-            <div className="flex justify-center py-10">
-              <div className="w-6 h-6 border-2 border-[var(--teal)] border-t-transparent rounded-full animate-spin" />
+            <div className="flex justify-center py-12">
+              <div className="w-7 h-7 border-2 border-[var(--teal)] border-t-transparent rounded-full animate-spin" />
             </div>
           ) : users.length === 0 ? (
-            <div className="text-center py-10 text-[var(--muted)] text-sm">
+            <div className="text-center py-16 text-[var(--muted)] text-sm font-mono">
               No {type} yet.
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-1 pb-4">
               {users.map(u => (
-                <div key={u.uid} className="flex items-center gap-3">
-                  <Link to={`/profile/${u.username}`} onClick={onClose}>
-                    <img
-                      src={u.photoURL || getAvatarUrl(u.displayName, theme)}
-                      alt={u.displayName}
-                      className="w-10 h-10 rounded-full object-cover border border-[var(--teal)]/40"
-                    />
-                  </Link>
+                <Link
+                  key={u.uid}
+                  to={`/profile/${u.username}`}
+                  onClick={onClose}
+                  className="flex items-center gap-4 p-3 rounded-2xl hover:bg-[var(--card)] transition-colors group"
+                >
+                  <img
+                    src={u.photoURL || getAvatarUrl(u.displayName, theme)}
+                    alt={u.displayName}
+                    className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm group-hover:scale-105 transition-transform"
+                  />
                   <div className="flex-1 min-w-0">
-                    <Link to={`/profile/${u.username}`} onClick={onClose} className="font-bold text-sm block truncate hover:text-[var(--teal)] transition-colors">
-                      {u.displayName}
-                    </Link>
-                    <div className="text-xs text-[var(--muted)] font-mono truncate">@{u.username}</div>
+                    <div className="font-bold text-[15px] truncate text-[var(--text)]">{u.displayName}</div>
+                    <div className="text-xs text-[var(--muted)] font-mono truncate mt-0.5">@{u.username}</div>
                   </div>
-                </div>
+                </Link>
               ))}
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </div>,
+    document.body
   );
 }
 
