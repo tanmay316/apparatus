@@ -89,7 +89,10 @@ export function PlanList() {
     }
   };
 
-  const stopCardAction = (event: React.MouseEvent) => event.stopPropagation();
+  const stopCardAction = (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
