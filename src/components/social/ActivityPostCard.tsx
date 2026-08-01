@@ -233,56 +233,56 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
           {/* ─── SECTION 3: METRICS ROW ────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
             {/* Duration */}
-            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                <Clock3 size={15} />
+            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
+                <Clock3 size={13} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <div>
-                <div className="font-mono text-sm font-bold text-[#17191c]">
+              <div className="flex-1 min-w-0">
+                <div className="font-mono text-[11px] sm:text-sm font-bold text-[#17191c] leading-tight break-words">
                   {details.durationMin || 0} min
                 </div>
-                <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Duration</div>
+                <div className="font-mono text-[8px] sm:text-[9px] text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 break-words">Duration</div>
               </div>
             </div>
 
             {/* Volume */}
-            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                <TrendingUp size={15} />
+            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
+                <TrendingUp size={13} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <div>
-                <div className="font-mono text-sm font-bold text-[#17191c]">
+              <div className="flex-1 min-w-0">
+                <div className="font-mono text-[11px] sm:text-sm font-bold text-[#17191c] leading-tight break-words">
                   {displayVolume > 0 ? displayVolume.toLocaleString() : displayBodyweightReps > 0 ? displayBodyweightReps : '0'}
                 </div>
-                <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">
+                <div className="font-mono text-[8px] sm:text-[9px] text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 break-words">
                   {displayVolume > 0 ? 'kg·reps' : repsLabel}
                 </div>
               </div>
             </div>
 
             {/* Calories */}
-            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                <Flame size={15} />
+            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
+                <Flame size={13} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <div>
-                <div className="font-mono text-sm font-bold text-[#17191c]">
+              <div className="flex-1 min-w-0">
+                <div className="font-mono text-[11px] sm:text-sm font-bold text-[#17191c] leading-tight break-words">
                   {displayCalories} kcal
                 </div>
-                <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Burned</div>
+                <div className="font-mono text-[8px] sm:text-[9px] text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 break-words">Burned</div>
               </div>
             </div>
 
             {/* Exercise count */}
-            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                <Dumbbell size={15} />
+            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
+              <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
+                <Dumbbell size={13} className="sm:w-[15px] sm:h-[15px]" />
               </div>
-              <div>
-                <div className="font-mono text-sm font-bold text-[#17191c]">
+              <div className="flex-1 min-w-0">
+                <div className="font-mono text-[11px] sm:text-sm font-bold text-[#17191c] leading-tight break-words">
                   {exerciseNames.length}
                 </div>
-                <div className="font-mono text-[9px] text-[#777b86] uppercase tracking-wider">Exercises</div>
+                <div className="font-mono text-[8px] sm:text-[9px] text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 break-words">Exercises</div>
               </div>
             </div>
           </div>

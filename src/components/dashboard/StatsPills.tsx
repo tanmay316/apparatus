@@ -76,22 +76,21 @@ export function StatsPills({ totalWorkouts, totalCalories, totalHours }: StatsPi
             key={card.key}
             whileHover={{ y: -4, scale: 1.02 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className={`rounded-2xl bg-[var(--card)] p-3 sm:p-4 flex items-center shadow-lg relative overflow-hidden bg-gradient-to-br ${card.gradient}`}
+            className={`rounded-2xl bg-[var(--card)] p-2 sm:p-4 flex items-center shadow-lg relative overflow-hidden bg-gradient-to-br ${card.gradient}`}
           >
-            <div className="flex items-center gap-3">
-              <span className="text-xl sm:text-2xl w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[var(--bg)] flex items-center justify-center shadow-inner shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-3 w-full">
+              <span className="text-lg sm:text-2xl w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-[var(--bg)] flex items-center justify-center shadow-inner shrink-0">
                 {card.emoji}
               </span>
-              <div className="flex flex-col justify-center min-w-0">
-                <span className="text-[10px] sm:text-[11px] font-mono text-[var(--muted)] uppercase tracking-widest truncate">
+              <div className="flex flex-col justify-center min-w-0 flex-1">
+                <span className="text-[9px] sm:text-[11px] font-mono text-[var(--muted)] uppercase tracking-wider sm:tracking-widest truncate">
                   {card.label}
                 </span>
-                <span className="font-mono font-bold text-lg sm:text-xl text-[var(--text)] leading-tight mt-0.5 truncate">
+                <span className="font-mono font-bold text-base sm:text-xl text-[var(--text)] leading-tight mt-0.5 truncate">
                   <AnimatedCounter value={card.value} formatter={card.formatter} />
                 </span>
               </div>
             </div>
-
           </motion.div>
       ))}
     </motion.div>

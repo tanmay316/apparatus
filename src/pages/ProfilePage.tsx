@@ -72,7 +72,7 @@ export function ProfilePage() {
   const [publicPlans, setPublicPlans] = useState<any[]>([]);
   const [importingPlan, setImportingPlan] = useState<string | null>(null);
   const [profileShareData, setProfileShareData] = useState<ShareCardData | null>(null);
-  const [feedTab, setFeedTab] = useState<'activity' | 'communities'>('activity');
+  const [feedTab, setFeedTab] = useState<'activity' | 'communities' | 'posts' | 'bookmarks' | 'events'>('activity');
   const [showAllActivities, setShowAllActivities] = useState(false);
   const [showAllTimeline, setShowAllTimeline] = useState(false);
 
