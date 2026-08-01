@@ -23,7 +23,7 @@ def score_exercise(
     if ex.movement_pattern != target_pattern:
         return 0
     if ex.category != target_category:
-        return 0
+        score -= 20  # Soft penalty to allow fallbacks (e.g., if no Machine Compound is available)
     if ex.name in previously_used:
         return 0
         

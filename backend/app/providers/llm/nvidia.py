@@ -53,6 +53,9 @@ class NvidiaLLMProvider(BaseLLMProvider):
                 **kwargs
             )
 
+            if json_mode:
+                llm = llm.bind(response_format={"type": "json_object"})
+
             import asyncio
             response = await asyncio.wait_for(llm.ainvoke(lc_messages), timeout=185.0)
         except Exception as err:
