@@ -21,7 +21,7 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
                 (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION)
             ],
-            "warmup_focus": "upper_body_push",
+            "warmup_focus": ["chest", "shoulders"],
             "muscles_trained": ["chest", "shoulders", "triceps"]
         },
         {
@@ -33,7 +33,7 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
                 (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION) # Rear delts usually fall here
             ],
-            "warmup_focus": "upper_body_pull",
+            "warmup_focus": ["back", "arms"],
             "muscles_trained": ["back", "biceps", "rear_delt"]
         },
         {
@@ -45,7 +45,7 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
                 (MovementPattern.CORE, ExerciseCategory.CORE)
             ],
-            "warmup_focus": "lower_body",
+            "warmup_focus": ["squat", "legs"],
             "muscles_trained": ["quads", "hamstrings", "glutes", "calves", "core"]
         }
     ],
@@ -60,7 +60,7 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
                 (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION)
             ],
-            "warmup_focus": "full_upper",
+            "warmup_focus": ["upper_body"],
             "muscles_trained": ["chest", "back", "shoulders", "arms"]
         },
         {
@@ -72,7 +72,7 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
                 (MovementPattern.CORE, ExerciseCategory.CORE)
             ],
-            "warmup_focus": "lower_body",
+            "warmup_focus": ["squat", "deadlift", "legs"],
             "muscles_trained": ["quads", "hamstrings", "glutes", "calves", "core"]
         }
     ],
@@ -87,7 +87,7 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
                 (MovementPattern.CORE, ExerciseCategory.CORE)
             ],
-            "warmup_focus": "full_body",
+            "warmup_focus": ["full_body"],
             "muscles_trained": ["full_body"]
         }
     ]
@@ -156,7 +156,7 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
         
         # ── SKILL WORK ──
         skill_exercises = []
-        is_upper_day = template["warmup_focus"] in ["upper_body_push", "upper_body_pull", "full_upper", "full_body"]
+        is_upper_day = any(m in template["warmup_focus"] for m in ["chest", "shoulders", "back", "arms", "upper_body", "full_body"])
         
         for skill in all_skills:
             if fatigue_mgr.can_train_skill(skill, max_frequency=2):
