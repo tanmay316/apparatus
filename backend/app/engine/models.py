@@ -15,7 +15,11 @@ class MovementPattern(str, Enum):
     CORE = "core"
     CARRY = "carry"
     CALF = "calf"
-    ISOLATION = "isolation" # general isolation
+    ISOLATION = "isolation" # general isolation fallback
+    ISOLATION_BICEPS = "isolation_biceps"
+    ISOLATION_TRICEPS = "isolation_triceps"
+    ISOLATION_SHOULDERS = "isolation_shoulders"
+    ISOLATION_LEGS = "isolation_legs"
 
 class ExerciseCategory(str, Enum):
     PRIMARY_COMPOUND = "primary_compound"

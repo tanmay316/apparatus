@@ -18,8 +18,8 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.VERTICAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.MACHINE_COMPOUND),
-                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION), # Tricep
-                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION)  # Lateral Delt
+                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION)
             ],
             "warmup_focus": "upper_body_push",
             "muscles_trained": ["chest", "shoulders", "triceps"]
@@ -30,8 +30,8 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.VERTICAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.MACHINE_COMPOUND),
-                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION), # Bicep
-                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION)  # Rear Delt
+                (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION) # Rear delts usually fall here
             ],
             "warmup_focus": "upper_body_pull",
             "muscles_trained": ["back", "biceps", "rear_delt"]
@@ -40,9 +40,9 @@ SPLIT_TEMPLATES = {
             "title": "Leg Day",
             "slots": [
                 (MovementPattern.SQUAT, ExerciseCategory.PRIMARY_COMPOUND),
-                (MovementPattern.HINGE, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.HINGE, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.LUNGE, ExerciseCategory.SECONDARY_COMPOUND),
-                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION), # Quads/Hams
+                (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
                 (MovementPattern.CORE, ExerciseCategory.CORE)
             ],
             "warmup_focus": "lower_body",
@@ -57,8 +57,8 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.VERTICAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.VERTICAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
-                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION)
+                (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION)
             ],
             "warmup_focus": "full_upper",
             "muscles_trained": ["chest", "back", "shoulders", "arms"]
@@ -69,7 +69,7 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.SQUAT, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.HINGE, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.LUNGE, ExerciseCategory.SECONDARY_COMPOUND),
-                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
                 (MovementPattern.CORE, ExerciseCategory.CORE)
             ],
             "warmup_focus": "lower_body",
@@ -84,7 +84,7 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.HINGE, ExerciseCategory.SECONDARY_COMPOUND),
-                (MovementPattern.ISOLATION, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
                 (MovementPattern.CORE, ExerciseCategory.CORE)
             ],
             "warmup_focus": "full_body",
@@ -116,6 +116,12 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
     available_exs = get_exercises_for_equipment(equipment)
     
     split_type = blueprint.get("split_type", "upper_lower")
+    
+    # ── Override bad LLM decisions ──
+    # If it's a 6-day split, force PPL to avoid Upper/Lower burnout
+    if days >= 6:
+        split_type = "push_pull_legs"
+        
     split_key = split_type.lower().replace(" ", "_").replace("-", "_")
     split_aliases = {
         "push_pull_legs": "push_pull_legs", "ppl": "push_pull_legs",
@@ -135,10 +141,14 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
     blueprint_skills = blueprint.get("skills", [])
     all_skills = list(set(requested_skills + blueprint_skills))
     
-    global_used = set()
+    cycle_used = set()
     assembled_days = []
     
     for i, template in enumerate(day_templates):
+        # Reset cycle used every 3 days (e.g. for PPL 1 vs PPL 2)
+        if i > 0 and i % 3 == 0:
+            cycle_used.clear()
+            
         day_used = set()
         
         # ── WARMUP ──
@@ -146,24 +156,28 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
         
         # ── SKILL WORK ──
         skill_exercises = []
+        is_upper_day = template["warmup_focus"] in ["upper_body_push", "upper_body_pull", "full_upper", "full_body"]
+        
         for skill in all_skills:
-            if fatigue_mgr.can_train_skill(skill, max_frequency=2):  # Limit skills to 2x/week!
-                skill_exs = get_skill_exercises(skill, experience)
-                # pick 1-2 exercises from the progression
-                for sex in skill_exs[:2]:
-                    if sex["name"] not in day_used:
-                        skill_exercises.append({
-                            "name": sex["name"],
-                            "sets": sex.get("sets", "3 x 5"),
-                            "tempo": "",
-                            "rest": sex.get("rest", "90s"),
-                            "cues": sex.get("cues", []),
-                            "yt": ""
-                        })
-                        day_used.add(sex["name"])
-                fatigue_mgr.register_skill_session(skill)
-                # Max 1 skill per day
-                break
+            if fatigue_mgr.can_train_skill(skill, max_frequency=2):
+                # Ensure handstands/planche only happen on upper body days, and pistols on leg days
+                is_leg_skill = skill in ["pistol squat", "shrimp squat"]
+                if (is_upper_day and not is_leg_skill) or (not is_upper_day and is_leg_skill):
+                    skill_exs = get_skill_exercises(skill, experience)
+                    for sex in skill_exs[:2]:
+                        if sex["name"] not in day_used:
+                            skill_exercises.append({
+                                "name": sex["name"],
+                                "sets": sex.get("sets", "3 x 5"),
+                                "tempo": "",
+                                "rest": sex.get("rest", "90s"),
+                                "cues": sex.get("cues", []),
+                                "yt": ""
+                            })
+                            day_used.add(sex["name"])
+                    fatigue_mgr.register_skill_session(skill)
+                    # Max 1 skill per day
+                    break
                 
         # ── STRENGTH ──
         strength_exercises = []
@@ -171,7 +185,7 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
             # Score all available exercises for this slot
             scored = []
             for ex in available_exs:
-                score = score_exercise(ex, pattern, category, goal, experience, fatigue_mgr, global_used)
+                score = score_exercise(ex, pattern, category, goal, experience, fatigue_mgr, cycle_used)
                 if score > 0:
                     scored.append((score, ex))
                     
@@ -194,7 +208,7 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
                     "yt": ""
                 })
                 
-                global_used.add(best_ex.name)
+                cycle_used.add(best_ex.name)
                 fatigue_mgr.add_exercise_fatigue(best_ex)
                 vol_tracker.add_sets(best_ex.primary_muscles, 3)
                 
