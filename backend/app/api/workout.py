@@ -75,12 +75,13 @@ You are given the user's original request and the output of our deterministic py
 
 Rules for your review:
 1. **Biomechanics & Science**: Audit the exercises. Ensure they are the absolute best choice for the target muscle and experience level. If an exercise is redundant or suboptimal, REPLACE it with a superior science-based alternative.
-2. **Custom Requests**: If the user's CUSTOM INSTRUCTIONS mention specific exercises, skills (calisthenics), or preferences that the engine missed, FORCE them into the plan gracefully.
-3. **Equipment**: Ensure NO exercises require equipment the user does not have.
-4. **Variety & Fatigue**: Ensure there is no destructive overlap (e.g., Heavy Deadlifts followed by heavy bent-over rows the next day). Fix the exercise selection to manage systemic and local fatigue.
-5. **JSON Schema**: Keep the EXACT SAME JSON structure. Do NOT change the schema.
-6. Output the COMPLETE modified plan as strictly valid JSON. No commentary.
-7. If the plan is already 100% optimal, return it as-is.
+2. **Volume & Time Management**: The user requested a specific `Session Duration` for their main strength block (excluding warmups). If the engine provided too few exercises for that time (assuming ~12 mins for heavy compounds and ~6 mins for isolations), ADD more highly-effective exercises to maximize growth without exceeding the time limit. If it provided too many, DELETE the least effective "junk volume" exercises. Ensure every muscle group assigned to that day is optimally stimulated.
+3. **Custom Requests**: If the user's CUSTOM INSTRUCTIONS mention specific exercises, skills (calisthenics), or preferences that the engine missed, FORCE them into the plan gracefully.
+4. **Equipment**: Ensure NO exercises require equipment the user does not have.
+5. **Variety & Fatigue**: Ensure there is no destructive overlap (e.g., Heavy Deadlifts followed by heavy bent-over rows the next day). Fix the exercise selection to manage systemic and local fatigue.
+6. **JSON Schema**: Keep the EXACT SAME JSON structure. Do NOT change the schema.
+7. Output the COMPLETE modified plan as strictly valid JSON. No commentary.
+8. If the plan is already 100% optimal, return it as-is.
 
 Act as the ultimate quality control. Output strictly valid JSON matching WorkoutPlanResponse schema."""
 
@@ -171,9 +172,12 @@ Generate the coaching blueprint JSON for a {req.days}-day program. The "days" ar
     
     review_prompt = f"""Original User Request:
 - Goal: {req.goal}
+- Fitness Goal (from profile): {req.fitnessGoal or req.goal}
+- Training Style: {req.trainingStyle or 'general'}
 - Days: {req.days}
 - Equipment: {req.equipment}
 - Experience: {req.experience or 'intermediate'}
+- Session Duration: {req.sessionDuration} minutes (applies to strength portion only)
 - Custom Instructions: {req.customInfo or 'None'}
 - Injuries: {req.injuries or 'None'}
 
