@@ -1,34 +1,28 @@
 import React, { useRef, useEffect, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Dumbbell, BookOpen, Apple, TrendingUp, User } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
+import { Dumbbell, BookOpen, Apple, TrendingUp, Users } from 'lucide-react';
 
 const TABS = [
   { id: 'home', path: '/', label: 'Home', icon: Dumbbell },
   { id: 'plans', path: '/plans', label: 'Plans', icon: BookOpen },
   { id: 'nutrition', path: '/nutrition', label: 'Nutrition', icon: Apple },
   { id: 'progress', path: '/progress', label: 'Progress', icon: TrendingUp },
-  { id: 'profile', path: '/profile', label: 'Profile', icon: User },
+  { id: 'community', path: '/communities', label: 'Community', icon: Users },
 ];
 
 export function BottomNav() {
   const location = useLocation();
-  const { profile } = useAuthStore();
 
   const isWorkoutRoute = location.pathname.startsWith('/workout/');
   if (isWorkoutRoute) return null;
 
-  const getProfilePath = () => {
-    return profile?.username ? `/profile/${profile.username}` : '/profile';
-  };
-
   const activeIndex = useMemo(() => {
     const index = TABS.findIndex((tab) => {
       if (tab.id === 'home') return location.pathname === '/';
-      if (tab.id === 'profile') return location.pathname.startsWith('/profile/');
+      if (tab.id === 'community') return location.pathname.startsWith('/communities');
       return location.pathname.startsWith(tab.path);
     });
-    return index === -1 ? 0 : index;
+    return index;
   }, [location.pathname]);
 
   const textRefs = useRef<(HTMLElement | null)[]>([]);
@@ -65,15 +59,17 @@ export function BottomNav() {
         {TABS.map((tab, index) => {
           const isActive = index === activeIndex;
           const IconComponent = tab.icon;
-          const href = tab.id === 'profile' ? getProfilePath() : tab.path;
+          const href = tab.path;
 
           return (
             <Link
               key={tab.id}
               to={href}
               ref={(el) => (itemRefs.current[index] = el)}
-              className={`relative flex items-center justify-center h-11 px-4 rounded-full transition-all duration-300 ease-out ${
-                isActive ? 'bg-sienna-light/15 text-sienna' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'
+              className={`relative flex items-center justify-center h-11 px-4 rounded-full transition-all duration-300 ease-out border-none ${
+                isActive 
+                  ? 'bg-white shadow-[inset_3px_3px_8px_rgba(0,0,0,0.05),inset_-3px_-3px_8px_rgba(255,255,255,1)] text-[#5d2a1a]' 
+                  : 'text-gray-400 hover:text-gray-600 bg-white shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)]'
               }`}
               style={{ '--lineWidth': '0px' } as React.CSSProperties}
             >

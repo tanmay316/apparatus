@@ -41,7 +41,10 @@ export function HeroDashboard({ displayName, streak, xp, completedCount, targetD
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <h1 className="font-sans font-semibold text-xl text-bone leading-tight truncate">
-            {getGreeting()}, {displayName.split(' ')[0]} 👋
+            {getGreeting()},{' '}
+            <span className="font-serif italic tracking-wide text-2xl text-premium-animated pr-1">
+              {displayName.split(' ')[0]}
+            </span>
           </h1>
           <p className="text-[12px] font-sans text-bone-dim mt-0.5">{today}</p>
         </div>

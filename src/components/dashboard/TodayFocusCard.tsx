@@ -63,7 +63,7 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="relative overflow-hidden p-4 mb-3 rounded-[16px] bg-[#fbe1d1] text-[#5d2a1a]"
+      className="relative overflow-hidden p-4 mb-3 rounded-[16px] bg-[#fbe1d1]/40 backdrop-blur-xl border border-white/40 shadow-lg text-[#5d2a1a]"
     >
       <div className="relative flex items-center justify-between gap-3">
         {/* Info */}
@@ -98,21 +98,21 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
         <div className="shrink-0 flex items-center gap-2">
           <Link
             to={`/workout/${activePlan.id}/day/${todayDay.id}`}
-            className="w-10 h-10 rounded-full bg-[#5d2a1a] text-[#fbe1d1] inline-flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-sm"
+            className="w-10 h-10 rounded-full bg-[#5d2a1a] text-[#fbe1d1] inline-flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.2),-4px_-4px_10px_rgba(255,255,255,0.5)]"
             title={wasCompletedToday ? 'Redo Workout' : isActive ? 'Resume Workout' : 'Start Workout'}
           >
             <Play size={18} fill="currentColor" className="ml-0.5" />
           </Link>
           <Link
             to="/explore"
-            className="w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] inline-flex items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all"
+            className="w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] inline-flex items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.1),-4px_-4px_10px_rgba(255,255,255,0.8)]"
             title="Explore Programs & Community Workouts"
           >
             <Compass size={18} />
           </Link>
           <Link
             to="/plans"
-            className="w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] inline-flex items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all"
+            className="w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] inline-flex items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.1),-4px_-4px_10px_rgba(255,255,255,0.8)]"
             title="My Custom Plan"
           >
             <Plus size={18} />

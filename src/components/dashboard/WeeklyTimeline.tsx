@@ -65,10 +65,10 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
             >
               <Link
                 to={`/workout/${activePlan.id}/day/${day.id}`}
-                className={`relative w-[82vw] sm:w-[260px] h-[264px] p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] shadow-sm hover:shadow-md ${
+                className={`relative w-[82vw] sm:w-[260px] h-[264px] p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] shadow-[6px_6px_14px_rgba(0,0,0,0.05),-6px_-6px_14px_rgba(255,255,255,0.8)] ${
                   isToday
-                    ? 'bg-gradient-to-br from-white to-sienna-light/20'
-                    : 'bg-gradient-to-br from-white to-gray-50'
+                    ? 'bg-gradient-to-br from-[#fdfbfb] to-[#f4ebe6]'
+                    : 'bg-gradient-to-br from-[#fdfbfb] to-[#f5f5f5]'
                 }`}
               >
                 <div>
@@ -102,14 +102,14 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
                   </p>
 
                   <div className="flex flex-wrap items-center gap-2 mb-4">
-                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'}`}>
+                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'}`}>
                       <Clock size={12} /> {day.time}
                     </span>
-                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'}`}>
+                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'}`}>
                       <Layers size={12} /> {allExercises.length} ex
                     </span>
                     {day.skill && (
-                       <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'} truncate max-w-full`}>
+                       <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'} truncate max-w-full`}>
                          <Activity size={12} /> {day.skill}
                        </span>
                     )}
@@ -118,7 +118,7 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
 
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   {isToday ? (
-                     <div className="w-full py-2.5 rounded-xl bg-sienna text-bone font-sans font-semibold text-sm flex items-center justify-center gap-2 shadow-sm hover:bg-sienna-dim transition-colors shadow-sienna/20">
+                     <div className="w-full py-2.5 rounded-xl bg-sienna text-bone font-sans font-semibold text-sm flex items-center justify-center gap-2 hover:bg-sienna-dim transition-colors shadow-[4px_4px_10px_rgba(0,0,0,0.2),-4px_-4px_10px_rgba(255,255,255,0.5)]">
                        Start Workout
                      </div>
                   ) : (

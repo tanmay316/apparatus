@@ -72,7 +72,9 @@ export function ProfilePage() {
   const [publicPlans, setPublicPlans] = useState<any[]>([]);
   const [importingPlan, setImportingPlan] = useState<string | null>(null);
   const [profileShareData, setProfileShareData] = useState<ShareCardData | null>(null);
-  const [feedTab, setFeedTab] = useState<'posts' | 'bookmarks' | 'events' | 'communities'>('posts');
+  const [feedTab, setFeedTab] = useState<'activity' | 'communities'>('activity');
+  const [showAllActivities, setShowAllActivities] = useState(false);
+  const [showAllTimeline, setShowAllTimeline] = useState(false);
 
   const { data: bookmarkedPosts = [] } = useQuery({
     queryKey: ['bookmarkedPosts', viewProfile?.bookmarks],
@@ -593,7 +595,7 @@ export function ProfilePage() {
                 </div>
               ) : (
                 <div className="relative pl-6 border-l border-[var(--border)] space-y-8">
-                  {publicWorkouts.slice(0, 5).map((workout, idx) => {
+                  {publicWorkouts.slice(0, showAllTimeline ? publicWorkouts.length : 2).map((workout, idx) => {
                     const relativeTime = getRelativeTime(workout.date || new Date().toISOString());
                     return (
                       <div key={workout.id || idx} className="relative">
@@ -624,6 +626,14 @@ export function ProfilePage() {
                       </div>
                     );
                   })}
+                  {publicWorkouts.length > 2 && (
+                    <button
+                      onClick={() => setShowAllTimeline(!showAllTimeline)}
+                      className="w-full py-2.5 mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--card)] transition-colors text-xs font-semibold uppercase tracking-wider"
+                    >
+                      {showAllTimeline ? 'Show Less' : `Show ${publicWorkouts.length - 2} More Timeline Events`}
+                    </button>
+                  )}
                 </div>
               )}
             </motion.div>
@@ -743,7 +753,7 @@ export function ProfilePage() {
                     <p className="text-sm text-[var(--muted)]">No workouts logged yet.</p>
                   ) : (
                 <div className="space-y-4">
-                  {publicWorkouts.slice(0, 10).map(workout => {
+                  {publicWorkouts.slice(0, showAllActivities ? publicWorkouts.length : 1).map(workout => {
                     const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
                     const exerciseNamesList = rawExLogs.map((e: any) => typeof e === 'string' ? e : e.name);
 
@@ -781,6 +791,14 @@ export function ProfilePage() {
                       />
                     );
                   })}
+                  {publicWorkouts.length > 1 && (
+                    <button
+                      onClick={() => setShowAllActivities(!showAllActivities)}
+                      className="w-full py-3 mt-2 rounded-2xl border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--card)] transition-colors text-xs font-semibold uppercase tracking-wider"
+                    >
+                      {showAllActivities ? 'Show Less' : `Show ${publicWorkouts.length - 1} More Activities`}
+                    </button>
+                  )}
                 </div>
               )}
                 </>
@@ -788,80 +806,8 @@ export function ProfilePage() {
             </motion.div>
           </div>
 
-          {/* RIGHT PANEL: PERFORMANCE & METRICS */}
+            {/* RIGHT PANEL: PERFORMANCE & METRICS */}
           <div className="lg:col-span-4 space-y-6">
-            
-            {/* SECTION 3: CURRENT PLAN CARD */}
-            {activePlan ? (
-              <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md relative overflow-hidden bg-gradient-to-br from-[var(--teal)]/5 to-transparent">
-                <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-[var(--teal)]/10 blur-[40px] pointer-events-none" />
-                <div className="text-[10px] font-mono uppercase tracking-widest text-[var(--teal)] mb-1">Active Plan</div>
-                <h3 className="font-serif text-lg tracking-tight text-[var(--text)] mb-3">{activePlan.title}</h3>
-                
-                <div className="flex justify-between items-center text-xs text-[var(--muted)] font-mono mb-2">
-                  <span>Progress</span>
-                  <span className="font-semibold text-[var(--text)]">{completedDaysCount} / {totalDaysCount || 6} days completed</span>
-                </div>
-                
-                <div className="w-full h-2 bg-[var(--bg)] rounded-full overflow-hidden mb-5 border border-[var(--border)]">
-                  <div 
-                    className="h-full bg-[var(--teal)] rounded-full" 
-                    style={{ width: `${Math.min(100, (completedDaysCount / (totalDaysCount || 6)) * 100)}%` }} 
-                  />
-                </div>
-
-                {isOwnProfile && (
-                  <Link
-                    to={`/workout/${activePlan.id}/day/${planDays[completedDaysCount % (planDays.length || 1)]?.id || ''}`}
-                    className="btn-primary w-full py-2.5 text-xs font-semibold flex items-center justify-center gap-2"
-                  >
-                    <Play size={14} fill="currentColor" /> Continue Workout
-                  </Link>
-                )}
-              </motion.div>
-            ) : (
-              <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md text-center">
-                <ShieldAlert size={28} className="mx-auto text-[var(--muted)] mb-2" />
-                <h3 className="font-semibold text-sm text-[var(--text)]">No Active Program</h3>
-                <p className="text-xs text-[var(--muted)] mt-1 mb-4">Jump into the explorer and load a calisthenics target plan.</p>
-                {isOwnProfile && (
-                  <Link to="/explore" className="btn-secondary w-full py-2 text-xs">
-                    Find Programs
-                  </Link>
-                )}
-              </motion.div>
-            )}
-
-            {/* SECTION 4: SKILLS CARD (WHOOP-style roadmap) */}
-            <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
-              <div className="flex items-center gap-2 mb-4">
-                <Target className="text-[var(--amber)]" size={16} />
-                <h3 className="font-serif text-base tracking-tight">Performance Progressions</h3>
-              </div>
-              <div className="space-y-4">
-                {[
-                  { name: 'Handstand', val: getSkillProgress('Handstand'), color: 'bg-indigo-500' },
-                  { name: 'Front Lever', val: getSkillProgress('Front Lever'), color: 'bg-emerald-500' },
-                  { name: 'L-Sit', val: getSkillProgress('L-Sit'), color: 'bg-amber-500' },
-                  { name: 'Planche', val: getSkillProgress('Planche'), color: 'bg-rose-500' },
-                ].map(skill => (
-                  <div key={skill.name}>
-                    <div className="flex justify-between items-center text-xs font-mono mb-1.5">
-                      <span className="font-medium text-[var(--text)]">{skill.name}</span>
-                      <span className="text-[var(--muted)]">{skill.val}%</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-[var(--bg)] rounded-full overflow-hidden border border-[var(--border)]">
-                      <motion.div 
-                        className={`h-full ${skill.color} rounded-full`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${skill.val}%` }}
-                        transition={{ duration: 0.8, ease: 'easeOut' }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
 
             {/* SECTION 5: BODY METRICS */}
             <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">

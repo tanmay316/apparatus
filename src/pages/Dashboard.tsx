@@ -164,22 +164,11 @@ export function Dashboard() {
   if (store.isActive && store.dayId) {
     const activeIdx = findDayIndex(store.dayId);
     if (activeIdx !== -1) currentDayIndex = activeIdx;
-  } else {
-    const todayPlanWorkout = todayWorkouts.find((w: any) =>
-      w.planId === activePlan?.id || activeDays.some(d => d.id === w.dayId || String(d.dayNumber) === String(w.dayId))
+  } else if (activeDays.length > 0) {
+    const firstUncompletedIndex = activeDays.findIndex(d =>
+      !todayWorkouts.some((w: any) => w.dayId === d.id) && !recentWorkouts.some((w: any) => w.dayId === d.id)
     );
-    if (todayPlanWorkout) {
-      const todayIdx = findDayIndex(todayPlanWorkout.dayId);
-      if (todayIdx !== -1) currentDayIndex = todayIdx;
-    } else {
-      const lastPlanWorkout = recentWorkouts.find((w: any) =>
-        w.planId === activePlan?.id || activeDays.some(d => d.id === w.dayId || String(d.dayNumber) === String(w.dayId))
-      );
-      const lastDayIndex = lastPlanWorkout ? findDayIndex(lastPlanWorkout.dayId) : -1;
-      if (lastDayIndex !== -1 && activeDays.length > 0) {
-        currentDayIndex = (lastDayIndex + 1) % activeDays.length;
-      }
-    }
+    currentDayIndex = firstUncompletedIndex === -1 ? activeDays.length - 1 : firstUncompletedIndex;
   }
 
   // Handle Share button click on a completed workout day

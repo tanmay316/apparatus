@@ -121,7 +121,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="activity-post-card relative overflow-hidden text-[#17191c] border border-[#ececec] rounded-[24px] bg-white shadow-[0_0_0_1px_rgba(4,23,43,0.05),0_20px_25px_-5px_rgba(0,0,0,0.08),0_8px_10px_-6px_rgba(0,0,0,0.05)] p-6 mb-6"
+      className="activity-post-card relative overflow-hidden text-[#17191c] border border-[#ececec] rounded-[24px] bg-[#fdfbfb] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] p-6 mb-6"
     >
       {/* ─── SECTION 1: HEADER ────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 mb-5">
@@ -130,7 +130,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
             <img
               src={activity.userPhoto || getAvatarUrl(activity.userName, theme)}
               alt={activity.userName}
-              className="w-10 h-10 md:w-11 md:h-11 rounded-full border-2 border-[#ececec] object-cover"
+              className="w-10 h-10 md:w-11 md:h-11 rounded-full shadow-[3px_3px_6px_rgba(0,0,0,0.1),-3px_-3px_6px_rgba(255,255,255,1)] object-cover"
               referrerPolicy="no-referrer"
             />
           </Link>
@@ -146,7 +146,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
                 <span className="text-[11px] font-mono text-[#777b86] hidden sm:inline">@{activity.username}</span>
               )}
               {profile?.experienceLevel && (
-                <span className="text-[10px] font-mono font-medium uppercase px-2.5 py-0.5 rounded-full bg-[#f2f2f3] text-[#777b86] border border-[#ececec]">
+                <span className="text-[10px] font-mono font-medium uppercase px-2.5 py-0.5 rounded-full bg-[#fdfbfb] text-[#777b86] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)]">
                   {profile.experienceLevel}
                 </span>
               )}
@@ -169,7 +169,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
 
       {/* ─── SECTION 2: WORKOUT HERO ───────────────────────────────────── */}
       <div
-        className="relative overflow-hidden rounded-[20px] p-6 mb-5 bg-[#fafafb] border border-[#ececec] flex flex-col justify-between min-h-[130px]"
+        className="relative overflow-hidden rounded-[20px] p-6 mb-5 bg-[#fdfbfb] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.05),inset_-3px_-3px_8px_rgba(255,255,255,1)] flex flex-col justify-between min-h-[130px]"
       >
         {activity.type === 'event_join' ? (
           <div>
@@ -201,7 +201,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
 
               {/* Small size Anatomy figure beside workout day title */}
               {activeMuscleSet.size > 0 && (
-                <div className="flex items-center gap-1.5 shrink-0 bg-white p-2 rounded-2xl border border-[#ececec]" title="Muscles Targeted">
+                <div className="flex items-center gap-1.5 shrink-0 bg-[#fdfbfb] p-2 rounded-2xl shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)]" title="Muscles Targeted">
                   <AnatomyFigureSVG view="front" activeMuscles={activeMuscleSet} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
                   <AnatomyFigureSVG view="back" activeMuscles={activeMuscleSet} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
                 </div>
@@ -210,14 +210,14 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
 
             {/* Muscle Heatmap Text Strip */}
             {activeMuscleList.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-[#ececec] flex items-center gap-2 flex-wrap">
+              <div className="mt-4 pt-3 flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-mono font-semibold text-[#777b86] flex items-center gap-1">
                   <Sparkles size={12} className="text-[#979799]" /> Trained:
                 </span>
                 {activeMuscleList.map((m, idx) => (
                   <span
                     key={idx}
-                    className="text-xs font-sans text-[#17191c] bg-white px-2.5 py-0.5 rounded-md border border-[#ececec]"
+                    className="text-xs font-sans text-[#17191c] bg-[#fdfbfb] px-2.5 py-0.5 rounded-md shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)]"
                   >
                     {m.replace('_', ' ')}
                   </span>
@@ -233,8 +233,8 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
           {/* ─── SECTION 3: METRICS ROW ────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
             {/* Duration */}
-            <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
+            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
                 <Clock3 size={15} />
               </div>
               <div>
@@ -246,8 +246,8 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
             </div>
 
             {/* Volume */}
-            <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
+            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
                 <TrendingUp size={15} />
               </div>
               <div>
@@ -261,8 +261,8 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
             </div>
 
             {/* Calories */}
-            <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
+            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
                 <Flame size={15} />
               </div>
               <div>
@@ -274,8 +274,8 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
             </div>
 
             {/* Exercise count */}
-            <div className="rounded-[16px] border border-[#ececec] bg-white p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#f2f2f3] flex items-center justify-center text-[#777b86] shrink-0">
+            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
                 <Dumbbell size={15} />
               </div>
               <div>
@@ -363,7 +363,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
         </>)}
 
       {/* ─── SECTION 5: SOCIAL ACTIONS ─────────────────────────────────── */}
-      <div className="flex items-center justify-between border-t border-[#ececec] pt-3 text-xs font-sans">
+      <div className="flex items-center justify-between mt-4 pt-4 text-xs font-sans">
         <div className="flex items-center gap-4">
           {/* Like */}
           <motion.button
@@ -427,16 +427,16 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="mt-3 pt-3 border-t border-[#ececec] space-y-2"
+            className="mt-3 pt-3 space-y-2"
           >
             {comments.map((comment: Comment) => (
               <div key={comment.id} className="flex items-start gap-2.5 text-xs">
                 <img
                   src={comment.userPhoto || getAvatarUrl(comment.userName, theme, 64)}
-                  className="w-6 h-6 rounded-full object-cover shrink-0 mt-0.5"
+                  className="w-6 h-6 rounded-full shadow-[2px_2px_4px_rgba(0,0,0,0.1),-2px_-2px_4px_rgba(255,255,255,1)] object-cover shrink-0 mt-0.5"
                   alt=""
                 />
-                <div className="rounded-xl bg-[#f2f2f3] px-3 py-2 flex-1">
+                <div className="rounded-xl bg-[#fdfbfb] shadow-[inset_2px_2px_5px_rgba(0,0,0,0.05),inset_-2px_-2px_5px_rgba(255,255,255,1)] px-3 py-2 flex-1">
                   <span className="font-bold text-[#17191c]">{comment.userName}</span>
                   <p className="text-[#777b86] mt-0.5 leading-relaxed">{comment.text}</p>
                 </div>
@@ -452,12 +452,12 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
                   if (e.key === 'Enter' && commentText.trim()) commentMutation.mutate();
                 }}
                 placeholder="Say something encouraging…"
-                className="flex-1 bg-[#f2f2f3] border border-[#ececec] rounded-xl px-3 py-2 text-xs text-[#17191c] outline-none focus:border-[#5d2a1a]/40 font-sans"
+                className="flex-1 bg-[#fdfbfb] shadow-[inset_3px_3px_6px_rgba(0,0,0,0.05),inset_-3px_-3px_6px_rgba(255,255,255,1)] rounded-xl px-3 py-2 text-xs text-[#17191c] outline-none font-sans"
               />
               <button
                 disabled={!commentText.trim() || commentMutation.isPending}
                 onClick={() => commentMutation.mutate()}
-                className="px-3 py-2 rounded-xl bg-[#17191c] text-white font-medium hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center shrink-0"
+                className="px-3 py-2 rounded-xl bg-[#17191c] text-white shadow-[4px_4px_8px_rgba(0,0,0,0.15),-4px_-4px_8px_rgba(255,255,255,1)] font-medium hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center shrink-0"
               >
                 <Send size={14} />
               </button>
@@ -472,7 +472,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
 /** Skeleton Loader Component */
 export function ActivityPostCardSkeleton() {
   return (
-    <div className="rounded-[24px] border border-[#ececec] bg-white p-5 mb-4 animate-pulse">
+    <div className="rounded-[24px] border border-[#ececec] bg-[#fdfbfb] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] p-5 mb-4 animate-pulse">
       <div className="flex items-center gap-3 mb-4">
         <div className="w-12 h-12 rounded-full bg-[#f2f2f3]" />
         <div className="space-y-2 flex-1">

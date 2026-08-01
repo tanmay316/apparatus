@@ -13,4 +13,45 @@
   .glass {
     @apply bg-ink-2/80 backdrop-blur-md border border-line/50;
   }
+
+  .text-premium-animated {
+    /* Darker, rich bronze/copper gradient for light themes */
+    background: linear-gradient(
+      270deg,
+      #8C5F35 0%,
+      #C69C6D 25%,
+      #5C3A21 50%,
+      #C69C6D 75%,
+      #8C5F35 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 4s linear infinite;
+  }
+
+  .dark .text-premium-animated {
+    /* Brighter, glowing gold/pearl gradient for dark themes */
+    background: linear-gradient(
+      270deg,
+      #E8C37C 0%,
+      #FFFFFF 25%,
+      #D4AF37 50%,
+      #FFFFFF 75%,
+      #E8C37C 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 4s linear infinite;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: 0% center; }
 }

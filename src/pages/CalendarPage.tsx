@@ -118,7 +118,7 @@ export function CalendarPage() {
   });
 
   const registeredEventIds = eventRegistrations.map(r => r.eventId);
-  
+
   // 9. Fetch details for registered events
   const { data: registeredEvents = [] } = useQuery({
     queryKey: ['registeredEvents', registeredEventIds],
@@ -188,14 +188,14 @@ export function CalendarPage() {
       const planToClone = followerPlans.find(p => p.id === selectedFollowerPlanId);
       const displayName = profile.displayName || 'Athlete';
       const clonedId = await clonePlan(selectedFollowerPlanId, 'plans', profile.uid, displayName);
-      
+
       // Auto-set as active plan
       await useAuthStore.getState().updateProfile({ activePlanId: clonedId });
-      
+
       queryClient.invalidateQueries({ queryKey: ['activePlan'] });
       queryClient.invalidateQueries({ queryKey: ['activePlanDays'] });
       queryClient.invalidateQueries({ queryKey: ['userPlans'] });
-      
+
       showToast('Plan imported and set as active!');
       setIsImportModalOpen(false);
       setSelectedFollowerUid('');
@@ -224,6 +224,27 @@ export function CalendarPage() {
     ath.username.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const isDark = theme === 'dark';
+  const calendarBg = isDark
+    ? 'bg-gradient-to-br from-[#160a08] to-[#57302a] shadow-[8px_8px_20px_rgba(0,0,0,0.6),-8px_-8px_20px_rgba(255,255,255,0.03)] border-none text-bone'
+    : 'bg-gradient-to-br from-[#ffeee6] to-[#fbf8e7] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] border border-white/60 text-[#17191c]';
+
+  const nmCard = isDark
+    ? 'bg-[#1e2024] shadow-[8px_8px_20px_rgba(0,0,0,0.6),-8px_-8px_20px_rgba(255,255,255,0.03)] border-none text-bone'
+    : 'bg-[#fbf8e7] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] border border-white/60 text-[#17191c]';
+
+  const nmBtn = isDark
+    ? 'bg-[#1e2024] shadow-[4px_4px_10px_rgba(0,0,0,0.4),-4px_-4px_10px_rgba(255,255,255,0.03)] border-none text-bone'
+    : 'bg-[#fbf8e7] shadow-[4px_4px_10px_rgba(0,0,0,0.06),-4px_-4px_10px_rgba(255,255,255,0.8)] border border-white/60 text-[#17191c]';
+
+  const nmInset = isDark
+    ? 'bg-[#1e2024] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.6),inset_-3px_-3px_8px_rgba(255,255,255,0.03)] border-none'
+    : 'bg-[#fbf8e7] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.05),inset_-3px_-3px_8px_rgba(255,255,255,1)] border border-white/60';
+
+  const nmTag = isDark
+    ? 'bg-[#1e2024] shadow-[2px_2px_5px_rgba(0,0,0,0.4),-2px_-2px_5px_rgba(255,255,255,0.03)] border-none text-bone'
+    : 'bg-[#fbf8e7] shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] border border-white/60 text-[#17191c]';
+
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
       <motion.div variants={item} className="pb-5 border-b border-line mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -242,7 +263,7 @@ export function CalendarPage() {
               <select
                 value={profile?.activePlanId || ''}
                 onChange={(e) => handleActivePlanChange(e.target.value)}
-                className="appearance-none bg-ink-2 border border-line rounded-xl px-3 py-2 pr-8 text-xs font-sans text-bone hover:border-sienna transition-colors focus:outline-none focus:ring-1 focus:ring-sienna min-w-[160px]"
+                className={`appearance-none rounded-xl px-3 py-2 pr-8 text-xs font-sans hover:text-sienna transition-colors focus:outline-none min-w-[160px] ${nmInset} ${isDark ? 'text-bone' : 'text-[#17191c]'}`}
               >
                 <option value="" disabled>No active plan</option>
                 {allPlans.map(p => (
@@ -256,7 +277,7 @@ export function CalendarPage() {
           {/* Import Button */}
           <button
             onClick={() => setIsImportModalOpen(true)}
-            className="btn-secondary py-2 px-3 text-xs inline-flex items-center gap-1.5 self-end mt-4 h-[34px] rounded-xl hover:text-sienna hover:border-sienna/50"
+            className={`py-2 px-3 text-xs inline-flex items-center gap-1.5 self-end mt-4 h-[34px] rounded-xl hover:text-sienna transition-colors ${nmBtn}`}
           >
             <Plus size={13} /> Import Plan
           </button>
@@ -265,17 +286,17 @@ export function CalendarPage() {
 
       {/* Main Grid: Calendar left, day details right */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
+
         {/* Calendar Card */}
-        <motion.div variants={item} className="card p-5 lg:col-span-2 h-fit">
+        <motion.div variants={item} className={`rounded-[24px] p-5 lg:col-span-2 h-fit ${calendarBg}`}>
           <div className="flex items-center justify-between mb-6">
-            <button onClick={prevMonth} className="p-2 rounded-lg border border-line hover:border-sienna hover:text-sienna transition-colors">
+            <button onClick={prevMonth} className={`p-2 rounded-lg hover:text-sienna transition-colors ${nmBtn}`}>
               <ChevronLeft size={18} />
             </button>
             <h2 className="font-display text-xl tracking-wider">
               {MONTHS[currentMonth]} {currentYear}
             </h2>
-            <button onClick={nextMonth} className="p-2 rounded-lg border border-line hover:border-sienna hover:text-sienna transition-colors">
+            <button onClick={nextMonth} className={`p-2 rounded-lg hover:text-sienna transition-colors ${nmBtn}`}>
               <ChevronRight size={18} />
             </button>
           </div>
@@ -310,15 +331,14 @@ export function CalendarPage() {
                   <button
                     key={i}
                     onClick={() => setSelectedDate(cell.dateStr)}
-                    className={`aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-mono relative transition-all ${
-                      isSelected
-                        ? 'bg-sienna text-bone font-bold ring-2 ring-sienna ring-offset-2 ring-offset-ink'
+                    className={`aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-mono relative transition-all ${isSelected
+                        ? `${isDark ? 'bg-[#1e2024] shadow-[inset_4px_4px_10px_rgba(0,0,0,0.6),inset_-4px_-4px_10px_rgba(255,255,255,0.05)] text-sienna' : 'bg-[#fbf8e7] shadow-[inset_4px_4px_10px_rgba(0,0,0,0.05),inset_-4px_-4px_10px_rgba(255,255,255,1)] text-[#5d2a1a]'} font-bold border-none`
                         : isToday
-                        ? 'bg-amber/15 text-amber font-bold border border-amber/30'
-                        : (hasWorkout || hasEvent)
-                        ? 'bg-sienna/10 text-bone hover:bg-sienna/20 border border-sienna/20'
-                        : 'text-bone-dim hover:bg-ink-3 border border-transparent'
-                    }`}
+                          ? 'bg-amber/15 text-amber font-bold border border-amber/30'
+                          : (hasWorkout || hasEvent)
+                            ? `${isDark ? 'text-bone bg-[#1e2024] shadow-[3px_3px_8px_rgba(0,0,0,0.5),-3px_-3px_8px_rgba(255,255,255,0.03)]' : 'text-[#17191c] bg-[#fbf8e7] shadow-[3px_3px_8px_rgba(0,0,0,0.06),-3px_-3px_8px_rgba(255,255,255,0.8)]'} border-none`
+                            : `${isDark ? 'text-bone-dim bg-[#1e2024] shadow-[3px_3px_8px_rgba(0,0,0,0.4),-3px_-3px_8px_rgba(255,255,255,0.02)] hover:text-bone' : 'text-[#777b86] bg-[#fbf8e7] shadow-[3px_3px_8px_rgba(0,0,0,0.04),-3px_-3px_8px_rgba(255,255,255,0.6)] hover:text-[#17191c]'} border-none`
+                      }`}
                   >
                     {cell.day}
                     {hasWorkout && !isSelected && (
@@ -336,9 +356,9 @@ export function CalendarPage() {
 
         {/* Selected day details panel */}
         <motion.div variants={item} className="space-y-4 lg:col-span-1">
-          
+
           {selectedDate && (
-            <div className="card p-5 space-y-4">
+            <div className={`rounded-[24px] p-5 space-y-4 ${nmCard}`}>
               <div className="flex items-center gap-2 pb-3 border-b border-line">
                 <CalIcon size={16} className="text-sienna" />
                 <h3 className="font-display text-base">
@@ -347,7 +367,7 @@ export function CalendarPage() {
               </div>
 
               {/* SECTION A: SCHEDULED PLAN WORKOUT */}
-              <div className="bg-ink bg-white/[0.01] rounded-xl p-4 border border-line/45 space-y-3">
+              <div className={`rounded-xl p-4 space-y-3 ${nmInset}`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <BookOpen size={14} className="text-amber" />
@@ -362,13 +382,13 @@ export function CalendarPage() {
 
                 {scheduledDay ? (
                   <div>
-                    <div className="font-display text-lg text-bone font-medium mb-1">{scheduledDay.title}</div>
+                    <div className={`font-display text-lg font-medium mb-1 ${isDark ? 'text-bone' : 'text-[#17191c]'}`}>{scheduledDay.title}</div>
                     <div className="text-xs text-bone-dim font-mono mb-3">Estimated time: {scheduledDay.time || '~45 min'}</div>
                     <div className="space-y-1">
                       <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">Exercises list:</div>
                       <div className="flex flex-wrap gap-1.5 mt-1.5">
                         {[...(scheduledDay.warmup || []), ...(scheduledDay.skillWork || []), ...(scheduledDay.strength || []), ...(scheduledDay.cooldown || [])].map((ex, idx) => (
-                          <span key={idx} className="text-xs font-mono bg-ink-2 px-2 py-0.5 rounded border border-line/40 text-bone">
+                          <span key={idx} className={`text-xs font-mono px-2 py-0.5 rounded ${nmTag}`}>
                             {ex.name}
                           </span>
                         ))}
@@ -389,11 +409,11 @@ export function CalendarPage() {
                     <MapPin size={12} className="text-amber" /> Registered Events
                   </div>
                   {selectedEvents.map(e => (
-                    <div key={e.id} className="bg-ink-2 rounded-xl p-4 border border-line/30 space-y-2">
-                      <div className="font-bold text-sm text-bone">{e.title}</div>
+                    <div key={e.id} className={`rounded-xl p-4 space-y-2 ${nmBtn}`}>
+                      <div className={`font-bold text-sm ${isDark ? 'text-bone' : 'text-[#17191c]'}`}>{e.title}</div>
                       <div className="flex items-center gap-2 text-xs text-bone-dim font-mono">
                         <CalIcon size={12} />
-                        {e.dateTime?.start?.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        {e.dateTime?.start?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                       <div className="flex items-center gap-2 text-xs text-bone-dim font-mono">
                         <MapPin size={12} />
@@ -407,22 +427,22 @@ export function CalendarPage() {
               {/* SECTION B: LOGGED WORKOUTS */}
               <div className="space-y-3">
                 <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">Logged Activity</div>
-                
+
                 {selectedWorkouts.length === 0 ? (
-                  <div className="text-center text-bone-dim text-xs py-6 border border-dashed border-line rounded-xl">
+                  <div className={`text-center text-bone-dim text-xs py-6 rounded-xl ${nmInset}`}>
                     No workouts logged on this day.
                   </div>
                 ) : (
                   selectedWorkouts.map((w, i) => {
                     const maxWeightVal = getWorkoutMaxWeight(w);
                     return (
-                      <div key={i} className="bg-ink-2 rounded-xl p-4 border border-line/30 space-y-3">
+                      <div key={i} className={`rounded-xl p-4 space-y-3 ${nmBtn}`}>
                         <div className="flex items-start justify-between">
                           <div>
-                            <div className="font-bold text-sm text-bone">{w.planTitle || 'Workout'}</div>
+                            <div className={`font-bold text-sm ${isDark ? 'text-bone' : 'text-[#17191c]'}`}>{w.planTitle || 'Workout'}</div>
                             <div className="font-mono text-xs text-sienna">{w.dayTitle || ''}</div>
                           </div>
-                          <span className="font-mono text-[10px] text-bone-dim bg-ink-3 px-2 py-0.5 rounded">
+                          <span className={`font-mono text-[10px] text-bone-dim px-2 py-0.5 rounded ${nmInset}`}>
                             {w.exercises?.length || 0} exercises
                           </span>
                         </div>
@@ -432,17 +452,17 @@ export function CalendarPage() {
                           <div className="flex flex-col items-center gap-0.5">
                             <Clock size={12} className="text-sienna" />
                             <span className="text-[9px] font-mono text-bone-dim uppercase">TIME</span>
-                            <span className="font-mono text-xs text-bone font-semibold">{w.durationMin}m</span>
+                            <span className={`font-mono text-xs font-semibold ${isDark ? 'text-bone' : 'text-[#17191c]'}`}>{w.durationMin}m</span>
                           </div>
                           <div className="flex flex-col items-center gap-0.5">
                             <TrendingUp size={12} className="text-amber" />
                             <span className="text-[9px] font-mono text-bone-dim uppercase">MAX LIFT</span>
-                            <span className="font-mono text-xs text-bone font-semibold">{maxWeightVal > 0 ? `${maxWeightVal}kg` : 'BW'}</span>
+                            <span className={`font-mono text-xs font-semibold ${isDark ? 'text-bone' : 'text-[#17191c]'}`}>{maxWeightVal > 0 ? `${maxWeightVal}kg` : 'BW'}</span>
                           </div>
                           <div className="flex flex-col items-center gap-0.5">
                             <Flame size={12} className="text-danger" />
                             <span className="text-[9px] font-mono text-bone-dim uppercase">KCAL</span>
-                            <span className="font-mono text-xs text-bone font-semibold">{w.calories}</span>
+                            <span className={`font-mono text-xs font-semibold ${isDark ? 'text-bone' : 'text-[#17191c]'}`}>{w.calories}</span>
                           </div>
                         </div>
 
@@ -452,7 +472,7 @@ export function CalendarPage() {
                             <div className="text-[9px] font-mono text-bone-dim uppercase tracking-wider mb-1.5">Crushed Exercises:</div>
                             <div className="flex flex-wrap gap-1">
                               {w.exercises.map((ex, idx) => (
-                                <span key={idx} className="text-[10px] font-mono bg-ink px-1.5 py-0.5 rounded border border-line/30 text-bone-dim">
+                                <span key={idx} className={`text-[10px] font-mono px-1.5 py-0.5 rounded text-bone-dim ${nmTag}`}>
                                   {ex.name}
                                 </span>
                               ))}
@@ -505,11 +525,11 @@ export function CalendarPage() {
 
               {/* Body Content */}
               <div className="p-6 overflow-y-auto space-y-4 flex-1">
-                
+
                 {/* Step 1: Search and Select Follower */}
                 <div className="space-y-2">
                   <label className="text-[10px] font-mono text-bone-dim uppercase tracking-wider block">1. Select Followed Athlete</label>
-                  
+
                   {followingUids.length === 0 ? (
                     <div className="text-xs text-bone-dim font-mono py-2 bg-ink/30 border border-line/35 rounded-xl text-center">
                       You are not following any athletes yet.
@@ -540,11 +560,10 @@ export function CalendarPage() {
                                 setSelectedFollowerUid(ath.uid);
                                 setSelectedFollowerPlanId('');
                               }}
-                              className={`flex items-center gap-3 p-2 rounded-lg text-left transition-all border ${
-                                isSelected
+                              className={`flex items-center gap-3 p-2 rounded-lg text-left transition-all border ${isSelected
                                   ? 'bg-sienna/20 border-sienna text-bone font-semibold'
                                   : 'bg-transparent border-transparent text-bone-dim hover:bg-white/5 hover:text-bone'
-                              }`}
+                                }`}
                             >
                               <img
                                 src={ath.photoURL}
@@ -571,7 +590,7 @@ export function CalendarPage() {
                 {selectedFollowerUid && (
                   <div className="space-y-2 pt-2 border-t border-line/20">
                     <label className="text-[10px] font-mono text-bone-dim uppercase tracking-wider block">2. Choose public Plan</label>
-                    
+
                     {followerPlans.length === 0 ? (
                       <div className="text-xs text-bone-dim font-mono py-4 bg-ink/30 border border-line/35 rounded-xl text-center">
                         This athlete has no public plans.

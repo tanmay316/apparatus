@@ -43,25 +43,25 @@ export function StatsPills({ totalWorkouts, totalCalories, totalHours }: StatsPi
       key: 'workouts',
       label: 'Workouts',
       value: totalWorkouts,
-      icon: Zap,
-      iconBg: 'bg-blue-50 text-blue-600'
+      emoji: '🔥',
+      gradient: 'from-[#ff6b6b]/10 to-transparent',
     },
     {
       key: 'calories',
       label: 'Calories',
       value: totalCalories,
-      icon: TrendingUp,
-      iconBg: 'bg-orange-50 text-orange-600',
-      formatter: (v: number) => `${Math.round(v).toLocaleString()} kcal`
+      emoji: '⚡',
+      formatter: (v: number) => `${Math.round(v).toLocaleString()}`,
+      gradient: 'from-[#ffbe0b]/10 to-transparent',
     },
     {
       key: 'hours',
-      label: 'Time',
+      label: 'Hours',
       value: totalHours,
-      icon: Clock,
-      iconBg: 'bg-purple-50 text-purple-600',
-      formatter: (v: number) => v < 1 ? `${Math.round(v * 60)}m` : `${v.toFixed(1)}h`
-    },
+      emoji: '⏱',
+      formatter: (v: number) => v < 1 ? `${Math.round(v * 60)}m` : `${v.toFixed(1)}h`,
+      gradient: 'from-[#4ea8de]/10 to-transparent',
+    }
   ];
 
   return (
@@ -71,36 +71,29 @@ export function StatsPills({ totalWorkouts, totalCalories, totalHours }: StatsPi
       transition={{ delay: 0.15 }}
       className="grid grid-cols-3 gap-2 sm:gap-3 mb-8"
     >
-      {cards.map((card) => {
-        const Icon = card.icon;
-        return (
+      {cards.map((card) => (
           <motion.div
             key={card.key}
-            whileHover={{ y: -2 }}
+            whileHover={{ y: -4, scale: 1.02 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="p-3 sm:p-4 rounded-[20px] sm:rounded-[24px] bg-white border border-[#ececec] shadow-sm flex flex-col justify-center overflow-hidden"
+            className={`rounded-2xl bg-[var(--card)] p-3 sm:p-4 flex items-center shadow-lg relative overflow-hidden bg-gradient-to-br ${card.gradient}`}
           >
-            <div className="flex flex-col xl:flex-row items-start xl:items-center gap-2 sm:gap-3 min-w-0">
-              <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 ${card.iconBg}`}>
-                <Icon className="w-4 h-4 sm:w-5 sm:h-5" strokeWidth={2.5} />
-              </div>
-              <div className="flex flex-col justify-center min-w-0 w-full">
-                <span className="text-[10px] sm:text-[11px] font-sans font-medium text-gray-500 uppercase tracking-wider truncate">
+            <div className="flex items-center gap-3">
+              <span className="text-xl sm:text-2xl w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-[var(--bg)] flex items-center justify-center shadow-inner shrink-0">
+                {card.emoji}
+              </span>
+              <div className="flex flex-col justify-center min-w-0">
+                <span className="text-[10px] sm:text-[11px] font-mono text-[var(--muted)] uppercase tracking-widest truncate">
                   {card.label}
                 </span>
-                <span className="font-sans font-bold text-lg sm:text-xl text-gray-900 leading-tight truncate">
+                <span className="font-mono font-bold text-lg sm:text-xl text-[var(--text)] leading-tight mt-0.5 truncate">
                   <AnimatedCounter value={card.value} formatter={card.formatter} />
                 </span>
               </div>
             </div>
-            {card.trend && (
-              <div className="mt-2 sm:mt-3 flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-emerald-600 truncate w-full">
-                <TrendingUp size={12} className="shrink-0" /> <span className="truncate">{card.trend}</span>
-              </div>
-            )}
+
           </motion.div>
-        );
-      })}
+      ))}
     </motion.div>
   );
 }

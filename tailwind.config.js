@@ -51,6 +51,7 @@ export default {
         'float-delay': 'particleFloat 10s ease-in-out 2s infinite',
         'float-slow': 'particleFloat 12s ease-in-out 4s infinite',
         'counter-up': 'counterUp 0.6s ease-out',
+        'gradient': 'gradient 4s ease infinite',
       },
       keyframes: {
         fadeIn: {
@@ -82,6 +83,10 @@ export default {
         counterUp: {
           '0%': { opacity: '0', transform: 'translateY(8px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        gradient: {
+          '0%, 100%': { backgroundPosition: '0% 50%' },
+          '50%': { backgroundPosition: '100% 50%' },
         },
       },
     },
