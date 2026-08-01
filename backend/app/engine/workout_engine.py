@@ -276,15 +276,15 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
         
         # Determine exercise count based on session duration
         if session_duration <= 30:
-            main_count, accessory_count, iso_count = 2, 1, 0
+            total_compounds, total_accessories = 1, 1
         elif session_duration <= 45:
-            main_count, accessory_count, iso_count = 2, 1, 1
+            total_compounds, total_accessories = 2, 1
         elif session_duration <= 60:
-            main_count, accessory_count, iso_count = 2, 2, 1
+            total_compounds, total_accessories = 2, 2
         elif session_duration <= 75:
-            main_count, accessory_count, iso_count = 3, 2, 2
+            total_compounds, total_accessories = 3, 2
         else:
-            main_count, accessory_count, iso_count = 3, 3, 2
+            total_compounds, total_accessories = 3, 3
         
         # Track per-day used names (allow some reuse across days)
         day_used = set()
@@ -318,22 +318,25 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
         strength_exercises = []
         categories = template["categories"]
         
-        # Primary compounds first
+        # Primary compounds
         compound_cats = [c for c in categories if "compound" in c or "squat" in c or "hinge" in c or "lunge" in c]
-        accessory_cats = [c for c in categories if "isolation" in c]
-        
-        for cat in compound_cats[:2]:  # Max 2 compound categories
-            selected = _select_exercises(cat, available, main_count, day_used, experience)
-            for ex in selected:
-                strength_exercises.append(_format_exercise(ex, params, "compound"))
+        if compound_cats:
+            for i in range(total_compounds):
+                cat = compound_cats[i % len(compound_cats)]
+                selected = _select_exercises(cat, available, 1, day_used, experience)
+                for ex in selected:
+                    strength_exercises.append(_format_exercise(ex, params, "compound"))
         
         # Accessories
-        for cat in accessory_cats:
-            selected = _select_exercises(cat, available, iso_count, day_used, experience)
-            for ex in selected:
-                strength_exercises.append(_format_exercise(ex, params, "isolation"))
+        accessory_cats = [c for c in categories if "isolation" in c]
+        if accessory_cats:
+            for i in range(total_accessories):
+                cat = accessory_cats[i % len(accessory_cats)]
+                selected = _select_exercises(cat, available, 1, day_used, experience)
+                for ex in selected:
+                    strength_exercises.append(_format_exercise(ex, params, "isolation"))
         
-        # Core (add 1-2 core exercises if there's room)
+        # Core
         if "core" in categories or len(strength_exercises) < 4:
             core_exs = _select_exercises("core", available, 1, day_used, experience)
             for ex in core_exs:
@@ -342,9 +345,11 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
         # ── COOLDOWN ──
         cooldown = get_cooldown_for_day(template["muscles_trained"])
         
-        # Calculate estimated time
-        ex_count = len(warmup) + len(skill_exercises) + len(strength_exercises) + len(cooldown)
-        est_time = f"{max(30, ex_count * 4)}-{max(45, ex_count * 6)} min"
+        # Calculate estimated time (Warmup=5m, Cooldown=5m, Strength=10m/ex, Skill=5m/ex)
+        base_time = 10 + (len(strength_exercises) * 10) + (len(skill_exercises) * 5)
+        min_time = max(30, base_time - 10)
+        max_time = base_time + 10
+        est_time = f"{min_time}-{max_time} min"
         
         assembled_days.append({
             "dayNumber": i + 1,

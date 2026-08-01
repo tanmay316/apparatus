@@ -25,7 +25,7 @@ class OpenRouterLLMProvider(BaseLLMProvider):
         messages: List[ChatMessage],
         system_prompt: Optional[str] = None,
         temperature: float = 0.7,
-        max_tokens: int = 2048,
+        max_tokens: Optional[int] = None,
         json_mode: bool = False,
     ) -> LLMResponse:
         start = time.time()
@@ -39,9 +39,10 @@ class OpenRouterLLMProvider(BaseLLMProvider):
             payload = {
                 "model": self.model,
                 "messages": api_messages,
-                "max_tokens": max_tokens,
                 "temperature": temperature,
             }
+            if max_tokens is not None:
+                payload["max_tokens"] = max_tokens
             if json_mode:
                 payload["response_format"] = {"type": "json_object"}
 

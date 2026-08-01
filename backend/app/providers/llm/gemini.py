@@ -25,7 +25,7 @@ class GeminiLLMProvider(BaseLLMProvider):
         messages: List[ChatMessage],
         system_prompt: Optional[str] = None,
         temperature: float = 0.7,
-        max_tokens: int = 2048,
+        max_tokens: Optional[int] = None,
         json_mode: bool = False,
     ) -> LLMResponse:
         if not self.client:
@@ -52,8 +52,9 @@ class GeminiLLMProvider(BaseLLMProvider):
 
             config = genai_types.GenerateContentConfig(
                 temperature=temperature,
-                max_output_tokens=max_tokens,
             )
+            if max_tokens is not None:
+                config.max_output_tokens = max_tokens
             if json_mode:
                 config.response_mime_type = "application/json"
 

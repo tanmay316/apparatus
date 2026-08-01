@@ -21,7 +21,7 @@ class NvidiaLLMProvider(BaseLLMProvider):
         messages: List[ChatMessage],
         system_prompt: Optional[str] = None,
         temperature: float = 1.0,
-        max_tokens: int = 16384,
+        max_tokens: Optional[int] = None,
         json_mode: bool = False,
     ) -> LLMResponse:
         start_time = time.time()
@@ -41,13 +41,16 @@ class NvidiaLLMProvider(BaseLLMProvider):
         logger = logging.getLogger(__name__)
         model_to_use = self.model
         try:
+            kwargs = {}
+            if max_tokens is not None:
+                kwargs["max_completion_tokens"] = max_tokens
             llm = ChatNVIDIA(
                 model=model_to_use,
                 api_key=self.api_key,
                 temperature=temperature,
                 top_p=1,
-                max_completion_tokens=max_tokens,
                 timeout=180,
+                **kwargs
             )
 
             import asyncio
@@ -56,14 +59,16 @@ class NvidiaLLMProvider(BaseLLMProvider):
             err_str = str(err)
             if any(k in err_str.lower() for k in ["404", "not found", "410", "unknown error", "gone", "timeout"]):
                 try:
-                    model_to_use = "meta/llama-3.2-11b-vision-instruct"
+                    kwargs_fallback = {}
+                    if max_tokens is not None:
+                        kwargs_fallback["max_completion_tokens"] = max_tokens
                     llm = ChatNVIDIA(
                         model=model_to_use,
                         api_key=self.api_key,
                         temperature=temperature,
                         top_p=1,
-                        max_completion_tokens=max_tokens,
                         timeout=180,
+                        **kwargs_fallback
                     )
                     response = await asyncio.wait_for(llm.ainvoke(lc_messages), timeout=185.0)
                 except Exception as fallback_err:
