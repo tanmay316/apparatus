@@ -300,15 +300,14 @@
 
   /* Skills Page Card & Progress styling overrides */
   [data-theme='dark'] .skills-page-container .bg-ink-2,
-  [data-theme='dark'] .skills-page-container .bg-sienna\/5,
-  [data-theme='dark'] .skills-page-container button.bg-ink-2 {
+  [data-theme='dark'] .skills-page-container .bg-sienna\/5 {
     background-color: #000000 !important;
     border: 1px solid #1a1a1a !important;
     box-shadow: none !important;
   }
 
-  [data-theme='dark'] .skills-page-container button.bg-ink-2:hover,
-  [data-theme='dark'] .skills-page-container button.bg-ink-3:hover {
+  [data-theme='dark'] .skills-page-container .bg-ink-2:hover,
+  [data-theme='dark'] .skills-page-container .bg-ink-3:hover {
     background-color: #141414 !important;
     border-color: #3d2c22 !important;
   }

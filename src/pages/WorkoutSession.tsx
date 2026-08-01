@@ -144,8 +144,9 @@ export function WorkoutSession() {
         planId: store.planId,
         dayId: store.dayId,
         dayTitle: store.dayTitle,
-        currentExercise: '',
-        caloriesBurned: 0,
+        currentExercise: lastExercise,
+        caloriesBurned: Math.round(displayCalories) || 0,
+        startedAt: Timestamp.fromMillis(store.startedAt)
       }).catch(console.error);
     }
     
@@ -213,9 +214,17 @@ export function WorkoutSession() {
     if (activeExercise?.name) setLastExercise(activeExercise.name);
   }, [activeExercise?.name]);
 
-  // Periodically update the active session's stats
+  // Immediately push exercise changes to live session
   useEffect(() => {
-    if (!user || !store.isActive || sessionFinished) return;
+    if (!user || !store.isActive || sessionFinished || !store.startedAt) return;
+    updateActiveSession(user.uid, {
+      currentExercise: lastExercise,
+    }).catch(console.error);
+  }, [lastExercise, user, store.isActive, sessionFinished, store.startedAt]);
+
+  // Periodically update the active session's stats (calories, etc.)
+  useEffect(() => {
+    if (!user || !store.isActive || sessionFinished || !store.startedAt) return;
     const interval = setInterval(() => {
       updateActiveSession(user.uid, {
         currentExercise: lastExercise,
@@ -223,7 +232,7 @@ export function WorkoutSession() {
       }).catch(console.error);
     }, 10000); // Update every 10s
     return () => clearInterval(interval);
-  }, [store.isActive, sessionFinished, lastExercise, displayCalories]);
+  }, [store.isActive, sessionFinished, lastExercise, displayCalories, user, store.startedAt]);
   
   let maxWeight = 0;
   activeLogs.forEach(log => {
@@ -509,6 +518,7 @@ export function WorkoutSession() {
                         log?.sets.forEach((_: any, setIdx: number) => {
                           store.markSetComplete(e.name, setIdx, !isCurrentlyDone);
                         });
+                        setLastExercise(e.name);
                         showToast(`All sets marked ${!isCurrentlyDone ? 'complete' : 'incomplete'}`);
                       }}
                       className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-none transition-colors ${isDone ? 'bg-sienna border-sienna text-bone font-bold' : 'border-line text-transparent hover:border-sienna'}`}

@@ -373,12 +373,12 @@ export interface ActiveSession {
   caloriesBurned: number;
 }
 
-export async function startActiveSession(uid: string, sessionData: Omit<ActiveSession, 'uid' | 'startedAt' | 'updatedAt'>) {
+export async function startActiveSession(uid: string, sessionData: Omit<ActiveSession, 'uid' | 'updatedAt'> & { startedAt?: any }) {
   const ref = doc(db, 'activeSessions', uid);
   await setDoc(ref, {
+    startedAt: serverTimestamp(),
     ...sessionData,
     uid,
-    startedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 }
