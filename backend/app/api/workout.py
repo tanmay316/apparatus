@@ -38,10 +38,12 @@ async def generate_workout_plan(
     Create a highly optimized workout plan tailored exactly to the user's requirements.
     
     CRITICAL INSTRUCTIONS:
-    1. Output strictly valid JSON matching the exact schema requested. No markdown blocks, no conversational text.
-    2. WARM-UPS & COOL-DOWNS: Must be highly specific to the main strength exercises for that specific day. Do NOT output generic universal warmups for every day. If it's a Heavy Squat day, warmup the hips, knees, and core.
-    3. SKILL WORK: If the user requests calisthenics or specific skill goals (like handstand, muscle up, front lever), add them to the 'skillWork' array for relevant days.
-    4. EXERCISES: Provide reps/sets in a clear format (e.g., '3 x 10'). Give tempo (e.g., '2010') and rest (e.g., '90s').
+    1. STRICT DAY COUNT: You MUST generate exactly the number of days requested by the user. If they ask for 6 days, the "days" array MUST contain exactly 6 elements. Do not stop early.
+    2. CUSTOM INSTRUCTIONS: You MUST deeply integrate the user's "Custom Instructions" (e.g. learning planche, frog stand). Put relevant exercises into the 'skillWork' array or 'strength' array. Do not ignore their custom requests!
+    3. WARM-UPS & COOL-DOWNS: Must be highly specific to the main strength exercises for that specific day. Do NOT output generic universal warmups. If it's a Heavy Squat day, warmup the hips/knees.
+    4. COMPLETE DATA: Do not leave days half-empty. Every single day must have 'warmup', 'strength', and 'cooldown' populated. If the user requested calisthenics/skills, populate 'skillWork' too.
+    5. EXERCISES: Provide reps/sets in a clear format (e.g., '3 x 10'). Give tempo (e.g., '2010') and rest (e.g., '90s').
+    6. Output strictly valid JSON matching the exact schema requested. No markdown blocks, no conversational text.
     
     JSON SCHEMA TO MATCH:
     {{
@@ -67,7 +69,7 @@ async def generate_workout_plan(
     Equipment available: {req.equipment}
     Custom Instructions: {req.customInfo}
     
-    Generate the {req.days}-day workout plan JSON now.
+    Generate the EXACTLY {req.days}-day workout plan JSON now. Do not stop until all {req.days} days are fully generated with warmups, main sets, and cooldowns.
     """
 
     messages = [ChatMessage(role="user", content=user_prompt)]
@@ -78,7 +80,7 @@ async def generate_workout_plan(
             providers=providers,
             system_prompt=system_prompt,
             temperature=0.7,
-            max_tokens=4000,
+            max_tokens=8000,
             json_mode=True
         )
         
