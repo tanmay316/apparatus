@@ -11,75 +11,63 @@ from app.data.skill_progressions import get_skill_exercises
 
 # Templates explicitly mapping day to its required categories and patterns
 SPLIT_TEMPLATES = {
+    # 6-Day Elite PPL (Arnold Variant): Push (Chest/Tri), Pull (Back/Bi), Legs & Shoulders
     "push_pull_legs": [
         {
-            "title": "Push Day",
+            "title": "Push Day (Chest & Triceps)",
             "slots": [
-                # Base (5 exercises)
                 (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.PRIMARY_COMPOUND),
-                (MovementPattern.VERTICAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND),
-                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.MACHINE_COMPOUND),
-                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
-                # Extensions (up to 14 total for a massive 2-hour workout)
                 (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
+                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.MACHINE_COMPOUND),
+                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
                 (MovementPattern.FLY, ExerciseCategory.ISOLATION),
                 (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
                 (MovementPattern.FLY, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
-                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.MACHINE_COMPOUND)
+                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION)
             ],
-            "warmup_focus": ["chest", "shoulders"],
-            "muscles_trained": ["chest", "shoulders", "triceps"]
+            "warmup_focus": ["chest"],
+            "muscles_trained": ["chest", "triceps"]
         },
         {
-            "title": "Pull Day",
+            "title": "Pull Day (Back & Biceps)",
             "slots": [
-                # Base
                 (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.VERTICAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
                 (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.MACHINE_COMPOUND),
                 (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
-                # Extensions
                 (MovementPattern.VERTICAL_PULL, ExerciseCategory.MACHINE_COMPOUND),
                 (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
-                (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
-                (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
-                (MovementPattern.VERTICAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.ISOLATION),
                 (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION)
             ],
             "warmup_focus": ["back", "arms"],
             "muscles_trained": ["back", "biceps", "rear_delt"]
         },
         {
-            "title": "Leg Day",
+            "title": "Legs & Shoulders Day",
             "slots": [
-                # Base
                 (MovementPattern.SQUAT, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.VERTICAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND), # Overhead press
                 (MovementPattern.HINGE, ExerciseCategory.PRIMARY_COMPOUND),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION), # Lateral raise
                 (MovementPattern.LUNGE, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
+                (MovementPattern.CALF, ExerciseCategory.ISOLATION),
                 (MovementPattern.CORE, ExerciseCategory.CORE),
-                # Extensions
                 (MovementPattern.SQUAT, ExerciseCategory.MACHINE_COMPOUND),
-                (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
                 (MovementPattern.CALF, ExerciseCategory.ISOLATION),
-                (MovementPattern.CORE, ExerciseCategory.CORE),
-                (MovementPattern.HINGE, ExerciseCategory.SECONDARY_COMPOUND),
-                (MovementPattern.CALF, ExerciseCategory.ISOLATION),
-                (MovementPattern.CORE, ExerciseCategory.CORE),
-                (MovementPattern.LUNGE, ExerciseCategory.MACHINE_COMPOUND)
+                (MovementPattern.CORE, ExerciseCategory.CORE)
             ],
-            "warmup_focus": ["squat", "legs"],
-            "muscles_trained": ["quads", "hamstrings", "glutes", "calves", "core"]
+            "warmup_focus": ["squat", "shoulders", "legs"],
+            "muscles_trained": ["quads", "hamstrings", "glutes", "calves", "shoulders", "core"]
         }
     ],
+    # 4-Day Elite Upper / Lower
     "upper_lower": [
         {
             "title": "Upper Body",
@@ -119,6 +107,7 @@ SPLIT_TEMPLATES = {
             "muscles_trained": ["quads", "hamstrings", "glutes", "calves", "core"]
         }
     ],
+    # 3-Day Elite Full Body
     "full_body": [
         {
             "title": "Full Body",
@@ -142,6 +131,15 @@ SPLIT_TEMPLATES = {
     ]
 }
 
+# Add PHAT (5-day hybrid) dynamically based on existing templates
+SPLIT_TEMPLATES["phat"] = [
+    SPLIT_TEMPLATES["upper_lower"][0],
+    SPLIT_TEMPLATES["upper_lower"][1],
+    SPLIT_TEMPLATES["push_pull_legs"][0],
+    SPLIT_TEMPLATES["push_pull_legs"][1],
+    SPLIT_TEMPLATES["push_pull_legs"][2]
+]
+
 def get_day_templates(split_key: str, days: int) -> List[Dict]:
     base_templates = SPLIT_TEMPLATES.get(split_key)
     if not base_templates:
@@ -152,6 +150,17 @@ def get_day_templates(split_key: str, days: int) -> List[Dict]:
         template = dict(base_templates[i % len(base_templates)])
         result.append(template)
     return result
+
+def get_estimated_duration(category: ExerciseCategory, goal: str) -> int:
+    """Returns estimated time in minutes for an exercise based on its category and goal."""
+    if category == ExerciseCategory.PRIMARY_COMPOUND:
+        return 15 if goal == "strength" else 12
+    elif category == ExerciseCategory.SECONDARY_COMPOUND:
+        return 12 if goal == "strength" else 10
+    elif category == ExerciseCategory.MACHINE_COMPOUND:
+        return 8
+    else: # Isolation or Core
+        return 6
 
 def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Dict[str, Any]:
     goal = user_request.get("goal", "Hypertrophy").lower().replace(" ", "_")
@@ -166,8 +175,8 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
         except ValueError:
             session_duration = 60
             
-    # Estimate 20 mins for warmup/cooldown/skills, and 8 mins per strength exercise
-    target_exercises = max(4, (session_duration - 20) // 8)
+    # Time available for strength training (reserving 15-20 mins for warmup/cooldown/skills)
+    time_budget = max(20, session_duration - 20)
     
     # 1. Initialize Expert Systems
     fatigue_mgr = FatigueManager()
@@ -176,16 +185,22 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
     
     split_type = blueprint.get("split_type", "upper_lower")
     
-    # ── Override bad LLM decisions ──
-    # If it's a 6-day split, force PPL to avoid Upper/Lower burnout
-    if days >= 6:
+    # ── Override bad LLM decisions (Elite Coaching) ──
+    if days == 3:
+        split_type = "full_body"
+    elif days == 4:
+        split_type = "upper_lower"
+    elif days == 5:
+        split_type = "phat"
+    elif days >= 6:
         split_type = "push_pull_legs"
         
     split_key = split_type.lower().replace(" ", "_").replace("-", "_")
     split_aliases = {
         "push_pull_legs": "push_pull_legs", "ppl": "push_pull_legs",
         "upper_lower": "upper_lower", "ul": "upper_lower",
-        "full_body": "full_body"
+        "full_body": "full_body",
+        "phat": "phat"
     }
     split_key = split_aliases.get(split_key, "upper_lower")
     day_templates = get_day_templates(split_key, days)
@@ -240,13 +255,19 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
                 
         # ── STRENGTH ──
         strength_exercises = []
-        target_slots = template["slots"][:target_exercises]
+        accumulated_time = 0
         
-        for pattern, category in target_slots:
+        for pattern, category in template["slots"]:
+            ex_duration = get_estimated_duration(category, goal)
+            
+            # If we're out of time budget (allowing a 5-min grace period) and already have >=3 exercises, stop adding.
+            if accumulated_time + ex_duration > time_budget + 5 and len(strength_exercises) >= 3:
+                break
+                
             # Score all available exercises for this slot
             scored = []
             for ex in available_exs:
-                score = score_exercise(ex, pattern, category, goal, experience, fatigue_mgr, cycle_used)
+                score = score_exercise(ex, pattern, category, goal, experience, fatigue_mgr, vol_tracker, cycle_used)
                 if score > 0:
                     scored.append((score, ex))
                     
@@ -272,12 +293,13 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
                 cycle_used.add(best_ex.name)
                 fatigue_mgr.add_exercise_fatigue(best_ex)
                 vol_tracker.add_sets(best_ex.primary_muscles, 3)
+                accumulated_time += ex_duration
                 
         # ── COOLDOWN ──
         cooldown = get_cooldown_for_day(template["muscles_trained"])
         
         # Calculate accurate estimated time
-        base_time = 10 + (len(strength_exercises) * 10) + (len(skill_exercises) * 5)
+        base_time = 15 + accumulated_time + (len(skill_exercises) * 5)
         est_time = f"{max(30, base_time - 10)}-{base_time + 10} min"
         
         assembled_days.append({

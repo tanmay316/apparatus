@@ -1,6 +1,7 @@
 from typing import List, Dict, Any
 from app.engine.models import ExerciseMetadata, MovementPattern, ExerciseCategory
 from app.engine.fatigue_manager import FatigueManager
+from app.engine.weekly_volume import VolumeTracker
 
 def score_exercise(
     ex: ExerciseMetadata,
@@ -9,6 +10,7 @@ def score_exercise(
     user_goal: str,
     user_experience: str,
     fatigue_mgr: FatigueManager,
+    vol_tracker: VolumeTracker,
     previously_used: set
 ) -> int:
     """
@@ -47,4 +49,25 @@ def score_exercise(
     penalty = fatigue_mgr.get_fatigue_penalty(ex)
     score -= penalty
     
-    return max(0, score)
+    # 5. Volume Landmarks (MRV / MEV)
+    # If a muscle is over its target (MRV approaching), heavily penalize adding more to it.
+    for muscle in ex.primary_muscles:
+        if muscle in vol_tracker.targets:
+            current_vol = vol_tracker.current[muscle]
+            target_vol = vol_tracker.targets[muscle]
+            
+            # If we are over the target by more than 20% (Junk Volume / MRV)
+            if current_vol > target_vol * 1.2:
+                score -= 40
+            elif current_vol >= target_vol:
+                score -= 15
+            elif current_vol < target_vol * 0.5:
+                # If we are severely lacking volume for this muscle (below MEV)
+                score += 20
+                
+    # 6. Biomechanical Variation Bonus
+    # Reward unilateral movements if they match the goal
+    if ex.unilateral and user_goal in ["hypertrophy", "athletic"]:
+        score += 5
+    
+    return max(0, int(score))
