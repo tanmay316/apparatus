@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Sparkles, ChevronRight, CheckCircle2, Target, CalendarDays, Dumbbell, AlignLeft, ArrowRight, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Sparkles, ChevronRight, CheckCircle2, Target, CalendarDays, Dumbbell, AlignLeft, ArrowRight, Clock, ChevronDown, ChevronUp, User2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '@/stores/ui-store';
 import { useAuthStore } from '@/stores/auth-store';
@@ -13,10 +13,10 @@ interface Props {
   onClose: () => void;
 }
 
-type Step = 'goal' | 'days' | 'equipment' | 'custom' | 'generating' | 'result';
+type Step = 'goal' | 'days' | 'equipment' | 'about' | 'custom' | 'generating' | 'result';
 
 export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const { theme, showToast } = useUIStore();
   const [step, setStep] = useState<Step>('goal');
   
@@ -24,6 +24,12 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
   const [days, setDays] = useState(4);
   const [equipment, setEquipment] = useState('Full Gym');
   const [customInfo, setCustomInfo] = useState('');
+  
+  // New "About You" fields
+  const [experience, setExperience] = useState('');
+  const [sessionDuration, setSessionDuration] = useState(60);
+  const [trainingStyle, setTrainingStyle] = useState('');
+  const [injuries, setInjuries] = useState('');
   
   const [generatedPlan, setGeneratedPlan] = useState<any>(null);
   const [expandedDay, setExpandedDay] = useState<number | null>(null);
@@ -56,8 +62,15 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
       setEquipment('Full Gym');
       setCustomInfo('');
       setGeneratedPlan(null);
+      
+      // Auto-fill from profile
+      if (profile) {
+        setExperience(profile.experienceLevel || '');
+        setTrainingStyle(profile.preferredWorkoutType || '');
+        setInjuries('');
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, profile]);
 
   const handleGenerate = async () => {
     setStep('generating');
@@ -68,6 +81,14 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
         days,
         equipment,
         customInfo,
+        experience: experience || 'intermediate',
+        gender: profile?.gender || '',
+        age: profile?.age || 0,
+        weight: profile?.weight || 0,
+        sessionDuration,
+        injuries,
+        trainingStyle,
+        fitnessGoal: profile?.fitnessGoal || goal,
       });
       
       setGeneratedPlan(plan);
@@ -76,7 +97,7 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
     } catch (e: any) {
       console.error(e);
       showToast(e.message || 'Failed to generate plan. Please check your API keys or try again.', 'error');
-      setStep('custom'); // go back to last step to try again
+      setStep('custom');
     }
   };
 
@@ -90,7 +111,7 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
         description: generatedPlan.description,
         type: 'custom',
         isPublic: false,
-        tags: [goal, equipment],
+        tags: [goal, equipment, trainingStyle].filter(Boolean),
         daysPerWeek: generatedPlan.days.length,
         estimatedDuration: `${generatedPlan.days.length} weeks`,
         isArchived: false,
@@ -224,7 +245,7 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
                   <h3 className="font-sans font-semibold">Available equipment?</h3>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {['Full Gym', 'Dumbbells Only', 'Bodyweight', 'Kettlebells & Bands'].map(eq => (
+                  {['Full Gym', 'Dumbbells Only', 'Bodyweight', 'Kettlebells & Bands', 'Home Gym', 'Calisthenics Park'].map(eq => (
                     <button
                       key={eq}
                       onClick={() => setEquipment(eq)}
@@ -236,6 +257,83 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
                 </div>
                 <div className="flex justify-between pt-4">
                   <button onClick={() => setStep('days')} className="text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]">Back</button>
+                  <button onClick={() => setStep('about')} className="flex items-center gap-2 px-6 py-3 bg-sienna text-bone rounded-xl font-bold text-sm hover:scale-105 active:scale-95 transition-all">
+                    Next Step <ChevronRight size={16} />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
+            {/* NEW: About You Step */}
+            {step === 'about' && (
+              <motion.div key="about" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-5">
+                <div className="flex items-center gap-3 text-sienna mb-2">
+                  <User2 size={20} />
+                  <h3 className="font-sans font-semibold">About You</h3>
+                </div>
+                
+                {/* Experience */}
+                <div>
+                  <p className="text-xs font-mono text-[var(--muted)] mb-2 uppercase tracking-wide">Experience Level</p>
+                  <div className="flex gap-2">
+                    {['beginner', 'intermediate', 'advanced'].map(lvl => (
+                      <button
+                        key={lvl}
+                        onClick={() => setExperience(lvl)}
+                        className={`flex-1 py-2.5 px-3 rounded-xl border-2 text-sm font-bold capitalize transition-all ${experience === lvl ? 'border-sienna bg-sienna/5' : 'border-[var(--border)] hover:border-[var(--muted)] bg-[var(--bg)]'}`}
+                      >
+                        {lvl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Session Duration */}
+                <div>
+                  <p className="text-xs font-mono text-[var(--muted)] mb-2 uppercase tracking-wide">Session Duration</p>
+                  <div className="flex gap-2">
+                    {[30, 45, 60, 75, 90].map(dur => (
+                      <button
+                        key={dur}
+                        onClick={() => setSessionDuration(dur)}
+                        className={`flex-1 py-2.5 px-2 rounded-xl border-2 text-sm font-bold transition-all ${sessionDuration === dur ? 'border-sienna bg-sienna/5' : 'border-[var(--border)] hover:border-[var(--muted)] bg-[var(--bg)]'}`}
+                      >
+                        {dur}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Training Style */}
+                <div>
+                  <p className="text-xs font-mono text-[var(--muted)] mb-2 uppercase tracking-wide">Training Style</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Bodybuilding', 'Powerlifting', 'Calisthenics', 'Hybrid'].map(style => (
+                      <button
+                        key={style}
+                        onClick={() => setTrainingStyle(style)}
+                        className={`py-2.5 px-3 rounded-xl border-2 text-sm font-bold transition-all ${trainingStyle === style ? 'border-sienna bg-sienna/5' : 'border-[var(--border)] hover:border-[var(--muted)] bg-[var(--bg)]'}`}
+                      >
+                        {style}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Injuries */}
+                <div>
+                  <p className="text-xs font-mono text-[var(--muted)] mb-2 uppercase tracking-wide">Injuries / Limitations (Optional)</p>
+                  <input
+                    type="text"
+                    value={injuries}
+                    onChange={(e) => setInjuries(e.target.value)}
+                    placeholder="e.g. Lower back pain, bad right knee..."
+                    className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-4 py-3 focus:outline-none focus:border-sienna text-sm font-medium"
+                  />
+                </div>
+
+                <div className="flex justify-between pt-4">
+                  <button onClick={() => setStep('equipment')} className="text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]">Back</button>
                   <button onClick={() => setStep('custom')} className="flex items-center gap-2 px-6 py-3 bg-sienna text-bone rounded-xl font-bold text-sm hover:scale-105 active:scale-95 transition-all">
                     Next Step <ChevronRight size={16} />
                   </button>
@@ -253,12 +351,12 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
                   <textarea
                     value={customInfo}
                     onChange={(e) => setCustomInfo(e.target.value)}
-                    placeholder="e.g. Focus a lot on rear delts, avoid heavy deadlifts due to back pain, workout max 45 mins..."
+                    placeholder="e.g. I want to learn planche and frog stand, focus on rear delts, avoid heavy deadlifts, include handstand work..."
                     className="w-full h-32 bg-[var(--bg)] border border-[var(--border)] rounded-xl px-4 py-3 focus:outline-none focus:border-sienna text-sm font-medium resize-none"
                   />
                 </div>
                 <div className="flex justify-between pt-4">
-                  <button onClick={() => setStep('equipment')} className="text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]">Back</button>
+                  <button onClick={() => setStep('about')} className="text-sm font-medium text-[var(--muted)] hover:text-[var(--text)]">Back</button>
                   <button onClick={handleGenerate} className="flex items-center gap-2 px-6 py-3 bg-amber-500 text-amber-950 rounded-xl font-bold text-sm hover:scale-105 active:scale-95 transition-all shadow-[0_0_15px_rgba(245,158,11,0.3)]">
                     <Sparkles size={16} /> Generate Plan
                   </button>
@@ -275,15 +373,16 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
                   </div>
                 </div>
                 <h3 className="font-serif text-xl font-medium mb-2">Consulting the Coach...</h3>
-                <p className="text-sm text-[var(--muted)] max-w-xs font-mono">Synthesizing {days} days of {goal.toLowerCase()} programming for {equipment.toLowerCase()}...</p>
+                <p className="text-sm text-[var(--muted)] max-w-xs font-mono">Analyzing your goals, selecting the optimal split, assembling {days} days of {goal.toLowerCase()} programming...</p>
                 <div className="w-full max-w-xs h-1 bg-[var(--border)] rounded-full mt-6 overflow-hidden">
                   <motion.div 
                     initial={{ width: 0 }}
                     animate={{ width: '100%' }}
-                    transition={{ duration: 4, ease: 'easeInOut' }}
+                    transition={{ duration: 15, ease: 'easeInOut' }}
                     className="h-full bg-gradient-to-r from-sienna to-amber-500" 
                   />
                 </div>
+                <p className="text-[10px] text-[var(--muted)] mt-3 font-mono">3-step pipeline: Blueprint → Assembly → Review</p>
               </motion.div>
             )}
 
@@ -331,7 +430,7 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
                               className="overflow-hidden"
                             >
                               <div className="pt-4 mt-3 border-t border-[var(--border)] space-y-3">
-                                {d.warmup.length > 0 && (
+                                {d.warmup?.length > 0 && (
                                   <div>
                                     <div className="text-[10px] uppercase font-bold text-[var(--muted)] mb-1 font-sans">Warm-up</div>
                                     {d.warmup.map((ex: any, idx: number) => (
@@ -342,7 +441,18 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
                                     ))}
                                   </div>
                                 )}
-                                {d.strength.length > 0 && (
+                                {d.skillWork?.length > 0 && (
+                                  <div>
+                                    <div className="text-[10px] uppercase font-bold text-amber-500 mb-1 font-sans">⚡ Skill Work</div>
+                                    {d.skillWork.map((ex: any, idx: number) => (
+                                      <div key={idx} className="flex justify-between items-center text-xs py-1">
+                                        <span className="text-[var(--text)] font-medium">{ex.name}</span>
+                                        <span className="text-amber-500/70 font-mono">{ex.sets}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {d.strength?.length > 0 && (
                                   <div>
                                     <div className="text-[10px] uppercase font-bold text-[var(--muted)] mb-1 font-sans">Strength</div>
                                     {d.strength.map((ex: any, idx: number) => (
@@ -353,7 +463,7 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
                                     ))}
                                   </div>
                                 )}
-                                {d.cooldown.length > 0 && (
+                                {d.cooldown?.length > 0 && (
                                   <div>
                                     <div className="text-[10px] uppercase font-bold text-[var(--muted)] mb-1 font-sans">Cool-down</div>
                                     {d.cooldown.map((ex: any, idx: number) => (
