@@ -175,8 +175,8 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
         except ValueError:
             session_duration = 60
             
-    # Time available for strength training (reserving 15-20 mins for warmup/cooldown/skills)
-    time_budget = max(20, session_duration - 20)
+    # Time available for strength training (warmups and cooldowns are extra)
+    time_budget = session_duration
     
     # 1. Initialize Expert Systems
     fatigue_mgr = FatigueManager()
