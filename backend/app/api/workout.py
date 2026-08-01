@@ -185,6 +185,15 @@ Generate the coaching blueprint JSON for a {req.days}-day program. The "days" ar
     from app.data.exercise_db import get_exercises_for_equipment
     available_exercises = [ex.name for ex in get_exercises_for_equipment(req.equipment)]
     
+    simplified_plan = []
+    for day in assembled_plan.get("days", []):
+        simplified_plan.append({
+            "day_number": day["dayNumber"],
+            "title": day["title"],
+            "strength": [ex["name"] for ex in day.get("strength", [])],
+            "skillWork": [ex["name"] for ex in day.get("skillWork", [])]
+        })
+        
     review_prompt = f"""Original User Request:
 - Goal: {req.goal}
 - Fitness Goal (from profile): {req.fitnessGoal or req.goal}
@@ -199,8 +208,8 @@ Generate the coaching blueprint JSON for a {req.days}-day program. The "days" ar
 Available Exercises:
 {', '.join(available_exercises)}
 
-Assembled Workout Plan:
-{json.dumps(assembled_plan, indent=2)}
+Assembled Workout Plan Summary:
+{json.dumps(simplified_plan, indent=2)}
 
 Review this plan and output the JSON Delta Schema detailing any additions, removals, or replacements needed."""
 
