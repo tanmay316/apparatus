@@ -192,7 +192,7 @@ Review this plan and output the final version as JSON. Fix any issues or return 
             providers=providers,
             system_prompt=REVIEW_SYSTEM_PROMPT,
             temperature=0.3,  # Lower temp for precision
-            max_tokens=8000,
+            max_tokens=4000,
             json_mode=True
         )
         
