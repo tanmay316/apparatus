@@ -154,13 +154,13 @@ def get_day_templates(split_key: str, days: int) -> List[Dict]:
 def get_estimated_duration(category: ExerciseCategory, goal: str) -> int:
     """Returns estimated time in minutes for an exercise based on its category and goal."""
     if category == ExerciseCategory.PRIMARY_COMPOUND:
-        return 15 if goal == "strength" else 12
-    elif category == ExerciseCategory.SECONDARY_COMPOUND:
         return 12 if goal == "strength" else 10
+    elif category == ExerciseCategory.SECONDARY_COMPOUND:
+        return 10 if goal == "strength" else 8
     elif category == ExerciseCategory.MACHINE_COMPOUND:
-        return 8
+        return 7
     else: # Isolation or Core
-        return 6
+        return 5
 
 def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Dict[str, Any]:
     goal = user_request.get("goal", "Hypertrophy").lower().replace(" ", "_")
@@ -298,9 +298,9 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
         # ── COOLDOWN ──
         cooldown = get_cooldown_for_day(template["muscles_trained"])
         
-        # Calculate accurate estimated time
-        base_time = 15 + accumulated_time + (len(skill_exercises) * 5)
-        est_time = f"{max(30, base_time - 10)}-{base_time + 10} min"
+        # Calculate accurate estimated time (excluding warmup/cooldown as requested)
+        base_time = accumulated_time + (len(skill_exercises) * 5)
+        est_time = f"{max(20, base_time - 5)}-{base_time + 10} min"
         
         assembled_days.append({
             "dayNumber": i + 1,
