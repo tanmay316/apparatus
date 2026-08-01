@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '@/stores/ui-store';
 import { useAuthStore } from '@/stores/auth-store';
 import { createPlan, savePlanDay } from '@/services/plans';
+import { generateWorkoutPlan } from '@/services/workout-api';
 
 interface Props {
   isOpen: boolean;
@@ -61,28 +62,22 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
   const handleGenerate = async () => {
     setStep('generating');
     
-    // TODO: Connect real LLM API here.
-    // Simulating API call for now.
-    await new Promise(resolve => setTimeout(resolve, 4000));
-    
-    setGeneratedPlan({
-      title: `${goal || 'Hypertrophy'} Mastery`,
-      description: `A highly optimized ${days}-day split focused on ${goal || 'building muscle'}. Tailored for ${equipment}.`,
-      days: Array.from({ length: days }).map((_, i) => ({
-        dayNumber: i + 1,
-        title: `Day ${i + 1} - ${['Push', 'Pull', 'Legs', 'Upper', 'Lower', 'Full Body'][i % 6]}`,
-        time: '45-60 min',
-        warmup: [{ name: 'Jumping Jacks', sets: '2 x 30s', tempo: '', rest: '10s' }, { name: 'Arm Circles', sets: '2 x 15', tempo: '', rest: '10s' }],
-        strength: [
-          { name: 'Bench Press', sets: '3 x 10', tempo: '2010', rest: '90s', cues: [], yt: '' },
-          { name: 'Squat', sets: '3 x 8', tempo: '3010', rest: '120s', cues: [], yt: '' }
-        ],
-        cooldown: [{ name: 'Stretching', sets: '1 x 60s', tempo: '', rest: '0s' }]
-      }))
-    });
-    
-    setStep('result');
-    setExpandedDay(null);
+    try {
+      const plan = await generateWorkoutPlan({
+        goal,
+        days,
+        equipment,
+        customInfo,
+      });
+      
+      setGeneratedPlan(plan);
+      setStep('result');
+      setExpandedDay(null);
+    } catch (e: any) {
+      console.error(e);
+      showToast(e.message || 'Failed to generate plan. Please check your API keys or try again.', 'error');
+      setStep('custom'); // go back to last step to try again
+    }
   };
 
   const handleSaveToLibrary = async () => {
@@ -112,10 +107,10 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
           time: d.time,
           type: 'strength',
           skill: '',
-          warmup: d.warmup,
-          skillWork: [],
-          strength: d.strength,
-          cooldown: d.cooldown
+          warmup: d.warmup || [],
+          skillWork: d.skillWork || [],
+          strength: d.strength || [],
+          cooldown: d.cooldown || []
         });
       }
       

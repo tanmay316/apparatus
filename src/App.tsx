@@ -75,6 +75,14 @@ function PreferencesSync() {
     document.documentElement.dataset.theme = theme;
     document.documentElement.lang = language;
   }, [theme, language]);
+
+  // Wake up backend (Render free tier sleeps after 15m)
+  useEffect(() => {
+    const apiBase = import.meta.env.VITE_NUTRITION_API_URL || 'http://localhost:8000/api/v1';
+    fetch(`${apiBase}/health`)
+      .catch(e => console.debug('Backend wakeup ping failed', e));
+  }, []);
+
   return null;
 }
 
