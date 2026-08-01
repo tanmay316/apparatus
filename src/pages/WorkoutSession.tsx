@@ -126,8 +126,10 @@ export function WorkoutSession() {
 
   // Sync active session with backend
   useEffect(() => {
-    if (!user || sessionFinished) {
-      if (user) endActiveSession(user.uid).catch(console.error);
+    if (!user) return;
+    
+    if (sessionFinished || !store.isActive) {
+      endActiveSession(user.uid).catch(console.error);
       return;
     }
     
@@ -140,10 +142,7 @@ export function WorkoutSession() {
         caloriesBurned: 0,
       }).catch(console.error);
     }
-    
-    return () => {
-      if (user) endActiveSession(user.uid).catch(console.error);
-    };
+    // Intentionally no unmount cleanup: session persists if user navigates away
   }, [store.isActive, sessionFinished, store.planId, store.dayId]);
 
   useEffect(() => {
@@ -196,17 +195,23 @@ export function WorkoutSession() {
     : Number(completedWorkoutForDay?.calories || 0);
   const externalVolume = calculateWorkoutVolume(activeExercises, activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)), userWeight || 70);
   
+  const [lastExercise, setLastExercise] = useState('Warming up...');
+  
+  useEffect(() => {
+    if (activeExercise?.name) setLastExercise(activeExercise.name);
+  }, [activeExercise?.name]);
+
   // Periodically update the active session's stats
   useEffect(() => {
     if (!user || !store.isActive || sessionFinished) return;
     const interval = setInterval(() => {
       updateActiveSession(user.uid, {
-        currentExercise: activeExercise?.name || 'Warming up...',
+        currentExercise: lastExercise,
         caloriesBurned: Math.round(displayCalories) || 0,
       }).catch(console.error);
     }, 10000); // Update every 10s
     return () => clearInterval(interval);
-  }, [store.isActive, sessionFinished, activeExercise?.name, displayCalories]);
+  }, [store.isActive, sessionFinished, lastExercise, displayCalories]);
   
   let maxWeight = 0;
   activeLogs.forEach(log => {

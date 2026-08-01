@@ -89,15 +89,18 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
     if (!user || !generatedPlan) return;
     try {
       const planId = await createPlan({
-        creatorId: user.uid,
         ownerId: user.uid,
+        ownerName: user.displayName || 'Athlete',
         title: generatedPlan.title,
         description: generatedPlan.description,
+        type: 'custom',
         isPublic: false,
         tags: [goal, equipment],
-        likesCount: 0,
-        savesCount: 0,
         daysPerWeek: generatedPlan.days.length,
+        estimatedDuration: `${generatedPlan.days.length} weeks`,
+        isArchived: false,
+        clonedFrom: null,
+        usageCount: 0,
       });
       
       for (let i = 0; i < generatedPlan.days.length; i++) {

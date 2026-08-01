@@ -49,7 +49,7 @@ export function LiveChatOverlay() {
     const unsubscribe = onSnapshot(q, (snap) => {
       snap.docChanges().forEach(change => {
         if (change.type === 'added') {
-          const data = { id: change.doc.id, ...change.doc.data() };
+          const data = { id: change.doc.id, ...change.doc.data() } as any;
           // Don't show our own messages in the overlay
           if (data.senderUid !== user.uid) {
             setMessages(prev => [...prev, data]);

@@ -186,7 +186,7 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
                       ? 'bg-sienna text-bone rounded-tr-sm' 
                       : 'bg-[var(--card)] border border-[var(--border)] text-[var(--text)] rounded-tl-sm'
                   }`}>
-                    {msg.message}
+                    {msg.text}
                   </div>
                 </div>
               </motion.div>

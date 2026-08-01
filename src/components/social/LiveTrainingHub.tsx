@@ -67,13 +67,13 @@ export function LiveTrainingHub() {
 
   return (
     <>
-      <div className="mb-6">
+      <div className="-mt-2 mb-6">
         <div className="flex items-center gap-2 mb-4">
           <Activity size={16} className="text-sienna animate-pulse" />
           <h3 className="font-sans text-xs font-semibold text-[var(--muted)] tracking-wider uppercase">Live Training</h3>
         </div>
         
-        <div className="flex gap-4 overflow-x-auto pb-4 pt-1 snap-x snap-mandatory touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-4 overflow-x-auto pb-4 pt-2 px-2 -mx-2 snap-x snap-mandatory touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           {activeSessions.map((session) => (
             <motion.button
               key={session.uid}
@@ -82,14 +82,14 @@ export function LiveTrainingHub() {
               onClick={() => setSelectedSession(session)}
               className="flex flex-col items-center gap-2 shrink-0 snap-start"
             >
-              <div className="relative">
+              <div className="relative w-[56px] h-[56px]">
                 <div className="absolute -inset-1 bg-gradient-to-tr from-sienna to-amber rounded-full animate-spin-slow opacity-75 blur-[2px]" />
-                <div className="absolute -inset-0.5 bg-gradient-to-tr from-sienna to-amber rounded-full p-[2px]">
+                <div className="absolute inset-0 bg-gradient-to-tr from-sienna to-amber rounded-full p-[2px]">
                   <div className="w-full h-full bg-[var(--bg)] rounded-full flex items-center justify-center p-0.5">
                     <img 
                       src={session.photoURL || getAvatarUrl(session.displayName, theme)} 
                       alt={session.displayName} 
-                      className="w-[52px] h-[52px] rounded-full object-cover border-2 border-[var(--bg)]"
+                      className="w-full h-full rounded-full object-cover border border-[var(--bg)]"
                     />
                   </div>
                 </div>
