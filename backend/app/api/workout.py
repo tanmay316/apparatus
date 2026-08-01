@@ -92,8 +92,8 @@ async def generate_workout_plan(
     current_user: dict = Depends(get_current_user),
 ):
     """
-    Generate a highly customized AI workout plan using a 3-step hybrid pipeline.
-    Step 1: LLM coaching blueprint → Step 2: Engine assembly → Step 3: LLM review
+    Generate a highly customized AI workout plan using a 2-step hybrid pipeline.
+    Step 1: LLM coaching blueprint → Step 2: Engine assembly
     """
     keys = await resolve_api_keys(current_user)
     providers = get_llm_providers(
@@ -167,48 +167,12 @@ Generate the coaching blueprint JSON for a {req.days}-day program. The "days" ar
     assembled_plan = assemble_plan(blueprint, user_request)
     logger.info(f"Assembled plan: {len(assembled_plan['days'])} days, title='{assembled_plan['title']}'")
 
-    # ── STEP 3: LLM Review & Final Polish ───────────────────
-    logger.info("Step 3: LLM reviewing assembled plan...")
-    
-    review_prompt = f"""Original User Request:
-- Goal: {req.goal}
-- Fitness Goal (from profile): {req.fitnessGoal or req.goal}
-- Training Style: {req.trainingStyle or 'general'}
-- Days: {req.days}
-- Equipment: {req.equipment}
-- Experience: {req.experience or 'intermediate'}
-- Session Duration: {req.sessionDuration} minutes (applies to strength portion only)
-- Custom Instructions: {req.customInfo or 'None'}
-- Injuries: {req.injuries or 'None'}
-
-Assembled Workout Plan:
-{json.dumps(assembled_plan, indent=2)}
-
-Review this plan and output the final version as JSON. Fix any issues or return it as-is if it's good."""
-
-    review_messages = [ChatMessage(role="user", content=review_prompt)]
-
-    try:
-        review_response = await chat_with_fallback(
-            messages=review_messages,
-            providers=providers,
-            system_prompt=REVIEW_SYSTEM_PROMPT,
-            temperature=0.3,  # Lower temp for precision
-            json_mode=True
-        )
-        
-        final_plan = _parse_json(review_response.content)
-        if final_plan and "days" in final_plan and len(final_plan["days"]) == req.days:
-            logger.info("Step 3: LLM review applied successfully.")
-            return WorkoutPlanResponse(**final_plan)
-        else:
-            logger.warning("Step 3: LLM review returned invalid data, using engine output.")
-            return WorkoutPlanResponse(**assembled_plan)
-            
-    except Exception as e:
-        logger.warning(f"Step 3 failed: {e}, using engine output as final.")
-        return WorkoutPlanResponse(**assembled_plan)
-
+    # ── STEP 3: Return Deterministic Plan ───────────────────
+    # The deterministic python engine handles MRV, exact time slicing, 
+    # and biomechanics perfectly. Passing a massive 6-day JSON to the LLM 
+    # causes token truncation and hallucinated missing exercises.
+    logger.info("Step 3: Returning flawless deterministic plan (bypassing LLM truncation).")
+    return WorkoutPlanResponse(**assembled_plan)
 
 def _parse_json(content: str) -> dict | None:
     """Safely parse JSON from LLM output, stripping markdown fences if present."""
