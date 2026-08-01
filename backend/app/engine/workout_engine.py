@@ -15,11 +15,22 @@ SPLIT_TEMPLATES = {
         {
             "title": "Push Day",
             "slots": [
+                # Base (5 exercises)
                 (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.VERTICAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.MACHINE_COMPOUND),
                 (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION)
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
+                # Extensions (up to 14 total for a massive 2-hour workout)
+                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
+                (MovementPattern.FLY, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
+                (MovementPattern.FLY, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.MACHINE_COMPOUND)
             ],
             "warmup_focus": ["chest", "shoulders"],
             "muscles_trained": ["chest", "shoulders", "triceps"]
@@ -27,11 +38,21 @@ SPLIT_TEMPLATES = {
         {
             "title": "Pull Day",
             "slots": [
+                # Base
                 (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.VERTICAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.MACHINE_COMPOUND),
                 (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION) # Rear delts usually fall here
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
+                # Extensions
+                (MovementPattern.VERTICAL_PULL, ExerciseCategory.MACHINE_COMPOUND),
+                (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
+                (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
+                (MovementPattern.VERTICAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION)
             ],
             "warmup_focus": ["back", "arms"],
             "muscles_trained": ["back", "biceps", "rear_delt"]
@@ -39,11 +60,21 @@ SPLIT_TEMPLATES = {
         {
             "title": "Leg Day",
             "slots": [
+                # Base
                 (MovementPattern.SQUAT, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.HINGE, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.LUNGE, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
-                (MovementPattern.CORE, ExerciseCategory.CORE)
+                (MovementPattern.CORE, ExerciseCategory.CORE),
+                # Extensions
+                (MovementPattern.SQUAT, ExerciseCategory.MACHINE_COMPOUND),
+                (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
+                (MovementPattern.CALF, ExerciseCategory.ISOLATION),
+                (MovementPattern.CORE, ExerciseCategory.CORE),
+                (MovementPattern.HINGE, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.CALF, ExerciseCategory.ISOLATION),
+                (MovementPattern.CORE, ExerciseCategory.CORE),
+                (MovementPattern.LUNGE, ExerciseCategory.MACHINE_COMPOUND)
             ],
             "warmup_focus": ["squat", "legs"],
             "muscles_trained": ["quads", "hamstrings", "glutes", "calves", "core"]
@@ -58,7 +89,13 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.VERTICAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.VERTICAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
-                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION)
+                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.MACHINE_COMPOUND),
+                (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.MACHINE_COMPOUND),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.FLY, ExerciseCategory.ISOLATION)
             ],
             "warmup_focus": ["upper_body"],
             "muscles_trained": ["chest", "back", "shoulders", "arms"]
@@ -70,7 +107,13 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.HINGE, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.LUNGE, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
-                (MovementPattern.CORE, ExerciseCategory.CORE)
+                (MovementPattern.CORE, ExerciseCategory.CORE),
+                (MovementPattern.SQUAT, ExerciseCategory.MACHINE_COMPOUND),
+                (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
+                (MovementPattern.CALF, ExerciseCategory.ISOLATION),
+                (MovementPattern.CORE, ExerciseCategory.CORE),
+                (MovementPattern.HINGE, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.CALF, ExerciseCategory.ISOLATION)
             ],
             "warmup_focus": ["squat", "deadlift", "legs"],
             "muscles_trained": ["quads", "hamstrings", "glutes", "calves", "core"]
@@ -85,6 +128,12 @@ SPLIT_TEMPLATES = {
                 (MovementPattern.HORIZONTAL_PULL, ExerciseCategory.PRIMARY_COMPOUND),
                 (MovementPattern.HINGE, ExerciseCategory.SECONDARY_COMPOUND),
                 (MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.CORE, ExerciseCategory.CORE),
+                (MovementPattern.VERTICAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.VERTICAL_PULL, ExerciseCategory.SECONDARY_COMPOUND),
+                (MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_LEGS, ExerciseCategory.ISOLATION),
+                (MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION),
                 (MovementPattern.CORE, ExerciseCategory.CORE)
             ],
             "warmup_focus": ["full_body"],
@@ -109,6 +158,16 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
     days = user_request.get("days", 4)
     equipment = user_request.get("equipment", "Full Gym")
     experience = user_request.get("experience", "intermediate").lower()
+    
+    session_duration = user_request.get("sessionDuration", 60)
+    if isinstance(session_duration, str):
+        try:
+            session_duration = int(session_duration)
+        except ValueError:
+            session_duration = 60
+            
+    # Estimate 20 mins for warmup/cooldown/skills, and 8 mins per strength exercise
+    target_exercises = max(4, (session_duration - 20) // 8)
     
     # 1. Initialize Expert Systems
     fatigue_mgr = FatigueManager()
@@ -181,7 +240,9 @@ def assemble_plan(blueprint: Dict[str, Any], user_request: Dict[str, Any]) -> Di
                 
         # ── STRENGTH ──
         strength_exercises = []
-        for pattern, category in template["slots"]:
+        target_slots = template["slots"][:target_exercises]
+        
+        for pattern, category in target_slots:
             # Score all available exercises for this slot
             scored = []
             for ex in available_exs:
