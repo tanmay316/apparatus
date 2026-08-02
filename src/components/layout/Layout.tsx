@@ -5,6 +5,8 @@ import { Topbar } from './Topbar';
 import { BottomNav } from './BottomNav';
 import { ReminderManager } from './ReminderManager';
 import FloatingAIBot from '../nutrition/FloatingAIBot';
+import { FeatureAnnouncementModal } from '../ui/FeatureAnnouncementModal';
+import { Video, Bot } from 'lucide-react';
 
 export function Layout() {
   const location = useLocation();
@@ -21,6 +23,23 @@ export function Layout() {
       <ReminderManager />
       <FloatingAIBot />
       <BottomNav />
+      <FeatureAnnouncementModal 
+        featureId="v2-live-ai-features"
+        title="What's New in Apparatus"
+        subtitle="Two massive features just dropped."
+        items={[
+          {
+            icon: <Video size={18} className="text-sienna" />,
+            title: "Live Workout & Chat",
+            description: "Train live with your friends, chat in real-time, and motivate each other right from the dashboard."
+          },
+          {
+            icon: <Bot size={18} className="text-blue-400" />,
+            title: "Meet Your New AI Workout Planner",
+            description: "Generate highly customized, hyper-optimized training programs instantly based on your exact goals and equipment."
+          }
+        ]}
+      />
 
       <main className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-[72px] relative z-0">
         <AnimatePresence mode="wait">
