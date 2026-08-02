@@ -94,7 +94,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               createdAt: serverTimestamp() as any,
               updatedAt: serverTimestamp() as any,
             };
-            
+
             await withTimeout(
               setDoc(profileRef, profile),
               8000,

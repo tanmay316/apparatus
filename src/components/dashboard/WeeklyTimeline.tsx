@@ -76,15 +76,15 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
             >
               <Link
                 to={`/workout/${activePlan.id}/day/${day.id}`}
-                className={`relative w-[82vw] sm:w-[260px] min-h-[264px] h-auto p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] dark:border-line/40 shadow-[6px_6px_14px_rgba(0,0,0,0.05),-6px_-6px_14px_rgba(255,255,255,0.8)] dark:shadow-none ${
+                className={`relative w-[82vw] sm:w-[260px] min-h-[264px] h-auto p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] shadow-[6px_6px_14px_rgba(0,0,0,0.05),-6px_-6px_14px_rgba(255,255,255,0.8)] ${
                   isToday
-                    ? 'bg-gradient-to-br from-[#fdfbfb] to-[#f4ebe6] dark:from-ink-2 dark:to-ink-3'
-                    : 'bg-gradient-to-br from-[#fdfbfb] to-[#f5f5f5] dark:from-ink-2 dark:to-ink-2'
+                    ? 'bg-gradient-to-br from-[#fdfbfb] to-[#f4ebe6]'
+                    : 'bg-gradient-to-br from-[#fdfbfb] to-[#f5f5f5]'
                 }`}
               >
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="font-sans text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-bone-dim">
+                    <span className="font-sans text-[10px] font-bold uppercase tracking-widest text-gray-400">
                       DAY {String(day.dayNumber).padStart(2, '0')}
                     </span>
                     <div className="flex items-center gap-2 z-10">
@@ -96,63 +96,63 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
                               e.stopPropagation();
                               if (onShareDay) onShareDay(day);
                             }}
-                            className="p-1.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors shadow-sm border border-blue-100 dark:border-blue-800/50"
+                            className="p-1.5 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors shadow-sm border border-blue-100"
                             title="Share Workout"
                           >
                             <Share2 size={12} strokeWidth={2.5} />
                           </button>
-                          <span className="font-sans text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 flex items-center gap-1 border dark:border-emerald-800/50">
+                          <span className="font-sans text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1">
                             <Check size={12} strokeWidth={2.5} /> Logged
                           </span>
                         </>
                       ) : isToday ? (
-                        <span className="font-sans text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-sienna-light/30 dark:bg-sienna/20 text-sienna dark:text-sienna-light flex items-center gap-1.5 shadow-sm border border-sienna-light/50 dark:border-sienna/30">
-                          <span className="w-1.5 h-1.5 rounded-full bg-sienna dark:bg-sienna-light animate-pulse" /> Today
+                        <span className="font-sans text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-sienna-light/30 text-sienna flex items-center gap-1.5 shadow-sm border border-sienna-light/50">
+                          <span className="w-1.5 h-1.5 rounded-full bg-sienna animate-pulse" /> Today
                         </span>
                       ) : (
-                        <span className="font-sans text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-bone-dim">
+                        <span className="font-sans text-[10px] font-bold uppercase tracking-wide text-gray-500">
                           Upcoming
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <h4 className={`font-sans font-bold text-lg leading-tight mb-2 line-clamp-2 ${isToday ? 'text-gray-900 dark:text-bone' : 'text-gray-800 dark:text-bone/90'}`}>
+                  <h4 className={`font-sans font-bold text-lg leading-tight mb-2 line-clamp-2 ${isToday ? 'text-gray-900' : 'text-gray-800'}`}>
                     {day.title}
                   </h4>
                   
-                  <p className={`font-sans text-xs font-semibold mb-4 truncate ${isToday ? 'text-sienna dark:text-sienna-light' : 'text-gray-500 dark:text-bone-dim'}`}>
+                  <p className={`font-sans text-xs font-semibold mb-4 truncate ${isToday ? 'text-sienna' : 'text-gray-500'}`}>
                     {muscleString}
                   </p>
 
                   <div className="flex flex-wrap items-center gap-2 mb-4">
-                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] dark:shadow-none ${isToday ? 'bg-sienna-light/20 text-sienna dark:bg-sienna/20 dark:text-sienna-light' : 'bg-gray-100 text-gray-600 dark:bg-ink-3 dark:text-bone-dim'}`}>
+                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'}`}>
                       <Clock size={12} /> {day.time}
                     </span>
-                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] dark:shadow-none ${isToday ? 'bg-sienna-light/20 text-sienna dark:bg-sienna/20 dark:text-sienna-light' : 'bg-gray-100 text-gray-600 dark:bg-ink-3 dark:text-bone-dim'}`}>
+                    <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'}`}>
                       <Layers size={12} /> {allExercises.length} ex
                     </span>
                     {day.skill && (
-                       <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] dark:shadow-none ${isToday ? 'bg-sienna-light/20 text-sienna dark:bg-sienna/20 dark:text-sienna-light' : 'bg-gray-100 text-gray-600 dark:bg-ink-3 dark:text-bone-dim'} truncate max-w-full`}>
+                       <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-sans text-[11px] font-medium shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] ${isToday ? 'bg-sienna-light/20 text-sienna' : 'bg-gray-100 text-gray-600'} truncate max-w-full`}>
                          <Activity size={12} /> {day.skill}
                        </span>
                     )}
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-line/40">
+                <div className="mt-4 pt-4 border-t border-gray-100">
                   {isToday ? (
-                     <div className="w-full py-2.5 rounded-xl bg-sienna text-bone font-sans font-semibold text-sm flex items-center justify-center gap-2 hover:bg-sienna-dim transition-colors shadow-[4px_4px_10px_rgba(0,0,0,0.2),-4px_-4px_10px_rgba(255,255,255,0.5)] dark:shadow-none">
+                     <div className="w-full py-2.5 rounded-xl bg-sienna text-bone font-sans font-semibold text-sm flex items-center justify-center gap-2 hover:bg-sienna-dim transition-colors shadow-[4px_4px_10px_rgba(0,0,0,0.2),-4px_-4px_10px_rgba(255,255,255,0.5)]">
                        Start Workout
                      </div>
                   ) : (
                     <div className="w-full">
-                      <div className="flex items-center justify-end text-[10px] font-sans font-medium text-gray-500 dark:text-bone-dim mb-1.5 uppercase tracking-wide">
+                      <div className="flex items-center justify-end text-[10px] font-sans font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
                          <span>{wasCompleted ? '100%' : '0%'}</span>
                       </div>
-                      <div className="w-full h-1.5 bg-gray-100 dark:bg-ink-3 rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all duration-500 ${wasCompleted ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-gray-300 dark:bg-line'}`}
+                          className={`h-full rounded-full transition-all duration-500 ${wasCompleted ? 'bg-emerald-500' : 'bg-gray-300'}`}
                           style={{ width: wasCompleted ? '100%' : '0%' }}
                         />
                       </div>
