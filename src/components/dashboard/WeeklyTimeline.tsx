@@ -87,11 +87,24 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
                     <span className="font-sans text-[10px] font-bold uppercase tracking-widest text-gray-400">
                       DAY {String(day.dayNumber).padStart(2, '0')}
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 z-10">
                       {wasCompleted ? (
-                        <span className="font-sans text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1">
-                          <Check size={12} strokeWidth={2.5} /> Logged
-                        </span>
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (onShareDay) onShareDay(day);
+                            }}
+                            className="p-1.5 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors shadow-sm border border-blue-100"
+                            title="Share Workout"
+                          >
+                            <Share2 size={12} strokeWidth={2.5} />
+                          </button>
+                          <span className="font-sans text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 flex items-center gap-1">
+                            <Check size={12} strokeWidth={2.5} /> Logged
+                          </span>
+                        </>
                       ) : isToday ? (
                         <span className="font-sans text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-sienna-light/30 text-sienna flex items-center gap-1.5 shadow-sm border border-sienna-light/50">
                           <span className="w-1.5 h-1.5 rounded-full bg-sienna animate-pulse" /> Today

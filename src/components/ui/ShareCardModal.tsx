@@ -747,7 +747,7 @@ export function ShareCardModal({ data: originalData, onClose }: Props) {
   return createPortal(
     (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center p-0 md:p-4">
+      <div className="fixed inset-0 z-[250] flex items-end md:items-center justify-center p-0 md:p-4 pb-safe">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -761,7 +761,7 @@ export function ShareCardModal({ data: originalData, onClose }: Props) {
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.95, opacity: 0, y: 50 }}
           transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-          className="relative z-10 w-full max-w-lg flex flex-col h-[90dvh] md:h-auto md:max-h-[95vh] bg-ink rounded-t-2xl md:rounded-2xl border-t border-line/20 md:border border-line/30 p-4 pb-6 md:pb-4 shadow-2xl"
+          className="relative z-10 w-full max-w-lg flex flex-col h-[92dvh] md:h-auto md:max-h-[95vh] bg-ink rounded-t-2xl md:rounded-2xl border-t border-line/20 md:border border-line/30 p-4 pb-8 md:pb-4 shadow-2xl"
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-3 flex-shrink-0">
