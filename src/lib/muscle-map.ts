@@ -141,6 +141,7 @@ export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
 
       if (/\b(plank|crunch|sit up|core|ab|abs|hollow)\b/.test(n)) active.add('abs');
       if (/\b(face pull|rear delt)\b/.test(n)) active.add('rear_delts');
+    }
   }
 
   return active;
