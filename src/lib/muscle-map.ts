@@ -120,20 +120,27 @@ export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
       if (/\b(iron cross)\b/.test(n)) { active.add('chest'); active.add('lats'); active.add('biceps'); }
 
       // Standard movements
-      if (/\b(pike push|handstand push)\b/.test(n)) { active.add('front_delts'); active.add('triceps'); }
-      else if (/\b(squat|lunge)\b/.test(n)) { active.add('quads'); active.add('glutes'); }
-      else if (/\b(push|bench|press|fly)\b/.test(n)) active.add('chest');
+      if (/\b(nordic|leg curl|hamstring curl)\b/.test(n)) { active.add('hamstrings'); active.add('glutes'); }
+      else if (/\b(pike push|handstand push)\b/.test(n)) { active.add('front_delts'); active.add('triceps'); }
+      else if (/\b(squat|lunge|leg press)\b/.test(n)) { active.add('quads'); active.add('glutes'); }
+      else if (/\b(push|bench|fly|chest|pec|pecs)\b/.test(n)) active.add('chest');
       else if (/\b(pull|row|lat|lats|chin)\b/.test(n)) { active.add('lats'); active.add('traps'); active.add('rear_delts'); }
       else if (/\b(curl|bicep|biceps)\b/.test(n)) active.add('biceps');
       
       if (/\b(dip|dips)\b/.test(n)) { active.add('triceps'); active.add('chest'); }
       if (/\b(tricep|triceps|extension)\b/.test(n)) active.add('triceps');
-      if (/\b(deadlift|hip|glute|bridge|nordic)\b/.test(n)) { active.add('hamstrings'); active.add('glutes'); active.add('lower_back'); }
-      if (/\b(shoulder|delt|delts|press|raise)\b/.test(n)) active.add('front_delts');
+      if (/\b(deadlift|hip|glute|bridge)\b/.test(n)) { active.add('hamstrings'); active.add('glutes'); active.add('lower_back'); }
+      
+      if (/\b(calf|calves|calve)\b/.test(n)) {
+        active.add('calves');
+      } else if (/\b(leg raise|knee raise|toes to bar)\b/.test(n)) {
+        active.add('abs');
+      } else if (/\b(shoulder|delt|delts|press|raise|lateral|overhead)\b/.test(n)) {
+        active.add('front_delts');
+      }
+
       if (/\b(plank|crunch|sit up|core|ab|abs|hollow)\b/.test(n)) active.add('abs');
-      if (/\b(calf|calves|calve)\b/.test(n)) active.add('calves');
       if (/\b(face pull|rear delt)\b/.test(n)) active.add('rear_delts');
-    }
   }
 
   return active;
