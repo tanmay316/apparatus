@@ -189,11 +189,12 @@ function drawExercisePill(
   cardH: number,
   exName: string,
   highlightColor: HighlightColor,
-  exLog: any
+  exLog: any,
+  scale: number = 1
 ) {
   // Draw card background
   ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-  roundRect(ctx, cardX, cardY, cardW, cardH, 8);
+  roundRect(ctx, cardX, cardY, cardW, cardH, 8 * scale);
   ctx.fill();
 
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
@@ -202,21 +203,34 @@ function drawExercisePill(
 
   // Draw left accent bar in highlight color
   ctx.fillStyle = highlightColor.fill;
-  roundRect(ctx, cardX, cardY, 6, cardH, 2);
+  roundRect(ctx, cardX, cardY, 6 * scale, cardH, 2 * scale);
   ctx.fill();
 
   // Display name
-  ctx.font = '700 32px Oswald, sans-serif';
+  const nameFontSize = Math.floor(32 * scale);
+  ctx.font = `700 ${nameFontSize}px Oswald, sans-serif`;
   ctx.fillStyle = '#FFFFFF';
   ctx.textAlign = 'left';
-  const displayName = exName.length > 22 ? exName.substring(0, 20) + '...' : exName;
-  ctx.fillText(displayName.toUpperCase(), cardX + 28, cardY + 48);
+  
+  let displayName = exName.toUpperCase();
+  const maxTextWidth = cardW - (40 * scale);
+  let textWidth = ctx.measureText(displayName).width;
+  if (textWidth > maxTextWidth) {
+    while (displayName.length > 3 && ctx.measureText(displayName + '...').width > maxTextWidth) {
+      displayName = displayName.substring(0, displayName.length - 1);
+    }
+    displayName += '...';
+  }
+
+  const textStartY = cardY + (cardH / 2) - (nameFontSize / 4);
+  ctx.fillText(displayName, cardX + 24 * scale, textStartY);
 
   // Display sets info
-  ctx.font = '400 20px "JetBrains Mono", monospace';
+  const setsFontSize = Math.floor(20 * scale);
+  ctx.font = `400 ${setsFontSize}px "JetBrains Mono", monospace`;
   ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
   const setsCount = exLog ? exLog.sets.length : 3;
-  ctx.fillText(`${setsCount} SETS COMPLETED`, cardX + 28, cardY + cardH - 24);
+  ctx.fillText(`${setsCount} SETS COMPLETED`, cardX + 24 * scale, cardY + cardH - (16 * scale));
 }
 
 function drawMoreExercisesPill(
@@ -226,10 +240,11 @@ function drawMoreExercisesPill(
   cardW: number,
   cardH: number,
   moreCount: number,
-  highlightColor: HighlightColor
+  highlightColor: HighlightColor,
+  scale: number = 1
 ) {
   ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-  roundRect(ctx, cardX, cardY, cardW, cardH, 8);
+  roundRect(ctx, cardX, cardY, cardW, cardH, 8 * scale);
   ctx.fill();
 
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
@@ -237,13 +252,14 @@ function drawMoreExercisesPill(
   ctx.stroke();
 
   ctx.fillStyle = highlightColor.fill;
-  roundRect(ctx, cardX, cardY, 6, cardH, 2);
+  roundRect(ctx, cardX, cardY, 6 * scale, cardH, 2 * scale);
   ctx.fill();
 
-  ctx.font = '700 34px Oswald, sans-serif';
+  const fontSize = Math.floor(34 * scale);
+  ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
   ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'left';
-  ctx.fillText(`+${moreCount} MORE EXERCISES`, cardX + 28, cardY + cardH / 2 + 12);
+  ctx.textAlign = 'center';
+  ctx.fillText(`+${moreCount} MORE`, cardX + cardW / 2, cardY + cardH / 2 + (fontSize / 3));
 }
 
 // ─── Canvas Drawing — Exercises List Card ─────────────────────
@@ -342,17 +358,31 @@ function drawExercisesCard(
   ctx.fillText('CRUSHED MOVES', 80, cursorY);
   cursorY += 40;
 
-  // 2-Column Grid of Exercises (Fits up to 14 pills)
-  const maxExercises = 14;
+  // Grid of Exercises (Dynamic Columns)
+  const total = data.exerciseNames.length;
+  let cols = 2;
+  let maxExercises = 14;
+  if (total > 21) {
+    cols = 4;
+    maxExercises = 36;
+  } else if (total > 14) {
+    cols = 3;
+    maxExercises = 24;
+  }
+  
   const items = data.exerciseNames.slice(0, maxExercises);
-  const cardH = 114;
-  const cardW = 440;
-  const rowGap = 20;
-  const colGap = 40;
+  const colGap = cols === 2 ? 40 : 20;
+  const rowGap = cols === 2 ? 20 : 15;
+  const cardW = (W - 160 - (cols - 1) * colGap) / cols;
+  
+  let scale = cardW / 440;
+  if (scale < 0.65) scale = 0.65;
+  
+  const cardH = 114 * scale;
 
   items.forEach((exName, index) => {
-    const row = Math.floor(index / 2);
-    const col = index % 2;
+    const row = Math.floor(index / cols);
+    const col = index % cols;
     const cardX = 80 + col * (cardW + colGap);
     const cardY = cursorY + row * (cardH + rowGap);
 
@@ -360,10 +390,10 @@ function drawExercisesCard(
     const hasMore = data.exerciseNames.length > maxExercises;
 
     if (isLastSlot && hasMore) {
-      drawMoreExercisesPill(ctx, cardX, cardY, cardW, cardH, data.exerciseNames.length - maxExercises + 1, highlightColor);
+      drawMoreExercisesPill(ctx, cardX, cardY, cardW, cardH, data.exerciseNames.length - maxExercises + 1, highlightColor, scale);
     } else {
       const exLog = data.exerciseLogs?.find(l => l.name === exName);
-      drawExercisePill(ctx, cardX, cardY, cardW, cardH, exName, highlightColor, exLog);
+      drawExercisePill(ctx, cardX, cardY, cardW, cardH, exName, highlightColor, exLog, scale);
     }
   });
 
@@ -514,17 +544,31 @@ function drawCombinedCard(
   ctx.fillRect(80, cursorY + 12, W - 160, 2);
   cursorY += 50;
 
-  // ─── Grid of Exercises (2 Columns, up to 6 cards) ───
-  const maxExercises = 6;
+  // ─── Grid of Exercises (Dynamic Columns) ───
+  const total = data.exerciseNames.length;
+  let cols = 2;
+  let maxExercises = 6;
+  if (total > 12) {
+    cols = 4;
+    maxExercises = 16;
+  } else if (total > 6) {
+    cols = 3;
+    maxExercises = 12;
+  }
+  
   const items = data.exerciseNames.slice(0, maxExercises);
-  const cardH = 114;
-  const cardW = 440;
-  const rowGap = 20;
-  const colGap = 40;
+  const colGap = cols === 2 ? 40 : 20;
+  const rowGap = cols === 2 ? 20 : 15;
+  const cardW = (W - 160 - (cols - 1) * colGap) / cols;
+  
+  let scale = cardW / 440;
+  if (scale < 0.65) scale = 0.65;
+  
+  const cardH = 114 * scale;
 
   items.forEach((exName, index) => {
-    const row = Math.floor(index / 2);
-    const col = index % 2;
+    const row = Math.floor(index / cols);
+    const col = index % cols;
     const cardX = 80 + col * (cardW + colGap);
     const cardY = cursorY + row * (cardH + rowGap);
 
@@ -532,10 +576,10 @@ function drawCombinedCard(
     const hasMore = data.exerciseNames.length > maxExercises;
 
     if (isLastSlot && hasMore) {
-      drawMoreExercisesPill(ctx, cardX, cardY, cardW, cardH, data.exerciseNames.length - maxExercises + 1, highlightColor);
+      drawMoreExercisesPill(ctx, cardX, cardY, cardW, cardH, data.exerciseNames.length - maxExercises + 1, highlightColor, scale);
     } else {
       const exLog = data.exerciseLogs?.find(l => l.name === exName);
-      drawExercisePill(ctx, cardX, cardY, cardW, cardH, exName, highlightColor, exLog);
+      drawExercisePill(ctx, cardX, cardY, cardW, cardH, exName, highlightColor, exLog, scale);
     }
   });
 

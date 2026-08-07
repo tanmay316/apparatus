@@ -13,12 +13,6 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.email == 'tanmay.sharma4334@gmail.com';
     }
 
-    function isFollower(targetUid) {
-      return isAuthenticated() && exists(
-        /databases/$(database)/documents/followers/$(targetUid)/followers/$(request.auth.uid)
-      );
-    }
-
     function canReadPlan(planId) {
       let plan = get(/databases/$(database)/documents/plans/$(planId)).data;
       return plan.isPublic == true || isOwner(plan.ownerId);

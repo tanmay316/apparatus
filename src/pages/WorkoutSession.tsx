@@ -153,26 +153,6 @@ export function WorkoutSession() {
     };
   }, []);
 
-  // Sync active session with backend
-  useEffect(() => {
-    if (!user) return;
-    
-    if (sessionFinished || !store.isActive || !store.startedAt) {
-      endActiveSession(user.uid).catch(console.error);
-      return;
-    }
-    
-    if (store.isActive && store.planId && store.dayId && store.startedAt) {
-      startActiveSession(user.uid, {
-        planId: store.planId,
-        dayId: store.dayId,
-        dayTitle: store.dayTitle,
-        currentExercise: lastExercise,
-        caloriesBurned: Math.round(displayCalories) || 0,
-        startedAt: Timestamp.fromMillis(store.startedAt)
-      }).catch(console.error);
-    }
-  }, [store.isActive, sessionFinished, store.planId, store.dayId, user, store.startedAt, store.dayTitle, lastExercise, displayCalories]);
 
   useEffect(() => {
     if (!store.isActive && completedWorkoutForDay) {
@@ -229,6 +209,27 @@ export function WorkoutSession() {
   useEffect(() => {
     if (activeExercise?.name) setLastExercise(activeExercise.name);
   }, [activeExercise?.name]);
+
+  // Sync active session with backend
+  useEffect(() => {
+    if (!user) return;
+    
+    if (sessionFinished || !store.isActive || !store.startedAt) {
+      endActiveSession(user.uid).catch(console.error);
+      return;
+    }
+    
+    if (store.isActive && store.planId && store.dayId && store.startedAt) {
+      startActiveSession(user.uid, {
+        planId: store.planId,
+        dayId: store.dayId,
+        dayTitle: store.dayTitle,
+        currentExercise: lastExercise,
+        caloriesBurned: Math.round(displayCalories) || 0,
+        startedAt: Timestamp.fromMillis(store.startedAt)
+      }).catch(console.error);
+    }
+  }, [store.isActive, sessionFinished, store.planId, store.dayId, user, store.startedAt, store.dayTitle, lastExercise, displayCalories]);
 
   // Immediately push exercise changes to live session
   useEffect(() => {

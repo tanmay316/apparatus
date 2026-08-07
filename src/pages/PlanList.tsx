@@ -101,12 +101,20 @@ export function PlanList() {
           <div className="font-mono text-amber text-xs tracking-widest mb-1">PROGRAMMING</div>
           <h1 className="font-display text-2xl">My Plans</h1>
         </div>
-        <button 
-          onClick={() => setShowCreate(true)}
-          className="btn-primary flex items-center gap-2"
-        >
-          <Plus size={16} /> New Plan
-        </button>
+        <div className="flex items-center gap-3">
+          <Link 
+            to="/explore"
+            className="btn-secondary flex items-center gap-2"
+          >
+            Explore
+          </Link>
+          <button 
+            onClick={() => setShowCreate(true)}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Plus size={16} /> New Plan
+          </button>
+        </div>
       </div>
 
       <AnimatePresence>
