@@ -13,10 +13,12 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+import { Geolocation } from '@capacitor/geolocation';
+
 // ────────────────────────────────────────────────────────────
 // Global GPS & Wake Lock (lives outside React for persistence)
 // ────────────────────────────────────────────────────────────
-let watchIdRef: number | null = null;
+let watchIdRef: string | null = null;
 let wakeLockRef: any = null;
 
 const requestWakeLock = async () => {
@@ -34,33 +36,65 @@ const releaseWakeLock = () => {
   }
 };
 
-const startGpsWatch = () => {
-  if (watchIdRef !== null) return; // already watching
-  if (!navigator.geolocation) return;
-
-  requestWakeLock();
-  watchIdRef = navigator.geolocation.watchPosition(
-    (pos) => {
-      useCardioStore.getState().addPoint({
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        alt: pos.coords.altitude ?? undefined,
-        speed: pos.coords.speed ?? undefined,
-        ts: Date.now(),
-      });
-    },
-    (err) => console.warn('[CardioStore] GPS error:', err.message),
-    {
-      enableHighAccuracy: true,
-      maximumAge: 2000,
-      timeout: 10000,
+const checkPermissions = async () => {
+  try {
+    let perm = await Geolocation.checkPermissions();
+    if (perm.location !== 'granted') {
+      perm = await Geolocation.requestPermissions();
     }
-  );
+    return perm.location === 'granted';
+  } catch (err) {
+    // If running in a context where Capacitor Geolocation throws, fallback to true 
+    // and let the browser's native Geolocation prompt handle it
+    return true; 
+  }
 };
 
-const stopGpsWatch = () => {
+const startGpsWatch = async () => {
+  if (watchIdRef !== null) return; // already watching
+  
+  const hasPerm = await checkPermissions();
+  if (!hasPerm) {
+    console.warn('[CardioStore] GPS permission denied');
+    // We could dispatch an error state here so the UI shows 'Permission Denied'
+    return;
+  }
+
+  requestWakeLock();
+  
+  try {
+    watchIdRef = await Geolocation.watchPosition(
+      {
+        enableHighAccuracy: true,
+        maximumAge: 2000,
+        timeout: 10000,
+      },
+      (pos, err) => {
+        if (err) {
+          console.warn('[CardioStore] GPS error:', err.message);
+          return;
+        }
+        if (pos) {
+          useCardioStore.getState().addPoint({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            alt: pos.coords.altitude ?? undefined,
+            speed: pos.coords.speed ?? undefined,
+            ts: Date.now(),
+          });
+        }
+      }
+    );
+  } catch (e) {
+    console.warn('[CardioStore] Failed to start GPS watch:', e);
+  }
+};
+
+const stopGpsWatch = async () => {
   if (watchIdRef !== null) {
-    navigator.geolocation.clearWatch(watchIdRef);
+    try {
+      await Geolocation.clearWatch({ id: watchIdRef });
+    } catch { /* silent */ }
     watchIdRef = null;
   }
   releaseWakeLock();
