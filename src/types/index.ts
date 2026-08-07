@@ -152,7 +152,7 @@ export interface Activity {
   userName: string;
   username?: string; // added for profile routing
   userPhoto: string;
-  type: 'workout' | 'achievement' | 'streak' | 'pr' | 'follow' | 'event_join';
+  type: 'workout' | 'achievement' | 'streak' | 'pr' | 'follow' | 'event_join' | 'walk' | 'run' | 'cycle';
   workoutId: string | null;
   summary: string;
   details: Record<string, unknown>;

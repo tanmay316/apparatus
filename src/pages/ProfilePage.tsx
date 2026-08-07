@@ -18,8 +18,10 @@ import { followUser, unfollowUser, isFollowing, getFollowCounts, getFollowers, g
 import type { Activity as ActivityType, UserProfile, UserStats } from '@/types';
 import { createReport } from '@/services/admin';
 import { getPublicWorkoutsForUser, getUserWorkouts } from '@/services/workouts';
+import { getUserCardioActivities } from '@/services/cardio';
 import { clonePlan, getPublicPlansForUser, getPlanDays, getPlan } from '@/services/plans';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
+import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { ActivityPostCard } from '@/components/social/ActivityPostCard';
 import { getUserSkills } from '@/services/skills';
@@ -73,6 +75,7 @@ export function ProfilePage() {
   const [publicPlans, setPublicPlans] = useState<any[]>([]);
   const [importingPlan, setImportingPlan] = useState<string | null>(null);
   const [profileShareData, setProfileShareData] = useState<ShareCardData | null>(null);
+  const [cardioShareData, setCardioShareData] = useState<CardioShareData | null>(null);
   const [feedTab, setFeedTab] = useState<'activity' | 'communities' | 'posts' | 'bookmarks' | 'events'>('activity');
   const [showAllActivities, setShowAllActivities] = useState(false);
   const [showAllTimeline, setShowAllTimeline] = useState(false);
@@ -173,15 +176,41 @@ export function ProfilePage() {
 
   useEffect(() => {
     if (!viewProfile) return;
-    if (isOwnProfile) {
-      getUserWorkouts(viewProfile.uid, 20)
-        .then((workouts) => setPublicWorkouts(workouts))
-        .catch(error => console.error('Failed to load logged workouts', error));
-    } else {
-      Promise.all([getPublicWorkoutsForUser(viewProfile.uid, myProfile?.uid), getPublicPlansForUser(viewProfile.uid)])
-        .then(([workouts, plans]) => { setPublicWorkouts(workouts); setPublicPlans(plans); })
-        .catch(error => console.error('Failed to load public training data', error));
-    }
+    
+    const fetchAllActivities = async () => {
+      try {
+        let gymWorkouts = [];
+        let cardioLogs = [];
+        let plans = [];
+
+        if (isOwnProfile) {
+          [gymWorkouts, cardioLogs] = await Promise.all([
+            getUserWorkouts(viewProfile.uid, 20),
+            getUserCardioActivities(viewProfile.uid, 10)
+          ]);
+        } else {
+          [gymWorkouts, plans, cardioLogs] = await Promise.all([
+            getPublicWorkoutsForUser(viewProfile.uid, myProfile?.uid),
+            getPublicPlansForUser(viewProfile.uid),
+            getUserCardioActivities(viewProfile.uid, 10)
+          ]);
+          setPublicPlans(plans);
+        }
+
+        // Merge and sort
+        const merged = [...gymWorkouts, ...cardioLogs].sort((a: any, b: any) => {
+          const timeA = a.createdAt?.seconds || (a.date ? Math.floor(new Date(a.date).getTime() / 1000) : 0);
+          const timeB = b.createdAt?.seconds || (b.date ? Math.floor(new Date(b.date).getTime() / 1000) : 0);
+          return timeB - timeA;
+        });
+
+        setPublicWorkouts(merged);
+      } catch (error) {
+        console.error('Failed to load training data', error);
+      }
+    };
+
+    fetchAllActivities();
   }, [viewProfile, isOwnProfile, myProfile?.uid]);
 
   const importPublicPlan = async (planId: string) => {
@@ -195,23 +224,6 @@ export function ProfilePage() {
     } finally {
       setImportingPlan(null);
     }
-  };
-
-  const startEditing = () => {
-    if (!viewProfile) return;
-    setEditData({
-      displayName: viewProfile.displayName,
-      bio: viewProfile.bio,
-      height: viewProfile.height,
-      weight: viewProfile.weight,
-      age: viewProfile.age,
-      gender: viewProfile.gender,
-      fitnessGoal: viewProfile.fitnessGoal,
-      experienceLevel: viewProfile.experienceLevel,
-      preferredWorkoutType: viewProfile.preferredWorkoutType,
-      bodyFat: (viewProfile as any).bodyFat || null,
-    });
-    setEditing(true);
   };
 
   const saveEdit = async () => {
@@ -237,20 +249,6 @@ export function ProfilePage() {
     } finally {
       setReporting(false);
     }
-  };
-
-  const handleShareWorkout = (activity: ActivityType) => {
-    const details = (activity.details as Record<string, any>) || {};
-    setProfileShareData({
-      dayTitle: details.dayTitle || activity.summary,
-      planTitle: details.planTitle || 'Training Plan',
-      date: new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
-      durationMin: details.durationMin || 0,
-      volume: details.volume || 0,
-      calories: details.calories || 0,
-      exerciseNames: details.exercises || [],
-      exerciseLogs: details.exerciseLogs || undefined,
-    });
   };
 
   // Loading skeleton state
@@ -302,33 +300,6 @@ export function ProfilePage() {
   const completedDaysCount = publicWorkouts.filter(w => w.planId === activePlan?.id).length;
   const totalDaysCount = planDays.length;
 
-  // Skill progress mapping helper
-  const getSkillProgress = (skillName: 'Handstand' | 'Front Lever' | 'L-Sit' | 'Planche') => {
-    const skillsSet = new Set(userSkills);
-    if (skillName === 'Handstand') {
-      if (skillsSet.has('free_hs')) return 100;
-      if (skillsSet.has('wall_hs')) return 50;
-      return 15;
-    }
-    if (skillName === 'Front Lever') {
-      if (skillsSet.has('full_fl')) return 100;
-      if (skillsSet.has('adv_tuck_fl')) return 66;
-      if (skillsSet.has('tuck_fl')) return 33;
-      return 10;
-    }
-    if (skillName === 'L-Sit') {
-      if (skillsSet.has('straddle_lsit')) return 100;
-      if (skillsSet.has('tuck_lsit')) return 50;
-      return 20;
-    }
-    if (skillName === 'Planche') {
-      if (skillsSet.has('full_planche')) return 100;
-      if (skillsSet.has('tuck_planche')) return 50;
-      return 5;
-    }
-    return 0;
-  };
-
   // BMI calculations
   const heightInMeters = (p.height || 0) / 100;
   const bmi = heightInMeters > 0 && p.weight ? (p.weight / (heightInMeters * heightInMeters)).toFixed(1) : '—';
@@ -345,6 +316,15 @@ export function ProfilePage() {
   });
 
   const calculatedLevel = stats ? Math.min(10, Math.floor((stats.xp || 0) / 500) + 1) : 1;
+
+  function getRelativeTime(dateString: string) {
+    const date = new Date(dateString);
+    const diff = Date.now() - date.getTime();
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    return `${days} days ago`;
+  }
 
   return (
     <div style={themeStyles} className="bg-[var(--bg)] text-[var(--text)] transition-colors duration-300 min-h-screen rounded-3xl border border-[var(--border)] p-4 sm:p-6 lg:p-8">
@@ -477,8 +457,6 @@ export function ProfilePage() {
             </div>
           </div>
         </motion.div>
-
-
 
         {/* PROFILE DETAIL EDITING EXPANSION */}
         {editing && (
@@ -669,7 +647,32 @@ export function ProfilePage() {
                       <ActivityPostCard
                         key={activity.id}
                         activity={activity}
-                        onShare={handleShareWorkout}
+                        onShare={(act) => {
+                          const isCardio = act.type === 'walk' || act.type === 'run' || act.type === 'cycle';
+                          if (isCardio) {
+                            setCardioShareData({
+                              type: (act.details as any)?.activityType || 'walk',
+                              date: new Date().toISOString(),
+                              distanceKm: (act.details as any)?.distanceKm || 0,
+                              durationSec: (act.details as any)?.durationSec || 0,
+                              calories: (act.details as any)?.calories || 0,
+                              avgPace: (act.details as any)?.avgPace || '0:00 /km',
+                              route: (act.details as any)?.route || [],
+                            });
+                          } else {
+                            setProfileShareData({
+                              dayTitle: (act.details as any)?.dayTitle || act.summary || 'Workout',
+                              planTitle: (act.details as any)?.planTitle || 'Personal Session',
+                              date: new Date().toISOString(),
+                              durationMin: (act.details as any)?.durationMin || 0,
+                              calories: (act.details as any)?.calories || 0,
+                              volume: (act.details as any)?.volume || 0,
+                              exerciseNames: (act.details as any)?.exercises || [],
+                              exerciseLogs: (act.details as any)?.exerciseLogs || [],
+                              bodyweight: (act.details as any)?.bodyweight,
+                            });
+                          }
+                        }}
                       />
                     ))}
                   </div>
@@ -737,37 +740,84 @@ export function ProfilePage() {
                     const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
                     const exerciseNamesList = rawExLogs.map((e: any) => typeof e === 'string' ? e : e.name);
 
-                    const activityItem: ActivityType = {
-                      id: workout.id,
-                      userId: viewProfile.uid,
-                      userName: viewProfile.displayName,
-                      userPhoto: viewProfile.photoURL,
-                      username: viewProfile.username,
-                      type: 'workout',
-                      workoutId: workout.id,
-                      visibility: 'public',
-                      likesCount: workout.likesCount || 0,
-                      commentsCount: workout.commentsCount || 0,
-                      summary: workout.dayTitle || 'Workout',
-                      details: {
-                        dayTitle: workout.dayTitle || 'Workout',
-                        planTitle: workout.planTitle || 'Personal Session',
-                        durationMin: workout.durationMin || 0,
-                        volume: workout.volume || 0,
-                        calories: workout.calories || 0,
-                        exercises: exerciseNamesList,
-                        exerciseLogs: rawExLogs,
-                        bodyweight: workout.bodyweight || viewProfile.weight,
-                        skill: workout.skill,
-                      },
-                      createdAt: workout.createdAt || { seconds: workout.date ? Math.floor(new Date(workout.date).getTime() / 1000) : Math.floor(Date.now() / 1000) },
-                    };
+                      const isCardio = workout.type === 'walk' || workout.type === 'run' || workout.type === 'cycle';
+                      
+                      const activityItem: ActivityType = isCardio ? {
+                        id: workout.id,
+                        userId: viewProfile.uid,
+                        userName: viewProfile.displayName,
+                        userPhoto: viewProfile.photoURL,
+                        username: viewProfile.username,
+                        type: workout.type,
+                        workoutId: null,
+                        visibility: workout.visibility,
+                        likesCount: workout.likesCount || 0,
+                        commentsCount: workout.commentsCount || 0,
+                        summary: `Completed a ${workout.distanceKm?.toFixed(2)} km ${workout.type}`,
+                        details: {
+                          activityType: workout.type,
+                          distanceKm: workout.distanceKm,
+                          durationSec: workout.durationSec,
+                          calories: workout.calories,
+                          avgPace: workout.avgPace,
+                          route: workout.route,
+                        },
+                        createdAt: workout.startedAt || workout.createdAt || { seconds: workout.date ? Math.floor(new Date(workout.date).getTime() / 1000) : Math.floor(Date.now() / 1000) },
+                      } : {
+                        id: workout.id,
+                        userId: viewProfile.uid,
+                        userName: viewProfile.displayName,
+                        userPhoto: viewProfile.photoURL,
+                        username: viewProfile.username,
+                        type: 'workout',
+                        workoutId: workout.id,
+                        visibility: 'public',
+                        likesCount: workout.likesCount || 0,
+                        commentsCount: workout.commentsCount || 0,
+                        summary: workout.dayTitle || 'Workout',
+                        details: {
+                          dayTitle: workout.dayTitle || 'Workout',
+                          planTitle: workout.planTitle || 'Personal Session',
+                          durationMin: workout.durationMin || 0,
+                          volume: workout.volume || 0,
+                          calories: workout.calories || 0,
+                          exercises: exerciseNamesList,
+                          exerciseLogs: rawExLogs,
+                          bodyweight: workout.bodyweight || viewProfile.weight,
+                          skill: workout.skill,
+                        },
+                        createdAt: workout.createdAt || { seconds: workout.date ? Math.floor(new Date(workout.date).getTime() / 1000) : Math.floor(Date.now() / 1000) },
+                      };
 
                     return (
                       <ActivityPostCard
                         key={workout.id}
                         activity={activityItem}
-                        onShare={handleShareWorkout}
+                        onShare={(act) => {
+                          if (isCardio) {
+                            setCardioShareData({
+                              type: (act.details as any)?.activityType || 'walk',
+                              date: workout.date || new Date().toISOString(),
+                              distanceKm: (act.details as any)?.distanceKm || 0,
+                              durationSec: (act.details as any)?.durationSec || 0,
+                              calories: (act.details as any)?.calories || 0,
+                              avgPace: (act.details as any)?.avgPace || '0:00 /km',
+                              route: (act.details as any)?.route || [],
+                            });
+                          } else {
+                            setProfileShareData({
+                              dayTitle: (act.details as any)?.dayTitle || act.summary || 'Workout',
+                              planTitle: (act.details as any)?.planTitle || 'Personal Session',
+                              date: workout.date || new Date().toISOString(),
+                              durationMin: (act.details as any)?.durationMin || 0,
+                              calories: (act.details as any)?.calories || 0,
+                              volume: (act.details as any)?.volume || 0,
+                              exerciseNames: (act.details as any)?.exercises || [],
+                              exerciseLogs: (act.details as any)?.exerciseLogs || [],
+                              bodyweight: (act.details as any)?.bodyweight,
+                            });
+                          }
+                        }}
                       />
                     );
                   })}
@@ -885,6 +935,13 @@ export function ProfilePage() {
         <ShareCardModal
           data={profileShareData}
           onClose={() => setProfileShareData(null)}
+        />
+      )}
+
+      {cardioShareData && (
+        <CardioShareModal
+          data={cardioShareData}
+          onClose={() => setCardioShareData(null)}
         />
       )}
     </div>

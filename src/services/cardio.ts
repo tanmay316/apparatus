@@ -26,12 +26,19 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
 export const getUserCardioActivities = async (userId: string, count = 20): Promise<CardioActivity[]> => {
   const q = query(
     collection(db, 'cardioActivities'),
-    where('userId', '==', userId),
-    orderBy('startedAt', 'desc'),
-    firestoreLimit(count)
+    where('userId', '==', userId)
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as CardioActivity));
+  const activities = snap.docs.map(d => ({ id: d.id, ...d.data() } as CardioActivity));
+  
+  // Sort and limit client-side to avoid requiring a composite index in Firestore
+  return activities
+    .sort((a, b) => {
+      const timeA = a.startedAt?.seconds || 0;
+      const timeB = b.startedAt?.seconds || 0;
+      return timeB - timeA;
+    })
+    .slice(0, count);
 };
 
 export const deleteCardioActivity = async (activityId: string): Promise<void> => {

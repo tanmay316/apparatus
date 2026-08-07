@@ -13,6 +13,53 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Global references for background tracking
+let watchIdRef: number | null = null;
+let wakeLockRef: any = null;
+
+const requestWakeLock = async () => {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLockRef = await (navigator as any).wakeLock.request('screen');
+    }
+  } catch { /* silent */ }
+};
+
+const releaseWakeLock = () => {
+  if (wakeLockRef) {
+    wakeLockRef.release().catch(() => {});
+    wakeLockRef = null;
+  }
+};
+
+const startGpsWatch = () => {
+  if (watchIdRef !== null) return;
+  if (!navigator.geolocation) return;
+
+  requestWakeLock();
+  watchIdRef = navigator.geolocation.watchPosition(
+    (pos) => {
+      useCardioStore.getState().addPoint({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        alt: pos.coords.altitude ?? undefined,
+        speed: pos.coords.speed ?? undefined,
+        ts: Date.now(),
+      });
+    },
+    (err) => console.warn('GPS error:', err),
+    { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+  );
+};
+
+const stopGpsWatch = () => {
+  if (watchIdRef !== null) {
+    navigator.geolocation.clearWatch(watchIdRef);
+    watchIdRef = null;
+  }
+  releaseWakeLock();
+};
+
 interface CardioState {
   isTracking: boolean;
   isPaused: boolean;
@@ -55,6 +102,7 @@ export const useCardioStore = create<CardioState>()(
       ...(IDLE as CardioState),
 
       startTracking: (type) => {
+        startGpsWatch();
         set({
           isTracking: true,
           isPaused: false,
@@ -71,10 +119,12 @@ export const useCardioStore = create<CardioState>()(
       },
 
       pauseTracking: () => {
+        stopGpsWatch();
         set({ isPaused: true, pausedAt: Date.now() });
       },
 
       resumeTracking: () => {
+        startGpsWatch();
         const { pausedAt, totalPausedMs } = get();
         const addedPause = pausedAt ? Date.now() - pausedAt : 0;
         set({ isPaused: false, pausedAt: null, totalPausedMs: totalPausedMs + addedPause });
@@ -90,9 +140,12 @@ export const useCardioStore = create<CardioState>()(
         let speed = 0;
 
         if (prev) {
-          addedDistance = haversineKm(prev.lat, prev.lng, point.lat, point.lng);
-          // Filter noise: ignore jumps less than 2m or greater than 500m
-          if (addedDistance < 0.002 || addedDistance > 0.5) addedDistance = 0;
+          const rawDistance = haversineKm(prev.lat, prev.lng, point.lat, point.lng);
+          
+          // Filter noise: ignore jumps less than 10 meters to prevent stationary drift
+          if (rawDistance >= 0.01 && rawDistance < 0.5) {
+            addedDistance = rawDistance;
+          }
 
           if (point.alt !== undefined && prev.alt !== undefined) {
             const diff = point.alt - prev.alt;
@@ -120,6 +173,7 @@ export const useCardioStore = create<CardioState>()(
       },
 
       stopTracking: () => {
+        stopGpsWatch();
         set({ isTracking: false, isPaused: false });
       },
 

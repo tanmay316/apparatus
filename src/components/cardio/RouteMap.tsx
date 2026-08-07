@@ -4,26 +4,26 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { RoutePoint } from '@/types';
 
-// Fix default marker icon (Leaflet CSS issue with bundlers)
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+// Custom icons using HTML
+const startIcon = new L.DivIcon({
+  html: `<div style="width: 20px; height: 20px; background: #f97316; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
+  className: '',
+  iconSize: [20, 20],
+  iconAnchor: [10, 10]
 });
 
-const currentIcon = new L.Icon({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-  iconSize: [25, 41],
-  iconAnchor: [12, 41],
+const currentIcon = new L.DivIcon({
+  html: `<div style="width: 24px; height: 24px; background: #3b82f6; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 15px rgba(59,130,246,0.5); display: flex; align-items: center; justify-content: center;"><div style="width: 8px; height: 8px; background: white; border-radius: 50%;"></div></div>`,
+  className: '',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12]
 });
 
 interface Props {
   route: RoutePoint[];
   isLive?: boolean;
   height?: string;
+  theme?: 'light' | 'dark' | 'satellite' | 'street';
   highlightColor?: string;
 }
 
@@ -43,7 +43,7 @@ function MapAutoCenter({ route }: { route: RoutePoint[] }) {
   return null;
 }
 
-export function RouteMap({ route, isLive = false, height = '300px', highlightColor = '#FF5500' }: Props) {
+export function RouteMap({ route, isLive = false, height = '300px', theme = 'light', highlightColor = '#3b82f6' }: Props) {
   const positions: [number, number][] = useMemo(
     () => route.map(p => [p.lat, p.lng]),
     [route]
@@ -54,27 +54,31 @@ export function RouteMap({ route, isLive = false, height = '300px', highlightCol
     : [20.5937, 78.9629]; // Default: India center
 
   const zoom = positions.length > 0 ? 16 : 5;
+  
+  let tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+  if (theme === 'dark') tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  if (theme === 'satellite') tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+  if (theme === 'street') tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
   return (
-    <div style={{ height, width: '100%', borderRadius: '12px', overflow: 'hidden' }}>
+    <div style={{ height, width: '100%', overflow: 'hidden' }} className="relative">
+      {/* Fade overlay for top/bottom to blend into UI optionally */}
       <MapContainer
         center={center}
         zoom={zoom}
-        style={{ height: '100%', width: '100%' }}
+        style={{ height: '100%', width: '100%', background: theme === 'dark' ? '#121212' : '#f5f5f5' }}
         zoomControl={false}
         attributionControl={false}
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <TileLayer url={tileUrl} />
 
         {positions.length > 1 && (
           <Polyline
             positions={positions}
             pathOptions={{
               color: highlightColor,
-              weight: 4,
-              opacity: 0.9,
+              weight: 6,
+              opacity: 1,
               lineCap: 'round',
               lineJoin: 'round',
             }}
@@ -83,7 +87,7 @@ export function RouteMap({ route, isLive = false, height = '300px', highlightCol
 
         {/* Start marker */}
         {positions.length > 0 && (
-          <Marker position={positions[0]} />
+          <Marker position={positions[0]} icon={startIcon} />
         )}
 
         {/* Current position marker (only in live mode) */}

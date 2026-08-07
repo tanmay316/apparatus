@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -11,6 +12,7 @@ import { saveCardioActivity, getUserCardioActivities } from '@/services/cardio';
 import { postActivity } from '@/services/social';
 import { calculateCardioCalories } from '@/lib/calories';
 import { RouteMap } from '@/components/cardio/RouteMap';
+import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 import type { CardioActivityType, CardioActivity } from '@/types';
 
 function localDateKey(d: Date) {
@@ -47,17 +49,40 @@ export function CardioTracker() {
   const userWeight = useUserWeight();
   const store = useCardioStore();
 
-  const [screen, setScreen] = useState<'select' | 'tracking' | 'summary'>(() => {
-    return store.isTracking ? 'tracking' : 'select';
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlType = searchParams.get('type') as CardioActivityType | null;
+
+  const [screen, setScreen] = useState<'select' | 'ready' | 'tracking' | 'summary'>(() => {
+    if (store.isTracking) return 'tracking';
+    if (urlType) return 'ready';
+    return 'select';
   });
+  
+  // Map layer state
+  const [mapLayer, setMapLayer] = useState<'default' | 'light' | 'dark' | 'satellite' | 'street'>('default');
+
+  // Update screen if URL changes
+  useEffect(() => {
+    if (urlType) {
+      if (store.isTracking) {
+        if (store.activityType !== urlType) {
+          setScreen('ready');
+        } else {
+          setScreen('tracking');
+          setSearchParams({}); // Clear urlType
+        }
+      } else if (!store.isTracking && screen !== 'ready') {
+        setScreen('ready');
+        store.reset(); // clear any previous state
+      }
+    }
+  }, [urlType, store.isTracking, store.activityType, screen, store, setSearchParams]);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [summaryData, setSummaryData] = useState<Partial<CardioActivity> | null>(null);
+  const [showShare, setShowShare] = useState(false);
   const [recentActivities, setRecentActivities] = useState<CardioActivity[]>([]);
   const [gpsError, setGpsError] = useState<string | null>(null);
-
-  const watchIdRef = useRef<number | null>(null);
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
   // Fetch recent activities
   useEffect(() => {
@@ -78,97 +103,83 @@ export function CardioTracker() {
     return () => clearInterval(interval);
   }, [store.isTracking, store.startedAt, store.isPaused, store.totalPausedMs]);
 
-  // Wake lock
-  const requestWakeLock = useCallback(async () => {
-    try {
-      if ('wakeLock' in navigator) {
-        wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
-      }
-    } catch { /* silent */ }
-  }, []);
+  // GPS and WakeLock logic moved to global cardio-store.ts
 
-  const releaseWakeLock = useCallback(() => {
-    wakeLockRef.current?.release().catch(() => {});
-    wakeLockRef.current = null;
-  }, []);
+  const handleBackgroundSave = async () => {
+    if (!store.isTracking || !store.activityType) return;
+    const durationSec = elapsedSec;
+    const dist = store.distanceKm;
+    const type = store.activityType;
+    const startedAt = store.startedAt;
+    const route = store.routePoints;
+    const elevation = store.elevationGainM;
+    const maxSpeed = store.maxSpeedKmh;
 
-  // GPS watcher
-  const startGpsWatch = useCallback(() => {
-    if (!navigator.geolocation) {
-      setGpsError('Geolocation is not supported by your browser.');
-      return;
+    store.stopTracking();
+
+    if (user && dist > 0.01) {
+      const durationMin = Math.max(1, Math.round(durationSec / 60));
+      const avgSpeed = durationSec > 0 ? (dist / durationSec) * 3600 : 0;
+      const pace = formatPace(dist, durationSec);
+      const calories = calculateCardioCalories(type, dist, durationMin, userWeight || 70, avgSpeed);
+
+      saveCardioActivity(user.uid, {
+        userId: user.uid,
+        userName: user.displayName || 'Athlete',
+        userPhoto: user.photoURL || '',
+        type,
+        date: localDateKey(new Date()),
+        startedAt: startedAt ? Timestamp.fromMillis(startedAt) : Timestamp.now(),
+        finishedAt: Timestamp.now(),
+        durationSec,
+        distanceKm: Math.round(dist * 1000) / 1000,
+        avgSpeedKmh: Math.round(avgSpeed * 10) / 10,
+        maxSpeedKmh: Math.round(maxSpeed * 10) / 10,
+        avgPace: `${pace} /km`,
+        calories,
+        elevationGainM: Math.round(elevation),
+        route,
+        visibility: 'followers',
+        notes: 'Auto-saved session',
+      }).catch(console.error);
     }
+  };
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        setGpsError(null);
-        store.addPoint({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          alt: pos.coords.altitude ?? undefined,
-          speed: pos.coords.speed ?? undefined,
-          ts: Date.now(),
-        });
-      },
-      (err) => {
-        setGpsError(err.message || 'GPS error');
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 3000,
-        timeout: 10000,
-      }
-    );
-  }, [store]);
-
-  const stopGpsWatch = useCallback(() => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
+  const handleStartTracking = async () => {
+    const type = urlType || store.activityType;
+    if (!type) return;
+    
+    if (store.isTracking && store.activityType !== type) {
+      await handleBackgroundSave();
+      store.reset();
     }
-  }, []);
-
-  // Clean up on unmount
-  useEffect(() => {
-    return () => {
-      stopGpsWatch();
-      releaseWakeLock();
-    };
-  }, [stopGpsWatch, releaseWakeLock]);
-
-  // Resume GPS if returning to a tracking session
-  useEffect(() => {
-    if (store.isTracking && !store.isPaused && watchIdRef.current === null) {
-      startGpsWatch();
-      requestWakeLock();
-    }
-  }, [store.isTracking, store.isPaused, startGpsWatch, requestWakeLock]);
+    
+    // Clear the URL param so a refresh stays in tracking
+    setSearchParams({});
+    
+    store.startTracking(type);
+    setScreen('tracking');
+    setElapsedSec(0);
+  };
 
   const handleStartActivity = (type: CardioActivityType | 'workout') => {
     if (type === 'workout') {
       navigate('/plans');
       return;
     }
-    store.startTracking(type);
-    startGpsWatch();
-    requestWakeLock();
-    setScreen('tracking');
-    setElapsedSec(0);
+    // Navigate to ready screen
+    setSearchParams({ type });
   };
 
   const handlePause = () => {
     store.pauseTracking();
-    stopGpsWatch();
   };
 
   const handleResume = () => {
     store.resumeTracking();
-    startGpsWatch();
   };
 
   const handleStop = async () => {
-    stopGpsWatch();
-    releaseWakeLock();
     store.stopTracking();
 
     const durationSec = elapsedSec;
@@ -330,99 +341,188 @@ export function CardioTracker() {
     );
   }
 
+  // ─── Ready Screen ───
+  if (screen === 'ready' && urlType) {
+    const typeLabel = urlType === 'walk' ? 'Walking' : urlType === 'run' ? 'Running' : 'Cycling';
+    const isDark = useUIStore.getState().theme === 'dark';
+    const effectiveTheme = mapLayer === 'default' ? (isDark ? 'dark' : 'light') : mapLayer;
+
+    return createPortal(
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-[var(--bg)] flex flex-col h-screen overflow-hidden">
+        
+        {/* Background Map */}
+        <div className="absolute inset-0 z-0">
+          <RouteMap route={store.routePoints} isLive={false} height="100%" theme={effectiveTheme} />
+          <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg)] via-transparent to-transparent z-[1]" />
+        </div>
+
+        {/* Header Overlay */}
+        <div className="relative z-10 flex items-start justify-between p-6 safe-top pointer-events-none">
+          <button 
+            onClick={() => { setSearchParams({}); setScreen('select'); }}
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--card)]/80 backdrop-blur-md shadow-sm border border-[var(--border)] text-[var(--text)] pointer-events-auto transition-transform active:scale-95"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          
+          <div className="flex flex-col gap-2 items-end">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)]/80 backdrop-blur-md shadow-sm border border-[var(--border)] pointer-events-auto">
+              {gpsError ? (
+                <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-[var(--text)]">GPS Error</span></>
+              ) : (
+                <><Navigation size={14} className="text-emerald-500" /><span className="text-xs font-bold text-[var(--text)]">GPS Ready</span></>
+              )}
+            </div>
+            
+            <button
+              onClick={() => {
+                const layers = ['default', 'light', 'dark', 'street', 'satellite'] as const;
+                const nextIdx = (layers.indexOf(mapLayer) + 1) % layers.length;
+                setMapLayer(layers[nextIdx]);
+              }}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--card)]/80 backdrop-blur-md shadow-sm border border-[var(--border)] text-[var(--text)] pointer-events-auto transition-transform active:scale-95"
+            >
+              <Layers size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Content Overlay */}
+        <div className="relative z-10 flex-1 flex flex-col justify-end p-8 pb-[100px] pointer-events-none">
+          <div className="pointer-events-auto text-center mb-8">
+            <h1 className="font-sans text-5xl font-black tracking-tight text-[var(--text)] drop-shadow-md mb-2">{typeLabel}</h1>
+            <p className="text-sm font-semibold text-[var(--muted)] tracking-widest uppercase bg-[var(--bg)]/50 backdrop-blur-sm px-4 py-1.5 rounded-full inline-block">Tap to begin</p>
+          </div>
+          
+          <button
+            onClick={handleStartTracking}
+            className="w-24 h-24 rounded-full bg-[var(--text)] text-[var(--bg)] flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-[0_10px_40px_rgba(0,0,0,0.3)] mx-auto pointer-events-auto"
+          >
+            <Play size={40} fill="currentColor" className="ml-2" />
+          </button>
+        </div>
+      </motion.div>,
+      document.body
+    );
+  }
+
   // ─── Tracking Screen ───
   if (screen === 'tracking') {
-    const typeLabel = store.activityType === 'walk' ? 'Walking' : store.activityType === 'run' ? 'Running' : 'Cycling';
-    const typeEmoji = store.activityType === 'walk' ? '🚶' : store.activityType === 'run' ? '🏃' : '🚴';
+    const isDark = useUIStore.getState().theme === 'dark';
+    const effectiveTheme = mapLayer === 'default' ? (isDark ? 'dark' : 'light') : mapLayer;
 
-    return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-24">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">{typeEmoji}</span>
+    const isDarkMap = effectiveTheme === 'dark' || effectiveTheme === 'satellite';
+    const textColor = isDarkMap ? 'text-white drop-shadow-md' : 'text-black';
+    const labelColor = isDarkMap ? 'text-white/80' : 'text-[var(--muted)]';
+
+    return createPortal(
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-[var(--bg)] flex flex-col h-screen overflow-hidden">
+        
+        {/* Full Screen Map Background */}
+        <div className="absolute inset-0 z-0">
+          <RouteMap route={store.routePoints} isLive height="100%" theme={effectiveTheme} />
+        </div>
+
+        {/* Header (Top Right) */}
+        <div className="absolute top-6 right-6 z-20 safe-top pointer-events-none flex flex-col gap-2 items-end">
+          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)]/90 backdrop-blur-md shadow-sm border border-[var(--border)] pointer-events-auto">
+            {gpsError ? (
+              <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-[var(--text)]">GPS Error</span></>
+            ) : store.isPaused ? (
+              <><Navigation size={14} className="text-orange-500" /><span className="text-xs font-bold text-[var(--text)]">Paused</span></>
+            ) : (
+              <><Navigation size={14} className="text-[var(--text)]" /><span className="text-xs font-bold text-[var(--text)]">GPS On</span></>
+            )}
+          </div>
+          
+          <button
+            onClick={() => {
+              const layers = ['default', 'light', 'dark', 'street', 'satellite'] as const;
+              const nextIdx = (layers.indexOf(mapLayer) + 1) % layers.length;
+              setMapLayer(layers[nextIdx]);
+            }}
+            className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--card)]/90 backdrop-blur-md shadow-sm border border-[var(--border)] text-[var(--text)] pointer-events-auto transition-transform active:scale-95"
+          >
+            <Layers size={18} />
+          </button>
+        </div>
+
+        {/* Top Left Metrics Overlay & Back Button */}
+        <div className="absolute top-6 left-6 z-20 safe-top pointer-events-none flex flex-col items-start">
+          
+          {/* Back Button */}
+          <button 
+            onClick={() => {
+              setSearchParams({});
+              navigate('/');
+            }}
+            className="w-10 h-10 mb-6 flex items-center justify-center rounded-full bg-[var(--card)]/90 backdrop-blur-md shadow-sm border border-[var(--border)] text-[var(--text)] pointer-events-auto transition-transform active:scale-95"
+          >
+            <ArrowLeft size={20} />
+          </button>
+
+          {/* Big Timer */}
+          <div className="mb-8">
+            <div className={`font-sans text-[3.5rem] leading-none font-black tracking-tighter ${textColor}`}>
+              {formatDuration(elapsedSec)}
+            </div>
+            <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-1`}>Duration</div>
+          </div>
+
+          {/* Left Aligned Stats */}
+          <div className="flex flex-col gap-3 max-w-[120px]">
             <div>
-              <h1 className="font-display text-xl">{typeLabel}</h1>
-              {store.isPaused && <span className="text-xs text-amber font-mono animate-pulse">PAUSED</span>}
+              <div className={`font-sans text-3xl font-black ${textColor}`}>{store.distanceKm.toFixed(2)}</div>
+              <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-0.5`}>Distance (Km)</div>
+            </div>
+            <div className="w-6 h-px bg-[var(--border)] opacity-50"></div>
+            <div>
+              <div className={`font-sans text-3xl font-black ${textColor}`}>{calories}</div>
+              <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-0.5`}>Calories</div>
+            </div>
+            <div className="w-6 h-px bg-[var(--border)] opacity-50"></div>
+            <div>
+              <div className={`font-sans text-3xl font-black ${textColor}`}>{formatPace(store.distanceKm, elapsedSec)}</div>
+              <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-0.5`}>Avg. Pace (Min/Km)</div>
+            </div>
+            <div className="w-6 h-px bg-[var(--border)] opacity-50"></div>
+            <div>
+              <div className={`font-sans text-2xl font-black ${textColor}`}>
+                {elapsedSec > 0 ? (store.distanceKm / (elapsedSec / 3600)).toFixed(1) : '0.0'}
+              </div>
+              <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-0.5`}>Avg. Speed (Km/h)</div>
+            </div>
+            <div className="w-6 h-px bg-[var(--border)] opacity-50"></div>
+            <div>
+              <div className={`font-sans text-2xl font-black ${textColor}`}>{store.maxSpeedKmh.toFixed(1)}</div>
+              <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-0.5`}>Max Speed (Km/h)</div>
             </div>
           </div>
-          {gpsError && (
-            <div className="text-xs text-danger font-mono flex items-center gap-1">
-              <Navigation size={12} /> GPS Error
-            </div>
-          )}
         </div>
 
-        {/* Map */}
-        <div className="mb-4 rounded-xl overflow-hidden border border-line">
-          <RouteMap route={store.routePoints} isLive height="250px" />
+        {/* Bottom Controls */}
+        <div className="relative z-10 mt-auto pb-[100px] pt-8 bg-gradient-to-t from-[var(--bg)] via-[var(--bg)]/80 to-transparent pointer-events-none flex items-center justify-center gap-12 w-full px-8">
+          
+          <button
+            onClick={store.isPaused ? handleResume : handlePause}
+            className="w-12 h-12 flex items-center justify-center text-[var(--text)] pointer-events-auto hover:scale-110 transition-transform active:scale-95"
+          >
+            {store.isPaused ? <Play size={28} fill="currentColor" /> : <Pause size={28} fill="currentColor" />}
+          </button>
+          
+          <button
+            onClick={handleStop}
+            className="w-24 h-24 rounded-full bg-[var(--text)] text-[var(--bg)] flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-[0_10px_40px_rgba(0,0,0,0.3)] pointer-events-auto"
+          >
+            <span className="font-sans font-black tracking-widest uppercase text-sm">Finish</span>
+          </button>
+          
+          {/* Spacer to balance the pause button */}
+          <div className="w-12 h-12" />
+          
         </div>
-
-        {/* Big Timer */}
-        <div className="text-center mb-6">
-          <div className="font-mono text-5xl font-bold text-bone tracking-wider">
-            {formatDuration(elapsedSec)}
-          </div>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-3 mb-8">
-          <div className="card p-4 text-center">
-            <MapPin size={16} className="mx-auto text-sienna mb-1" />
-            <div className="font-mono text-2xl font-bold">{store.distanceKm.toFixed(2)}</div>
-            <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider">KM</div>
-          </div>
-          <div className="card p-4 text-center">
-            <TrendingUp size={16} className="mx-auto text-sienna mb-1" />
-            <div className="font-mono text-2xl font-bold">{store.currentSpeedKmh.toFixed(1)}</div>
-            <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider">KM/H</div>
-          </div>
-          <div className="card p-4 text-center">
-            <Clock size={16} className="mx-auto text-sienna mb-1" />
-            <div className="font-mono text-2xl font-bold">{formatPace(store.distanceKm, elapsedSec)}</div>
-            <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider">PACE /KM</div>
-          </div>
-          <div className="card p-4 text-center">
-            <Flame size={16} className="mx-auto text-sienna mb-1" />
-            <div className="font-mono text-2xl font-bold">{calories}</div>
-            <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider">KCAL</div>
-          </div>
-          {store.elevationGainM > 0 && (
-            <div className="card p-4 text-center col-span-2">
-              <Mountain size={16} className="mx-auto text-sienna mb-1" />
-              <div className="font-mono text-2xl font-bold">{Math.round(store.elevationGainM)}</div>
-              <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider">ELEVATION (M)</div>
-            </div>
-          )}
-        </div>
-
-        {/* Controls */}
-        <div className="flex items-center justify-center gap-4">
-          {store.isPaused ? (
-            <>
-              <button
-                onClick={handleResume}
-                className="w-16 h-16 rounded-full bg-sienna text-bone flex items-center justify-center hover:bg-sienna/90 transition-colors shadow-lg"
-              >
-                <Play size={28} fill="currentColor" />
-              </button>
-              <button
-                onClick={handleStop}
-                className="w-16 h-16 rounded-full bg-danger text-bone flex items-center justify-center hover:bg-danger/90 transition-colors shadow-lg"
-              >
-                <Square size={24} fill="currentColor" />
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={handlePause}
-              className="w-20 h-20 rounded-full bg-amber text-ink flex items-center justify-center hover:bg-amber/90 transition-colors shadow-lg"
-            >
-              <Pause size={32} fill="currentColor" />
-            </button>
-          )}
-        </div>
-      </motion.div>
+      </motion.div>,
+      document.body
     );
   }
 
@@ -487,12 +587,35 @@ export function CardioTracker() {
           <div className="text-center text-sm text-bone-dim font-mono mb-4">Saving...</div>
         ) : null}
 
-        <button
-          onClick={handleDone}
-          className="btn-primary w-full py-3.5 text-base font-bold tracking-wider"
-        >
-          Done
-        </button>
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => setShowShare(true)}
+            className="flex items-center justify-center gap-2 bg-sienna/10 text-sienna rounded-xl py-3.5 hover:bg-sienna/20 transition-colors font-bold tracking-wider"
+          >
+            Share
+          </button>
+          <button
+            onClick={handleDone}
+            className="btn-primary py-3.5 text-base font-bold tracking-wider"
+          >
+            Done
+          </button>
+        </div>
+        
+        {showShare && summaryData && (
+          <CardioShareModal
+            data={{
+              type: summaryData.type as any,
+              date: new Date().toISOString(),
+              distanceKm: summaryData.distanceKm || 0,
+              durationSec: summaryData.durationSec || 0,
+              calories: summaryData.calories || 0,
+              avgPace: summaryData.avgPace || '0:00 /km',
+              route: summaryData.route,
+            }}
+            onClose={() => setShowShare(false)}
+          />
+        )}
       </motion.div>
     );
   }

@@ -4,7 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   Clock3, Flame, Heart, MessageCircle, Share2, TrendingUp, Dumbbell,
-  MoreHorizontal, Check, Bookmark, Send, ChevronDown, ChevronUp, Sparkles, Calendar as CalendarIcon
+  MoreHorizontal, Check, Bookmark, Send, ChevronDown, ChevronUp, Sparkles, Calendar as CalendarIcon,
+  Zap, Bike, Footprints
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -61,6 +62,8 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
   // Active muscle heatmap regions
   const activeMuscleSet = getActiveMuscles(exerciseNames);
   const activeMuscleList = Array.from(activeMuscleSet).slice(0, 5);
+  
+  const isCardio = activity.type === 'walk' || activity.type === 'run' || activity.type === 'cycle';
 
   // React Query for Likes & Comments
   const { data: liked = false } = useQuery({
@@ -152,7 +155,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               )}
             </div>
             <div className="text-[11px] font-sans font-semibold text-[#777b86] tracking-wider uppercase mt-0.5">
-              {activity.type === 'event_join' ? 'REGISTERED FOR AN EVENT' : 'COMPLETED A WORKOUT'}
+              {activity.type === 'event_join' ? 'REGISTERED FOR AN EVENT' : isCardio ? 'COMPLETED A CARDIO SESSION' : 'COMPLETED A WORKOUT'}
             </div>
           </div>
         </div>
@@ -178,6 +181,20 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               <CalendarIcon size={14} className="text-[#5d2a1a]" />
               Going to {details.eventTitle || 'an event'}
             </p>
+          </div>
+        ) : isCardio ? (
+          <div className="flex items-center gap-4">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shrink-0 shadow-lg">
+               {activity.type === 'run' ? <Zap size={32} /> : activity.type === 'cycle' ? <Bike size={32} /> : <Footprints size={32} />}
+            </div>
+            <div>
+              <div className="text-xs font-sans font-medium text-[#5d2a1a] uppercase tracking-widest mb-1">
+                {activity.type}
+              </div>
+              <h3 className="font-serif font-normal text-2xl text-[#17191c] leading-tight">
+                {details.distanceKm ? `${details.distanceKm.toFixed(2)} km` : 'Cardio Session'}
+              </h3>
+            </div>
           </div>
         ) : (
           <>
@@ -239,24 +256,9 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               </div>
               <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
                 <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
-                  {details.durationMin || 0} min
+                  {isCardio ? Math.floor((details.durationSec || 0) / 60) : (details.durationMin || 0)} min
                 </div>
                 <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>Duration</div>
-              </div>
-            </div>
-
-            {/* Volume */}
-            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
-              <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                <TrendingUp size={13} className="sm:w-[15px] sm:h-[15px]" />
-              </div>
-              <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
-                <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
-                  {displayVolume > 0 ? displayVolume.toLocaleString() : displayBodyweightReps > 0 ? displayBodyweightReps : '0'}
-                </div>
-                <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>
-                  {displayVolume > 0 ? 'kg·reps' : repsLabel}
-                </div>
               </div>
             </div>
 
@@ -267,28 +269,74 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               </div>
               <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
                 <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
-                  {displayCalories} kcal
+                  {isCardio ? details.calories : displayCalories} kcal
                 </div>
                 <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>Burned</div>
               </div>
             </div>
 
-            {/* Exercise count */}
-            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
-              <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                <Dumbbell size={13} className="sm:w-[15px] sm:h-[15px]" />
-              </div>
-              <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
-                <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
-                  {exerciseNames.length}
+            {isCardio ? (
+              <>
+                {/* Distance */}
+                <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
+                    <TrendingUp size={13} className="sm:w-[15px] sm:h-[15px]" />
+                  </div>
+                  <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
+                    <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
+                      {details.distanceKm?.toFixed(2)}
+                    </div>
+                    <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>km</div>
+                  </div>
                 </div>
-                <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>Exercises</div>
-              </div>
-            </div>
+                {/* Pace */}
+                <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
+                    <Zap size={13} className="sm:w-[15px] sm:h-[15px]" />
+                  </div>
+                  <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
+                    <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
+                      {details.avgPace?.replace(' /km', '')}
+                    </div>
+                    <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>/km</div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Volume */}
+                <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
+                    <TrendingUp size={13} className="sm:w-[15px] sm:h-[15px]" />
+                  </div>
+                  <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
+                    <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
+                      {displayVolume > 0 ? displayVolume.toLocaleString() : displayBodyweightReps > 0 ? displayBodyweightReps : '0'}
+                    </div>
+                    <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>
+                      {displayVolume > 0 ? 'kg·reps' : repsLabel}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Exercise count */}
+                <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
+                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
+                    <Dumbbell size={13} className="sm:w-[15px] sm:h-[15px]" />
+                  </div>
+                  <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
+                    <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
+                      {exerciseNames.length}
+                    </div>
+                    <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>Exercises</div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* ─── SECTION 4: EXERCISE PREVIEW ───────────────────────────────── */}
-          {exerciseNames.length > 0 && (
+          {!isCardio && exerciseNames.length > 0 && (
             <div className="mb-4">
               {/* Default collapsed preview (shows first 2) */}
               {!showAllExercises && (
