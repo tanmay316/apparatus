@@ -130,6 +130,29 @@ export function WorkoutSession() {
     hasLoggedSetsRef.current = hasLoggedSets;
   }, [hasLoggedSets]);
 
+  // Keep references to current store methods/state for unmount cleanup
+  const cancelWorkoutRef = useRef(store.cancelWorkout);
+  const isActiveRef = useRef(store.isActive);
+  const userRef = useRef(user);
+
+  useEffect(() => {
+    cancelWorkoutRef.current = store.cancelWorkout;
+    isActiveRef.current = store.isActive;
+    userRef.current = user;
+  }, [store.cancelWorkout, store.isActive, user]);
+
+  // Handle cancellation on unmount ONLY if no sets were logged
+  useEffect(() => {
+    return () => {
+      if (isActiveRef.current && !hasLoggedSetsRef.current) {
+        if (userRef.current) {
+          endActiveSession(userRef.current.uid).catch(console.error);
+        }
+        cancelWorkoutRef.current();
+      }
+    };
+  }, []);
+
   // Sync active session with backend
   useEffect(() => {
     if (!user) return;
@@ -149,14 +172,7 @@ export function WorkoutSession() {
         startedAt: Timestamp.fromMillis(store.startedAt)
       }).catch(console.error);
     }
-    
-    return () => {
-      if (store.isActive && !hasLoggedSetsRef.current) {
-        endActiveSession(user.uid).catch(console.error);
-        store.cancelWorkout();
-      }
-    };
-  }, [store.isActive, sessionFinished, store.planId, store.dayId, user, store, store.startedAt]);
+  }, [store.isActive, sessionFinished, store.planId, store.dayId, user, store.startedAt, store.dayTitle, lastExercise, displayCalories]);
 
   useEffect(() => {
     if (!store.isActive && completedWorkoutForDay) {
