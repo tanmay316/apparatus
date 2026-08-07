@@ -16,6 +16,7 @@ import { calculateWorkoutCalories } from '@/lib/calories';
 import { COMPACT_LIBRARY } from '@/services/library';
 import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
 import { getAvatarUrl } from '@/lib/avatar';
+import { RouteMap } from '@/components/cardio/RouteMap';
 
 function timeAgo(seconds?: number): string {
   if (!seconds) return 'just now';
@@ -183,16 +184,32 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
             </p>
           </div>
         ) : isCardio ? (
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shrink-0 shadow-lg">
-               {activity.type === 'run' ? <Zap size={32} /> : activity.type === 'cycle' ? <Bike size={32} /> : <Footprints size={32} />}
-            </div>
-            <div>
-              <div className="text-xs font-sans font-medium text-[#5d2a1a] uppercase tracking-widest mb-1">
+          <div className="relative w-full h-[150px] rounded-xl overflow-hidden mt-1 shadow-md">
+            {details.route && details.route.length > 0 ? (
+              <div className="w-full h-full pointer-events-none">
+                <RouteMap 
+                  route={details.route} 
+                  theme={theme === 'dark' ? 'dark' : 'light'} 
+                  height="150px" 
+                  highlightColor={activity.type === 'walk' ? '#10b981' : activity.type === 'run' ? '#3b82f6' : '#a855f7'}
+                />
+              </div>
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-indigo-500/10 to-purple-500/10 flex items-center justify-center">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
+                   {activity.type === 'run' ? <Zap size={32} /> : activity.type === 'cycle' ? <Bike size={32} /> : <Footprints size={32} />}
+                </div>
+              </div>
+            )}
+            
+            {/* Overlay Info */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+            <div className="absolute bottom-3 left-4 z-10">
+              <div className="text-[10px] font-sans font-bold text-white/90 uppercase tracking-widest mb-0.5">
                 {activity.type}
               </div>
-              <h3 className="font-serif font-normal text-2xl text-[#17191c] leading-tight">
-                {details.distanceKm ? `${details.distanceKm.toFixed(2)} km` : 'Cardio Session'}
+              <h3 className="font-serif font-bold text-2xl text-white leading-tight">
+                {details.distanceKm ? `${details.distanceKm.toFixed(2)} km` : 'Cardio'}
               </h3>
             </div>
           </div>

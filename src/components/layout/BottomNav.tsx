@@ -1,12 +1,12 @@
 import React, { useRef, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Dumbbell, Apple, TrendingUp, Users, Play, Navigation, Zap, Footprints, Bike, X, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Dumbbell, Apple, TrendingUp, Users, Navigation, Zap, Footprints, Bike, X, ChevronRight, MapPin } from 'lucide-react';
 
 const TABS = [
   { id: 'home', path: '/', label: 'Home', icon: Dumbbell },
   { id: 'nutrition', path: '/nutrition', label: 'Nutrition', icon: Apple },
-  { id: 'action', path: '#', label: 'Start', icon: Play }, // Center action
+  { id: 'action', path: '#', label: 'Start', icon: MapPin }, // Center action
   { id: 'progress', path: '/progress', label: 'Progress', icon: TrendingUp },
   { id: 'community', path: '/communities', label: 'Community', icon: Users },
 ];
@@ -133,13 +133,13 @@ export function BottomNav() {
               animate={{ y: 0 }}
               exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed bottom-0 left-0 right-0 z-[300] bg-white dark:bg-ink-2 rounded-t-3xl p-6 max-w-[600px] mx-auto shadow-[0_-10px_40px_rgba(0,0,0,0.2)]"
+              className="fixed bottom-0 left-0 right-0 z-[300] bg-gradient-to-b from-slate-50 to-white dark:from-ink-2 dark:to-ink rounded-t-3xl p-6 max-w-[600px] mx-auto shadow-[0_-10px_40px_rgba(0,0,0,0.2)]"
             >
               <div className="flex items-center justify-between mb-8 px-2">
-                <h3 className="font-serif text-2xl font-medium tracking-tight text-ink dark:text-white">Start Activity</h3>
+                <h3 className="font-serif text-2xl font-medium tracking-tight text-bone">Start Activity</h3>
                 <button
                   onClick={() => setSheetOpen(false)}
-                  className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/10 flex items-center justify-center text-slate-500 hover:text-ink dark:hover:text-white transition-colors"
+                  className="w-8 h-8 rounded-full bg-slate-200/50 dark:bg-white/10 flex items-center justify-center text-slate-500 hover:text-bone transition-colors"
                 >
                   <X size={18} />
                 </button>
@@ -154,8 +154,8 @@ export function BottomNav() {
                     <Zap size={22} className="group-hover:scale-110 transition-transform" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-ink dark:text-white tracking-tight">Running</h4>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400">Track pace, distance & route</p>
+                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Running</h4>
+                    <p className="text-[13px] text-bone-dim">Track pace, distance & route</p>
                   </div>
                   <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
                 </button>
@@ -168,8 +168,8 @@ export function BottomNav() {
                     <Footprints size={22} className="group-hover:scale-110 transition-transform" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-ink dark:text-white tracking-tight">Walking</h4>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400">Casual walk or hike tracking</p>
+                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Walking</h4>
+                    <p className="text-[13px] text-bone-dim">Casual walk or hike tracking</p>
                   </div>
                   <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
                 </button>
@@ -182,8 +182,8 @@ export function BottomNav() {
                     <Bike size={22} className="group-hover:scale-110 transition-transform" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-ink dark:text-white tracking-tight">Cycling</h4>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400">Track speed, elevation & map</p>
+                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Cycling</h4>
+                    <p className="text-[13px] text-bone-dim">Track speed, elevation & map</p>
                   </div>
                   <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
                 </button>
@@ -198,8 +198,8 @@ export function BottomNav() {
                     <Dumbbell size={22} className="group-hover:scale-110 transition-transform" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-ink dark:text-white tracking-tight">Weight Training</h4>
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400">Log sets, reps & volume</p>
+                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Weight Training</h4>
+                    <p className="text-[13px] text-bone-dim">Log sets, reps & volume</p>
                   </div>
                   <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
                 </button>

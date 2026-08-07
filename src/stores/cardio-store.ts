@@ -13,7 +13,9 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Global references for background tracking
+// ────────────────────────────────────────────────────────────
+// Global GPS & Wake Lock (lives outside React for persistence)
+// ────────────────────────────────────────────────────────────
 let watchIdRef: number | null = null;
 let wakeLockRef: any = null;
 
@@ -33,7 +35,7 @@ const releaseWakeLock = () => {
 };
 
 const startGpsWatch = () => {
-  if (watchIdRef !== null) return;
+  if (watchIdRef !== null) return; // already watching
   if (!navigator.geolocation) return;
 
   requestWakeLock();
@@ -47,8 +49,12 @@ const startGpsWatch = () => {
         ts: Date.now(),
       });
     },
-    (err) => console.warn('GPS error:', err),
-    { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+    (err) => console.warn('[CardioStore] GPS error:', err.message),
+    {
+      enableHighAccuracy: true,
+      maximumAge: 2000,
+      timeout: 10000,
+    }
   );
 };
 
@@ -59,6 +65,10 @@ const stopGpsWatch = () => {
   }
   releaseWakeLock();
 };
+
+// ────────────────────────────────────────────────────────────
+// Store
+// ────────────────────────────────────────────────────────────
 
 interface CardioState {
   isTracking: boolean;
@@ -141,33 +151,50 @@ export const useCardioStore = create<CardioState>()(
 
         if (prev) {
           const rawDistance = haversineKm(prev.lat, prev.lng, point.lat, point.lng);
-          
-          // Filter noise: ignore jumps less than 10 meters to prevent stationary drift
-          if (rawDistance >= 0.01 && rawDistance < 0.5) {
-            addedDistance = rawDistance;
+          const dtSec = (point.ts - prev.ts) / 1000;
+
+          // ── Strava-style distance filtering ──────────────────
+          // 1. Ignore micro-jitter (< 3 meters) — GPS drift noise
+          // 2. Ignore teleport jumps (> 500 meters) — GPS glitches
+          // 3. Sanity-check implied speed to reject impossible bursts
+          if (rawDistance >= 0.003 && rawDistance < 0.5) {
+            // Calculate implied speed from this segment
+            const impliedSpeedKmh = dtSec > 0 ? (rawDistance / dtSec) * 3600 : 0;
+
+            // Max plausible speeds: walk ~10, run ~35, cycle ~80 km/h
+            // Use a generous 100 km/h ceiling to reject only true outliers
+            if (impliedSpeedKmh < 100) {
+              addedDistance = rawDistance;
+            }
           }
 
+          // Elevation gain (only count uphill)
           if (point.alt !== undefined && prev.alt !== undefined) {
             const diff = point.alt - prev.alt;
-            if (diff > 0) addedElevation = diff;
+            // Ignore small fluctuations (< 2m) as barometric noise
+            if (diff > 2) addedElevation = diff;
           }
 
-          const dtSec = (point.ts - prev.ts) / 1000;
+          // Calculate speed from distance/time
           if (dtSec > 0 && addedDistance > 0) {
             speed = (addedDistance / dtSec) * 3600; // km/h
           }
         }
 
-        // Use GPS-reported speed if available and more reliable
+        // Prefer GPS-reported speed when available (more accurate than derived)
         if (point.speed !== undefined && point.speed > 0) {
-          speed = point.speed * 3.6; // m/s → km/h
+          const gpsSpeedKmh = point.speed * 3.6; // m/s → km/h
+          // Only trust GPS speed if it's within a reasonable range
+          if (gpsSpeedKmh < 100) {
+            speed = gpsSpeedKmh;
+          }
         }
 
         set({
           routePoints: [...state.routePoints, point],
           distanceKm: state.distanceKm + addedDistance,
           currentSpeedKmh: Math.round(speed * 10) / 10,
-          maxSpeedKmh: Math.max(state.maxSpeedKmh, speed),
+          maxSpeedKmh: Math.max(state.maxSpeedKmh, Math.round(speed * 10) / 10),
           elevationGainM: state.elevationGainM + addedElevation,
         });
       },

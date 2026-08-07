@@ -35,7 +35,7 @@ function MapAutoCenter({ route }: { route: RoutePoint[] }) {
   useEffect(() => {
     if (route.length > lastLen.current && route.length > 0) {
       const last = route[route.length - 1];
-      map.setView([last.lat, last.lng], map.getZoom(), { animate: true });
+      map.setView([last.lat, last.lng], 18, { animate: true });
     }
     lastLen.current = route.length;
   }, [route, map]);
@@ -53,7 +53,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'lig
     ? positions[positions.length - 1]
     : [20.5937, 78.9629]; // Default: India center
 
-  const zoom = positions.length > 0 ? 16 : 5;
+  const zoom = positions.length > 0 ? 18 : 5;
   
   let tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
   if (theme === 'dark') tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
@@ -70,19 +70,33 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'lig
         zoomControl={false}
         attributionControl={false}
       >
-        <TileLayer url={tileUrl} />
+        <TileLayer url={tileUrl} crossOrigin="anonymous" />
 
         {positions.length > 1 && (
-          <Polyline
-            positions={positions}
-            pathOptions={{
-              color: highlightColor,
-              weight: 6,
-              opacity: 1,
-              lineCap: 'round',
-              lineJoin: 'round',
-            }}
-          />
+          <>
+            {/* Glow effect */}
+            <Polyline
+              positions={positions}
+              pathOptions={{
+                color: highlightColor,
+                weight: 12,
+                opacity: 0.3,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+            {/* Core line */}
+            <Polyline
+              positions={positions}
+              pathOptions={{
+                color: highlightColor,
+                weight: 5,
+                opacity: 1,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+          </>
         )}
 
         {/* Start marker */}

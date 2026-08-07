@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers, RotateCcw } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -61,22 +61,33 @@ export function CardioTracker() {
   // Map layer state
   const [mapLayer, setMapLayer] = useState<'default' | 'light' | 'dark' | 'satellite' | 'street'>('default');
 
-  // Update screen if URL changes
+  // Update screen based on URL params and tracking state
   useEffect(() => {
     if (urlType) {
       if (store.isTracking) {
-        if (store.activityType !== urlType) {
-          setScreen('ready');
-        } else {
+        if (store.activityType === urlType) {
+          // Returning to the same activity that's running — go straight to tracking
           setScreen('tracking');
-          setSearchParams({}); // Clear urlType
+          setSearchParams({}, { replace: true });
+        } else {
+          // Different activity selected — show ready screen for new type
+          setScreen('ready');
         }
-      } else if (!store.isTracking && screen !== 'ready') {
+      } else {
+        // Not tracking — show ready screen
+        if (screen !== 'ready') {
+          store.reset();
+        }
         setScreen('ready');
-        store.reset(); // clear any previous state
+      }
+    } else {
+      // No urlType — if not tracking and not on summary, show select screen
+      if (!store.isTracking && screen !== 'summary' && screen !== 'tracking') {
+        setScreen('select');
       }
     }
-  }, [urlType, store.isTracking, store.activityType, screen, store, setSearchParams]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlType]);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [summaryData, setSummaryData] = useState<Partial<CardioActivity> | null>(null);
@@ -118,7 +129,7 @@ export function CardioTracker() {
     store.stopTracking();
 
     if (user && dist > 0.01) {
-      const durationMin = Math.max(1, Math.round(durationSec / 60));
+      const durationMin = durationSec / 60;
       const avgSpeed = durationSec > 0 ? (dist / durationSec) * 3600 : 0;
       const pace = formatPace(dist, durationSec);
       const calories = calculateCardioCalories(type, dist, durationMin, userWeight || 70, avgSpeed);
@@ -183,7 +194,7 @@ export function CardioTracker() {
     store.stopTracking();
 
     const durationSec = elapsedSec;
-    const durationMin = Math.max(1, Math.round(durationSec / 60));
+    const durationMin = durationSec / 60;
     const dist = store.distanceKm;
     const avgSpeed = durationSec > 0 ? (dist / durationSec) * 3600 : 0;
     const pace = formatPace(dist, durationSec);
@@ -242,7 +253,7 @@ export function CardioTracker() {
             userName: user.displayName || 'Athlete',
             username: profile?.username || '',
             userPhoto: user.photoURL || '',
-            type: 'workout',
+            type: data.type as any,
             workoutId: null,
             summary: `Completed a ${data.distanceKm!.toFixed(2)} km ${typeLabel} in ${formatDuration(data.durationSec!)}`,
             details: {
@@ -251,6 +262,7 @@ export function CardioTracker() {
               durationSec: data.durationSec,
               calories: data.calories,
               avgPace: data.avgPace,
+              route: data.route,
             },
             visibility: 'followers',
             likesCount: 0,
@@ -278,7 +290,7 @@ export function CardioTracker() {
     ? calculateCardioCalories(
         store.activityType,
         store.distanceKm,
-        Math.max(1, Math.round(elapsedSec / 60)),
+        elapsedSec / 60,
         userWeight || 70,
         store.currentSpeedKmh
       )
@@ -396,9 +408,11 @@ export function CardioTracker() {
           
           <button
             onClick={handleStartTracking}
-            className="w-24 h-24 rounded-full bg-[var(--text)] text-[var(--bg)] flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-[0_10px_40px_rgba(0,0,0,0.3)] mx-auto pointer-events-auto"
+            className={`w-24 h-24 rounded-full flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-[0_10px_40px_rgba(0,0,0,0.3)] mx-auto pointer-events-auto ${
+              isDark ? 'bg-white text-black' : 'bg-black text-white'
+            }`}
           >
-            <Play size={40} fill="currentColor" className="ml-2" />
+            <Play size={40} fill="currentColor" className="ml-1" />
           </button>
         </div>
       </motion.div>,
@@ -505,20 +519,34 @@ export function CardioTracker() {
           
           <button
             onClick={store.isPaused ? handleResume : handlePause}
-            className="w-12 h-12 flex items-center justify-center text-[var(--text)] pointer-events-auto hover:scale-110 transition-transform active:scale-95"
+            className={`w-12 h-12 flex items-center justify-center pointer-events-auto hover:scale-110 transition-transform active:scale-95 ${isDarkMap ? 'text-white' : 'text-black'}`}
           >
-            {store.isPaused ? <Play size={28} fill="currentColor" /> : <Pause size={28} fill="currentColor" />}
+            {store.isPaused ? <Play size={28} fill="currentColor" className="ml-1" /> : <Pause size={28} fill="currentColor" />}
           </button>
           
           <button
             onClick={handleStop}
-            className="w-24 h-24 rounded-full bg-[var(--text)] text-[var(--bg)] flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-[0_10px_40px_rgba(0,0,0,0.3)] pointer-events-auto"
+            className={`w-24 h-24 rounded-full flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-[0_10px_40px_rgba(0,0,0,0.3)] pointer-events-auto ${
+              isDarkMap ? 'bg-white text-black' : 'bg-black text-white'
+            }`}
           >
             <span className="font-sans font-black tracking-widest uppercase text-sm">Finish</span>
           </button>
           
-          {/* Spacer to balance the pause button */}
-          <div className="w-12 h-12" />
+          {/* Reset button to discard tracking */}
+          <button
+            onClick={() => {
+              if (window.confirm('Are you sure you want to discard this session?')) {
+                store.reset();
+                setSearchParams({});
+                setScreen('select');
+              }
+            }}
+            className={`w-12 h-12 flex items-center justify-center rounded-full bg-red-500/20 text-red-500 hover:bg-red-500/30 hover:scale-110 transition-all active:scale-95 pointer-events-auto`}
+            title="Discard"
+          >
+            <RotateCcw size={24} />
+          </button>
           
         </div>
       </motion.div>,
@@ -613,6 +641,7 @@ export function CardioTracker() {
               avgPace: summaryData.avgPace || '0:00 /km',
               route: summaryData.route,
             }}
+            mapTheme={mapLayer}
             onClose={() => setShowShare(false)}
           />
         )}
