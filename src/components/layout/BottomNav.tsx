@@ -107,13 +107,18 @@ export function BottomNav() {
                 <button
                   key={tab.id}
                   onClick={() => setSheetOpen(true)}
-                  className={`relative flex items-center justify-center w-12 h-12 rounded-full transition-transform active:scale-95 ${
+                  className={`relative flex items-center justify-center w-12 h-12 rounded-full transition-all duration-300 active:scale-95 shadow-md ${
                     sheetOpen
-                      ? "bg-sienna text-white shadow-md"
-                      : "bg-transparent text-gray-500 hover:bg-gray-100"
+                      ? "bg-slate-800 text-white dark:bg-white dark:text-black shadow-[inset_2px_2px_5px_rgba(0,0,0,0.2)]"
+                      : "bg-[#5d2a1a] text-white shadow-[0_4px_14px_rgba(93,42,26,0.4)] hover:shadow-[0_6px_20px_rgba(93,42,26,0.5)] hover:-translate-y-0.5"
                   }`}
                 >
                   <IconComponent size={24} strokeWidth={sheetOpen ? 2.5 : 2} />
+                  
+                  {/* Subtle pulsing ring behind the button to draw attention */}
+                  {!sheetOpen && (
+                    <div className="absolute inset-0 rounded-full border border-[#5d2a1a]/50 animate-ping opacity-20 pointer-events-none"></div>
+                  )}
                 </button>
               );
             }
@@ -211,61 +216,61 @@ export function BottomNav() {
                 {/* Workout */}
                 <button
                   onClick={() => handleActionClick('/plans')}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-[#FFF3ED] dark:bg-orange-950/40 hover:scale-[1.01] transition-transform active:scale-95 text-left"
+                  className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left group"
                 >
-                  <div className="w-12 h-12 rounded-full bg-white dark:bg-orange-900/50 text-orange-500 flex items-center justify-center shrink-0 shadow-sm">
-                    <Dumbbell size={22} />
+                  <div className="w-12 h-12 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center shrink-0">
+                    <Dumbbell size={22} className="group-hover:scale-110 transition-transform" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-[#5d2a1a] dark:text-orange-100 tracking-tight">Workout</h4>
-                    <p className="text-[13px] text-orange-900/60 dark:text-orange-200/60 font-sans">Log sets, reps & PRs</p>
+                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Weight Training</h4>
+                    <p className="text-[13px] text-bone-dim">Log sets, reps & PRs</p>
                   </div>
-                  <ArrowRight size={20} className="text-orange-500/50" />
+                  <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
                 </button>
 
                 {/* Run */}
                 <button
                   onClick={() => handleActionClick('/cardio?type=run')}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-[#EEF8FF] dark:bg-blue-950/40 hover:scale-[1.01] transition-transform active:scale-95 text-left"
+                  className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left group"
                 >
-                  <div className="w-12 h-12 rounded-full bg-white dark:bg-blue-900/50 text-blue-500 flex items-center justify-center shrink-0 shadow-sm">
-                    <Zap size={22} />
+                  <div className="w-12 h-12 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+                    <Zap size={22} className="group-hover:scale-110 transition-transform" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-blue-950 dark:text-blue-100 tracking-tight">Run</h4>
-                    <p className="text-[13px] text-blue-900/60 dark:text-blue-200/60 font-sans">GPS • Pace • Distance</p>
+                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Run</h4>
+                    <p className="text-[13px] text-bone-dim">GPS • Pace • Distance</p>
                   </div>
-                  <ArrowRight size={20} className="text-blue-500/50" />
+                  <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
                 </button>
 
                 {/* Walk */}
                 <button
                   onClick={() => handleActionClick('/cardio?type=walk')}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-[#ECFFF7] dark:bg-emerald-950/40 hover:scale-[1.01] transition-transform active:scale-95 text-left"
+                  className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left group"
                 >
-                  <div className="w-12 h-12 rounded-full bg-white dark:bg-emerald-900/50 text-emerald-500 flex items-center justify-center shrink-0 shadow-sm">
-                    <Footprints size={22} />
+                  <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+                    <Footprints size={22} className="group-hover:scale-110 transition-transform" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-emerald-950 dark:text-emerald-100 tracking-tight">Walk</h4>
-                    <p className="text-[13px] text-emerald-900/60 dark:text-emerald-200/60 font-sans">Walking & Hiking</p>
+                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Walk</h4>
+                    <p className="text-[13px] text-bone-dim">Walking & Hiking</p>
                   </div>
-                  <ArrowRight size={20} className="text-emerald-500/50" />
+                  <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
                 </button>
 
                 {/* Ride */}
                 <button
                   onClick={() => handleActionClick('/cardio?type=cycle')}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-[#F5EEFF] dark:bg-purple-950/40 hover:scale-[1.01] transition-transform active:scale-95 text-left"
+                  className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left group"
                 >
-                  <div className="w-12 h-12 rounded-full bg-white dark:bg-purple-900/50 text-purple-500 flex items-center justify-center shrink-0 shadow-sm">
-                    <Bike size={22} />
+                  <div className="w-12 h-12 rounded-full bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                    <Bike size={22} className="group-hover:scale-110 transition-transform" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-purple-950 dark:text-purple-100 tracking-tight">Ride</h4>
-                    <p className="text-[13px] text-purple-900/60 dark:text-purple-200/60 font-sans">Cycling • Speed • Route</p>
+                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Ride</h4>
+                    <p className="text-[13px] text-bone-dim">Cycling • Speed • Route</p>
                   </div>
-                  <ArrowRight size={20} className="text-purple-500/50" />
+                  <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
                 </button>
               </div>
 

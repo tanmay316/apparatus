@@ -65,7 +65,7 @@ const startGpsWatch = async () => {
     try {
       useCardioStore.setState({ gpsStatus: 'waiting' });
       watchIdRef = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 },
+        { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 },
         (pos, err) => {
           if (err) {
             useCardioStore.setState({ gpsStatus: 'error' });
@@ -73,13 +73,17 @@ const startGpsWatch = async () => {
           }
           if (pos) {
             useCardioStore.setState({ gpsStatus: 'active' });
-            useCardioStore.getState().addPoint({
-              lat: pos.coords.latitude,
-              lng: pos.coords.longitude,
-              alt: pos.coords.altitude ?? undefined,
-              speed: pos.coords.speed ?? undefined,
-              ts: Date.now(),
-            });
+            // Filter out low precision points unless it's the first point
+            const storeState = useCardioStore.getState();
+            if (storeState.routePoints.length === 0 || pos.coords.accuracy <= 40) {
+              storeState.addPoint({
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+                alt: pos.coords.altitude ?? undefined,
+                speed: pos.coords.speed ?? undefined,
+                ts: Date.now(),
+              });
+            }
           }
         }
       );
@@ -98,13 +102,17 @@ const startGpsWatch = async () => {
     watchIdRef = navigator.geolocation.watchPosition(
       (pos) => {
         useCardioStore.setState({ gpsStatus: 'active' });
-        useCardioStore.getState().addPoint({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          alt: pos.coords.altitude ?? undefined,
-          speed: pos.coords.speed ?? undefined,
-          ts: Date.now(),
-        });
+        const storeState = useCardioStore.getState();
+        // Ignore inaccurate points for precise tracking
+        if (storeState.routePoints.length === 0 || pos.coords.accuracy <= 40) {
+          storeState.addPoint({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            alt: pos.coords.altitude ?? undefined,
+            speed: pos.coords.speed ?? undefined,
+            ts: Date.now(),
+          });
+        }
       },
       (err) => {
         console.warn('[CardioStore] Web GPS error:', err.code, err.message);
@@ -114,7 +122,7 @@ const startGpsWatch = async () => {
           useCardioStore.setState({ gpsStatus: 'error' });
         }
       },
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
     );
   }
 };

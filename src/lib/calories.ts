@@ -87,6 +87,11 @@ export function calculateCardioCalories(
   let met: number;
   const speed = avgSpeedKmh || (durationMin > 0 ? (distanceKm / durationMin) * 60 : 0);
 
+  // If the user hasn't moved, or is moving extremely slowly (GPS drift < 0.5km/h), they burn 0 active calories
+  if (distanceKm === 0 || speed < 0.5) {
+    return 0;
+  }
+
   switch (type) {
     case 'walk':
       if (speed < 4) met = 2.8;

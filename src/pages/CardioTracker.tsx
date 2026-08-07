@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers, RotateCcw, ChevronRight, ChevronUp, ChevronDown, LocateFixed } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -93,6 +93,9 @@ export function CardioTracker() {
   const [summaryData, setSummaryData] = useState<Partial<CardioActivity> | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [recentActivities, setRecentActivities] = useState<CardioActivity[]>([]);
+
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [recenterTrigger, setRecenterTrigger] = useState(0);
 
   // Fetch recent activities
   useEffect(() => {
@@ -305,20 +308,23 @@ export function CardioTracker() {
           <p className="text-sm text-bone-dim mt-1">Choose your activity type to begin tracking</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-8">
+        <div className="flex flex-col gap-3 mb-10">
           {ACTIVITY_OPTIONS.map((opt) => (
             <motion.button
               key={opt.type}
-              whileHover={{ scale: 1.02 }}
+              whileHover={{ scale: 1.01 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => handleStartActivity(opt.type)}
-              className="card p-5 text-left group hover:border-sienna/40 transition-all"
+              className="flex items-center gap-4 p-4 rounded-2xl bg-white dark:bg-white/5 border border-line hover:border-sienna/40 transition-colors text-left group shadow-sm"
             >
-              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${opt.color} flex items-center justify-center text-white mb-3 group-hover:scale-110 transition-transform`}>
+              <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${opt.color} flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform shadow-md`}>
                 {opt.icon}
               </div>
-              <h3 className="font-display text-lg mb-0.5">{opt.label}</h3>
-              <p className="text-xs text-bone-dim">{opt.description}</p>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-bold text-[17px] text-[var(--text)] tracking-tight">{opt.label}</h3>
+                <p className="text-[13px] text-bone-dim">{opt.description}</p>
+              </div>
+              <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500 transition-colors" />
             </motion.button>
           ))}
         </div>
@@ -427,134 +433,170 @@ export function CardioTracker() {
   if (screen === 'tracking') {
     const isDark = useUIStore.getState().theme === 'dark';
     const effectiveTheme = mapLayer === 'default' ? (isDark ? 'dark' : 'light') : mapLayer;
-
     const isDarkMap = effectiveTheme === 'dark' || effectiveTheme === 'satellite';
-    const textColor = isDarkMap ? 'text-white drop-shadow-md' : 'text-black';
-    const labelColor = isDarkMap ? 'text-white/80' : 'text-[var(--muted)]';
+    
+    const avgSpeed = elapsedSec > 0 ? (store.distanceKm / (elapsedSec / 3600)).toFixed(1) : '0.0';
+    const currentPace = formatPace(store.distanceKm, elapsedSec);
+    const activityType = store.activityType || 'run';
+    const typeLabel = activityType === 'walk' ? 'Walk' : activityType === 'run' ? 'Run' : 'Cycle';
 
     return createPortal(
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-[var(--bg)] flex flex-col h-screen overflow-hidden">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-ink flex flex-col h-screen overflow-hidden">
         
         {/* Full Screen Map Background */}
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} isLive height="100%" theme={effectiveTheme} />
+          <RouteMap route={store.routePoints} isLive height="100%" theme={effectiveTheme} recenterTrigger={recenterTrigger} />
         </div>
 
-        {/* Header (Top Right) */}
-        <div className="absolute top-6 right-6 z-20 safe-top pointer-events-none flex flex-col gap-2 items-end">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)]/90 backdrop-blur-md shadow-sm border border-[var(--border)] pointer-events-auto">
-            {store.gpsStatus === 'error' || store.gpsStatus === 'denied' ? (
-              <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-[var(--text)]">{store.gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}</span></>
-            ) : store.isPaused ? (
-              <><Navigation size={14} className="text-orange-500" /><span className="text-xs font-bold text-[var(--text)]">Paused</span></>
-            ) : store.gpsStatus === 'active' ? (
-              <><Navigation size={14} className="text-emerald-500" /><span className="text-xs font-bold text-[var(--text)]">GPS On</span></>
-            ) : store.gpsStatus === 'waiting' ? (
-              <><Navigation size={14} className="text-yellow-500 animate-pulse" /><span className="text-xs font-bold text-[var(--text)]">Locating...</span></>
-            ) : (
-              <><Navigation size={14} className="text-gray-400" /><span className="text-xs font-bold text-[var(--text)]">GPS Off</span></>
-            )}
-          </div>
-          
-          <button
-            onClick={() => {
-              const layers = ['default', 'light', 'dark', 'street', 'satellite'] as const;
-              const nextIdx = (layers.indexOf(mapLayer) + 1) % layers.length;
-              setMapLayer(layers[nextIdx]);
-            }}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--card)]/90 backdrop-blur-md shadow-sm border border-[var(--border)] text-[var(--text)] pointer-events-auto transition-transform active:scale-95"
-          >
-            <Layers size={18} />
-          </button>
-        </div>
-
-        {/* Top Left Metrics Overlay & Back Button */}
-        <div className="absolute top-6 left-6 z-20 safe-top pointer-events-none flex flex-col items-start">
-          
-          {/* Back Button */}
-          <button 
-            onClick={() => {
-              setSearchParams({});
-              navigate('/');
-            }}
-            className="w-10 h-10 mb-6 flex items-center justify-center rounded-full bg-[var(--card)]/90 backdrop-blur-md shadow-sm border border-[var(--border)] text-[var(--text)] pointer-events-auto transition-transform active:scale-95"
-          >
-            <ArrowLeft size={20} />
-          </button>
-
-          {/* Big Timer */}
-          <div className="mb-8">
-            <div className={`font-sans text-[3.5rem] leading-none font-black tracking-tighter ${textColor}`}>
-              {formatDuration(elapsedSec)}
-            </div>
-            <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-1`}>Duration</div>
-          </div>
-
-          {/* Left Aligned Stats */}
-          <div className="flex flex-col gap-3 max-w-[120px]">
-            <div>
-              <div className={`font-sans text-3xl font-black ${textColor}`}>{store.distanceKm.toFixed(2)}</div>
-              <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-0.5`}>Distance (Km)</div>
-            </div>
-            <div className="w-6 h-px bg-[var(--border)] opacity-50"></div>
-            <div>
-              <div className={`font-sans text-3xl font-black ${textColor}`}>{calories}</div>
-              <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-0.5`}>Calories</div>
-            </div>
-            <div className="w-6 h-px bg-[var(--border)] opacity-50"></div>
-            <div>
-              <div className={`font-sans text-3xl font-black ${textColor}`}>{formatPace(store.distanceKm, elapsedSec)}</div>
-              <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-0.5`}>Avg. Pace (Min/Km)</div>
-            </div>
-            <div className="w-6 h-px bg-[var(--border)] opacity-50"></div>
-            <div>
-              <div className={`font-sans text-2xl font-black ${textColor}`}>
-                {elapsedSec > 0 ? (store.distanceKm / (elapsedSec / 3600)).toFixed(1) : '0.0'}
-              </div>
-              <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-0.5`}>Avg. Speed (Km/h)</div>
-            </div>
-            <div className="w-6 h-px bg-[var(--border)] opacity-50"></div>
-            <div>
-              <div className={`font-sans text-2xl font-black ${textColor}`}>{store.maxSpeedKmh.toFixed(1)}</div>
-              <div className={`text-[10px] font-bold ${labelColor} uppercase tracking-wider mt-0.5`}>Max Speed (Km/h)</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Controls */}
-        <div className="relative z-10 mt-auto pb-[100px] pt-8 bg-gradient-to-t from-[var(--bg)] via-[var(--bg)]/80 to-transparent pointer-events-none flex items-center justify-center gap-12 w-full px-8">
-          
-          <button
-            onClick={store.isPaused ? handleResume : handlePause}
-            className={`w-12 h-12 flex items-center justify-center pointer-events-auto hover:scale-110 transition-transform active:scale-95 ${isDarkMap ? 'text-white' : 'text-black'}`}
-          >
-            {store.isPaused ? <Play size={28} fill="currentColor" className="ml-1" /> : <Pause size={28} fill="currentColor" />}
-          </button>
-          
-          <button
-            onClick={handleStop}
-            className={`w-24 h-24 rounded-full flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-[0_10px_40px_rgba(0,0,0,0.3)] pointer-events-auto ${
-              isDarkMap ? 'bg-white text-black' : 'bg-black text-white'
-            }`}
-          >
-            <span className="font-sans font-black tracking-widest uppercase text-sm">Finish</span>
-          </button>
-          
-          {/* Reset button to discard tracking */}
-          <button
-            onClick={() => {
-              if (window.confirm('Are you sure you want to discard this session?')) {
-                store.reset();
+        {/* Top Header */}
+        <div className="absolute top-6 left-4 right-4 z-20 safe-top pointer-events-none flex justify-between items-start">
+          <div className="flex items-center gap-3">
+            {/* Back Button */}
+            <button 
+              onClick={() => {
                 setSearchParams({});
-                setScreen('select');
-              }
-            }}
-            className={`w-12 h-12 flex items-center justify-center rounded-full bg-red-500/20 text-red-500 hover:bg-red-500/30 hover:scale-110 transition-all active:scale-95 pointer-events-auto`}
-            title="Discard"
-          >
-            <RotateCcw size={24} />
-          </button>
+                navigate('/');
+              }}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-ink/90 backdrop-blur-md shadow-sm border border-line text-bone pointer-events-auto transition-transform active:scale-95"
+            >
+              <ArrowLeft size={20} />
+            </button>
+
+            {/* Activity Type */}
+            <div className="flex items-center px-4 py-2 h-10 rounded-full bg-ink/90 backdrop-blur-md shadow-sm border border-line pointer-events-auto">
+               <span className="text-sm font-bold text-bone tracking-wide">{typeLabel}</span>
+            </div>
+          </div>
           
+          <div className="flex flex-col gap-3 items-end">
+            <div className="flex items-center gap-2 px-4 py-2 h-10 rounded-full bg-ink/90 backdrop-blur-md shadow-sm border border-line pointer-events-auto">
+              {store.gpsStatus === 'error' || store.gpsStatus === 'denied' ? (
+                <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-bone">{store.gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}</span></>
+              ) : store.gpsStatus === 'active' ? (
+                <><Navigation size={14} className="text-emerald-500" /><span className="text-xs font-bold text-bone">GPS Active</span></>
+              ) : store.gpsStatus === 'waiting' ? (
+                <><Navigation size={14} className="text-yellow-500 animate-pulse" /><span className="text-xs font-bold text-bone">Locating...</span></>
+              ) : (
+                <><Navigation size={14} className="text-bone-dim" /><span className="text-xs font-bold text-bone">GPS Ready</span></>
+              )}
+            </div>
+            
+            {/* Layers Button */}
+            <button
+              onClick={() => {
+                const layers = ['default', 'light', 'dark', 'street', 'satellite'] as const;
+                const nextIdx = (layers.indexOf(mapLayer) + 1) % layers.length;
+                setMapLayer(layers[nextIdx]);
+              }}
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-ink/90 backdrop-blur-md shadow-sm border border-line text-bone pointer-events-auto transition-transform active:scale-95"
+            >
+              <Layers size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Floating Actions (above the bottom sheet) */}
+        <div className="absolute right-4 bottom-[200px] z-10 pointer-events-auto flex flex-col gap-3 transition-all" style={{ transform: isExpanded ? 'translateY(-240px)' : 'translateY(0)' }}>
+          <button
+            onClick={() => setRecenterTrigger(t => t + 1)}
+            className="w-12 h-12 flex items-center justify-center rounded-full bg-ink/90 text-blue-500 shadow-lg border border-line active:scale-95 transition-transform backdrop-blur-md"
+          >
+            <LocateFixed size={22} />
+          </button>
+        </div>
+
+        {/* Expandable Bottom Sheet */}
+        <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-auto">
+          <motion.div 
+            animate={{ height: isExpanded ? 440 : 180 }}
+            className={`
+              ${isDarkMap 
+                ? 'bg-[#1a1a1a]/20 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),inset_0_0_0_1px_rgba(255,255,255,0.05),0_8px_40px_rgba(0,0,0,0.3)]' 
+                : 'bg-white/20 text-black shadow-[inset_0_1px_2px_rgba(255,255,255,0.8),inset_0_0_0_1px_rgba(255,255,255,0.3),0_8px_40px_rgba(0,0,0,0.1)]'} 
+              backdrop-blur-[60px] backdrop-saturate-[180%]
+              rounded-t-[40px] 
+              flex flex-col overflow-hidden
+            `}
+          >
+            {/* Drag Handle & Toggle */}
+            <button 
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="w-full h-8 flex items-center justify-center shrink-0 cursor-pointer"
+            >
+              <div className={`w-12 h-1.5 rounded-full ${isDarkMap ? 'bg-white/30' : 'bg-black/20'}`}></div>
+            </button>
+
+            {/* Core Stats (Always Visible) */}
+            <div className="px-6 pb-4 shrink-0" onClick={() => !isExpanded && setIsExpanded(true)}>
+              <div className="flex justify-between items-end mb-4">
+                <div>
+                  <div className="text-[2.5rem] leading-none font-black tracking-tighter drop-shadow-md">
+                    {formatDuration(elapsedSec)}
+                  </div>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Timer</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[2rem] leading-none font-black tracking-tighter drop-shadow-md">
+                    {store.distanceKm.toFixed(2)}
+                  </div>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Km</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Expanded Stats (Only visible when expanded) */}
+            <div className={`px-6 flex-1 overflow-hidden transition-opacity duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
+              <div className="grid grid-cols-2 gap-y-6 gap-x-4 mb-6">
+                <div>
+                  <div className="text-2xl font-black drop-shadow-sm">{currentPace}</div>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Pace (min/km)</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black drop-shadow-sm">{calories}</div>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Calories</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black drop-shadow-sm">{avgSpeed}</div>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Avg Speed (km/h)</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-black drop-shadow-sm">{store.maxSpeedKmh.toFixed(1)}</div>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Max Speed</div>
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="flex items-center justify-center gap-6 mt-4">
+                <button
+                  onClick={store.isPaused ? handleResume : handlePause}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-xl backdrop-blur-2xl ${isDarkMap ? 'bg-[#1a1a1a]/30 hover:bg-[#1a1a1a]/50 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'bg-white/40 hover:bg-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(255,255,255,0.4)]'}`}
+                >
+                  {store.isPaused ? <Play size={28} fill="currentColor" className="ml-1" /> : <Pause size={28} fill="currentColor" />}
+                </button>
+                
+                <button
+                  onClick={handleStop}
+                  className="w-20 h-20 rounded-full bg-gradient-to-br from-red-500 to-red-600 text-white flex items-center justify-center hover:scale-105 transition-all shadow-[inset_0_1px_2px_rgba(255,255,255,0.4),inset_0_0_0_1px_rgba(255,255,255,0.2),0_8px_30px_rgba(239,68,68,0.6)] active:scale-95"
+                >
+                  <Square size={28} fill="currentColor" />
+                </button>
+                
+                <button
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to discard this session?')) {
+                      store.reset();
+                      setSearchParams({});
+                      setScreen('select');
+                    }
+                  }}
+                  className={`w-16 h-16 flex items-center justify-center rounded-full transition-all active:scale-95 shadow-xl backdrop-blur-2xl ${isDarkMap ? 'bg-[#1a1a1a]/30 hover:bg-[#1a1a1a]/50 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'bg-white/40 hover:bg-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(255,255,255,0.4)]'}`}
+                  title="Discard"
+                >
+                  <RotateCcw size={28} />
+                </button>
+              </div>
+            </div>
+          </motion.div>
         </div>
       </motion.div>,
       document.body
