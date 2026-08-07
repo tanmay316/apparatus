@@ -422,3 +422,35 @@ export interface AppNotificationItem {
   createdAt: Timestamp | null;
   link?: string;
 }
+
+// ─── Cardio / GPS Activities ─────────────────────────────────
+export interface RoutePoint {
+  lat: number;
+  lng: number;
+  alt?: number;
+  speed?: number;
+  ts: number;
+}
+
+export type CardioActivityType = 'walk' | 'run' | 'cycle';
+
+export interface CardioActivity {
+  id?: string;
+  userId: string;
+  userName: string;
+  userPhoto: string;
+  type: CardioActivityType;
+  date: string;
+  startedAt: Timestamp;
+  finishedAt: Timestamp | null;
+  durationSec: number;
+  distanceKm: number;
+  avgSpeedKmh: number;
+  maxSpeedKmh: number;
+  avgPace: string;
+  calories: number;
+  elevationGainM: number;
+  route: RoutePoint[];
+  visibility: 'public' | 'followers' | 'private';
+  notes: string;
+}

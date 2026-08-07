@@ -288,6 +288,18 @@ service cloud.firestore {
       allow delete: if isAdmin() || isOwner(resource.data.reporterId);
     }
 
+    // ─── Cardio / GPS Activities ────────────────────────────────
+    match /cardioActivities/{activityId} {
+      allow read: if isAdmin() || resource.data.visibility == 'public'
+        || isOwner(resource.data.userId)
+        || (resource.data.visibility == 'followers' && isAuthenticated());
+      allow create: if isOwner(request.resource.data.userId)
+        && request.resource.data.visibility in ['public', 'followers', 'private'];
+      allow update: if isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if isOwner(resource.data.userId);
+    }
+
     // ─── Catch-All ──────────────────────────────────────────────
     // Deny access to any collection not explicitly defined above.
     // This prevents accidentally exposing new collections.

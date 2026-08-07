@@ -24,6 +24,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'calendar', path: '/calendar', label: 'Calendar', icon: <Calendar size={18} />, section: 'TRAIN' },
   { id: 'progress', path: '/progress', label: 'Progress', icon: <TrendingUp size={18} />, section: 'TRAIN' },
   { id: 'nutrition', path: '/nutrition', label: 'Nutrition', icon: <Apple size={18} />, section: 'TRAIN' },
+  { id: 'cardio', path: '/cardio', label: 'Run / Walk', icon: <Wind size={18} />, section: 'TRAIN' },
   // Performance
   { id: 'skills', path: '/skills', label: 'Skills', icon: <Target size={18} />, section: 'PERFORMANCE' },
   { id: 'measurements', path: '/measurements', label: 'Body Log', icon: <Ruler size={18} />, section: 'PERFORMANCE' },

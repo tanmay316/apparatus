@@ -26,6 +26,7 @@ import { SkillsPage } from '@/pages/SkillsPage';
 import { MeasurementsPage } from '@/pages/MeasurementsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { GuidePage } from '@/pages/GuidePage';
+import { CardioTracker } from '@/pages/CardioTracker';
 import { Toast } from '@/components/ui/Toast';
 import { useUIStore } from '@/stores/ui-store';
 
@@ -105,6 +106,7 @@ export function App() {
             <Route path="measurements" element={<MeasurementsPage />} />
             <Route path="achievements" element={<AchievementsPage />} />
             <Route path="explore" element={<ExplorePage />} />
+            <Route path="cardio" element={<CardioTracker />} />
             <Route path="feed" element={<FeedPage />} />
             <Route path="communities" element={<CommunitiesPage />} />
             <Route path="communities/:communityId" element={<CommunityDetailPage />} />

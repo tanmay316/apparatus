@@ -74,3 +74,44 @@ export function calculateWorkoutCalories(
   const minutes = durationMin && durationMin > 0 ? durationMin : Math.max(1, estimatedDuration / ((weightedMet * 3.5 * (bodyWeightKg || 70)) / 200));
   return Math.max(0, Math.round(minutes * (weightedMet * 3.5 * (bodyWeightKg || 70)) / 200));
 }
+
+// ─── Cardio Calorie Calculator ─────────────────────────────
+/** MET-based calorie estimate for cardio activities */
+export function calculateCardioCalories(
+  type: 'walk' | 'run' | 'cycle',
+  distanceKm: number,
+  durationMin: number,
+  bodyWeightKg: number,
+  avgSpeedKmh?: number
+): number {
+  let met: number;
+  const speed = avgSpeedKmh || (durationMin > 0 ? (distanceKm / durationMin) * 60 : 0);
+
+  switch (type) {
+    case 'walk':
+      if (speed < 4) met = 2.8;
+      else if (speed < 5.5) met = 3.5;
+      else if (speed < 6.5) met = 4.3;
+      else met = 5.0;
+      break;
+    case 'run':
+      if (speed < 8) met = 6.0;
+      else if (speed < 10) met = 8.3;
+      else if (speed < 12) met = 9.8;
+      else if (speed < 14) met = 11.0;
+      else met = 12.8;
+      break;
+    case 'cycle':
+      if (speed < 16) met = 4.0;
+      else if (speed < 20) met = 6.8;
+      else if (speed < 25) met = 8.0;
+      else if (speed < 30) met = 10.0;
+      else met = 12.0;
+      break;
+    default:
+      met = 4.0;
+  }
+
+  // Calories = (MET * 3.5 * bodyWeight) / 200 * minutes
+  return Math.max(0, Math.round((met * 3.5 * bodyWeightKg) / 200 * durationMin));
+}
