@@ -93,7 +93,6 @@ export function CardioTracker() {
   const [summaryData, setSummaryData] = useState<Partial<CardioActivity> | null>(null);
   const [showShare, setShowShare] = useState(false);
   const [recentActivities, setRecentActivities] = useState<CardioActivity[]>([]);
-  const [gpsError, setGpsError] = useState<string | null>(null);
 
   // Fetch recent activities
   useEffect(() => {
@@ -379,10 +378,14 @@ export function CardioTracker() {
           
           <div className="flex flex-col gap-2 items-end">
             <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)]/80 backdrop-blur-md shadow-sm border border-[var(--border)] pointer-events-auto">
-              {gpsError ? (
-                <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-[var(--text)]">GPS Error</span></>
+              {store.gpsStatus === 'error' || store.gpsStatus === 'denied' ? (
+                <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-[var(--text)]">{store.gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}</span></>
+              ) : store.gpsStatus === 'active' ? (
+                <><Navigation size={14} className="text-emerald-500" /><span className="text-xs font-bold text-[var(--text)]">GPS Active</span></>
+              ) : store.gpsStatus === 'waiting' ? (
+                <><Navigation size={14} className="text-yellow-500 animate-pulse" /><span className="text-xs font-bold text-[var(--text)]">Locating...</span></>
               ) : (
-                <><Navigation size={14} className="text-emerald-500" /><span className="text-xs font-bold text-[var(--text)]">GPS Ready</span></>
+                <><Navigation size={14} className="text-gray-400" /><span className="text-xs font-bold text-[var(--text)]">GPS Ready</span></>
               )}
             </div>
             
@@ -440,12 +443,16 @@ export function CardioTracker() {
         {/* Header (Top Right) */}
         <div className="absolute top-6 right-6 z-20 safe-top pointer-events-none flex flex-col gap-2 items-end">
           <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)]/90 backdrop-blur-md shadow-sm border border-[var(--border)] pointer-events-auto">
-            {gpsError ? (
-              <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-[var(--text)]">GPS Error</span></>
+            {store.gpsStatus === 'error' || store.gpsStatus === 'denied' ? (
+              <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-[var(--text)]">{store.gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}</span></>
             ) : store.isPaused ? (
               <><Navigation size={14} className="text-orange-500" /><span className="text-xs font-bold text-[var(--text)]">Paused</span></>
+            ) : store.gpsStatus === 'active' ? (
+              <><Navigation size={14} className="text-emerald-500" /><span className="text-xs font-bold text-[var(--text)]">GPS On</span></>
+            ) : store.gpsStatus === 'waiting' ? (
+              <><Navigation size={14} className="text-yellow-500 animate-pulse" /><span className="text-xs font-bold text-[var(--text)]">Locating...</span></>
             ) : (
-              <><Navigation size={14} className="text-[var(--text)]" /><span className="text-xs font-bold text-[var(--text)]">GPS On</span></>
+              <><Navigation size={14} className="text-gray-400" /><span className="text-xs font-bold text-[var(--text)]">GPS Off</span></>
             )}
           </div>
           

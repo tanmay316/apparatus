@@ -14,11 +14,12 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 import { Geolocation } from '@capacitor/geolocation';
+import { Capacitor } from '@capacitor/core';
 
 // ────────────────────────────────────────────────────────────
 // Global GPS & Wake Lock (lives outside React for persistence)
 // ────────────────────────────────────────────────────────────
-let watchIdRef: string | null = null;
+let watchIdRef: string | number | null = null;
 let wakeLockRef: any = null;
 
 const requestWakeLock = async () => {
@@ -36,7 +37,7 @@ const releaseWakeLock = () => {
   }
 };
 
-const checkPermissions = async () => {
+const checkPermissionsNative = async () => {
   try {
     let perm = await Geolocation.checkPermissions();
     if (perm.location !== 'granted') {
@@ -44,8 +45,6 @@ const checkPermissions = async () => {
     }
     return perm.location === 'granted';
   } catch (err) {
-    // If running in a context where Capacitor Geolocation throws, fallback to true 
-    // and let the browser's native Geolocation prompt handle it
     return true; 
   }
 };
@@ -53,48 +52,80 @@ const checkPermissions = async () => {
 const startGpsWatch = async () => {
   if (watchIdRef !== null) return; // already watching
   
-  const hasPerm = await checkPermissions();
-  if (!hasPerm) {
-    console.warn('[CardioStore] GPS permission denied');
-    // We could dispatch an error state here so the UI shows 'Permission Denied'
-    return;
-  }
-
   requestWakeLock();
-  
-  try {
-    watchIdRef = await Geolocation.watchPosition(
-      {
-        enableHighAccuracy: true,
-        maximumAge: 2000,
-        timeout: 10000,
+
+  if (Capacitor.isNativePlatform()) {
+    // NATIVE CAPACITOR APP
+    const hasPerm = await checkPermissionsNative();
+    if (!hasPerm) {
+      console.warn('[CardioStore] GPS permission denied natively');
+      useCardioStore.setState({ gpsStatus: 'denied' });
+      return;
+    }
+    try {
+      useCardioStore.setState({ gpsStatus: 'waiting' });
+      watchIdRef = await Geolocation.watchPosition(
+        { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 },
+        (pos, err) => {
+          if (err) {
+            useCardioStore.setState({ gpsStatus: 'error' });
+            return;
+          }
+          if (pos) {
+            useCardioStore.setState({ gpsStatus: 'active' });
+            useCardioStore.getState().addPoint({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              alt: pos.coords.altitude ?? undefined,
+              speed: pos.coords.speed ?? undefined,
+              ts: Date.now(),
+            });
+          }
+        }
+      );
+    } catch (e) {
+      console.warn('[CardioStore] Failed native GPS:', e);
+      useCardioStore.setState({ gpsStatus: 'error' });
+    }
+  } else {
+    // WEB BROWSER
+    if (!navigator.geolocation) {
+      useCardioStore.setState({ gpsStatus: 'error' });
+      return;
+    }
+    
+    useCardioStore.setState({ gpsStatus: 'waiting' });
+    watchIdRef = navigator.geolocation.watchPosition(
+      (pos) => {
+        useCardioStore.setState({ gpsStatus: 'active' });
+        useCardioStore.getState().addPoint({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          alt: pos.coords.altitude ?? undefined,
+          speed: pos.coords.speed ?? undefined,
+          ts: Date.now(),
+        });
       },
-      (pos, err) => {
-        if (err) {
-          console.warn('[CardioStore] GPS error:', err.message);
-          return;
+      (err) => {
+        console.warn('[CardioStore] Web GPS error:', err.code, err.message);
+        if (err.code === 1) {
+          useCardioStore.setState({ gpsStatus: 'denied' });
+        } else {
+          useCardioStore.setState({ gpsStatus: 'error' });
         }
-        if (pos) {
-          useCardioStore.getState().addPoint({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            alt: pos.coords.altitude ?? undefined,
-            speed: pos.coords.speed ?? undefined,
-            ts: Date.now(),
-          });
-        }
-      }
+      },
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
     );
-  } catch (e) {
-    console.warn('[CardioStore] Failed to start GPS watch:', e);
   }
 };
 
 const stopGpsWatch = async () => {
   if (watchIdRef !== null) {
-    try {
-      await Geolocation.clearWatch({ id: watchIdRef });
-    } catch { /* silent */ }
+    if (Capacitor.isNativePlatform()) {
+      try { await Geolocation.clearWatch({ id: watchIdRef as string }); } catch {}
+    } else {
+      navigator.geolocation.clearWatch(watchIdRef as number);
+    }
     watchIdRef = null;
   }
   releaseWakeLock();
@@ -103,6 +134,8 @@ const stopGpsWatch = async () => {
 // ────────────────────────────────────────────────────────────
 // Store
 // ────────────────────────────────────────────────────────────
+
+type GpsStatus = 'off' | 'waiting' | 'active' | 'error' | 'denied';
 
 interface CardioState {
   isTracking: boolean;
@@ -116,6 +149,7 @@ interface CardioState {
   currentSpeedKmh: number;
   maxSpeedKmh: number;
   elevationGainM: number;
+  gpsStatus: GpsStatus;
 
   // Actions
   startTracking: (type: CardioActivityType) => void;
@@ -138,6 +172,7 @@ const IDLE: Partial<CardioState> = {
   currentSpeedKmh: 0,
   maxSpeedKmh: 0,
   elevationGainM: 0,
+  gpsStatus: 'off' as GpsStatus,
 };
 
 export const useCardioStore = create<CardioState>()(
@@ -146,7 +181,7 @@ export const useCardioStore = create<CardioState>()(
       ...(IDLE as CardioState),
 
       startTracking: (type) => {
-        startGpsWatch();
+        // IMPORTANT: set isTracking FIRST so GPS callbacks aren't dropped
         set({
           isTracking: true,
           isPaused: false,
@@ -159,7 +194,10 @@ export const useCardioStore = create<CardioState>()(
           currentSpeedKmh: 0,
           maxSpeedKmh: 0,
           elevationGainM: 0,
+          gpsStatus: 'waiting' as GpsStatus,
         });
+        // Start GPS after state is ready
+        startGpsWatch();
       },
 
       pauseTracking: () => {
@@ -235,7 +273,7 @@ export const useCardioStore = create<CardioState>()(
 
       stopTracking: () => {
         stopGpsWatch();
-        set({ isTracking: false, isPaused: false });
+        set({ isTracking: false, isPaused: false, gpsStatus: 'off' as GpsStatus });
       },
 
       reset: () => {
