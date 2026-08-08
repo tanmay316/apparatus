@@ -65,7 +65,7 @@ const startGpsWatch = async () => {
     try {
       useCardioStore.setState({ gpsStatus: 'waiting' });
       watchIdRef = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, maximumAge: 30000, timeout: 10000 },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 },
         (pos, err) => {
           if (err) {
             useCardioStore.setState({ gpsStatus: 'error' });
@@ -73,9 +73,9 @@ const startGpsWatch = async () => {
           }
           if (pos) {
             useCardioStore.setState({ gpsStatus: 'active' });
-            // Filter out low precision points unless it's the first point
+            // Filter out wildly inaccurate points, but 40m was too strict (many phones hover around 50-80m)
             const storeState = useCardioStore.getState();
-            if (storeState.routePoints.length === 0 || pos.coords.accuracy <= 40) {
+            if (storeState.routePoints.length === 0 || pos.coords.accuracy <= 150) {
               storeState.addPoint({
                 lat: pos.coords.latitude,
                 lng: pos.coords.longitude,
@@ -103,8 +103,8 @@ const startGpsWatch = async () => {
       (pos) => {
         useCardioStore.setState({ gpsStatus: 'active' });
         const storeState = useCardioStore.getState();
-        // Ignore inaccurate points for precise tracking
-        if (storeState.routePoints.length === 0 || pos.coords.accuracy <= 40) {
+        // Ignore wildly inaccurate points for precise tracking (150m is a safe threshold)
+        if (storeState.routePoints.length === 0 || pos.coords.accuracy <= 150) {
           storeState.addPoint({
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
@@ -122,7 +122,7 @@ const startGpsWatch = async () => {
           useCardioStore.setState({ gpsStatus: 'error' });
         }
       },
-      { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
     );
   }
 };
