@@ -48,8 +48,8 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const typeLabel = data.type === 'walk' ? 'WALK' : data.type === 'run' ? 'RUN' : 'RIDE';
   const displayDate = format(new Date(data.date), 'EEEE, MMM d, yyyy');
   
-  // Theme-based line color: brown for our brand
-  const lineColor = '#5d2a1a';
+  // Theme-based line color: gradient
+  const lineColor = 'url(#route-gradient)';
 
   const layout = LAYOUTS[layoutIndex];
   const showMapBackground = layout !== 'stats-only';

@@ -393,6 +393,13 @@ export async function updateActiveSession(uid: string, data: Partial<ActiveSessi
 
 export async function endActiveSession(uid: string) {
   const ref = doc(db, 'activeSessions', uid);
+  const chatRef = collection(db, 'activeSessions', uid, 'chat');
+  const snap = await getDocs(chatRef).catch(() => null);
+  if (snap && snap.docs.length > 0) {
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit().catch(() => {});
+  }
   await deleteDoc(ref).catch(() => {});
 }
 

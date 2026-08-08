@@ -191,7 +191,6 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
                   route={details.route} 
                   theme={theme === 'dark' ? 'dark' : 'light'} 
                   height="150px" 
-                  highlightColor={activity.type === 'walk' ? '#10b981' : activity.type === 'run' ? '#3b82f6' : '#a855f7'}
                 />
               </div>
             ) : (

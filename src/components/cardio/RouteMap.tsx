@@ -6,10 +6,19 @@ import type { RoutePoint } from '@/types';
 
 // Custom icons using HTML
 const startIcon = new L.DivIcon({
-  html: `<div style="width: 20px; height: 20px; background: #f97316; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
+  html: `<div style="width: 16px; height: 16px; background: #fbbf24; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
   className: '',
-  iconSize: [20, 20],
-  iconAnchor: [10, 10]
+  iconSize: [16, 16],
+  iconAnchor: [8, 8]
+});
+
+const endIcon = new L.DivIcon({
+  html: `<div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: #a855f7; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));">
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
+  </div>`,
+  className: '',
+  iconSize: [28, 28],
+  iconAnchor: [4, 28]
 });
 
 const currentIcon = new L.DivIcon({
@@ -95,7 +104,7 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
   return null;
 }
 
-export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = '#5d2a1a', recenterTrigger, hideMap = false, noGlow = false }: Props) {
+export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false }: Props) {
   const positions: [number, number][] = useMemo(
     () => route.map(p => [p.lat, p.lng]),
     [route]
@@ -108,9 +117,19 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
   const zoom = positions.length > 0 ? 16.5 : 5;
   
   const themeData = MAP_THEMES[theme] || MAP_THEMES.street;
+  const isDarkMap = theme === 'dark' || theme === 'satellite';
 
   return (
     <div style={{ height, width: '100%', overflow: 'hidden' }} className="relative">
+      <svg style={{ width: 0, height: 0, position: 'absolute' }}>
+        <defs>
+          <linearGradient id="route-gradient" x1="100%" y1="100%" x2="0%" y2="0%">
+            <stop offset="0%" stopColor="#fbbf24" />
+            <stop offset="50%" stopColor="#f43f5e" />
+            <stop offset="100%" stopColor="#a855f7" />
+          </linearGradient>
+        </defs>
+      </svg>
       <MapContainer
         center={center}
         zoom={zoom}
@@ -122,25 +141,25 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
 
         {positions.length > 1 && (
           <>
-            {!noGlow && (
+            {isDarkMap && !hideMap && (
               <>
-                {/* Outer Glow effect */}
+                {/* Outer Glow effect for dark maps */}
                 <Polyline
                   positions={positions}
                   pathOptions={{
                     color: highlightColor,
-                    weight: 24,
-                    opacity: 0.15,
+                    weight: 20,
+                    opacity: 0.2,
                     lineCap: 'round',
                     lineJoin: 'round',
                   }}
                 />
-                {/* Inner Glow effect */}
+                {/* Inner Glow effect for dark maps */}
                 <Polyline
                   positions={positions}
                   pathOptions={{
                     color: highlightColor,
-                    weight: 12,
+                    weight: 10,
                     opacity: 0.4,
                     lineCap: 'round',
                     lineJoin: 'round',
@@ -153,7 +172,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
               positions={positions}
               pathOptions={{
                 color: highlightColor,
-                weight: noGlow ? 4 : 5,
+                weight: 5,
                 opacity: 1,
                 lineCap: 'round',
                 lineJoin: 'round',
@@ -170,6 +189,11 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
         {/* Current position marker (only in live mode) */}
         {isLive && positions.length > 1 && (
           <Marker position={positions[positions.length - 1]} icon={currentIcon} />
+        )}
+
+        {/* End marker (only in static mode) */}
+        {!isLive && positions.length > 1 && (
+          <Marker position={positions[positions.length - 1]} icon={endIcon} />
         )}
 
         {isLive && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} />}

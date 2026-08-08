@@ -553,7 +553,7 @@ export function CardioTracker() {
                 ? 'bg-black/40 text-white border-t border-white/20 shadow-[0_-10px_40px_rgba(0,0,0,0.5),inset_0_2px_4px_rgba(255,255,255,0.2),inset_0_0_20px_rgba(255,255,255,0.1)]' 
                 : 'bg-white/50 text-black border-t border-white/60 shadow-[0_-10px_40px_rgba(0,0,0,0.1),inset_0_2px_6px_rgba(255,255,255,0.9),inset_0_0_20px_rgba(255,255,255,0.5)]'} 
               backdrop-blur-[80px] backdrop-saturate-[200%]
-              rounded-t-[48px] 
+              rounded-t-[24px] 
               flex flex-col overflow-hidden
             `}
           >
@@ -623,6 +623,7 @@ export function CardioTracker() {
                 <button
                   onClick={() => {
                     if (window.confirm('Are you sure you want to discard this session?')) {
+                      if (user) endActiveSession(user.uid).catch(console.error);
                       store.reset();
                       setSearchParams({});
                       setScreen('select');

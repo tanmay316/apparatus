@@ -28,7 +28,7 @@ export function BottomNav() {
   useEffect(() => {
     if (sheetOpen && user) {
       const q = query(
-        collection(db, 'activities'), 
+        collection(db, 'activities'),
         where('userId', '==', user.uid),
         orderBy('createdAt', 'desc'),
         limit(2)
@@ -60,27 +60,7 @@ export function BottomNav() {
     return index;
   }, [location.pathname]);
 
-  const textRefs = useRef<(HTMLElement | null)[]>([]);
-  const itemRefs = useRef<(HTMLAnchorElement | null)[]>([]);
-
-  useEffect(() => {
-    const setLineWidth = () => {
-      const activeItemElement = itemRefs.current[activeIndex];
-      const activeTextElement = textRefs.current[activeIndex];
-
-      if (activeItemElement && activeTextElement && activeIndex !== -1) {
-        const textWidth = activeTextElement.scrollWidth;
-        activeItemElement.style.setProperty("--lineWidth", `${textWidth}px`);
-      }
-    };
-
-    const timer = setTimeout(setLineWidth, 50);
-    window.addEventListener("resize", setLineWidth);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener("resize", setLineWidth);
-    };
-  }, [activeIndex]);
+  // Removed line width effect since we are stacking icon and text vertically.
 
   const handleActionClick = (path: string) => {
     setSheetOpen(false);
@@ -91,78 +71,69 @@ export function BottomNav() {
 
   return (
     <>
-      <nav
-        className="fixed bottom-0 left-0 right-0 z-[200] bg-white border-t border-[#ececec] pb-safe shadow-lg"
-        style={
-          { "--component-active-color": "var(--sienna)" } as React.CSSProperties
-        }
-      >
-        <div className="flex items-center justify-around h-[64px] max-w-[600px] mx-auto px-4 relative">
-          {TABS.map((tab, index) => {
-            const isAction = tab.id === "action";
-            const isActive = index === activeIndex;
-            const IconComponent = tab.icon;
+      <style>{`
+        .nav-tab-icon-active { color: #5d2a1a; }
+        .dark .nav-tab-icon-active { color: #ffffff; }
+        .nav-tab-icon-inactive { color: rgba(93, 42, 26, 0.7); }
+        .dark .nav-tab-icon-inactive { color: rgba(255, 255, 255, 0.6); }
+      `}</style>
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-[420px] z-[200]">
+        <nav
+          className="bg-gradient-to-r from-[#5d2a1a]/10 to-[#d9a441]/10 dark:from-ink-2/90 dark:to-ink/90 backdrop-blur-xl border border-[#5d2a1a]/20 dark:border-white/20 rounded-[32px] shadow-2xl p-2"
+          style={
+            { "--component-active-color": "var(--sienna)" } as React.CSSProperties
+          }
+        >
+          <div className="flex items-center justify-between h-[64px] relative gap-1">
+            {TABS.map((tab, index) => {
+              const isAction = tab.id === "action";
+              const isActive = index === activeIndex;
+              const IconComponent = tab.icon;
 
-            if (isAction) {
+              if (isAction) {
+                return (
+                  <div key={tab.id} className="flex-1 flex items-center justify-center h-full">
+                    <button
+                      onClick={() => setSheetOpen(true)}
+                      className={`relative flex flex-col items-center justify-center w-full h-full rounded-[24px] transition-all duration-300 active:scale-95 border border-transparent ${sheetOpen
+                          ? "bg-black/10 dark:bg-white/20 border-black/10 dark:border-white/40"
+                          : "hover:bg-black/5 dark:hover:bg-white/10"
+                        }`}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-sienna flex items-center justify-center text-white shadow-lg">
+                        <IconComponent size={20} strokeWidth={2.5} />
+                      </div>
+                    </button>
+                  </div>
+                );
+              }
+
               return (
-                <div key={tab.id} className="flex-1 flex justify-center relative">
-                  <button
-                    onClick={() => setSheetOpen(true)}
-                    className={`relative flex items-center justify-center w-[52px] h-[52px] rounded-full transition-all duration-300 active:scale-95 shadow-md -mt-6 border-4 border-white dark:border-[#17191c] ${
-                      sheetOpen
-                        ? "bg-slate-800 text-white dark:bg-white dark:text-black shadow-[inset_2px_2px_5px_rgba(0,0,0,0.2)]"
-                        : "bg-[#5d2a1a] text-white shadow-[0_4px_14px_rgba(93,42,26,0.4)] hover:shadow-[0_6px_20px_rgba(93,42,26,0.5)] hover:-translate-y-0.5"
-                    }`}
+                <div key={tab.id} className="flex-1 flex items-center justify-center h-full">
+                  <Link
+                    to={tab.path}
+                    className={`relative flex flex-col items-center justify-center w-full h-full rounded-[28px] transition-all duration-300 ease-out border ${isActive
+                      ? "bg-white/40 dark:bg-white/15 border-sienna dark:border-white/30 shadow-[0_2px_10px_rgba(0,0,0,0.05)] dark:shadow-[0_0_15px_rgba(255,255,255,0.1)] nav-tab-icon-active"
+                      : "bg-transparent border-transparent hover:bg-black/5 dark:hover:bg-white/5 nav-tab-icon-inactive"
+                      }`}
                   >
-                    <IconComponent size={24} strokeWidth={sheetOpen ? 2.5 : 2} />
-                    
-                    {/* Subtle pulsing ring behind the button to draw attention */}
-                    {!sheetOpen && (
-                      <div className="absolute inset-0 rounded-full border border-[#5d2a1a]/50 animate-ping opacity-20 pointer-events-none"></div>
-                    )}
-                  </button>
-                </div>
-              );
-            }
-
-            return (
-              <div key={tab.id} className="flex-1 flex justify-center">
-                <Link
-                  to={tab.path}
-                  ref={(el) => (itemRefs.current[index] = el)}
-                  className={`relative flex items-center justify-center h-10 px-3 rounded-full transition-all duration-300 ease-out border-none ${
-                    isActive
-                      ? "bg-orange-50 text-[#5d2a1a]"
-                      : "text-gray-400 hover:text-gray-600 bg-transparent"
-                  }`}
-                  style={{ "--lineWidth": "0px" } as React.CSSProperties}
-                >
-                  <div className="flex items-center justify-center shrink-0">
                     <IconComponent
                       size={20}
                       strokeWidth={isActive ? 2.5 : 2}
-                      className="transition-all duration-300"
+                      className="transition-all duration-300 mb-0.5"
                     />
-                  </div>
-                  <strong
-                    ref={(el) => (textRefs.current[index] = el)}
-                    className="font-sans text-[12px] font-bold tracking-wide whitespace-nowrap transition-all duration-300 ease-out"
-                    style={{
-                      width: isActive ? "var(--lineWidth)" : "0px",
-                      opacity: isActive ? 1 : 0,
-                      marginLeft: isActive ? "6px" : "0px",
-                      overflow: "hidden",
-                      display: "inline-block",
-                    }}
-                  >
-                    {tab.label}
-                  </strong>
-                </Link>
-              </div>
-            );
-          })}
-        </div>
-      </nav>
+                    <span
+                      className="text-[10px] font-sans font-medium tracking-wide transition-all duration-300"
+                    >
+                      {tab.label}
+                    </span>
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        </nav>
+      </div>
 
       <AnimatePresence>
         {sheetOpen && (
