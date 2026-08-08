@@ -8,6 +8,7 @@ import { getWorkoutsByDateRange } from '@/services/workouts';
 import { getFollowing, getFeed } from '@/services/social';
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
+import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 
 import { HeroDashboard } from '@/components/dashboard/HeroDashboard';
 import { TodayFocusCard } from '@/components/dashboard/TodayFocusCard';
@@ -57,6 +58,7 @@ export function Dashboard() {
   const userWeight = useUserWeight();
   const store = useWorkoutStore();
   const [dashboardShareData, setDashboardShareData] = useState<ShareCardData | null>(null);
+  const [cardioShareData, setCardioShareData] = useState<CardioShareData | null>(null);
 
   // ─── Data ────────────────────────────────────────────────
   const xp = stats?.xp || 0;
@@ -204,17 +206,34 @@ export function Dashboard() {
     const createdDate = activity.createdAt?.seconds
       ? new Date(activity.createdAt.seconds * 1000)
       : new Date();
+    
+    const isCardio = activity.type === 'walk' || activity.type === 'run' || activity.type === 'cycle' || ['walk', 'run', 'cycle'].includes(details.activityType);
 
-    setDashboardShareData({
-      dayTitle: details.dayTitle || activity.summary,
-      planTitle: details.planTitle || 'Workout',
-      date: createdDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
-      durationMin: details.durationMin || 0,
-      volume: details.volume || 0,
-      calories: details.calories || 0,
-      exerciseNames: details.exercises || [],
-      exerciseLogs: details.exerciseLogs || undefined,
-    });
+    if (isCardio) {
+      setCardioShareData({
+        type: details.activityType || activity.type || 'walk',
+        date: createdDate.toISOString(),
+        distanceKm: details.distanceKm || 0,
+        durationSec: details.durationSec || 0,
+        calories: details.calories || 0,
+        avgPace: details.avgPace || '0:00 /km',
+        route: details.route || [],
+        avgSpeedKmh: details.avgSpeedKmh,
+        maxSpeedKmh: details.maxSpeedKmh,
+        elevationGainM: details.elevationGainM,
+      });
+    } else {
+      setDashboardShareData({
+        dayTitle: details.dayTitle || activity.summary,
+        planTitle: details.planTitle || 'Workout',
+        date: createdDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+        durationMin: details.durationMin || 0,
+        volume: details.volume || 0,
+        calories: details.calories || 0,
+        exerciseNames: details.exercises || [],
+        exerciseLogs: details.exerciseLogs || undefined,
+      });
+    }
   };
 
   return (
@@ -271,6 +290,14 @@ export function Dashboard() {
         <ShareCardModal
           data={dashboardShareData}
           onClose={() => setDashboardShareData(null)}
+        />
+      )}
+
+      {/* Cardio Share Modal */}
+      {cardioShareData && (
+        <CardioShareModal
+          data={cardioShareData}
+          onClose={() => setCardioShareData(null)}
         />
       )}
     </div>

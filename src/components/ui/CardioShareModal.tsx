@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Download, Check } from 'lucide-react';
+import { X, Download, Check, Share2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { toCanvas } from 'html-to-image';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
@@ -377,54 +377,63 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
           </motion.div>
 
           {/* Dots Indicator */}
-          <div className="flex items-center justify-center gap-2 mt-4">
+          <div className="flex items-center justify-center gap-1.5 mt-5">
             {LAYOUTS.map((_, idx) => (
               <div 
                 key={idx} 
-                className={`h-1.5 rounded-full transition-all duration-300 ${idx === layoutIndex ? 'w-4 bg-white' : 'w-1.5 bg-white/30'}`}
+                className={`h-1.5 rounded-full transition-all duration-300 ${idx === layoutIndex ? 'w-5 bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'w-1.5 bg-white/20'}`}
               />
             ))}
           </div>
         </div>
 
         {/* Controls */}
-        <div className="w-full max-w-[400px] mx-auto px-4 pb-12 flex flex-col gap-3">
+        <div className="w-full max-w-[400px] mx-auto px-4 pb-8 flex flex-col gap-4 mt-2">
           
           {/* Map theme selector (only when map tiles are visible) */}
           {!hideMapTiles && layout !== 'stats-only' && (
-            <div className="flex gap-2 overflow-x-auto px-2 -mx-2 py-2 -my-2 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {AVAILABLE_THEMES.map(t => (
-                <button
-                  key={t}
-                  onClick={() => setSelectedTheme(t)}
-                  className={`shrink-0 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all border ${
-                    selectedTheme === t 
-                      ? 'bg-gradient-to-r from-[#5d2a1a] to-[#c9743e] text-white border-transparent scale-105' 
-                      : 'bg-white/10 text-white/50 border-white/10 hover:text-white hover:bg-white/20 backdrop-blur-md'
-                  }`}
-                >
-                  {MAP_THEMES[t].label}
-                </button>
-              ))}
+            <div className="flex overflow-x-auto pb-2 -mx-4 px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex p-1 bg-white/5 backdrop-blur-xl rounded-[24px] border border-white/10 mx-auto">
+                {AVAILABLE_THEMES.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setSelectedTheme(t)}
+                    className={`shrink-0 px-4 py-2 rounded-[20px] text-xs font-bold tracking-wide transition-all duration-300 ${
+                      selectedTheme === t 
+                        ? 'bg-white text-black shadow-[0_4px_12px_rgba(255,255,255,0.3)]' 
+                        : 'text-white/60 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {MAP_THEMES[t].label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex gap-3 w-full mt-2">
+          <div className="grid grid-cols-2 gap-3 w-full">
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="flex-1 flex items-center justify-center gap-2 bg-white/10 text-white backdrop-blur-xl border border-white/20 px-4 py-4 rounded-[1.5rem] font-bold text-sm hover:bg-white/20 transition-all active:scale-95 disabled:opacity-50"
+              className="flex flex-col items-center justify-center gap-2 bg-white/5 text-white backdrop-blur-xl border border-white/10 py-4 rounded-[24px] hover:bg-white/10 transition-all active:scale-[0.97] disabled:opacity-50"
             >
-              {didCopy ? <Check size={18} className="text-green-400" /> : <Download size={18} />}
-              {downloading ? 'Preparing...' : 'Save'}
+              <div className="bg-white/10 p-2.5 rounded-full mb-1">
+                {didCopy ? <Check size={20} className="text-green-400" /> : <Download size={20} />}
+              </div>
+              <span className="font-bold text-[11px] uppercase tracking-wider text-white/80">{downloading ? 'Saving...' : 'Save to Photos'}</span>
             </button>
+            
             <button
               onClick={handleShare}
               disabled={downloading}
-              className="flex-[2] flex items-center justify-center gap-2 bg-gradient-to-r from-[#5d2a1a] to-[#c9743e] text-white border border-transparent px-6 py-4 rounded-[1.5rem] font-bold text-sm hover:brightness-110 transition-all active:scale-95 disabled:opacity-50"
+              className="flex flex-col items-center justify-center gap-2 bg-sienna text-white shadow-[0_8px_24px_rgba(235,89,60,0.4)] border border-sienna/50 py-4 rounded-[24px] hover:brightness-110 transition-all active:scale-[0.97] disabled:opacity-50 relative overflow-hidden"
             >
-              Share Image
+              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
+              <div className="bg-black/10 p-2.5 rounded-full mb-1">
+                <Share2 size={20} />
+              </div>
+              <span className="font-bold text-[11px] uppercase tracking-wider text-white/95">Share Activity</span>
             </button>
           </div>
         </div>

@@ -91,20 +91,50 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
 function InjectGradient() {
   const map = useMap();
   useEffect(() => {
-    const pane = map.getPane('overlayPane');
-    const svg = pane?.querySelector('svg');
-    if (svg && !svg.querySelector('#route-gradient')) {
-      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-      // Use horizontal gradient as requested
-      defs.innerHTML = `
-        <linearGradient id="route-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stop-color="#fbbf24" />
-          <stop offset="50%" stop-color="#f43f5e" />
-          <stop offset="100%" stop-color="#a855f7" />
-        </linearGradient>
-      `;
-      svg.prepend(defs);
-    }
+    const inject = () => {
+      const pane = map.getPane('overlayPane');
+      const svg = pane?.querySelector('svg');
+      if (svg && !svg.querySelector('#route-gradient')) {
+        const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        const linearGradient = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+        linearGradient.setAttribute("id", "route-gradient");
+        linearGradient.setAttribute("x1", "0%");
+        linearGradient.setAttribute("y1", "0%");
+        linearGradient.setAttribute("x2", "100%");
+        linearGradient.setAttribute("y2", "0%");
+        
+        const stop1 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+        stop1.setAttribute("offset", "0%");
+        stop1.setAttribute("stop-color", "#fbbf24");
+        
+        const stop2 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+        stop2.setAttribute("offset", "50%");
+        stop2.setAttribute("stop-color", "#f43f5e");
+        
+        const stop3 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+        stop3.setAttribute("offset", "100%");
+        stop3.setAttribute("stop-color", "#a855f7");
+        
+        linearGradient.appendChild(stop1);
+        linearGradient.appendChild(stop2);
+        linearGradient.appendChild(stop3);
+        defs.appendChild(linearGradient);
+        svg.prepend(defs);
+      }
+    };
+
+    inject();
+    map.on('layeradd', inject);
+    
+    // Also use fallback timeouts just in case layeradd fires before React renders Polyline
+    const timer = setTimeout(inject, 100);
+    const timer2 = setTimeout(inject, 500);
+
+    return () => {
+      map.off('layeradd', inject);
+      clearTimeout(timer);
+      clearTimeout(timer2);
+    };
   }, [map]);
   return null;
 }
@@ -124,8 +154,13 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
   const themeData = MAP_THEMES[theme] || MAP_THEMES.street;
   const isDarkMap = theme === 'dark' || theme === 'satellite';
 
-  const startColor = highlightColor === 'url(#route-gradient)' ? '#fbbf24' : highlightColor || '#fbbf24';
-  const endColor = highlightColor === 'url(#route-gradient)' ? '#a855f7' : highlightColor || '#a855f7';
+  const isGradient = highlightColor === 'url(#route-gradient)';
+  const startColor = isGradient ? '#fbbf24' : highlightColor || '#fbbf24';
+  const endColor = isGradient ? '#a855f7' : highlightColor || '#a855f7';
+
+  // Fix URL for deployed environments (Safari / React Router)
+  const pageUrl = window.location.href.split('#')[0];
+  const strokeColor = isGradient ? `url(${pageUrl}#route-gradient)` : highlightColor;
 
   const startIcon = useMemo(() => new L.DivIcon({
     html: `<div style="width: 16px; height: 16px; background: ${startColor}; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
@@ -163,7 +198,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
                 <Polyline
                   positions={positions}
                   pathOptions={{
-                    color: highlightColor,
+                    color: strokeColor,
                     weight: 20,
                     opacity: 0.2,
                     lineCap: 'round',
@@ -174,7 +209,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
                 <Polyline
                   positions={positions}
                   pathOptions={{
-                    color: highlightColor,
+                    color: strokeColor,
                     weight: 10,
                     opacity: 0.4,
                     lineCap: 'round',
@@ -187,7 +222,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
             <Polyline
               positions={positions}
               pathOptions={{
-                color: highlightColor,
+                color: strokeColor,
                 weight: 5,
                 opacity: 1,
                 lineCap: 'round',
