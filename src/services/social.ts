@@ -26,6 +26,19 @@ export async function createSelfNotification(userId: string, message: string, ta
   });
 }
 
+// ─── Post Management ──────────────────────────────────────────────
+
+export async function getActivityById(activityId: string): Promise<Activity | null> {
+  const docRef = doc(db, 'activities', activityId);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...snap.data() } as Activity;
+}
+
+export async function deleteActivity(activityId: string): Promise<void> {
+  await deleteDoc(doc(db, 'activities', activityId));
+}
+
 // ─── Follow System ──────────────────────────────────────────────
 
 export async function followUser(myUid: string, targetUid: string): Promise<void> {

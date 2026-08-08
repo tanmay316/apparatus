@@ -39,6 +39,7 @@ interface Props {
   recenterTrigger?: number;
   hideMap?: boolean;
   noGlow?: boolean;
+  isCapturing?: boolean;
 }
 
 /** Keeps the map centered on the last route point when live tracking or when recenterTrigger changes */
@@ -139,7 +140,7 @@ function InjectGradient() {
   return null;
 }
 
-export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false }: Props) {
+export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false, isCapturing = false }: Props) {
   const positions: [number, number][] = useMemo(
     () => route.map(p => [p.lat, p.lng]),
     [route]
@@ -160,7 +161,8 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
 
   // Fix URL for deployed environments (Safari / React Router)
   const pageUrl = window.location.href.split('#')[0];
-  const strokeColor = isGradient ? `url(${pageUrl}#route-gradient)` : highlightColor;
+  // html-to-image creates an isolated SVG context, so it requires the local URL.
+  const strokeColor = isGradient ? (isCapturing ? 'url(#route-gradient)' : `url(${pageUrl}#route-gradient)`) : highlightColor;
 
   const startIcon = useMemo(() => new L.DivIcon({
     html: `<div style="width: 16px; height: 16px; background: ${startColor}; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,

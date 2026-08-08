@@ -567,11 +567,31 @@ export function ProfilePage() {
                             <span className="text-xs font-mono text-[var(--muted)] font-bold">{relativeTime}</span>
                             <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-[var(--teal)]/10 text-[var(--teal)]">Logged</span>
                           </div>
-                          <h4 className="font-semibold text-sm text-[var(--text)] mt-1">{workout.dayTitle || 'Workout Day Completed'}</h4>
+                          <h4 className="font-semibold text-sm text-[var(--text)] mt-1">
+                            {workout.type === 'run' ? 'Running Session' : 
+                             workout.type === 'cycle' ? 'Cycling Session' : 
+                             workout.type === 'walk' ? 'Walking Session' : 
+                             workout.dayTitle || 'Workout Day Completed'}
+                          </h4>
                           {workout.planTitle && (
                             <p className="text-xs text-[var(--muted)] mt-0.5">Part of the <span className="font-medium text-[var(--text)]">{workout.planTitle}</span> plan</p>
                           )}
-                          {workout.exercises && (
+                          
+                          {workout.distanceKm !== undefined ? (
+                            <div className="flex flex-wrap gap-1.5 mt-2">
+                              <span className="flex items-center gap-1 text-[10px] font-mono bg-[var(--bg)] border border-[var(--border)] px-2 py-0.5 rounded text-[var(--muted)]">
+                                {workout.distanceKm.toFixed(2)} km
+                              </span>
+                              <span className="flex items-center gap-1 text-[10px] font-mono bg-[var(--bg)] border border-[var(--border)] px-2 py-0.5 rounded text-[var(--muted)]">
+                                {Math.floor((workout.durationSec || 0) / 60)} min
+                              </span>
+                              {workout.calories > 0 && (
+                                <span className="flex items-center gap-1 text-[10px] font-mono bg-[var(--bg)] border border-[var(--border)] px-2 py-0.5 rounded text-[var(--muted)]">
+                                  {workout.calories} kcal
+                                </span>
+                              )}
+                            </div>
+                          ) : workout.exercises && (
                             <div className="flex flex-wrap gap-1.5 mt-2">
                               {workout.exercises.map((ex: any, i: number) => (
                                 <span key={i} className="text-[10px] font-mono bg-[var(--bg)] border border-[var(--border)] px-2 py-0.5 rounded text-[var(--muted)]">

@@ -19,6 +19,10 @@ interface UIState {
   setTheme: (theme: ThemePreference) => void;
   setUnits: (units: UnitPreference) => void;
   setLanguage: (language: LanguagePreference) => void;
+  
+  hiddenPosts: string[];
+  hidePost: (id: string) => void;
+  unhidePost: (id: string) => void;
 }
 
 export const useUIStore = create<UIState>()(persist((set) => ({
@@ -38,7 +42,11 @@ export const useUIStore = create<UIState>()(persist((set) => ({
   setTheme: (theme) => set({ theme }),
   setUnits: (units) => set({ units }),
   setLanguage: (language) => set({ language }),
+
+  hiddenPosts: [],
+  hidePost: (id) => set((s) => ({ hiddenPosts: [...(s.hiddenPosts || []), id] })),
+  unhidePost: (id) => set((s) => ({ hiddenPosts: (s.hiddenPosts || []).filter(p => p !== id) })),
 }), {
   name: 'apparatus-preferences',
-  partialize: (state) => ({ theme: state.theme, units: state.units, language: state.language }),
+  partialize: (state) => ({ theme: state.theme, units: state.units, language: state.language, hiddenPosts: state.hiddenPosts }),
 }));

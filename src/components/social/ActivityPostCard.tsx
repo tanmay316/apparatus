@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { addComment, getComments, hasLiked, toggleLike } from '@/services/social';
+import { addComment, getComments, hasLiked, toggleLike, deleteActivity } from '@/services/social';
 import type { Activity, Comment } from '@/types';
 import { calculateBodyweightReps, calculateShareVolume, getActiveMuscles } from '@/lib/muscle-map';
 import { calculateWorkoutCalories } from '@/lib/calories';
@@ -34,12 +34,13 @@ interface ActivityPostCardProps {
 
 export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
   const { user, profile } = useAuthStore();
-  const { showToast, units, theme } = useUIStore();
+  const { showToast, units, theme, hiddenPosts, hidePost, unhidePost } = useUIStore();
   const queryClient = useQueryClient();
 
   const [showComments, setShowComments] = useState(false);
   const [showAllExercises, setShowAllExercises] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [showOptions, setShowOptions] = useState(false);
 
   const bookmarks = profile?.bookmarks || [];
   const isSaved = activity.id ? bookmarks.includes(activity.id) : false;
@@ -113,11 +114,32 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
     onError: () => showToast('Could not add comment', 'error'),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteActivity(activity.id!),
+    onSuccess: () => {
+      showToast('Post deleted', 'success');
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+    },
+    onError: () => showToast('Could not delete post', 'error'),
+  });
+
   // Map exercise name to muscle group
   const getExerciseMuscleGroup = (name: string) => {
     const found = COMPACT_LIBRARY.find(ex => ex.name.toLowerCase() === name.toLowerCase());
     return found?.muscleGroup || 'Full Body';
   };
+
+  if (activity.id && hiddenPosts?.includes(activity.id)) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        className="flex items-center justify-between p-4 mb-6 rounded-[24px] bg-[#fdfbfb] border border-[#ececec] text-sm shadow-sm"
+      >
+        <span className="text-[#777b86] font-medium font-sans">Post hidden</span>
+        <button onClick={() => unhidePost(activity.id!)} className="text-[#5d2a1a] font-bold font-sans hover:underline">Undo</button>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.article
@@ -125,10 +147,10 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="activity-post-card relative overflow-hidden text-[#17191c] border border-[#ececec] rounded-[24px] bg-[#fdfbfb] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] p-6 mb-6"
+      className="activity-post-card relative text-[#17191c] border border-[#ececec] rounded-[24px] bg-[#fdfbfb] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] p-6 mb-6"
     >
       {/* ─── SECTION 1: HEADER ────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 mb-5">
+      <div className="flex items-center justify-between gap-3 mb-5 relative z-20">
         <div className="flex items-center gap-3">
           <Link to={`/profile/${activity.username || activity.userId}`} className="shrink-0">
             <img
@@ -165,9 +187,74 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
           <span className="text-xs font-mono text-[#777b86]">
             {timeAgo(activity.createdAt?.seconds)}
           </span>
-          <button className="p-1.5 text-[#777b86] hover:text-[#17191c] transition-colors" title="Post options">
-            <MoreHorizontal size={18} />
-          </button>
+          <div className="relative">
+            <button 
+              onClick={() => setShowOptions(!showOptions)}
+              className="p-1.5 text-[#777b86] hover:text-[#17191c] transition-colors rounded-full hover:bg-gray-100" 
+              title="Post options"
+            >
+              <MoreHorizontal size={18} />
+            </button>
+
+            <AnimatePresence>
+              {showOptions && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -5 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -5 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50 overflow-hidden"
+                >
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/post/${activity.id}`);
+                      showToast('Link copied to clipboard');
+                      setShowOptions(false);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-[13px] font-sans text-[#17191c] hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    Copy Link
+                  </button>
+                  {isOwnActivity ? (
+                    <button 
+                      onClick={() => {
+                        if (confirm('Are you sure you want to delete this post?')) {
+                          deleteMutation.mutate();
+                        }
+                        setShowOptions(false);
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="w-full text-left px-4 py-2.5 text-[13px] font-sans text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {deleteMutation.isPending ? 'Deleting...' : 'Delete Post'}
+                    </button>
+                  ) : (
+                    <>
+                      <button 
+                        onClick={() => {
+                          if (activity.id) hidePost(activity.id);
+                          showToast('Post hidden');
+                          setShowOptions(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-[13px] font-sans text-[#17191c] hover:bg-gray-50 flex items-center gap-2"
+                      >
+                        Hide Post
+                      </button>
+                      <button 
+                        onClick={() => {
+                          showToast('Post reported to moderators');
+                          setShowOptions(false);
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-[13px] font-sans text-red-600 hover:bg-red-50 flex items-center gap-2"
+                      >
+                        Report
+                      </button>
+                    </>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 

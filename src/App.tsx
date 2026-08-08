@@ -23,6 +23,7 @@ import { MeasurementsPage } from '@/pages/MeasurementsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { GuidePage } from '@/pages/GuidePage';
 import { CardioTracker } from '@/pages/CardioTracker';
+import { SinglePostPage } from '@/pages/SinglePostPage';
 import { Toast } from '@/components/ui/Toast';
 import { useUIStore } from '@/stores/ui-store';
 
@@ -104,6 +105,7 @@ export function App() {
             <Route path="explore" element={<ExplorePage />} />
             <Route path="cardio" element={<CardioTracker />} />
             <Route path="feed" element={<FeedPage />} />
+            <Route path="post/:id" element={<SinglePostPage />} />
             <Route path="community" element={<CommunityPage />} />
             <Route path="nutrition" element={<NutritionDashboard />} />
             <Route path="profile/:username" element={<ProfilePage />} />

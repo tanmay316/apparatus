@@ -106,6 +106,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const handleDownload = async () => {
     try {
       setDownloading(true);
+      await new Promise(r => setTimeout(r, 50));
       const canvas = await getCanvas();
       if (!canvas) return;
       
@@ -129,6 +130,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const handleShare = async () => {
     try {
       setDownloading(true);
+      await new Promise(r => setTimeout(r, 50));
       const canvas = await getCanvas();
       if (!canvas) return;
 
@@ -206,6 +208,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                       highlightColor={lineColor}
                       hideMap={hideMapTiles}
                       noGlow={true}
+                      isCapturing={downloading}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-white/30 font-medium">
