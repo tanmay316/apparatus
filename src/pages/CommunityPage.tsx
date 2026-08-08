@@ -53,7 +53,7 @@ export function CommunityPage() {
         >
           Events & Challenges
           {activeTab === 'events' && (
-            <motion.div layoutId="community_tab" className="absolute bottom-0 left-0 right-0 h-1 bg-sienna rounded-t-full" />
+            <motion.div className="absolute bottom-0 left-0 right-0 h-1 bg-sienna rounded-t-full" />
           )}
         </button>
         <button
@@ -64,7 +64,7 @@ export function CommunityPage() {
         >
           Clans
           {activeTab === 'clans' && (
-            <motion.div layoutId="community_tab" className="absolute bottom-0 left-0 right-0 h-1 bg-sienna rounded-t-full" />
+            <motion.div className="absolute bottom-0 left-0 right-0 h-1 bg-sienna rounded-t-full" />
           )}
         </button>
       </div>

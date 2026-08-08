@@ -33,7 +33,14 @@ export function LiveTrainingHub() {
       );
 
       unsubscribe = onSnapshot(q, async (snap) => {
-        const sessions = snap.docs.map(d => d.data() as ActiveSession);
+        const now = Date.now();
+        const sessions = snap.docs
+          .map(d => d.data() as ActiveSession)
+          .filter(s => {
+            if (!s.updatedAt) return false;
+            const updateTime = s.updatedAt.toMillis ? s.updatedAt.toMillis() : (s.updatedAt.seconds * 1000) || now;
+            return now - updateTime < 120000; // 2 minutes
+          });
         
         // Fetch user details for these sessions
         const sessionsWithUsers = await Promise.all(sessions.map(async (s) => {

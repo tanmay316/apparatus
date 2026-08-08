@@ -648,7 +648,7 @@ export function ProfilePage() {
                         key={activity.id}
                         activity={activity}
                         onShare={(act) => {
-                          const isCardio = act.type === 'walk' || act.type === 'run' || act.type === 'cycle';
+                          const isCardio = act.type === 'walk' || act.type === 'run' || act.type === 'cycle' || ['walk', 'run', 'cycle'].includes((act.details as any)?.activityType);
                           if (isCardio) {
                             setCardioShareData({
                               type: (act.details as any)?.activityType || 'walk',
@@ -740,7 +740,7 @@ export function ProfilePage() {
                     const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
                     const exerciseNamesList = rawExLogs.map((e: any) => typeof e === 'string' ? e : e.name);
 
-                      const isCardio = workout.type === 'walk' || workout.type === 'run' || workout.type === 'cycle';
+                      const isCardio = workout.type === 'walk' || workout.type === 'run' || workout.type === 'cycle' || ['walk', 'run', 'cycle'].includes((workout.details as any)?.activityType);
                       
                       const activityItem: ActivityType = isCardio ? {
                         id: workout.id,
@@ -794,7 +794,8 @@ export function ProfilePage() {
                         key={workout.id}
                         activity={activityItem}
                         onShare={(act) => {
-                          if (isCardio) {
+                          const isCardioOnShare = act.type === 'walk' || act.type === 'run' || act.type === 'cycle' || ['walk', 'run', 'cycle'].includes((act.details as any)?.activityType);
+                          if (isCardioOnShare) {
                             setCardioShareData({
                               type: (act.details as any)?.activityType || 'walk',
                               date: workout.date || new Date().toISOString(),

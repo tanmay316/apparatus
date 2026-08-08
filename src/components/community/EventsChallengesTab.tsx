@@ -38,28 +38,25 @@ export function EventsChallengesTab() {
       </div>
 
       {/* Featured Section */}
-      <div className="relative overflow-hidden rounded-[32px] bg-ink-2 border border-line p-6 sm:p-8">
-        <div className="absolute top-0 right-0 p-8 opacity-10">
-          <Target size={120} />
+      {challenges.length > 0 && (
+        <div 
+          onClick={() => setSelectedChallengeId(challenges[0].id!)}
+          className="relative overflow-hidden rounded-[32px] bg-ink-2 border border-line p-6 sm:p-8 cursor-pointer hover:border-sienna/50 transition-colors"
+        >
+          <div className="absolute top-0 right-0 p-8 opacity-10">
+            <Target size={120} />
+          </div>
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-2 bg-sienna/20 text-sienna px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider mb-4">
+              <Flame size={14} /> Featured Challenge
+            </div>
+            <h2 className="font-display text-3xl text-bone mb-2">{challenges[0].title}</h2>
+            <p className="text-bone-dim max-w-md mb-6">{challenges[0].description || `Join ${challenges[0].participantCount || 0} athletes in completing this challenge. Push your limits and climb the leaderboard.`}</p>
+            
+            <button className="btn-primary px-6 py-2">View Challenge</button>
+          </div>
         </div>
-        <div className="relative z-10">
-          <div className="inline-flex items-center gap-2 bg-sienna/20 text-sienna px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider mb-4">
-            <Flame size={14} /> Active Challenge
-          </div>
-          <h2 className="font-display text-3xl text-bone mb-2">100km Run Club</h2>
-          <p className="text-bone-dim max-w-md mb-6">Join 1,204 athletes in completing 100km this month. Push your limits and climb the leaderboard.</p>
-          
-          <div className="w-full bg-ink-3 h-2 rounded-full mb-2 overflow-hidden">
-            <div className="h-full bg-sienna rounded-full w-[45%]" />
-          </div>
-          <div className="flex justify-between text-xs font-mono text-bone-dim mb-6">
-            <span>45km completed</span>
-            <span>55km remaining</span>
-          </div>
-
-          <button className="btn-primary px-6 py-2">Join Challenge</button>
-        </div>
-      </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         

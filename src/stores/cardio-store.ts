@@ -91,6 +91,32 @@ function getAccuracyThreshold(speedKmh: number): number {
 }
 
 // ────────────────────────────────────────────────────────────
+// 2b. Per-Activity Max Plausible Speed (km/h)
+// ────────────────────────────────────────────────────────────
+
+/** Returns the maximum believable speed for any human-powered or e-assisted activity.
+ *  This is NOT a cap — it's a GPS-glitch sanity filter. 150 km/h covers e-bikes
+ *  on downhills while still rejecting obvious GPS teleportation artifacts. */
+const MAX_SANE_SPEED_KMH = 150;
+
+// ────────────────────────────────────────────────────────────
+// 2c. Speed Smoothing Buffer — 3-sample moving average
+// ────────────────────────────────────────────────────────────
+
+const SPEED_BUFFER_SIZE = 3;
+let speedBuffer: number[] = [];
+
+function pushSpeed(raw: number): number {
+  speedBuffer.push(raw);
+  if (speedBuffer.length > SPEED_BUFFER_SIZE) speedBuffer.shift();
+  return speedBuffer.reduce((a, b) => a + b, 0) / speedBuffer.length;
+}
+
+function resetSpeedBuffer() {
+  speedBuffer = [];
+}
+
+// ────────────────────────────────────────────────────────────
 // 3. Auto-Pause — pause timer when user is standing still
 // ────────────────────────────────────────────────────────────
 
@@ -207,9 +233,16 @@ function handleGpsPosition(pos: GeolocationPosition) {
   const currentSpeed = storeState.currentSpeedKmh;
   const maxAccuracy = getAccuracyThreshold(currentSpeed);
 
-  // Smart accuracy thresholding: always accept the first point,
-  // then apply dynamic accuracy filtering
-  if (storeState.routePoints.length > 0 && accuracy > maxAccuracy) {
+  // ── GPS Warmup: discard early inaccurate points ──────────
+  // When GPS first starts, the first few readings can be wildly off.
+  // Wait until we get a reading with accuracy < 30m before recording.
+  const pointCount = storeState.routePoints.length;
+  if (pointCount < 5 && accuracy > 30) {
+    return; // Skip inaccurate warmup readings
+  }
+
+  // Smart accuracy thresholding: apply dynamic accuracy filtering
+  if (pointCount >= 5 && accuracy > maxAccuracy) {
     return; // Reject inaccurate point
   }
 
@@ -352,8 +385,9 @@ export const useCardioStore = create<CardioState>()(
       ...(IDLE as CardioState),
 
       startTracking: (type) => {
-        // Reset Kalman filters for a fresh session
+        // Reset Kalman filters and speed buffer for a fresh session
         resetKalmanFilters();
+        resetSpeedBuffer();
         lastMovementTs = Date.now();
 
         // IMPORTANT: set isTracking FIRST so GPS callbacks aren't dropped
@@ -398,8 +432,9 @@ export const useCardioStore = create<CardioState>()(
       },
 
       resumeTracking: () => {
-        // Reset Kalman filters when resuming so we don't smooth across the gap
+        // Reset Kalman filters and speed buffer when resuming so we don't smooth across the gap
         resetKalmanFilters();
+        resetSpeedBuffer();
         lastMovementTs = Date.now();
 
         startGpsWatch();
@@ -470,7 +505,7 @@ export const useCardioStore = create<CardioState>()(
           if (rawDistance < 0.003 && !isGpsGap) {
             // Still update speed to 0 so auto-pause can detect stillness
             const gpsSpeed = point.speed != null && point.speed > 0
-              ? Math.min(point.speed * 3.6, 100) : 0;
+              ? Math.min(point.speed * 3.6, MAX_SANE_SPEED_KMH) : 0;
             
             // ── Auto-Pause Logic (while stationary) ──────
             if (gpsSpeed < AUTO_PAUSE_SPEED_THRESHOLD) {
@@ -499,8 +534,7 @@ export const useCardioStore = create<CardioState>()(
             // Sanity-check implied speed to reject impossible bursts
             if (rawDistance < 0.5) {
               const impliedSpeedKmh = dtSec > 0 ? (rawDistance / dtSec) * 3600 : 0;
-              // Max plausible speeds: walk ~10, run ~35, cycle ~80 km/h
-              if (impliedSpeedKmh < 100) {
+              if (impliedSpeedKmh < MAX_SANE_SPEED_KMH) {
                 addedDistance = rawDistance;
               }
             }
@@ -522,10 +556,13 @@ export const useCardioStore = create<CardioState>()(
         // Prefer GPS-reported speed when available (more accurate than derived)
         if (point.speed !== undefined && point.speed > 0) {
           const gpsSpeedKmh = point.speed * 3.6; // m/s → km/h
-          if (gpsSpeedKmh < 100) {
+          if (gpsSpeedKmh < MAX_SANE_SPEED_KMH) {
             speed = gpsSpeedKmh;
           }
         }
+
+        // Smooth speed through moving average to reject momentary spikes
+        speed = pushSpeed(speed);
 
         // ── Auto-Pause Logic ──────────────────────────────
         if (speed >= AUTO_PAUSE_SPEED_THRESHOLD) {
@@ -567,11 +604,12 @@ export const useCardioStore = create<CardioState>()(
           return;
         }
 
+        const clampedSpeed = Math.min(speed, MAX_SANE_SPEED_KMH);
         set({
           routePoints: [...state.routePoints, smoothedPoint],
           distanceKm: state.distanceKm + addedDistance,
-          currentSpeedKmh: Math.round(speed * 10) / 10,
-          maxSpeedKmh: Math.max(state.maxSpeedKmh, Math.round(speed * 10) / 10),
+          currentSpeedKmh: Math.round(clampedSpeed * 10) / 10,
+          maxSpeedKmh: Math.max(state.maxSpeedKmh, Math.round(clampedSpeed * 10) / 10),
           elevationGainM: state.elevationGainM + addedElevation,
           gpsAccuracy: accuracy || 0,
         });
@@ -598,6 +636,7 @@ export const useCardioStore = create<CardioState>()(
 
       reset: () => {
         resetKalmanFilters();
+        resetSpeedBuffer();
         lastMovementTs = 0;
         set({ ...(IDLE as CardioState) });
       },

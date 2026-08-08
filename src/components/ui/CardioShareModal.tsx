@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Check } from 'lucide-react';
 import { format } from 'date-fns';
-import html2canvas from 'html2canvas';
+import { toCanvas } from 'html-to-image';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
 import type { RoutePoint } from '@/types';
 
@@ -76,11 +76,9 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
 
   const getCanvas = async () => {
     if (!cardRef.current) return null;
-    const canvas = await html2canvas(cardRef.current, {
-      useCORS: true,
-      allowTaint: true,
-      scale: 2,
-      backgroundColor: isTransparent ? null : undefined,
+    const canvas = await toCanvas(cardRef.current, {
+      pixelRatio: 2,
+      backgroundColor: isTransparent ? 'rgba(0,0,0,0)' : '#121212',
     });
     
     // Apply clipping to match the 1.8rem border-radius of the card

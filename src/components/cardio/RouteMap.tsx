@@ -95,9 +95,9 @@ function InjectGradient() {
     const svg = pane?.querySelector('svg');
     if (svg && !svg.querySelector('#route-gradient')) {
       const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-      // Use diagonal gradient to avoid horizontal solid strips
+      // Use horizontal gradient as requested
       defs.innerHTML = `
-        <linearGradient id="route-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient id="route-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stop-color="#fbbf24" />
           <stop offset="50%" stop-color="#f43f5e" />
           <stop offset="100%" stop-color="#a855f7" />
