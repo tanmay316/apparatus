@@ -454,3 +454,112 @@ export interface CardioActivity {
   visibility: 'public' | 'followers' | 'private';
   notes: string;
 }
+
+// ─── Clan System (V2) ────────────────────────────────────────
+export type ClanRole = 'leader' | 'co_leader' | 'member';
+export type ClanVisibility = 'public' | 'private';
+export type ClanStatus = 'active' | 'suspended' | 'disbanded';
+export type ClanCategory = 'Calisthenics' | 'Gym' | 'Running' | 'Cycling' | 
+  'Yoga' | 'CrossFit' | 'Swimming' | 'MMA' | 'General' | 'Other';
+
+export interface ClanV2 {
+  id?: string;
+  name: string;
+  description: string;
+  avatarUrl?: string;
+  coverUrl?: string;
+  category: ClanCategory;
+  visibility: ClanVisibility;
+  leaderId: string;
+  leaderName: string;
+  memberCount: number;
+  status: ClanStatus;
+  location?: { city?: string; country?: string };
+  tags: string[];
+  createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
+export interface ClanMembership {
+  id?: string;
+  clanId: string;
+  userId: string;
+  userName: string;
+  userPhoto: string;
+  role: ClanRole;
+  joinedAt: Timestamp | null;
+  status: 'active' | 'removed' | 'left';
+}
+
+// ─── Challenge System (V2) ───────────────────────────────────
+export type ChallengeMetric = 'distance' | 'calories' | 'workouts' | 
+  'duration' | 'steps';
+export type ChallengeStatus = 'upcoming' | 'active' | 'completed' | 
+  'cancelled' | 'removed';
+
+export interface ChallengeV2 {
+  id?: string;
+  title: string;
+  description: string;
+  createdBy: string;
+  creatorName: string;
+  creatorPhoto: string;
+  clanId?: string;
+  clanName?: string;
+  metric: ChallengeMetric;
+  target: number;
+  unit: string;
+  startDate: Timestamp;
+  endDate: Timestamp;
+  visibility: 'public' | 'clan_only';
+  status: ChallengeStatus;
+  participantCount: number;
+  coverUrl?: string;
+  createdAt: Timestamp | null;
+}
+
+export interface ChallengeParticipant {
+  id?: string;
+  challengeId: string;
+  userId: string;
+  userName: string;
+  userPhoto: string;
+  progress: number;
+  rank: number;
+  joinedAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
+// ─── Event System (V2) ───────────────────────────────────────
+export type SimpleEventStatus = 'upcoming' | 'active' | 'completed' | 
+  'cancelled' | 'removed';
+
+export interface SimpleEvent {
+  id?: string;
+  title: string;
+  description: string;
+  createdBy: string;
+  creatorName: string;
+  creatorPhoto: string;
+  clanId?: string;
+  clanName?: string;
+  activityType: string;
+  startTime: Timestamp;
+  endTime: Timestamp;
+  location?: { name?: string; latitude?: number; longitude?: number };
+  maxParticipants?: number;
+  visibility: 'public' | 'clan_only';
+  status: SimpleEventStatus;
+  participantCount: number;
+  coverUrl?: string;
+  createdAt: Timestamp | null;
+}
+
+export interface EventParticipant {
+  id?: string;
+  eventId: string;
+  userId: string;
+  userName: string;
+  userPhoto: string;
+  joinedAt: Timestamp | null;
+}

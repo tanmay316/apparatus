@@ -64,7 +64,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
   const activeMuscleSet = getActiveMuscles(exerciseNames);
   const activeMuscleList = Array.from(activeMuscleSet).slice(0, 5);
   
-  const isCardio = activity.type === 'walk' || activity.type === 'run' || activity.type === 'cycle';
+  const isCardio = activity.type === 'walk' || activity.type === 'run' || activity.type === 'cycle' || ['walk', 'run', 'cycle'].includes(details.activityType);
 
   // React Query for Likes & Comments
   const { data: liked = false } = useQuery({

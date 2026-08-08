@@ -88,6 +88,27 @@ function FitBounds({ positions }: { positions: [number, number][] }) {
   return null;
 }
 
+function InjectGradient() {
+  const map = useMap();
+  useEffect(() => {
+    const pane = map.getPane('overlayPane');
+    const svg = pane?.querySelector('svg');
+    if (svg && !svg.querySelector('#route-gradient')) {
+      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      // Use diagonal gradient to avoid horizontal solid strips
+      defs.innerHTML = `
+        <linearGradient id="route-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#fbbf24" />
+          <stop offset="50%" stop-color="#f43f5e" />
+          <stop offset="100%" stop-color="#a855f7" />
+        </linearGradient>
+      `;
+      svg.prepend(defs);
+    }
+  }, [map]);
+  return null;
+}
+
 export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false }: Props) {
   const positions: [number, number][] = useMemo(
     () => route.map(p => [p.lat, p.lng]),
@@ -124,15 +145,6 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
 
   return (
     <div style={{ height, width: '100%', overflow: 'hidden' }} className="relative">
-      <svg style={{ width: 0, height: 0, position: 'absolute' }}>
-        <defs>
-          <linearGradient id="route-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#fbbf24" />
-            <stop offset="50%" stopColor="#f43f5e" />
-            <stop offset="100%" stopColor="#a855f7" />
-          </linearGradient>
-        </defs>
-      </svg>
       <MapContainer
         center={center}
         zoom={zoom}
@@ -140,6 +152,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
         zoomControl={false}
         attributionControl={false}
       >
+        <InjectGradient />
         {!hideMap && <TileLayer url={themeData.url} crossOrigin="anonymous" />}
 
         {positions.length > 1 && (

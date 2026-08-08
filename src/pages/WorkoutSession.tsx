@@ -363,6 +363,18 @@ export function WorkoutSession() {
       } catch (e) {
         console.error('Failed to post activity:', e);
       }
+
+      // Auto-update community challenges
+      try {
+        const { updateUserChallengeProgress } = await import('@/services/community');
+        await updateUserChallengeProgress(user.uid, [
+          { metric: 'calories', amount: calories },
+          { metric: 'duration', amount: finalDurationMin },
+          { metric: 'workouts', amount: 1 }
+        ]);
+      } catch (err) {
+        console.error('Failed to update challenges:', err);
+      }
       
       // Invalidate queries to refresh dashboard metrics immediately
       queryClient.invalidateQueries({ queryKey: ['stats'] });

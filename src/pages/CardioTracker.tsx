@@ -314,6 +314,20 @@ export function CardioTracker() {
             commentsCount: 0,
           });
         } catch { /* silent */ }
+        
+        // Auto-update community challenges
+        try {
+          // Import dynamic to avoid circular dependencies if any, or just regular import at top
+          const { updateUserChallengeProgress } = await import('@/services/community');
+          await updateUserChallengeProgress(user.uid, [
+            { metric: 'distance', amount: data.distanceKm! },
+            { metric: 'calories', amount: data.calories! },
+            { metric: 'duration', amount: data.durationSec! / 60 },
+            { metric: 'workouts', amount: 1 }
+          ]);
+        } catch (err) {
+          console.error('Failed to update challenges:', err);
+        }
 
         showToast('Activity saved!');
       } catch (err) {

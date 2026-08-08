@@ -14,7 +14,7 @@ const TABS = [
   { id: "nutrition", path: "/nutrition", label: "Nutrition", icon: Apple },
   { id: "action", path: "#", label: "Start", icon: MapPin }, // Center action
   { id: "progress", path: "/progress", label: "Progress", icon: TrendingUp },
-  { id: "community", path: "/communities", label: "Community", icon: Users },
+  { id: "community", path: "/community", label: "Community", icon: Users },
 ];
 
 export function BottomNav() {
@@ -54,7 +54,7 @@ export function BottomNav() {
       if (tab.id === "action") return false;
       if (tab.id === "home") return location.pathname === "/";
       if (tab.id === "community")
-        return location.pathname.startsWith("/communities");
+        return location.pathname.startsWith("/community");
       return location.pathname.startsWith(tab.path);
     });
     return index;

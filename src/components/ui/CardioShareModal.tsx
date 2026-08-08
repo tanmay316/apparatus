@@ -76,12 +76,33 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
 
   const getCanvas = async () => {
     if (!cardRef.current) return null;
-    return await html2canvas(cardRef.current, {
+    const canvas = await html2canvas(cardRef.current, {
       useCORS: true,
       allowTaint: true,
       scale: 2,
       backgroundColor: isTransparent ? null : undefined,
     });
+    
+    // Apply clipping to match the 1.8rem border-radius of the card
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.globalCompositeOperation = 'destination-in';
+      const clipCanvas = document.createElement('canvas');
+      clipCanvas.width = canvas.width;
+      clipCanvas.height = canvas.height;
+      const clipCtx = clipCanvas.getContext('2d');
+      if (clipCtx) {
+        // 1.8rem is roughly 28.8px at default base size. 
+        // We multiply by scale=2 -> approx 58px.
+        const radius = 58; 
+        clipCtx.beginPath();
+        clipCtx.roundRect(0, 0, canvas.width, canvas.height, radius);
+        clipCtx.fill();
+        ctx.drawImage(clipCanvas, 0, 0);
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    return canvas;
   };
 
   const handleDownload = async () => {
