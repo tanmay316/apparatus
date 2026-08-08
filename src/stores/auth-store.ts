@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { User, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut } from 'firebase/auth';
+import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider, ADMIN_EMAIL } from '@/lib/firebase';
 import { sanitizeUsername, validateDisplayName } from '@/lib/validation';
@@ -49,6 +49,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initialized: false,
 
   init: () => {
+    // Handle mobile redirect login resolution
+    getRedirectResult(auth).catch(err => {
+      console.error('Redirect sign-in error:', err);
+    });
+
     onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
@@ -152,9 +157,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       } catch (error: any) {
         console.error('Failed to initialize user session:', error);
-        useUIStore.getState().showToast(error?.message || 'Failed to initialize session. Check your database setup.', 'error');
-        // Crucial: Sign out of Firebase so internal auth state matches our store's null state.
-        firebaseSignOut(auth).catch(console.error);
+        useUIStore.getState().showToast('Network timeout. Please check your connection and refresh.', 'error');
+        // Do NOT forcefully sign out of Firebase here. The user is still authenticated, 
+        // they just had a bad connection. Forcing signOut deletes their session!
         set({ user: null, profile: null, stats: null, loading: false, initialized: true });
       }
     });
@@ -163,11 +168,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signInWithGoogle: async () => {
     set({ loading: true });
     try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        // Mobile browsers often block popups or kill the context.
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
+    } catch (error: any) {
       console.error('Google sign-in failed:', error);
-      set({ loading: false });
-      throw error;
+      // Fallback if popup blocked on desktop
+      if (error.code === 'auth/popup-blocked') {
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        set({ loading: false });
+        throw error;
+      }
     }
   },
 
