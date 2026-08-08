@@ -174,15 +174,8 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
         exit={{ opacity: 0 }}
         className="fixed inset-0 z-[999] flex flex-col items-center bg-black/90 backdrop-blur-md touch-none overflow-y-auto px-4"
       >
-        <div className="relative w-full max-w-[400px] shrink-0 mx-auto mt-16 mb-4 sm:mt-24">
+        <div className="relative w-full max-w-[400px] shrink-0 mx-auto mt-2 sm:mt-4">
           
-          <button
-            onClick={onClose}
-            className="absolute -top-4 -right-4 w-10 h-10 flex items-center justify-center text-white/50 hover:text-white rounded-full bg-black/50 backdrop-blur-md z-[200]"
-          >
-            <X size={20} />
-          </button>
-
           {/* The Card to capture */}
           <motion.div 
             drag="x"
@@ -194,6 +187,14 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
               backgroundImage: isTransparent ? `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h12v12H0V0zm12 12h12v12H12V12zM0 12h12v12H0V12zm12-12h12v12H12V0z' fill='%23222' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E")` : 'none'
             }}
           >
+            {/* Close Button (Overlay on UI, not captured in image) */}
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center text-white/70 hover:text-white rounded-full bg-black/40 backdrop-blur-md z-[200]"
+            >
+              <X size={20} />
+            </button>
+
             <div
               ref={cardRef}
               className={`w-full h-full relative overflow-hidden flex flex-col pointer-events-none rounded-[1.8rem] ${isTransparent ? 'bg-transparent' : 'bg-[#121212]'}`}
@@ -382,7 +383,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
           </motion.div>
 
           {/* Dots Indicator */}
-          <div className="flex items-center justify-center gap-1.5 mt-5">
+          <div className="flex items-center justify-center gap-1.5 mt-3">
             {LAYOUTS.map((_, idx) => (
               <div 
                 key={idx} 
@@ -393,12 +394,12 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
         </div>
 
         {/* Controls */}
-        <div className="w-full max-w-[400px] mx-auto px-4 pb-8 flex flex-col gap-4 mt-2">
+        <div className="w-full max-w-[400px] mx-auto px-4 pb-6 flex flex-col gap-2 mt-2">
           
           {/* Map theme selector (only when map tiles are visible) */}
           {!hideMapTiles && layout !== 'stats-only' && (
-            <div className="flex overflow-x-auto pb-2 -mx-4 px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex p-1 bg-white/5 backdrop-blur-xl rounded-[24px] border border-white/10 mx-auto">
+            <div className="w-full max-w-[95vw] mx-auto bg-white/5 backdrop-blur-xl rounded-[24px] border border-white/10 overflow-hidden">
+              <div className="flex overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {AVAILABLE_THEMES.map(t => (
                   <button
                     key={t}
@@ -417,7 +418,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
           )}
 
           {/* Actions */}
-          <div className="flex justify-center gap-8 w-full mt-4">
+          <div className="flex justify-center gap-8 w-full mt-2">
             <svg width="0" height="0" className="absolute">
               <defs>
                 <linearGradient id="icon-gradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
