@@ -86,6 +86,7 @@ export function CardioTracker() {
       if (!store.isTracking && screen !== 'summary' && screen !== 'tracking') {
         setScreen('select');
       }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlType]);
 
