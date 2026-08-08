@@ -104,17 +104,21 @@ export function CardioTracker() {
     }
   }, [user, screen]);
 
-  // Timer
+  // Timer — pauses when manually paused OR auto-paused
   useEffect(() => {
     if (!store.isTracking || !store.startedAt) return;
     const interval = setInterval(() => {
-      if (!store.isPaused) {
-        const raw = Date.now() - store.startedAt! - store.totalPausedMs;
+      if (!store.isPaused && !store.isAutoPaused) {
+        // Subtract both manual pause time and accumulated auto-pause time
+        const currentAutoPause = store.isAutoPaused && store.autoPausedAt
+          ? Date.now() - store.autoPausedAt : 0;
+        const totalPause = store.totalPausedMs + store.totalAutoPausedMs + currentAutoPause;
+        const raw = Date.now() - store.startedAt! - totalPause;
         setElapsedSec(Math.max(0, Math.floor(raw / 1000)));
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [store.isTracking, store.startedAt, store.isPaused, store.totalPausedMs]);
+  }, [store.isTracking, store.startedAt, store.isPaused, store.totalPausedMs, store.isAutoPaused, store.autoPausedAt, store.totalAutoPausedMs]);
 
   // Update live session periodically
   useEffect(() => {
@@ -511,7 +515,12 @@ export function CardioTracker() {
               {store.gpsStatus === 'error' || store.gpsStatus === 'denied' ? (
                 <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-bone">{store.gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}</span></>
               ) : store.gpsStatus === 'active' ? (
-                <><Navigation size={14} className="text-emerald-500" /><span className="text-xs font-bold text-bone">GPS Active</span></>
+                <>
+                  <Navigation size={14} className="text-emerald-500" />
+                  <span className="text-xs font-bold text-bone">GPS Active</span>
+                  {/* GPS accuracy quality dot */}
+                  <div className={`w-2 h-2 rounded-full ${store.gpsAccuracy > 0 && store.gpsAccuracy <= 10 ? 'bg-emerald-400' : store.gpsAccuracy <= 30 ? 'bg-yellow-400' : store.gpsAccuracy <= 80 ? 'bg-orange-400' : 'bg-red-400'}`} title={`±${Math.round(store.gpsAccuracy)}m`} />
+                </>
               ) : store.gpsStatus === 'waiting' ? (
                 <><Navigation size={14} className="text-yellow-500 animate-pulse" /><span className="text-xs font-bold text-bone">Locating...</span></>
               ) : (
@@ -565,14 +574,22 @@ export function CardioTracker() {
               <div className={`w-12 h-1.5 rounded-full ${isDarkMap ? 'bg-white/30' : 'bg-black/20'}`}></div>
             </button>
 
+            {/* Auto-Pause Indicator */}
+            {store.isAutoPaused && (
+              <div className="flex items-center justify-center gap-2 py-1.5 bg-amber-500/20 backdrop-blur-sm border-b border-amber-500/30">
+                <Pause size={12} className="text-amber-400 animate-pulse" />
+                <span className="text-[11px] font-bold uppercase tracking-widest text-amber-400 animate-pulse">Auto-Paused · Standing Still</span>
+              </div>
+            )}
+
             {/* Core Stats (Always Visible) */}
             <div className="px-6 pb-4 shrink-0" onClick={() => !isExpanded && setIsExpanded(true)}>
               <div className="flex justify-between items-end mb-4">
                 <div>
-                  <div className="text-[2.5rem] leading-none font-black tracking-tighter drop-shadow-md">
+                  <div className={`text-[2.5rem] leading-none font-black tracking-tighter drop-shadow-md ${store.isAutoPaused ? 'opacity-50' : ''}`}>
                     {formatDuration(elapsedSec)}
                   </div>
-                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Timer</div>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>{store.isAutoPaused ? 'Paused' : 'Timer'}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[2rem] leading-none font-black tracking-tighter drop-shadow-md">
