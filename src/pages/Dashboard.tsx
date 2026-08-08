@@ -58,8 +58,6 @@ export function Dashboard() {
   const store = useWorkoutStore();
   const [dashboardShareData, setDashboardShareData] = useState<ShareCardData | null>(null);
 
-  if (!profile) return null;
-
   // ─── Data ────────────────────────────────────────────────
   const xp = stats?.xp || 0;
   const streak = stats?.currentStreak || 0;
@@ -68,34 +66,34 @@ export function Dashboard() {
   const badges = stats?.badges || [];
 
   const { data: activePlan } = useQuery({
-    queryKey: ['plan', profile.activePlanId],
-    queryFn: () => getPlan(profile.activePlanId!),
-    enabled: !!profile.activePlanId,
+    queryKey: ['plan', profile?.activePlanId],
+    queryFn: () => getPlan(profile!.activePlanId!),
+    enabled: !!profile?.activePlanId,
   });
 
   const { data: activeDays = [] } = useQuery({
-    queryKey: ['planDays', profile.activePlanId],
-    queryFn: () => getPlanDays(profile.activePlanId!),
-    enabled: !!profile.activePlanId,
+    queryKey: ['planDays', profile?.activePlanId],
+    queryFn: () => getPlanDays(profile!.activePlanId!),
+    enabled: !!profile?.activePlanId,
   });
 
   const todayKey = localDateKey(new Date());
   const { data: todayWorkouts = [] } = useQuery({
-    queryKey: ['todayWorkouts', profile.uid, todayKey],
-    queryFn: () => getWorkoutsByDateRange(profile.uid, todayKey, todayKey),
-    enabled: !!profile.uid,
+    queryKey: ['todayWorkouts', profile?.uid, todayKey],
+    queryFn: () => getWorkoutsByDateRange(profile!.uid, todayKey, todayKey),
+    enabled: !!profile?.uid,
   });
 
   const { data: recentWorkouts = [] } = useQuery({
-    queryKey: ['recentWorkouts', profile.uid],
+    queryKey: ['recentWorkouts', profile?.uid],
     queryFn: () => {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       const startDate = localDateKey(sevenDaysAgo);
       const endDate = localDateKey(new Date());
-      return getWorkoutsByDateRange(profile.uid, startDate, endDate);
+      return getWorkoutsByDateRange(profile!.uid, startDate, endDate);
     },
-    enabled: !!profile.uid,
+    enabled: !!profile?.uid,
   });
 
   // Calorie calculation
@@ -110,20 +108,22 @@ export function Dashboard() {
   });
 
   const { data: following = [] } = useQuery({
-    queryKey: ['following', profile.uid],
-    queryFn: () => getFollowing(profile.uid),
-    enabled: !!profile.uid,
+    queryKey: ['following', profile?.uid],
+    queryFn: () => getFollowing(profile!.uid),
+    enabled: !!profile?.uid,
     staleTime: 0,
     refetchOnMount: 'always',
   });
 
   const { data: feed = [] } = useQuery({
-    queryKey: ['feed', profile.uid, following],
-    queryFn: () => getFeed(profile.uid, following),
-    enabled: !!profile.uid,
+    queryKey: ['feed', profile?.uid, following],
+    queryFn: () => getFeed(profile!.uid, following),
+    enabled: !!profile?.uid,
     staleTime: 0,
     refetchOnMount: 'always',
   });
+
+  if (!profile) return null;
 
   // ─── Computed values ─────────────────────────────────────
   const streakDays: { label: string; done: boolean }[] = [];
