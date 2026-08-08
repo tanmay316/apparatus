@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Save, LogOut, Check, User, Scale, Eye, Upload, Download, Trash2, Sun, Moon, Globe, Ruler } from 'lucide-react';
+import { ImagePlus, Loader2, Save, Trash2, Crown, Eye, User, Globe, Ruler, MapPin, Download, Sun, Moon } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { deleteUser, reauthenticateWithPopup } from 'firebase/auth';
 import { useAuthStore } from '@/stores/auth-store';
 import PersonalAISettings from '@/components/settings/PersonalAISettings';
@@ -321,46 +322,37 @@ export function SettingsPage() {
             </div>
             <div>
               <label className="label">Gender</label>
-              <select
-                className="input-field bg-ink-2"
+              <CustomSelect
+                className="w-full"
                 value={gender}
-                onChange={(e) => setGender(e.target.value)}
-              >
-                {GENDERS.map((g) => (
-                  <option key={g} value={g}>
-                    {g || 'Select Gender'}
-                  </option>
-                ))}
-              </select>
+                onChange={setGender}
+                options={GENDERS.map(g => ({ value: g, label: g || 'Select Gender' }))}
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="label">Fitness Goal</label>
-              <select
-                className="input-field bg-ink-2"
+              <CustomSelect
+                className="w-full"
                 value={fitnessGoal}
-                onChange={(e) => setFitnessGoal(e.target.value)}
-              >
-                {FITNESS_GOALS.map((g) => (
-                  <option key={g} value={g}>
-                    {g || 'Select Goal'}
-                  </option>
-                ))}
-              </select>
+                onChange={setFitnessGoal}
+                options={FITNESS_GOALS.map(g => ({ value: g, label: g || 'Select Goal' }))}
+              />
             </div>
             <div>
               <label className="label">Experience Level</label>
-              <select
-                className="input-field bg-ink-2 capitalize"
+              <CustomSelect
+                className="w-full capitalize"
                 value={experienceLevel}
-                onChange={(e) => setExperienceLevel(e.target.value as 'beginner' | 'intermediate' | 'advanced')}
-              >
-                <option value="beginner">Beginner</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
+                onChange={(val) => setExperienceLevel(val as 'beginner' | 'intermediate' | 'advanced')}
+                options={[
+                  { value: 'beginner', label: 'Beginner' },
+                  { value: 'intermediate', label: 'Intermediate' },
+                  { value: 'advanced', label: 'Advanced' }
+                ]}
+              />
             </div>
             <div>
               <label className="label">Preferred Training</label>
@@ -409,24 +401,39 @@ export function SettingsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="label">Theme</label>
-              <select className="input-field bg-ink-2" value={theme} onChange={(event) => setTheme(event.target.value as 'dark' | 'light')}>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={theme}
+                onChange={(val) => setTheme(val as 'dark' | 'light')}
+                options={[
+                  { value: 'light', label: 'Light' },
+                  { value: 'dark', label: 'Dark' }
+                ]}
+              />
             </div>
             <div>
               <label className="label flex items-center gap-1"><Ruler size={12} /> Units</label>
-              <select className="input-field bg-ink-2" value={units} onChange={(event) => setUnits(event.target.value as 'metric' | 'imperial')}>
-                <option value="metric">Metric · kg / cm</option>
-                <option value="imperial">Imperial · lb / in</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={units}
+                onChange={(val) => setUnits(val as 'metric' | 'imperial')}
+                options={[
+                  { value: 'metric', label: 'Metric · kg / cm' },
+                  { value: 'imperial', label: 'Imperial · lb / in' }
+                ]}
+              />
             </div>
             <div>
               <label className="label flex items-center gap-1"><Globe size={12} /> Language</label>
-              <select className="input-field bg-ink-2" value={language} onChange={(event) => setLanguage(event.target.value as 'en' | 'hi')}>
-                <option value="en">English</option>
-                <option value="hi">हिन्दी</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={language}
+                onChange={(val) => setLanguage(val as 'en' | 'hi')}
+                options={[
+                  { value: 'en', label: 'English' },
+                  { value: 'hi', label: 'हिन्दी' }
+                ]}
+              />
             </div>
           </div>
           <p className="text-xs text-bone-dim">Theme, units, and language are saved locally and apply immediately. Profile measurements remain stored in metric for consistent analytics.</p>

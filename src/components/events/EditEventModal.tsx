@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useUIStore } from '@/stores/ui-store';
 import { updateEvent } from '@/services/events';
 import type { AppEvent, EventCategory, EventType, GenderRestriction, SkillLevel } from '@/types';
@@ -81,31 +82,42 @@ export function EditEventModal({ event, onClose }: { event: AppEvent; onClose: (
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Category</label>
-              <select value={category} onChange={e => setCategory(e.target.value as EventCategory)} className="input-field w-full">
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <CustomSelect 
+                className="w-full"
+                value={category} 
+                onChange={(val) => setCategory(val as EventCategory)}
+                options={CATEGORIES.map(c => ({ value: c, label: c }))}
+              />
             </div>
             <div>
-              <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Event Type</label>
-              <select value={eventType} onChange={e => setEventType(e.target.value as EventType)} className="input-field w-full">
-                <option value="Workout">Workout</option>
-                <option value="Competition">Competition</option>
-                <option value="Social">Social</option>
-                <option value="Workshop">Workshop</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={eventType}
+                onChange={(val) => setEventType(val as EventType)}
+                options={[
+                  { value: 'Workout', label: 'Workout' },
+                  { value: 'Competition', label: 'Competition' },
+                  { value: 'Social', label: 'Social' },
+                  { value: 'Workshop', label: 'Workshop' }
+                ]}
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Skill Level</label>
-              <select value={skillLevel} onChange={e => setSkillLevel(e.target.value as SkillLevel)} className="input-field w-full">
-                <option value="All Levels">All Levels</option>
-                <option value="Beginner">Beginner</option>
-                <option value="Intermediate">Intermediate</option>
-                <option value="Advanced">Advanced</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={skillLevel}
+                onChange={(val) => setSkillLevel(val as SkillLevel)}
+                options={[
+                  { value: 'All Levels', label: 'All Levels' },
+                  { value: 'Beginner', label: 'Beginner' },
+                  { value: 'Intermediate', label: 'Intermediate' },
+                  { value: 'Advanced', label: 'Advanced' }
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Capacity</label>

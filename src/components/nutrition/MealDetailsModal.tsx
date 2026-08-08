@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Apple, Beef, Droplet, Flame, Wheat, Activity, ChevronDown } from 'lucide-react';
+import { X, Apple, Check, Trash2, MoreVertical, Flame, ArrowRight, ChevronDown, Beef, Droplet, Wheat, Activity } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { getNutritionImage, updateMealType } from '@/services/nutrition-api';
 
 interface MealDetailsModalProps {
@@ -69,19 +70,18 @@ export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetail
             </div>
             <div>
               <div className="flex items-center gap-1.5 relative">
-                <div className="relative group cursor-pointer flex items-center pr-5">
-                  <select 
+                <div className="relative z-10 w-[220px]">
+                  <CustomSelect
+                    className={`w-full ${isUpdating ? 'opacity-50 pointer-events-none' : ''}`}
                     value={mealType}
-                    onChange={handleTypeChange}
-                    disabled={isUpdating}
-                    className={`bg-transparent text-lg font-display font-bold text-bone capitalize focus:outline-none appearance-none cursor-pointer ${isUpdating ? 'opacity-50' : ''}`}
-                  >
-                    <option value="breakfast" className="bg-ink text-bone">Breakfast Details</option>
-                    <option value="lunch" className="bg-ink text-bone">Lunch Details</option>
-                    <option value="dinner" className="bg-ink text-bone">Dinner Details</option>
-                    <option value="snack" className="bg-ink text-bone">Snack Details</option>
-                  </select>
-                  <ChevronDown size={14} className="text-bone-dim absolute right-0 pointer-events-none group-hover:text-bone transition-colors" />
+                    onChange={(val) => handleTypeChange({ target: { value: val } } as any)}
+                    options={[
+                      { value: 'breakfast', label: 'Breakfast Details' },
+                      { value: 'lunch', label: 'Lunch Details' },
+                      { value: 'dinner', label: 'Dinner Details' },
+                      { value: 'snack', label: 'Snack Details' }
+                    ]}
+                  />
                 </div>
                 {hasChanged && (
                   <button 

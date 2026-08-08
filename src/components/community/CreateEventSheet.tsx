@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -99,20 +100,30 @@ export function CreateEventSheet({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Activity Type</label>
-              <select value={activityType} onChange={e => setActivityType(e.target.value)} className="input-field w-full">
-                <option value="Run">Run</option>
-                <option value="Ride">Ride</option>
-                <option value="Calisthenics">Calisthenics</option>
-                <option value="Yoga">Yoga</option>
-                <option value="Meetup">Meetup</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={activityType}
+                onChange={setActivityType}
+                options={[
+                  { value: 'Run', label: 'Run' },
+                  { value: 'Ride', label: 'Ride' },
+                  { value: 'Calisthenics', label: 'Calisthenics' },
+                  { value: 'Yoga', label: 'Yoga' },
+                  { value: 'Meetup', label: 'Meetup' }
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Visibility</label>
-              <select value={visibility} onChange={e => setVisibility(e.target.value as any)} className="input-field w-full">
-                <option value="public">Public</option>
-                <option value="clan_only">Clan Only</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={visibility}
+                onChange={(val) => setVisibility(val as any)}
+                options={[
+                  { value: 'public', label: 'Public' },
+                  { value: 'clan_only', label: 'Clan Only' }
+                ]}
+              />
             </div>
           </div>
 

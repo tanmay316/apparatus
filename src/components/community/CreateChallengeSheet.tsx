@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Target } from 'lucide-react';
+import { X } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -92,20 +93,25 @@ export function CreateChallengeSheet({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Metric</label>
-              <select value={metric} onChange={e => {
-                setMetric(e.target.value as ChallengeMetric);
-                if (e.target.value === 'distance') setUnit('km');
-                else if (e.target.value === 'calories') setUnit('kcal');
-                else if (e.target.value === 'workouts') setUnit('sessions');
-                else if (e.target.value === 'duration') setUnit('min');
-                else setUnit('');
-              }} className="input-field w-full">
-                <option value="distance">Distance</option>
-                <option value="calories">Calories</option>
-                <option value="workouts">Workouts</option>
-                <option value="duration">Duration</option>
-                <option value="steps">Steps</option>
-              </select>
+              <CustomSelect 
+                className="w-full"
+                value={metric} 
+                onChange={(val) => {
+                  setMetric(val as ChallengeMetric);
+                  if (val === 'distance') setUnit('km');
+                  else if (val === 'calories') setUnit('kcal');
+                  else if (val === 'workouts') setUnit('sessions');
+                  else if (val === 'duration') setUnit('min');
+                  else setUnit('');
+                }}
+                options={[
+                  { value: 'distance', label: 'Distance' },
+                  { value: 'calories', label: 'Calories' },
+                  { value: 'workouts', label: 'Workouts' },
+                  { value: 'duration', label: 'Duration' },
+                  { value: 'steps', label: 'Steps' }
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Target Value</label>
@@ -119,19 +125,29 @@ export function CreateChallengeSheet({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Duration (Days)</label>
-              <select value={durationDays} onChange={e => setDurationDays(e.target.value)} className="input-field w-full">
-                <option value="7">1 Week</option>
-                <option value="14">2 Weeks</option>
-                <option value="30">30 Days</option>
-                <option value="90">90 Days</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={durationDays}
+                onChange={setDurationDays}
+                options={[
+                  { value: '7', label: '1 Week' },
+                  { value: '14', label: '2 Weeks' },
+                  { value: '30', label: '30 Days' },
+                  { value: '90', label: '90 Days' }
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Visibility</label>
-              <select value={visibility} onChange={e => setVisibility(e.target.value as any)} className="input-field w-full">
-                <option value="public">Public</option>
-                <option value="clan_only">Clan Only</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={visibility}
+                onChange={(val) => setVisibility(val as any)}
+                options={[
+                  { value: 'public', label: 'Public' },
+                  { value: 'clan_only', label: 'Clan Only' }
+                ]}
+              />
             </div>
           </div>
 

@@ -79,7 +79,7 @@ export function CommunityPage() {
 
       <AnimatePresence>
         {showCreateMenu && (
-          <div className="fixed inset-0 z-50 flex flex-col justify-end">
+          <div className="fixed inset-0 z-[300] flex flex-col justify-end">
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setShowCreateMenu(false)}

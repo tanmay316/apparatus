@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, Plus, X, Video, Share2 } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { getPlan, getPlanDays, savePlanDay } from '@/services/plans';
@@ -595,29 +596,26 @@ export function WorkoutSession() {
             DAY {currentDay.dayNumber.toString().padStart(2, '0')} / 07 · ~{currentDay.time}
           </div>
           {(!store.isActive && hasCompletedToday) && todayCompletedWorkouts.length > 0 && (
-            <select 
-              value={selectedWorkoutIndex} 
-              onChange={(e) => setSelectedWorkoutIndex(Number(e.target.value))}
-              className="bg-ink-2 border border-line text-bone text-xs font-mono rounded px-2 py-1"
-            >
-              {todayCompletedWorkouts.map((w: any, idx: number) => {
-                let ms = Date.now();
-                if (w.startedAt) {
-                  if (typeof w.startedAt.toMillis === 'function') ms = w.startedAt.toMillis();
-                  else if (w.startedAt.seconds) ms = w.startedAt.seconds * 1000;
-                  else if (typeof w.startedAt === 'number') ms = w.startedAt;
-                } else if (w.createdAt) {
-                  if (typeof w.createdAt.toMillis === 'function') ms = w.createdAt.toMillis();
-                  else if (w.createdAt.seconds) ms = w.createdAt.seconds * 1000;
-                  else if (typeof w.createdAt === 'number') ms = w.createdAt;
-                }
-                return (
-                  <option key={idx} value={idx}>
-                    {new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </option>
-                );
-              })}
-            </select>
+            <div className="relative z-10 w-[140px]">
+              <CustomSelect 
+                className="w-full text-xs font-mono"
+                value={selectedWorkoutIndex.toString()} 
+                onChange={(val) => setSelectedWorkoutIndex(Number(val))}
+                options={todayCompletedWorkouts.map((w: any, idx: number) => {
+                  let ms = Date.now();
+                  if (w.startedAt) {
+                    if (typeof w.startedAt.toMillis === 'function') ms = w.startedAt.toMillis();
+                    else if (w.startedAt.seconds) ms = w.startedAt.seconds * 1000;
+                    else if (typeof w.startedAt === 'number') ms = w.startedAt;
+                  } else if (w.createdAt) {
+                    if (typeof w.createdAt.toMillis === 'function') ms = w.createdAt.toMillis();
+                    else if (w.createdAt.seconds) ms = w.createdAt.seconds * 1000;
+                    else if (typeof w.createdAt === 'number') ms = w.createdAt;
+                  }
+                  return { value: idx.toString(), label: new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+                })}
+              />
+            </div>
           )}
         </div>
         <h1 className="font-display text-3xl mb-2">{currentDay.title}</h1>
@@ -656,17 +654,18 @@ export function WorkoutSession() {
       {renderSection('5-10 min', 'COOLDOWN', 'bg-bone text-ink', store.isActive ? store.cooldown : displayCooldown, 'cooldown')}
 
       <div className="mt-12 flex flex-col items-center justify-center gap-3 pb-20">
-         <div className="flex items-center gap-3 bg-ink-2 p-2 px-4 rounded border border-line">
+         <div className="flex items-center gap-3 bg-ink-2 p-2 px-4 rounded border border-line z-10 w-full max-w-[300px]">
            <span className="text-xs font-mono text-bone-dim uppercase">Workout Privacy:</span>
-           <select 
-             className="bg-transparent text-xs font-mono text-sienna border-none focus:outline-none cursor-pointer"
+           <CustomSelect
+             className="flex-1 text-xs font-mono"
              value={privacy}
-             onChange={(e) => setPrivacy(e.target.value as any)}
-           >
-             <option value="followers" className="bg-ink text-bone">Followers only (Default)</option>
-             <option value="public" className="bg-ink text-bone">Public</option>
-             <option value="private" className="bg-ink text-bone">Private</option>
-           </select>
+             onChange={(val) => setPrivacy(val as any)}
+             options={[
+               { value: 'followers', label: 'Followers only' },
+               { value: 'public', label: 'Public' },
+               { value: 'private', label: 'Private' }
+             ]}
+           />
          </div>
           <button 
             onClick={() => {

@@ -4,11 +4,8 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { doc, getDoc } from 'firebase/firestore';
-import {
-  Calendar as CalendarIcon, Edit3, Save, X,
-  Users as UsersIcon, UserPlus, UserMinus, Flag, Dumbbell, Flame, Clock, Trophy, Target,
-  Scale, Award, Plus, Compass, Play, MessageSquare, Share2, Activity, ShieldAlert
-} from 'lucide-react';
+import { ChevronLeft, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -501,33 +498,30 @@ export function ProfilePage() {
               </div>
               <div>
                 <label className="label">Gender</label>
-                <select
-                  className="input-field bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--teal)]"
+                <CustomSelect
+                  className="w-full"
                   value={editData.gender || ''}
-                  onChange={(e) => setEditData({ ...editData, gender: e.target.value })}
-                >
-                  {GENDERS.map((g) => <option key={g} value={g}>{g || '—'}</option>)}
-                </select>
+                  onChange={(val) => setEditData({ ...editData, gender: val })}
+                  options={GENDERS.map(g => ({ value: g, label: g || '—' }))}
+                />
               </div>
               <div>
                 <label className="label">Fitness Goal</label>
-                <select
-                  className="input-field bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--teal)]"
+                <CustomSelect
+                  className="w-full"
                   value={editData.fitnessGoal || ''}
-                  onChange={(e) => setEditData({ ...editData, fitnessGoal: e.target.value })}
-                >
-                  {FITNESS_GOALS.map((g) => <option key={g} value={g}>{g || '—'}</option>)}
-                </select>
+                  onChange={(val) => setEditData({ ...editData, fitnessGoal: val })}
+                  options={FITNESS_GOALS.map(g => ({ value: g, label: g || '—' }))}
+                />
               </div>
               <div>
                 <label className="label">Preferred Workout</label>
-                <select
-                  className="input-field bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] w-full rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--teal)]"
+                <CustomSelect
+                  className="w-full"
                   value={editData.preferredWorkoutType || ''}
-                  onChange={(e) => setEditData({ ...editData, preferredWorkoutType: e.target.value })}
-                >
-                  {WORKOUT_TYPES.map((t) => <option key={t} value={t}>{t || '—'}</option>)}
-                </select>
+                  onChange={(val) => setEditData({ ...editData, preferredWorkoutType: val })}
+                  options={WORKOUT_TYPES.map(t => ({ value: t, label: t || '—' }))}
+                />
               </div>
             </div>
           </motion.div>
@@ -932,13 +926,18 @@ export function ProfilePage() {
             <div className="space-y-4">
               <div>
                 <label className="label">Reason</label>
-                <select value={reportReason} onChange={event => setReportReason(event.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-[var(--text)]">
-                  <option value="spam">Spam or scam</option>
-                  <option value="harassment">Harassment</option>
-                  <option value="unsafe">Unsafe content</option>
-                  <option value="impersonation">Impersonation</option>
-                  <option value="other">Other</option>
-                </select>
+                <CustomSelect
+                  className="w-full"
+                  value={reportReason}
+                  onChange={setReportReason}
+                  options={[
+                    { value: 'spam', label: 'Spam or scam' },
+                    { value: 'harassment', label: 'Harassment' },
+                    { value: 'unsafe', label: 'Unsafe content' },
+                    { value: 'impersonation', label: 'Impersonation' },
+                    { value: 'other', label: 'Other' }
+                  ]}
+                />
               </div>
               <div>
                 <label className="label">Details</label>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { X, Clock, RotateCcw, Plus, Trash2, ExternalLink, LoaderCircle } from 'lucide-react';
+import { X, Play, Clock, TrendingUp, History, Info, ChevronRight, Check, Dumbbell, ShieldAlert, ImagePlus, Loader2, Edit3, Trash2, RotateCcw, Plus, ExternalLink, LoaderCircle } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useWorkoutStore } from '@/stores/workout-store';
 import type { Exercise, SetData } from '@/types';
 import { MUSCLE_GROUPS } from '@/lib/muscle-map';
@@ -287,12 +288,15 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
               </div>
               <div>
                 <label className="text-xs font-mono text-bone-dim block mb-1">Target Muscle Group (Optional)</label>
-                <select className="input-field w-full" value={editMuscleGroup} onChange={e => setEditMuscleGroup(e.target.value)}>
-                  <option value="">Auto-detect</option>
-                  {MUSCLE_GROUPS.map(mg => (
-                    <option key={mg} value={mg}>{mg}</option>
-                  ))}
-                </select>
+                <CustomSelect 
+                  className="w-full" 
+                  value={editMuscleGroup} 
+                  onChange={setEditMuscleGroup}
+                  options={[
+                    { value: '', label: 'Auto-detect' },
+                    ...MUSCLE_GROUPS.map(mg => ({ value: mg, label: mg }))
+                  ]}
+                />
               </div>
               <div className="flex gap-2">
                 <button onClick={handleEditSave} className="btn-primary flex-1">Save changes</button>

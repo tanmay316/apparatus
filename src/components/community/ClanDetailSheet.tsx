@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Shield, Users, MapPin, Search, Plus, Target, CalendarDays } from 'lucide-react';
+import { X, Shield, Users, MapPin, Search, Plus, Target, CalendarDays, MoreVertical } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getClan, getClanMembers, joinClan, leaveClan, updateClanMemberRole, disbandClan, transferLeadership } from '@/services/community';
@@ -204,15 +205,18 @@ export function ClanDetailSheet({ clanId, onClose }: { clanId: string; onClose: 
                     </div>
                     
                     {isLeader && member.userId !== user?.uid && (
-                      <select 
-                        value={member.role}
-                        onChange={(e) => handleRoleChange(member.userId, e.target.value as any, member.userName)}
-                        className="bg-ink-3 border border-line rounded px-2 py-1 text-xs text-bone font-mono"
-                      >
-                        <option value="member">Member</option>
-                        <option value="co_leader">Co-Leader</option>
-                        <option value="leader">Transfer Leadership</option>
-                      </select>
+                      <div className="relative z-10 w-[180px]">
+                        <CustomSelect
+                          className="w-full text-xs font-mono"
+                          value={member.role}
+                          onChange={(val) => handleRoleChange(member.userId, val as any, member.userName)}
+                          options={[
+                            { value: 'member', label: 'Member' },
+                            { value: 'co_leader', label: 'Co-Leader' },
+                            { value: 'leader', label: 'Transfer Leadership' }
+                          ]}
+                        />
+                      </div>
                     )}
                   </div>
                 ))}

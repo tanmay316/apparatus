@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { X, Settings, Loader2 } from 'lucide-react';
+import { X, Save, Calculator, Settings, Loader2 } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { getNutritionProfile, updateNutritionProfile } from '@/services/nutrition-api';
 
 interface NutritionProfileModalProps {
@@ -123,44 +124,47 @@ export default function NutritionProfileModal({ onClose, onSaved }: NutritionPro
               </div>
               <div>
                 <label className="block text-xs text-bone-dim mb-1">Gender</label>
-                <select
+                <CustomSelect
+                  className="w-full"
                   value={formData.gender}
-                  onChange={e => setFormData({ ...formData, gender: e.target.value })}
-                  className="w-full bg-ink border border-line rounded-xl px-3 py-2 text-sm text-bone focus:border-sienna outline-none appearance-none"
-                >
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                </select>
+                  onChange={(val) => setFormData({ ...formData, gender: val })}
+                  options={[
+                    { value: 'male', label: 'Male' },
+                    { value: 'female', label: 'Female' }
+                  ]}
+                />
               </div>
             </div>
 
             <div>
               <label className="block text-xs text-bone-dim mb-1">Activity Level</label>
-              <select
+              <CustomSelect
+                className="w-full"
                 value={formData.activity_level}
-                onChange={e => setFormData({ ...formData, activity_level: e.target.value })}
-                className="w-full bg-ink border border-line rounded-xl px-3 py-2 text-sm text-bone focus:border-sienna outline-none appearance-none"
-              >
-                <option value="sedentary">Sedentary (Little/No Exercise)</option>
-                <option value="light">Light (1-3 days/week)</option>
-                <option value="moderate">Moderate (3-5 days/week)</option>
-                <option value="active">Active (6-7 days/week)</option>
-                <option value="very_active">Very Active (Physical job/training)</option>
-              </select>
+                onChange={(val) => setFormData({ ...formData, activity_level: val })}
+                options={[
+                  { value: 'sedentary', label: 'Sedentary (Little/No Exercise)' },
+                  { value: 'light', label: 'Light (1-3 days/week)' },
+                  { value: 'moderate', label: 'Moderate (3-5 days/week)' },
+                  { value: 'active', label: 'Active (6-7 days/week)' },
+                  { value: 'very_active', label: 'Very Active (Physical job/training)' }
+                ]}
+              />
             </div>
 
             <div>
               <label className="block text-xs text-bone-dim mb-1">Fitness Goal</label>
-              <select
+              <CustomSelect
+                className="w-full"
                 value={formData.fitness_goal}
-                onChange={e => setFormData({ ...formData, fitness_goal: e.target.value })}
-                className="w-full bg-ink border border-line rounded-xl px-3 py-2 text-sm text-bone focus:border-sienna outline-none appearance-none"
-              >
-                <option value="lose_fat">Lose Fat (Cut)</option>
-                <option value="maintain">Maintain Weight</option>
-                <option value="recomposition">Body Recomposition</option>
-                <option value="build_muscle">Build Muscle (Bulk)</option>
-              </select>
+                onChange={(val) => setFormData({ ...formData, fitness_goal: val })}
+                options={[
+                  { value: 'lose_fat', label: 'Lose Fat (Cut)' },
+                  { value: 'maintain', label: 'Maintain Weight' },
+                  { value: 'recomposition', label: 'Body Recomposition' },
+                  { value: 'build_muscle', label: 'Build Muscle (Bulk)' }
+                ]}
+              />
             </div>
 
             <button

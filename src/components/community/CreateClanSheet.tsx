@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Camera, Shield } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -101,22 +102,32 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Category</label>
-              <select value={category} onChange={e => setCategory(e.target.value as ClanCategory)} className="input-field w-full">
-                <option value="General">General</option>
-                <option value="Calisthenics">Calisthenics</option>
-                <option value="Gym">Gym</option>
-                <option value="Running">Running</option>
-                <option value="Cycling">Cycling</option>
-                <option value="CrossFit">CrossFit</option>
-                <option value="Yoga">Yoga</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={category}
+                onChange={(val) => setCategory(val as ClanCategory)}
+                options={[
+                  { value: 'General', label: 'General' },
+                  { value: 'Calisthenics', label: 'Calisthenics' },
+                  { value: 'Gym', label: 'Gym' },
+                  { value: 'Running', label: 'Running' },
+                  { value: 'Cycling', label: 'Cycling' },
+                  { value: 'CrossFit', label: 'CrossFit' },
+                  { value: 'Yoga', label: 'Yoga' }
+                ]}
+              />
             </div>
             <div>
               <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Visibility</label>
-              <select value={visibility} onChange={e => setVisibility(e.target.value as ClanVisibility)} className="input-field w-full">
-                <option value="public">Public</option>
-                <option value="private">Private (Invite Only)</option>
-              </select>
+              <CustomSelect
+                className="w-full"
+                value={visibility}
+                onChange={(val) => setVisibility(val as ClanVisibility)}
+                options={[
+                  { value: 'public', label: 'Public' },
+                  { value: 'private', label: 'Private (Invite Only)' }
+                ]}
+              />
             </div>
           </div>
           

@@ -5,6 +5,7 @@ import {
   ChevronLeft, ChevronRight, Calendar as CalIcon, Clock, TrendingUp, Flame,
   BookOpen, Plus, User, Check, X, Search, ChevronDown, Download, Sparkles, MapPin
 } from 'lucide-react';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getWorkoutsByDateRange } from '@/services/workouts';
@@ -259,18 +260,14 @@ export function CalendarPage() {
           {/* Active Plan Selector */}
           <div className="flex flex-col">
             <span className="text-[9px] font-mono text-bone-dim uppercase tracking-wider mb-1">Active Plan</span>
-            <div className="relative">
-              <select
+            <div className="relative z-10 w-[200px]">
+              <CustomSelect
+                className={`w-full ${nmInset}`}
                 value={profile?.activePlanId || ''}
-                onChange={(e) => handleActivePlanChange(e.target.value)}
-                className={`appearance-none rounded-xl px-3 py-2 pr-8 text-xs font-sans hover:text-sienna transition-colors focus:outline-none min-w-[160px] ${nmInset} ${isDark ? 'text-bone' : 'text-[#17191c]'}`}
-              >
-                <option value="" disabled>No active plan</option>
-                {allPlans.map(p => (
-                  <option key={p.id} value={p.id}>{p.title}</option>
-                ))}
-              </select>
-              <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-bone-dim pointer-events-none" />
+                onChange={handleActivePlanChange}
+                placeholder="No active plan"
+                options={allPlans.map(p => ({ value: p.id, label: p.title }))}
+              />
             </div>
           </div>
 
@@ -596,18 +593,14 @@ export function CalendarPage() {
                         This athlete has no public plans.
                       </div>
                     ) : (
-                      <div className="relative">
-                        <select
+                      <div className="relative z-10">
+                        <CustomSelect
+                          className="w-full"
                           value={selectedFollowerPlanId}
-                          onChange={(e) => setSelectedFollowerPlanId(e.target.value)}
-                          className="appearance-none w-full bg-ink border border-line rounded-xl px-3 py-2.5 pr-8 text-xs font-sans text-bone hover:border-sienna transition-colors focus:outline-none"
-                        >
-                          <option value="" disabled>Select a plan...</option>
-                          {followerPlans.map(p => (
-                            <option key={p.id} value={p.id}>{p.title} ({p.daysPerWeek} days)</option>
-                          ))}
-                        </select>
-                        <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-bone-dim pointer-events-none" />
+                          onChange={setSelectedFollowerPlanId}
+                          placeholder="Select a plan..."
+                          options={followerPlans.map(p => ({ value: p.id, label: `${p.title} (${p.daysPerWeek} days)` }))}
+                        />
                       </div>
                     )}
                   </div>
