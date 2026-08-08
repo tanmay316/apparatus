@@ -35,8 +35,8 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
           <h3 className="font-sans text-xs font-semibold text-gray-500 tracking-wider uppercase">Weekly Training</h3>
         </div>
         <div className="flex items-center gap-4">
-          <button onClick={() => setIsAiModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors text-xs font-bold font-sans">
-            <Sparkles size={14} className="animate-pulse" /> Generate AI Plan
+          <button onClick={() => setIsAiModalOpen(true)} className="flex items-center justify-center p-1.5 rounded-full bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 transition-colors" title="Generate AI Plan">
+            <Sparkles size={14} className="animate-pulse" />
           </button>
           <Link to="/plans" className="flex items-center gap-1 text-xs text-gray-600 font-sans font-medium hover:text-gray-900 transition-colors">
             All Plans <ChevronRight size={12} />

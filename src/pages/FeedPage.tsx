@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Users } from 'lucide-react';
 import { ActivityPostCard, ActivityPostCardSkeleton } from '@/components/social/ActivityPostCard';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
+import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 import { useAuthStore } from '@/stores/auth-store';
 import { getActivity, getFeed, getFollowing, getPublicFeed, getBookmarkedActivities } from '@/services/social';
 import type { Activity } from '@/types';
@@ -18,6 +19,7 @@ export function FeedPage() {
   const [searchParams] = useSearchParams();
   const activityId = searchParams.get('activity');
   const [shareData, setShareData] = useState<ShareCardData | null>(null);
+  const [cardioShareData, setCardioShareData] = useState<CardioShareData | null>(null);
 
   const { data: followingUids = [] } = useQuery({
     queryKey: ['following', user?.uid],
@@ -51,21 +53,37 @@ export function FeedPage() {
   }, [activityId, linkedActivity]);
 
   const handleShareActivity = (activity: Activity) => {
+    const isCardio = activity.type === 'walk' || activity.type === 'run' || activity.type === 'cycle';
     const details = (activity.details as Record<string, any>) || {};
     const createdDate = activity.createdAt?.seconds
       ? new Date(activity.createdAt.seconds * 1000)
       : new Date();
 
-    setShareData({
-      dayTitle: details.dayTitle || activity.summary,
-      planTitle: details.planTitle || 'Workout',
-      date: createdDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
-      durationMin: details.durationMin || 0,
-      volume: details.volume || 0,
-      calories: details.calories || 0,
-      exerciseNames: details.exercises || [],
-      exerciseLogs: details.exerciseLogs || undefined,
-    });
+    if (isCardio) {
+      setCardioShareData({
+        type: details.activityType || activity.type || 'walk',
+        date: createdDate.toISOString(),
+        distanceKm: details.distanceKm || 0,
+        durationSec: details.durationSec || 0,
+        calories: details.calories || 0,
+        avgPace: details.avgPace || '0:00 /km',
+        route: details.route || [],
+        avgSpeedKmh: details.avgSpeedKmh,
+        maxSpeedKmh: details.maxSpeedKmh,
+        elevationGainM: details.elevationGainM,
+      });
+    } else {
+      setShareData({
+        dayTitle: details.dayTitle || activity.summary,
+        planTitle: details.planTitle || 'Workout',
+        date: createdDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+        durationMin: details.durationMin || 0,
+        volume: details.volume || 0,
+        calories: details.calories || 0,
+        exerciseNames: details.exercises || [],
+        exerciseLogs: details.exerciseLogs || undefined,
+      });
+    }
   };
 
   return (
@@ -137,6 +155,14 @@ export function FeedPage() {
         <ShareCardModal
           data={shareData}
           onClose={() => setShareData(null)}
+        />
+      )}
+
+      {/* Share Card Modal for cardio */}
+      {cardioShareData && (
+        <CardioShareModal
+          data={cardioShareData}
+          onClose={() => setCardioShareData(null)}
         />
       )}
     </motion.div>

@@ -24,13 +24,28 @@ const currentIcon = new L.DivIcon({
   iconAnchor: [10, 10]
 });
 
+// All available map themes with tile URLs
+export const MAP_THEMES = {
+  street:    { label: 'Street',    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', bg: '#f5f5f5' },
+  dark:      { label: 'Dark',      url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', bg: '#121212' },
+  light:     { label: 'Light',     url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', bg: '#f5f5f5' },
+  google:    { label: 'Google',    url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', bg: '#f5f5f5' },
+  satellite: { label: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', bg: '#0a0a0a' },
+  terrain:   { label: 'Terrain',   url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', bg: '#e8e4d8' },
+  toner:     { label: 'Toner',     url: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', bg: '#ffffff' },
+} as const;
+
+export type MapThemeKey = keyof typeof MAP_THEMES;
+
 interface Props {
   route: RoutePoint[];
   isLive?: boolean;
   height?: string;
-  theme?: 'light' | 'dark' | 'satellite' | 'street';
+  theme?: MapThemeKey;
   highlightColor?: string;
   recenterTrigger?: number;
+  hideMap?: boolean;
+  noGlow?: boolean;
 }
 
 /** Keeps the map centered on the last route point when live tracking or when recenterTrigger changes */
@@ -64,7 +79,23 @@ function MapAutoCenter({ route, recenterTrigger }: { route: RoutePoint[], recent
   return null;
 }
 
-export function RouteMap({ route, isLive = false, height = '300px', theme = 'light', highlightColor = '#3b82f6', recenterTrigger }: Props) {
+/** Fits the map to the bounds of the entire route (for summary/share views) */
+function FitBounds({ positions }: { positions: [number, number][] }) {
+  const map = useMap();
+  const fitted = useRef(false);
+
+  useEffect(() => {
+    if (positions.length > 1 && !fitted.current) {
+      const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+      fitted.current = true;
+    }
+  }, [positions, map]);
+
+  return null;
+}
+
+export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = '#5d2a1a', recenterTrigger, hideMap = false, noGlow = false }: Props) {
   const positions: [number, number][] = useMemo(
     () => route.map(p => [p.lat, p.lng]),
     [route]
@@ -76,54 +107,53 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'lig
 
   const zoom = positions.length > 0 ? 16.5 : 5;
   
-  let tileUrl = 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'; // Google Map default
-  if (theme === 'dark') tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-  if (theme === 'satellite') tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
-  if (theme === 'light') tileUrl = 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}'; // Same as default for colorful look
-  if (theme === 'street') tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+  const themeData = MAP_THEMES[theme] || MAP_THEMES.street;
 
   return (
     <div style={{ height, width: '100%', overflow: 'hidden' }} className="relative">
-      {/* Fade overlay for top/bottom to blend into UI optionally */}
       <MapContainer
         center={center}
         zoom={zoom}
-        style={{ height: '100%', width: '100%', background: theme === 'dark' ? '#121212' : '#f5f5f5' }}
+        style={{ height: '100%', width: '100%', background: hideMap ? 'transparent' : themeData.bg }}
         zoomControl={false}
         attributionControl={false}
       >
-        <TileLayer url={tileUrl} crossOrigin="anonymous" />
+        {!hideMap && <TileLayer url={themeData.url} crossOrigin="anonymous" />}
 
         {positions.length > 1 && (
           <>
-            {/* Outer Glow effect */}
-            <Polyline
-              positions={positions}
-              pathOptions={{
-                color: highlightColor,
-                weight: 24,
-                opacity: 0.15,
-                lineCap: 'round',
-                lineJoin: 'round',
-              }}
-            />
-            {/* Inner Glow effect */}
-            <Polyline
-              positions={positions}
-              pathOptions={{
-                color: highlightColor,
-                weight: 12,
-                opacity: 0.4,
-                lineCap: 'round',
-                lineJoin: 'round',
-              }}
-            />
+            {!noGlow && (
+              <>
+                {/* Outer Glow effect */}
+                <Polyline
+                  positions={positions}
+                  pathOptions={{
+                    color: highlightColor,
+                    weight: 24,
+                    opacity: 0.15,
+                    lineCap: 'round',
+                    lineJoin: 'round',
+                  }}
+                />
+                {/* Inner Glow effect */}
+                <Polyline
+                  positions={positions}
+                  pathOptions={{
+                    color: highlightColor,
+                    weight: 12,
+                    opacity: 0.4,
+                    lineCap: 'round',
+                    lineJoin: 'round',
+                  }}
+                />
+              </>
+            )}
             {/* Core line */}
             <Polyline
               positions={positions}
               pathOptions={{
                 color: highlightColor,
-                weight: 5,
+                weight: noGlow ? 4 : 5,
                 opacity: 1,
                 lineCap: 'round',
                 lineJoin: 'round',
@@ -143,6 +173,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'lig
         )}
 
         {isLive && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} />}
+        {!isLive && positions.length > 1 && <FitBounds positions={positions} />}
       </MapContainer>
     </div>
   );

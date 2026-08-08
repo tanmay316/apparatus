@@ -9,9 +9,9 @@ import { useUIStore } from '@/stores/ui-store';
 import { useCardioStore } from '@/stores/cardio-store';
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { saveCardioActivity, getUserCardioActivities } from '@/services/cardio';
-import { postActivity } from '@/services/social';
 import { calculateCardioCalories } from '@/lib/calories';
-import { RouteMap } from '@/components/cardio/RouteMap';
+import { startActiveSession, updateActiveSession, endActiveSession, postActivity } from '@/services/social';
+import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 import type { CardioActivityType, CardioActivity } from '@/types';
 
@@ -58,8 +58,8 @@ export function CardioTracker() {
     return 'select';
   });
   
-  // Map layer state
-  const [mapLayer, setMapLayer] = useState<'default' | 'light' | 'dark' | 'satellite' | 'street'>('default');
+  // Map layer state — default to street
+  const [mapLayer, setMapLayer] = useState<MapThemeKey>('street');
 
   // Update screen based on URL params and tracking state
   useEffect(() => {
@@ -116,6 +116,25 @@ export function CardioTracker() {
     return () => clearInterval(interval);
   }, [store.isTracking, store.startedAt, store.isPaused, store.totalPausedMs]);
 
+  // Update live session periodically
+  useEffect(() => {
+    if (!store.isTracking || !user || !store.activityType) return;
+    const interval = setInterval(() => {
+      const cals = calculateCardioCalories(
+        store.activityType!,
+        store.distanceKm,
+        elapsedSec / 60,
+        userWeight || 70,
+        store.currentSpeedKmh
+      );
+      updateActiveSession(user.uid, {
+        currentExercise: `${store.distanceKm.toFixed(2)} km`,
+        caloriesBurned: cals
+      }).catch(console.error);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [store.isTracking, user, store.activityType, store.distanceKm, elapsedSec, userWeight, store.currentSpeedKmh]);
+
   // GPS and WakeLock logic moved to global cardio-store.ts
 
   const handleBackgroundSave = async () => {
@@ -129,6 +148,10 @@ export function CardioTracker() {
     const maxSpeed = store.maxSpeedKmh;
 
     store.stopTracking();
+
+    if (user) {
+      endActiveSession(user.uid).catch(console.error);
+    }
 
     if (user && dist > 0.01) {
       const durationMin = durationSec / 60;
@@ -170,9 +193,21 @@ export function CardioTracker() {
     // Clear the URL param so a refresh stays in tracking
     setSearchParams({});
     
+    
     store.startTracking(type);
     setScreen('tracking');
     setElapsedSec(0);
+
+    if (user) {
+      startActiveSession(user.uid, {
+        planId: 'cardio',
+        dayId: type,
+        dayTitle: type === 'walk' ? 'Walking' : type === 'run' ? 'Running' : 'Cycling',
+        currentExercise: '0.00 km',
+        caloriesBurned: 0,
+        startedAt: Timestamp.now()
+      }).catch(console.error);
+    }
   };
 
   const handleStartActivity = (type: CardioActivityType | 'workout') => {
@@ -194,6 +229,10 @@ export function CardioTracker() {
 
   const handleStop = async () => {
     store.stopTracking();
+
+    if (user) {
+      endActiveSession(user.uid).catch(console.error);
+    }
 
     const durationSec = elapsedSec;
     const durationMin = durationSec / 60;
@@ -362,14 +401,13 @@ export function CardioTracker() {
   if (screen === 'ready' && urlType) {
     const typeLabel = urlType === 'walk' ? 'Walking' : urlType === 'run' ? 'Running' : 'Cycling';
     const isDark = useUIStore.getState().theme === 'dark';
-    const effectiveTheme = mapLayer === 'default' ? (isDark ? 'dark' : 'light') : mapLayer;
 
     return createPortal(
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-[var(--bg)] flex flex-col h-screen overflow-hidden">
         
         {/* Background Map */}
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} isLive={false} height="100%" theme={effectiveTheme} />
+          <RouteMap route={store.routePoints} isLive={false} height="100%" theme={mapLayer} />
           <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg)] via-transparent to-transparent z-[1]" />
         </div>
 
@@ -397,11 +435,12 @@ export function CardioTracker() {
             
             <button
               onClick={() => {
-                const layers = ['default', 'light', 'dark', 'street', 'satellite'] as const;
-                const nextIdx = (layers.indexOf(mapLayer) + 1) % layers.length;
-                setMapLayer(layers[nextIdx]);
+                const themes = Object.keys(MAP_THEMES) as MapThemeKey[];
+                const nextIdx = (themes.indexOf(mapLayer) + 1) % themes.length;
+                setMapLayer(themes[nextIdx]);
               }}
               className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--card)]/80 backdrop-blur-md shadow-sm border border-[var(--border)] text-[var(--text)] pointer-events-auto transition-transform active:scale-95"
+              title={MAP_THEMES[mapLayer].label}
             >
               <Layers size={18} />
             </button>
@@ -432,8 +471,7 @@ export function CardioTracker() {
   // ─── Tracking Screen ───
   if (screen === 'tracking') {
     const isDark = useUIStore.getState().theme === 'dark';
-    const effectiveTheme = mapLayer === 'default' ? (isDark ? 'dark' : 'light') : mapLayer;
-    const isDarkMap = effectiveTheme === 'dark' || effectiveTheme === 'satellite';
+    const isDarkMap = mapLayer === 'dark' || mapLayer === 'satellite' || mapLayer === 'toner';
     
     const avgSpeed = elapsedSec > 0 ? (store.distanceKm / (elapsedSec / 3600)).toFixed(1) : '0.0';
     const currentPace = formatPace(store.distanceKm, elapsedSec);
@@ -445,7 +483,7 @@ export function CardioTracker() {
         
         {/* Full Screen Map Background */}
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} isLive height="100%" theme={effectiveTheme} recenterTrigger={recenterTrigger} />
+          <RouteMap route={store.routePoints} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} />
         </div>
 
         {/* Top Header */}
@@ -484,11 +522,12 @@ export function CardioTracker() {
             {/* Layers Button */}
             <button
               onClick={() => {
-                const layers = ['default', 'light', 'dark', 'street', 'satellite'] as const;
-                const nextIdx = (layers.indexOf(mapLayer) + 1) % layers.length;
-                setMapLayer(layers[nextIdx]);
+                const themes = Object.keys(MAP_THEMES) as MapThemeKey[];
+                const nextIdx = (themes.indexOf(mapLayer) + 1) % themes.length;
+                setMapLayer(themes[nextIdx]);
               }}
               className="w-10 h-10 flex items-center justify-center rounded-full bg-ink/90 backdrop-blur-md shadow-sm border border-line text-bone pointer-events-auto transition-transform active:scale-95"
+              title={MAP_THEMES[mapLayer].label}
             >
               <Layers size={18} />
             </button>
@@ -511,10 +550,10 @@ export function CardioTracker() {
             animate={{ height: isExpanded ? 440 : 180 }}
             className={`
               ${isDarkMap 
-                ? 'bg-[#1a1a1a]/20 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),inset_0_0_0_1px_rgba(255,255,255,0.05),0_8px_40px_rgba(0,0,0,0.3)]' 
-                : 'bg-white/20 text-black shadow-[inset_0_1px_2px_rgba(255,255,255,0.8),inset_0_0_0_1px_rgba(255,255,255,0.3),0_8px_40px_rgba(0,0,0,0.1)]'} 
-              backdrop-blur-[60px] backdrop-saturate-[180%]
-              rounded-t-[40px] 
+                ? 'bg-black/40 text-white border-t border-white/20 shadow-[0_-10px_40px_rgba(0,0,0,0.5),inset_0_2px_4px_rgba(255,255,255,0.2),inset_0_0_20px_rgba(255,255,255,0.1)]' 
+                : 'bg-white/50 text-black border-t border-white/60 shadow-[0_-10px_40px_rgba(0,0,0,0.1),inset_0_2px_6px_rgba(255,255,255,0.9),inset_0_0_20px_rgba(255,255,255,0.5)]'} 
+              backdrop-blur-[80px] backdrop-saturate-[200%]
+              rounded-t-[48px] 
               flex flex-col overflow-hidden
             `}
           >
@@ -688,6 +727,9 @@ export function CardioTracker() {
               durationSec: summaryData.durationSec || 0,
               calories: summaryData.calories || 0,
               avgPace: summaryData.avgPace || '0:00 /km',
+              avgSpeedKmh: summaryData.avgSpeedKmh || 0,
+              maxSpeedKmh: summaryData.maxSpeedKmh || 0,
+              elevationGainM: summaryData.elevationGainM || 0,
               route: summaryData.route,
             }}
             mapTheme={mapLayer}

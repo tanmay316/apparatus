@@ -47,8 +47,7 @@ export function BottomNav() {
     return format(date, 'EEEE');
   };
 
-  const isWorkoutRoute = location.pathname.startsWith("/workout/");
-  if (isWorkoutRoute) return null;
+  const isWorkoutRoute = location.pathname.startsWith("/workout/") || location.pathname.startsWith("/cardio");
 
   const activeIndex = useMemo(() => {
     const index = TABS.findIndex((tab) => {
@@ -88,6 +87,8 @@ export function BottomNav() {
     navigate(path);
   };
 
+  if (isWorkoutRoute) return null;
+
   return (
     <>
       <nav
@@ -104,58 +105,60 @@ export function BottomNav() {
 
             if (isAction) {
               return (
-                <button
-                  key={tab.id}
-                  onClick={() => setSheetOpen(true)}
-                  className={`relative flex items-center justify-center w-12 h-12 rounded-full transition-all duration-300 active:scale-95 shadow-md ${
-                    sheetOpen
-                      ? "bg-slate-800 text-white dark:bg-white dark:text-black shadow-[inset_2px_2px_5px_rgba(0,0,0,0.2)]"
-                      : "bg-[#5d2a1a] text-white shadow-[0_4px_14px_rgba(93,42,26,0.4)] hover:shadow-[0_6px_20px_rgba(93,42,26,0.5)] hover:-translate-y-0.5"
-                  }`}
-                >
-                  <IconComponent size={24} strokeWidth={sheetOpen ? 2.5 : 2} />
-                  
-                  {/* Subtle pulsing ring behind the button to draw attention */}
-                  {!sheetOpen && (
-                    <div className="absolute inset-0 rounded-full border border-[#5d2a1a]/50 animate-ping opacity-20 pointer-events-none"></div>
-                  )}
-                </button>
+                <div key={tab.id} className="flex-1 flex justify-center relative">
+                  <button
+                    onClick={() => setSheetOpen(true)}
+                    className={`relative flex items-center justify-center w-[52px] h-[52px] rounded-full transition-all duration-300 active:scale-95 shadow-md -mt-6 border-4 border-white dark:border-[#17191c] ${
+                      sheetOpen
+                        ? "bg-slate-800 text-white dark:bg-white dark:text-black shadow-[inset_2px_2px_5px_rgba(0,0,0,0.2)]"
+                        : "bg-[#5d2a1a] text-white shadow-[0_4px_14px_rgba(93,42,26,0.4)] hover:shadow-[0_6px_20px_rgba(93,42,26,0.5)] hover:-translate-y-0.5"
+                    }`}
+                  >
+                    <IconComponent size={24} strokeWidth={sheetOpen ? 2.5 : 2} />
+                    
+                    {/* Subtle pulsing ring behind the button to draw attention */}
+                    {!sheetOpen && (
+                      <div className="absolute inset-0 rounded-full border border-[#5d2a1a]/50 animate-ping opacity-20 pointer-events-none"></div>
+                    )}
+                  </button>
+                </div>
               );
             }
 
             return (
-              <Link
-                key={tab.id}
-                to={tab.path}
-                ref={(el) => (itemRefs.current[index] = el)}
-                className={`relative flex items-center justify-center h-11 px-4 rounded-full transition-all duration-300 ease-out border-none ${
-                  isActive
-                    ? "bg-white shadow-[inset_3px_3px_8px_rgba(0,0,0,0.05),inset_-3px_-3px_8px_rgba(255,255,255,1)] text-[#5d2a1a]"
-                    : "text-gray-400 hover:text-gray-600 bg-white shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)]"
-                }`}
-                style={{ "--lineWidth": "0px" } as React.CSSProperties}
-              >
-                <div className="flex items-center justify-center shrink-0">
-                  <IconComponent
-                    size={20}
-                    strokeWidth={isActive ? 2.5 : 2}
-                    className="transition-all duration-300"
-                  />
-                </div>
-                <strong
-                  ref={(el) => (textRefs.current[index] = el)}
-                  className="font-sans text-[12px] font-bold tracking-wide whitespace-nowrap transition-all duration-300 ease-out"
-                  style={{
-                    width: isActive ? "var(--lineWidth)" : "0px",
-                    opacity: isActive ? 1 : 0,
-                    marginLeft: isActive ? "6px" : "0px",
-                    overflow: "hidden",
-                    display: "inline-block",
-                  }}
+              <div key={tab.id} className="flex-1 flex justify-center">
+                <Link
+                  to={tab.path}
+                  ref={(el) => (itemRefs.current[index] = el)}
+                  className={`relative flex items-center justify-center h-10 px-3 rounded-full transition-all duration-300 ease-out border-none ${
+                    isActive
+                      ? "bg-orange-50 text-[#5d2a1a]"
+                      : "text-gray-400 hover:text-gray-600 bg-transparent"
+                  }`}
+                  style={{ "--lineWidth": "0px" } as React.CSSProperties}
                 >
-                  {tab.label}
-                </strong>
-              </Link>
+                  <div className="flex items-center justify-center shrink-0">
+                    <IconComponent
+                      size={20}
+                      strokeWidth={isActive ? 2.5 : 2}
+                      className="transition-all duration-300"
+                    />
+                  </div>
+                  <strong
+                    ref={(el) => (textRefs.current[index] = el)}
+                    className="font-sans text-[12px] font-bold tracking-wide whitespace-nowrap transition-all duration-300 ease-out"
+                    style={{
+                      width: isActive ? "var(--lineWidth)" : "0px",
+                      opacity: isActive ? 1 : 0,
+                      marginLeft: isActive ? "6px" : "0px",
+                      overflow: "hidden",
+                      display: "inline-block",
+                    }}
+                  >
+                    {tab.label}
+                  </strong>
+                </Link>
+              </div>
             );
           })}
         </div>
