@@ -18,6 +18,7 @@ export interface CardioShareData {
   maxSpeedKmh?: number;
   elevationGainM?: number;
   route?: RoutePoint[];
+  currentLocation?: { lat: number; lng: number } | null;
 }
 
 interface Props {
@@ -200,9 +201,10 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
               {/* Background Map Layer */}
               {(showMapBackground || showPathBackground) && (
                 <div className="absolute inset-0 z-0">
-                  {data.route && data.route.length > 0 ? (
+                  {(data.route && data.route.length > 0) || data.currentLocation ? (
                     <RouteMap 
-                      route={data.route} 
+                      route={data.route || []} 
+                      currentLocation={data.currentLocation}
                       theme={selectedTheme} 
                       height="100%" 
                       highlightColor={lineColor}

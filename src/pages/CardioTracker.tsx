@@ -778,6 +778,7 @@ export function CardioTracker() {
               maxSpeedKmh: summaryData.maxSpeedKmh || 0,
               elevationGainM: summaryData.elevationGainM || 0,
               route: summaryData.route,
+              currentLocation: store.currentLocation,
             }}
             mapTheme={mapLayer}
             onClose={() => setShowShare(false)}
