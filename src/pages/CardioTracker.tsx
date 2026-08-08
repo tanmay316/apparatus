@@ -657,46 +657,52 @@ export function CardioTracker() {
           <p className="text-sm text-bone-dim font-mono">{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
         </div>
 
-        {/* Map */}
-        {summaryData.route && summaryData.route.length > 1 && (
-          <div className="mb-6 rounded-xl overflow-hidden border border-line">
-            <RouteMap route={summaryData.route} height="200px" />
-          </div>
-        )}
+        {/* Glassmorphism Summary Card */}
+        <div className="relative rounded-3xl overflow-hidden mb-8 shadow-2xl bg-ink-2/30 backdrop-blur-xl border border-line/50">
+          
+          {/* Map (if exists) */}
+          {summaryData.route && summaryData.route.length > 1 && (
+            <div className="h-[250px] w-full border-b border-line/30 relative">
+              <RouteMap route={summaryData.route} height="100%" />
+              <div className="absolute inset-0 pointer-events-none shadow-[inset_0_-20px_40px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_-20px_40px_rgba(0,0,0,0.5)] z-10" />
+            </div>
+          )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="card p-4 text-center">
-            <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider mb-1">Distance</div>
-            <div className="font-mono text-xl font-bold">{summaryData.distanceKm?.toFixed(2)}</div>
-            <div className="text-[10px] text-bone-dim">km</div>
-          </div>
-          <div className="card p-4 text-center">
-            <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider mb-1">Duration</div>
-            <div className="font-mono text-xl font-bold">{formatDuration(summaryData.durationSec || 0)}</div>
-          </div>
-          <div className="card p-4 text-center">
-            <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider mb-1">Calories</div>
-            <div className="font-mono text-xl font-bold">{summaryData.calories}</div>
-            <div className="text-[10px] text-bone-dim">kcal</div>
-          </div>
-        </div>
+          <div className="p-6">
+            {/* Main Stats: Distance and Duration */}
+            <div className="flex items-end justify-between mb-8">
+              <div>
+                <div className="text-[10px] text-sienna font-mono uppercase tracking-widest mb-1 font-bold">Distance</div>
+                <div className="flex items-baseline gap-1">
+                  <span className="font-display text-5xl md:text-6xl tracking-tight leading-none">{summaryData.distanceKm?.toFixed(2)}</span>
+                  <span className="font-mono text-bone-dim text-sm mb-1">km</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] text-amber font-mono uppercase tracking-widest mb-1 font-bold">Time</div>
+                <div className="font-mono text-3xl font-light tracking-tight">{formatDuration(summaryData.durationSec || 0)}</div>
+              </div>
+            </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-8">
-          <div className="card p-4 text-center">
-            <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider mb-1">Avg Speed</div>
-            <div className="font-mono text-xl font-bold">{summaryData.avgSpeedKmh?.toFixed(1)}</div>
-            <div className="text-[10px] text-bone-dim">km/h</div>
-          </div>
-          <div className="card p-4 text-center">
-            <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider mb-1">Avg Pace</div>
-            <div className="font-mono text-xl font-bold">{summaryData.avgPace?.replace(' /km', '')}</div>
-            <div className="text-[10px] text-bone-dim">/km</div>
-          </div>
-          <div className="card p-4 text-center">
-            <div className="text-[10px] text-bone-dim font-mono uppercase tracking-wider mb-1">Max Speed</div>
-            <div className="font-mono text-xl font-bold">{summaryData.maxSpeedKmh?.toFixed(1)}</div>
-            <div className="text-[10px] text-bone-dim">km/h</div>
+            {/* Secondary Stats Grid */}
+            <div className="grid grid-cols-4 gap-2 pt-6 border-t border-line/30 text-center md:text-left">
+              <div>
+                <div className="text-[9px] text-bone-dim font-mono uppercase tracking-wider mb-1">Calories</div>
+                <div className="font-mono text-base font-medium">{summaryData.calories}</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-bone-dim font-mono uppercase tracking-wider mb-1">Avg Pace</div>
+                <div className="font-mono text-base font-medium">{summaryData.avgPace?.replace(' /km', '')}</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-bone-dim font-mono uppercase tracking-wider mb-1">Avg Spd</div>
+                <div className="font-mono text-base font-medium">{summaryData.avgSpeedKmh?.toFixed(1)}</div>
+              </div>
+              <div>
+                <div className="text-[9px] text-bone-dim font-mono uppercase tracking-wider mb-1">Max Spd</div>
+                <div className="font-mono text-base font-medium">{summaryData.maxSpeedKmh?.toFixed(1)}</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -704,18 +710,18 @@ export function CardioTracker() {
           <div className="text-center text-sm text-bone-dim font-mono mb-4">Saving...</div>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setShowShare(true)}
-            className="flex items-center justify-center gap-2 bg-sienna/10 text-sienna rounded-xl py-3.5 hover:bg-sienna/20 transition-colors font-bold tracking-wider"
-          >
-            Share
-          </button>
+        <div className="flex flex-col gap-3 mt-4">
           <button
             onClick={handleDone}
-            className="btn-primary py-3.5 text-base font-bold tracking-wider"
+            className="w-full bg-sienna text-white py-4 rounded-2xl font-bold text-lg shadow-[0_4px_14px_0_rgba(235,89,60,0.39)] hover:shadow-[0_6px_20px_rgba(235,89,60,0.23)] transition-all active:scale-[0.98]"
           >
-            Done
+            Finish Workout
+          </button>
+          <button
+            onClick={() => setShowShare(true)}
+            className="w-full bg-ink-2/30 backdrop-blur-md border border-line text-bone py-4 rounded-2xl font-bold text-lg hover:bg-ink-3 transition-all active:scale-[0.98]"
+          >
+            Share Activity
           </button>
         </div>
         

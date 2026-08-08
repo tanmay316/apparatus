@@ -33,8 +33,19 @@ function formatDuration(sec: number): string {
   return `${h}h ${m}m`;
 }
 
-type ShareLayout = 'map-stats' | 'map-only' | 'path-stats' | 'path-only' | 'stats-only';
-const LAYOUTS: ShareLayout[] = ['map-stats', 'map-only', 'path-stats', 'path-only', 'stats-only'];
+type ShareLayout = 
+  | 'map-stats' | 'map-only' | 'path-stats' | 'path-only' | 'stats-only'
+  | 'map-distance' | 'path-distance' | 'stats-hero'
+  | 'sticker-solid' | 'sticker-transparent' 
+  | 'polaroid-solid' | 'polaroid-transparent';
+
+const LAYOUTS: ShareLayout[] = [
+  'map-stats', 'map-distance', 'map-only', 
+  'path-stats', 'path-distance', 'path-only', 
+  'stats-only', 'stats-hero', 
+  'sticker-solid', 'sticker-transparent', 
+  'polaroid-solid', 'polaroid-transparent'
+];
 
 const AVAILABLE_THEMES = Object.keys(MAP_THEMES) as MapThemeKey[];
 
@@ -52,11 +63,18 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const lineColor = 'url(#route-gradient)';
 
   const layout = LAYOUTS[layoutIndex];
-  const showMapBackground = layout !== 'stats-only';
-  const hideMapTiles = layout === 'path-stats' || layout === 'path-only';
+  
+  const isSticker = layout.startsWith('sticker-');
+  const isPolaroid = layout.startsWith('polaroid-');
+  const isTransparent = layout.includes('path-') || layout.endsWith('-transparent');
+  const isSolidBg = layout.startsWith('stats-') || layout.endsWith('-solid');
+  
+  const showMapBackground = !isSolidBg && !isSticker && !isPolaroid && !isTransparent; // Only for map-* layouts
+  const showPathBackground = layout.startsWith('path-'); // For path-* layouts
+
+  const hideMapTiles = isTransparent;
   const showOverlayStats = layout === 'map-stats' || layout === 'path-stats';
-  const isSolidBg = layout === 'stats-only';
-  const isTransparent = layout === 'path-stats' || layout === 'path-only';
+  const showDistanceOnly = layout === 'map-distance' || layout === 'path-distance';
 
   const getCanvas = async () => {
     if (!cardRef.current) return null;
@@ -150,7 +168,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
             drag="x"
             dragConstraints={{ left: 0, right: 0 }}
             onDragEnd={handleDragEnd}
-            className={`w-full relative overflow-hidden rounded-[2rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] cursor-grab active:cursor-grabbing border-4 border-white/10 ${isTransparent ? 'backdrop-blur-xl bg-white/5' : ''}`}
+            className={`w-full relative overflow-hidden rounded-[2rem] shadow-xl cursor-grab active:cursor-grabbing border-4 border-white/10`}
             style={{ 
               aspectRatio: isSolidBg ? '1 / 1' : '9 / 16',
               backgroundImage: isTransparent ? `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h12v12H0V0zm12 12h12v12H12V12zM0 12h12v12H0V12zm12-12h12v12H12V0z' fill='%23222' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E")` : 'none'
@@ -179,11 +197,11 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                   )}
                   {/* Strava-like bottom gradient for text readability if overlay stats are shown */}
                   {showOverlayStats && !isTransparent && (
-                    <div className="absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/90 via-black/50 to-transparent z-[1000]" />
+                    <div className="absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/60 via-black/20 to-transparent z-[1000]" />
                   )}
                   {/* Subtle top gradient for logo */}
                   {(showOverlayStats || layout === 'map-only' || layout === 'path-only') && !isTransparent && (
-                    <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/80 to-transparent z-[1000]" />
+                    <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/30 to-transparent z-[1000]" />
                   )}
                 </div>
               )}
@@ -200,74 +218,81 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
               {/* Content Foreground */}
               <div className="relative z-10 w-full h-full flex flex-col justify-between p-6">
                 
-                {/* Header Logo */}
-                <div className={`flex flex-col items-center justify-center gap-1 ${isSolidBg ? 'mt-4' : 'mt-2'}`}>
-                  <span className="font-sans tracking-[0.3em] text-[18px] font-light text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-                    ΛPPΛRΛTUS
-                  </span>
-                  <span className="font-display font-bold text-[11px] text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)] uppercase tracking-widest">
-                    {typeLabel}
-                  </span>
-                </div>
+                {/* Header Logo (Hidden for sticker and polaroid) */}
+                {!isSticker && !isPolaroid && (
+                  <div className={`flex flex-col items-center justify-center gap-1 ${isSolidBg ? 'mt-4' : 'mt-2'}`}>
+                    <span className="font-sans tracking-[0.3em] text-[18px] font-black text-white">
+                      ΛPPΛRΛTUS
+                    </span>
+                  </div>
+                )}
 
-                {/* Center space filler */}
-                <div className="flex-1" />
+                {/* Center space filler (Hidden for sticker and polaroid) */}
+                {!isSticker && !isPolaroid && <div className="flex-1" />}
 
                 {/* Stats Overlay */}
-                {showOverlayStats && (
+                {(showOverlayStats || showDistanceOnly) && (
                   <div className="flex flex-col gap-3 mb-2 w-full">
-                    <div className="flex items-baseline gap-2 mb-2">
-                      <span className="font-display text-6xl font-black text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.5)] tracking-tighter">
-                        {data.distanceKm.toFixed(2)}
-                      </span>
-                      <span className="text-xl font-bold text-white/90 uppercase tracking-widest drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-                        km
+                    <div className="flex items-end gap-2 mb-2">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-display text-6xl font-black text-white tracking-tighter">
+                          {data.distanceKm.toFixed(2)}
+                        </span>
+                        <span className="text-xl font-bold text-white/90 uppercase tracking-widest">
+                          km
+                        </span>
+                      </div>
+                      <span className="text-xl font-black text-[#f97316] uppercase tracking-widest ml-auto mb-1">
+                        {typeLabel}
                       </span>
                     </div>
                     
-                    <div className="grid grid-cols-3 gap-y-4 gap-x-2">
-                      <div>
-                        <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">Time</div>
-                        <div className="font-display font-bold text-xl text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-                          {formatDuration(data.durationSec)}
+                    {showOverlayStats && (
+                      <div className="grid grid-cols-3 gap-y-4 gap-x-2">
+                        <div>
+                          <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Time</div>
+                          <div className="font-display font-bold text-xl text-white">
+                            {formatDuration(data.durationSec)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Pace</div>
+                          <div className="font-display font-bold text-xl text-white">
+                            {data.avgPace.replace(' /km', '')}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Speed</div>
+                          <div className="font-display font-bold text-xl text-white">
+                            {data.avgSpeedKmh?.toFixed(1) || '0.0'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Max Spd</div>
+                          <div className="font-display font-bold text-xl text-white">
+                            {data.maxSpeedKmh?.toFixed(1) || '0.0'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Elev</div>
+                          <div className="font-display font-bold text-xl text-white">
+                            {data.elevationGainM || 0}m
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9px] font-bold text-[#f97316] uppercase tracking-widest mb-0.5">Calories</div>
+                          <div className="font-display font-bold text-xl text-[#f97316]">
+                            {data.calories}
+                          </div>
                         </div>
                       </div>
-                      <div>
-                        <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">Pace</div>
-                        <div className="font-display font-bold text-xl text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-                          {data.avgPace.replace(' /km', '')}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">Speed</div>
-                        <div className="font-display font-bold text-xl text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-                          {data.avgSpeedKmh?.toFixed(1) || '0.0'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">Max Spd</div>
-                        <div className="font-display font-bold text-xl text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-                          {data.maxSpeedKmh?.toFixed(1) || '0.0'}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">Elev</div>
-                        <div className="font-display font-bold text-xl text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-                          {data.elevationGainM || 0}m
-                        </div>
-                      </div>
-                      <div>
-                        <div className="text-[9px] font-bold text-[#f97316] uppercase tracking-widest mb-0.5 drop-shadow-[0_1px_1px_rgba(0,0,0,0.5)]">Calories</div>
-                        <div className="font-display font-bold text-xl text-[#f97316] drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
-                          {data.calories}
-                        </div>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
                 {/* Centered Stats for Stats-only view */}
-                {isSolidBg && (
+                {/* Centered Stats for Stats-only view */}
+                {layout === 'stats-only' && (
                   <div className="flex-1 flex flex-col items-center justify-center w-full">
                     <div className="text-center mb-10">
                       <div className="font-display text-[5.5rem] leading-none font-black text-white tracking-tighter">
@@ -302,6 +327,63 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                       <div className="text-center">
                         <div className="font-display font-bold text-2xl text-white mb-1">{data.elevationGainM || 0}m</div>
                         <div className="text-[9px] font-bold text-white/50 uppercase tracking-widest">Elev</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Hero Stats */}
+                {layout === 'stats-hero' && (
+                  <div className="flex-1 flex flex-col items-center justify-center w-full gap-8">
+                    <div className="text-center">
+                      <div className="text-sm font-bold text-white/50 uppercase tracking-widest mb-1">{typeLabel} Distance</div>
+                      <div className="font-display text-[6.5rem] leading-none font-black text-white tracking-tighter">{data.distanceKm.toFixed(2)}<span className="text-3xl ml-1 text-white/50">km</span></div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-sm font-bold text-white/50 uppercase tracking-widest mb-1">Time</div>
+                      <div className="font-display text-5xl font-black text-white">{formatDuration(data.durationSec)}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-sm font-bold text-white/50 uppercase tracking-widest mb-1">Pace</div>
+                      <div className="font-display text-5xl font-black text-white">{data.avgPace.replace(' /km', '')}</div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sticker */}
+                {isSticker && (
+                  <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none p-8">
+                    <div className="bg-white/95 backdrop-blur-md rounded-[2.5rem] p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col w-full rotate-[-2deg] border border-white/20">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <div className="font-sans font-black tracking-widest text-[10px] text-black/40">ΛPPΛRΛTUS {typeLabel}</div>
+                          <div className="font-display font-black text-5xl text-black tracking-tighter leading-none mt-1">{data.distanceKm.toFixed(2)}<span className="text-lg ml-1 text-black/50">km</span></div>
+                        </div>
+                        <div className="w-12 h-12 rounded-full bg-[#eb593c]/10 flex items-center justify-center text-xl">
+                          {data.type === 'walk' ? '🚶' : data.type === 'run' ? '🏃' : '🚴'}
+                        </div>
+                      </div>
+                      <div className="h-28 bg-black/5 rounded-2xl mb-4 overflow-hidden relative">
+                         <RouteMap route={data.route || []} theme="street" height="100%" hideMap={true} highlightColor="#eb593c" noGlow={true} />
+                      </div>
+                      <div className="flex justify-between font-mono text-sm font-bold text-black/70">
+                         <span>{formatDuration(data.durationSec)}</span>
+                         <span>{data.avgPace.replace(' /km', '')}/km</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Polaroid */}
+                {isPolaroid && (
+                  <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none p-6 pb-12">
+                    <div className="bg-[#fcfbf9] rounded-sm p-4 pb-10 shadow-[0_20px_40px_rgba(0,0,0,0.6)] w-full rotate-[1deg] border border-black/5">
+                      <div className="w-full aspect-square bg-gray-200 rounded-sm overflow-hidden relative">
+                        <RouteMap route={data.route || []} theme="satellite" height="100%" hideMap={false} />
+                      </div>
+                      <div className="mt-6 flex flex-col items-center gap-1 font-sans text-gray-800">
+                        <div className="text-2xl font-black italic">{data.distanceKm.toFixed(2)} km {typeLabel}</div>
+                        <div className="text-sm opacity-60 font-bold">{formatDuration(data.durationSec)} • {displayDate}</div>
                       </div>
                     </div>
                   </div>
