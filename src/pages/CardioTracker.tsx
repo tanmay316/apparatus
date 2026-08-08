@@ -13,6 +13,7 @@ import { calculateCardioCalories } from '@/lib/calories';
 import { startActiveSession, updateActiveSession, endActiveSession, postActivity } from '@/services/social';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
+import { updateUserChallengeProgress } from '@/services/community';
 import type { CardioActivityType, CardioActivity } from '@/types';
 
 function localDateKey(d: Date) {
@@ -317,8 +318,6 @@ export function CardioTracker() {
         
         // Auto-update community challenges
         try {
-          // Import dynamic to avoid circular dependencies if any, or just regular import at top
-          const { updateUserChallengeProgress } = await import('@/services/community');
           await updateUserChallengeProgress(user.uid, [
             { metric: 'distance', amount: data.distanceKm! },
             { metric: 'calories', amount: data.calories! },

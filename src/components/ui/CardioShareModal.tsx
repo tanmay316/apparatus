@@ -259,7 +259,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                           km
                         </span>
                       </div>
-                      <span className="text-xl font-black text-[#f97316] uppercase tracking-widest ml-auto mb-1">
+                      <span className="text-xl font-black uppercase tracking-widest ml-auto mb-1 bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">
                         {typeLabel}
                       </span>
                     </div>
@@ -297,8 +297,8 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                           </div>
                         </div>
                         <div>
-                          <div className="text-[9px] font-bold text-[#f97316] uppercase tracking-widest mb-0.5">Calories</div>
-                          <div className="font-display font-bold text-xl text-[#f97316]">
+                          <div className="text-[9px] font-bold uppercase tracking-widest mb-0.5 bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">Calories</div>
+                          <div className="font-display font-bold text-xl bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">
                             {data.calories}
                           </div>
                         </div>
@@ -330,8 +330,8 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                         <div className="text-[9px] font-bold text-white/50 uppercase tracking-widest">Pace</div>
                       </div>
                       <div className="text-center">
-                        <div className="font-display font-bold text-2xl text-[#f97316] mb-1">{data.calories}</div>
-                        <div className="text-[9px] font-bold text-[#f97316]/70 uppercase tracking-widest">Cals</div>
+                        <div className="font-display font-bold text-2xl mb-1 bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">{data.calories}</div>
+                        <div className="text-[9px] font-bold opacity-80 uppercase tracking-widest bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">Cals</div>
                       </div>
                       <div className="text-center">
                         <div className="font-display font-bold text-2xl text-white mb-1">{data.avgSpeedKmh?.toFixed(1) || '0.0'}</div>
@@ -400,7 +400,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                     onClick={() => setSelectedTheme(t)}
                     className={`shrink-0 px-4 py-2 rounded-[20px] text-xs font-bold tracking-wide transition-all duration-300 ${
                       selectedTheme === t 
-                        ? 'bg-white text-black shadow-[0_4px_12px_rgba(255,255,255,0.3)]' 
+                        ? 'bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-white shadow-[0_4px_12px_rgba(244,63,94,0.4)]' 
                         : 'text-white/60 hover:text-white hover:bg-white/10'
                     }`}
                   >
@@ -412,28 +412,33 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
           )}
 
           {/* Actions */}
-          <div className="grid grid-cols-2 gap-3 w-full">
+          <div className="flex justify-center gap-8 w-full mt-4">
+            <svg width="0" height="0" className="absolute">
+              <defs>
+                <linearGradient id="icon-gradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#fbbf24" offset="0%" />
+                  <stop stopColor="#f43f5e" offset="50%" />
+                  <stop stopColor="#a855f7" offset="100%" />
+                </linearGradient>
+              </defs>
+            </svg>
+
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="flex flex-col items-center justify-center gap-2 bg-white/5 text-white backdrop-blur-xl border border-white/10 py-4 rounded-[24px] hover:bg-white/10 transition-all active:scale-[0.97] disabled:opacity-50"
+              className="p-4 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-[0.90] disabled:opacity-50"
+              title="Save to Photos"
             >
-              <div className="bg-white/10 p-2.5 rounded-full mb-1">
-                {didCopy ? <Check size={20} className="text-green-400" /> : <Download size={20} />}
-              </div>
-              <span className="font-bold text-[11px] uppercase tracking-wider text-white/80">{downloading ? 'Saving...' : 'Save to Photos'}</span>
+              {didCopy ? <Check size={28} className="text-green-400" /> : <Download size={28} style={{ stroke: 'url(#icon-gradient)' }} />}
             </button>
             
             <button
               onClick={handleShare}
               disabled={downloading}
-              className="flex flex-col items-center justify-center gap-2 bg-sienna text-white shadow-[0_8px_24px_rgba(235,89,60,0.4)] border border-sienna/50 py-4 rounded-[24px] hover:brightness-110 transition-all active:scale-[0.97] disabled:opacity-50 relative overflow-hidden"
+              className="p-4 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-[0.90] disabled:opacity-50"
+              title="Share Activity"
             >
-              <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/20 to-transparent opacity-0 hover:opacity-100 transition-opacity" />
-              <div className="bg-black/10 p-2.5 rounded-full mb-1">
-                <Share2 size={20} />
-              </div>
-              <span className="font-bold text-[11px] uppercase tracking-wider text-white/95">Share Activity</span>
+              <Share2 size={28} style={{ stroke: 'url(#icon-gradient)' }} />
             </button>
           </div>
         </div>

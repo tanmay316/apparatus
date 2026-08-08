@@ -20,6 +20,7 @@ import type { Exercise } from '@/types';
 import { calculateWorkoutCalories, calculateWorkoutVolume } from '@/lib/calories';
 import { calculateBodyweightReps } from '@/lib/muscle-map';
 import { compareExerciseProgress } from '@/lib/progressive-overload';
+import { updateUserChallengeProgress } from '@/services/community';
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -366,7 +367,6 @@ export function WorkoutSession() {
 
       // Auto-update community challenges
       try {
-        const { updateUserChallengeProgress } = await import('@/services/community');
         await updateUserChallengeProgress(user.uid, [
           { metric: 'calories', amount: calories },
           { metric: 'duration', amount: finalDurationMin },
