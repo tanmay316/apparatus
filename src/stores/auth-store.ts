@@ -57,7 +57,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
-          // Fetch or create profile
+          // Unblock the UI immediately to remove the double loading screen
+          set({ user: firebaseUser, initialized: true });
+
+          // Fetch or create profile asynchronously in the background
           const profileRef = doc(db, 'users', firebaseUser.uid);
           const profileSnap = await withTimeout(
             getDoc(profileRef),
@@ -131,7 +134,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           if (banSnap.exists() && banSnap.data().active === true) {
             useUIStore.getState().showToast('This account has been suspended. Contact support if you believe this is a mistake.', 'error');
             await firebaseSignOut(auth);
-            set({ user: null, profile: null, stats: null, loading: false, initialized: true });
+            set({ user: null, profile: null, stats: null, loading: false });
             return;
           }
 
@@ -151,7 +154,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             );
           }
 
-          set({ user: firebaseUser, profile, stats, loading: false, initialized: true });
+          set({ profile, stats, loading: false });
         } else {
           set({ user: null, profile: null, stats: null, loading: false, initialized: true });
         }
