@@ -105,13 +105,15 @@ const startGpsWatch = async () => {
         const storeState = useCardioStore.getState();
         // Ignore wildly inaccurate points for precise tracking (150m is a safe threshold)
         if (storeState.routePoints.length === 0 || pos.coords.accuracy <= 150) {
-          storeState.addPoint({
+          const pt = {
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-            alt: pos.coords.altitude ?? undefined,
-            speed: pos.coords.speed ?? undefined,
             ts: Date.now(),
-          });
+          } as RoutePoint;
+          if (pos.coords.altitude != null) pt.alt = pos.coords.altitude;
+          if (pos.coords.speed != null) pt.speed = pos.coords.speed;
+          
+          storeState.addPoint(pt);
         }
       },
       (err) => {

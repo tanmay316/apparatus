@@ -4,23 +4,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { RoutePoint } from '@/types';
 
-// Custom icons using HTML
-const startIcon = new L.DivIcon({
-  html: `<div style="width: 16px; height: 16px; background: #fbbf24; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
-  className: '',
-  iconSize: [16, 16],
-  iconAnchor: [8, 8]
-});
-
-const endIcon = new L.DivIcon({
-  html: `<div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: #a855f7; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));">
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
-  </div>`,
-  className: '',
-  iconSize: [28, 28],
-  iconAnchor: [4, 28]
-});
-
+// currentIcon stays as a static icon for live tracking
 const currentIcon = new L.DivIcon({
   html: `
     <div class="gps-pulse-ring"></div>
@@ -119,11 +103,30 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
   const themeData = MAP_THEMES[theme] || MAP_THEMES.street;
   const isDarkMap = theme === 'dark' || theme === 'satellite';
 
+  const startColor = highlightColor === 'url(#route-gradient)' ? '#fbbf24' : highlightColor || '#fbbf24';
+  const endColor = highlightColor === 'url(#route-gradient)' ? '#a855f7' : highlightColor || '#a855f7';
+
+  const startIcon = useMemo(() => new L.DivIcon({
+    html: `<div style="width: 16px; height: 16px; background: ${startColor}; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
+    className: '',
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
+  }), [startColor]);
+
+  const endIcon = useMemo(() => new L.DivIcon({
+    html: `<div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: ${endColor}; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));">
+      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
+    </div>`,
+    className: '',
+    iconSize: [28, 28],
+    iconAnchor: [4, 28]
+  }), [endColor]);
+
   return (
     <div style={{ height, width: '100%', overflow: 'hidden' }} className="relative">
       <svg style={{ width: 0, height: 0, position: 'absolute' }}>
         <defs>
-          <linearGradient id="route-gradient" x1="100%" y1="100%" x2="0%" y2="0%">
+          <linearGradient id="route-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#fbbf24" />
             <stop offset="50%" stopColor="#f43f5e" />
             <stop offset="100%" stopColor="#a855f7" />
