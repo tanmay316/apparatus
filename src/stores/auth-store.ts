@@ -171,16 +171,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signInWithGoogle: async () => {
     set({ loading: true });
     try {
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (isMobile) {
-        // Mobile browsers often block popups or kill the context.
-        await signInWithRedirect(auth, googleProvider);
-      } else {
-        await signInWithPopup(auth, googleProvider);
-      }
+      // Use popup by default for all devices (works best in Chrome PWAs)
+      await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
       console.error('Google sign-in failed:', error);
-      // Fallback if popup blocked on desktop
+      // Fallback if popup blocked
       if (error.code === 'auth/popup-blocked') {
         await signInWithRedirect(auth, googleProvider);
       } else {
