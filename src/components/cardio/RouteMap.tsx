@@ -40,13 +40,15 @@ interface Props {
   hideMap?: boolean;
   noGlow?: boolean;
   isCapturing?: boolean;
+  currentLocation?: { lat: number, lng: number } | null;
 }
 
 /** Keeps the map centered on the last route point when live tracking or when recenterTrigger changes */
-function MapAutoCenter({ route, recenterTrigger }: { route: RoutePoint[], recenterTrigger?: number }) {
+function MapAutoCenter({ route, recenterTrigger, currentLocation }: { route: RoutePoint[], recenterTrigger?: number, currentLocation?: { lat: number, lng: number } | null }) {
   const map = useMap();
   const lastLen = useRef(0);
   const lastRecenter = useRef(recenterTrigger);
+  const initialized = useRef(false);
 
   useEffect(() => {
     let shouldCenter = false;
@@ -64,11 +66,17 @@ function MapAutoCenter({ route, recenterTrigger }: { route: RoutePoint[], recent
     if (shouldCenter && route.length > 0) {
       const last = route[route.length - 1];
       map.setView([last.lat, last.lng], 16.5, { animate: true });
+    } else if (shouldCenter && currentLocation) {
+      map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: true });
+    } else if (currentLocation && !initialized.current) {
+      // First time getting location
+      map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: true });
+      initialized.current = true;
     }
     
     lastLen.current = route.length;
     lastRecenter.current = recenterTrigger;
-  }, [route, map, recenterTrigger]);
+  }, [route, map, recenterTrigger, currentLocation]);
 
   return null;
 }
@@ -140,17 +148,19 @@ function InjectGradient() {
   return null;
 }
 
-export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false, isCapturing = false }: Props) {
+export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false, isCapturing = false, currentLocation }: Props) {
   const positions: [number, number][] = useMemo(
     () => route.map(p => [p.lat, p.lng]),
     [route]
   );
 
-  const center: [number, number] = positions.length > 0
+  const center: [number, number] = currentLocation
+    ? [currentLocation.lat, currentLocation.lng]
+    : positions.length > 0
     ? positions[positions.length - 1]
     : [20.5937, 78.9629]; // Default: India center
 
-  const zoom = positions.length > 0 ? 16.5 : 5;
+  const zoom = (positions.length > 0 || currentLocation) ? 16.5 : 5;
   
   const themeData = MAP_THEMES[theme] || MAP_THEMES.street;
   const isDarkMap = theme === 'dark' || theme === 'satellite';
@@ -239,9 +249,13 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
           <Marker position={positions[0]} icon={startIcon} />
         )}
 
-        {/* Current position marker (only in live mode) */}
-        {isLive && positions.length > 1 && (
-          <Marker position={positions[positions.length - 1]} icon={currentIcon} />
+        {/* Current position marker */}
+        {(isLive || currentLocation) && (
+          currentLocation ? (
+            <Marker position={[currentLocation.lat, currentLocation.lng]} icon={currentIcon} />
+          ) : positions.length > 0 ? (
+            <Marker position={positions[positions.length - 1]} icon={currentIcon} />
+          ) : null
         )}
 
         {/* End marker (only in static mode) */}
@@ -249,7 +263,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
           <Marker position={positions[positions.length - 1]} icon={endIcon} />
         )}
 
-        {isLive && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} />}
+        {(isLive || currentLocation) && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} currentLocation={currentLocation} />}
         {!isLive && positions.length > 1 && <FitBounds positions={positions} />}
       </MapContainer>
     </div>

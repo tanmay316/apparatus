@@ -6,7 +6,7 @@ import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mount
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { useCardioStore } from '@/stores/cardio-store';
+import { useCardioStore, startGpsWatch, stopGpsWatch } from '@/stores/cardio-store';
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { saveCardioActivity, getUserCardioActivities } from '@/services/cardio';
 import { calculateCardioCalories } from '@/lib/calories';
@@ -86,9 +86,15 @@ export function CardioTracker() {
       if (!store.isTracking && screen !== 'summary' && screen !== 'tracking') {
         setScreen('select');
       }
-    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlType]);
+
+  // Start GPS for preview on the ready screen
+  useEffect(() => {
+    if (screen === 'ready') {
+      startGpsWatch();
+    }
+  }, [screen]);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [summaryData, setSummaryData] = useState<Partial<CardioActivity> | null>(null);
@@ -427,7 +433,7 @@ export function CardioTracker() {
         
         {/* Background Map */}
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} isLive={false} height="100%" theme={mapLayer} />
+          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive={false} height="100%" theme={mapLayer} />
           <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg)] via-transparent to-transparent z-[1]" />
         </div>
 
@@ -503,7 +509,7 @@ export function CardioTracker() {
         
         {/* Full Screen Map Background */}
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} />
+          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} />
         </div>
 
         {/* Top Header */}

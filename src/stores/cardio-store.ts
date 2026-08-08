@@ -226,7 +226,10 @@ const checkPermissionsNative = async () => {
 
 /** Central GPS point handler — applies smart accuracy check and feeds to store */
 function handleGpsPosition(pos: GeolocationPosition) {
-  useCardioStore.setState({ gpsStatus: 'active' });
+  useCardioStore.setState({ 
+    gpsStatus: 'active',
+    currentLocation: { lat: pos.coords.latitude, lng: pos.coords.longitude }
+  });
   const storeState = useCardioStore.getState();
   
   const accuracy = pos.coords.accuracy;
@@ -258,7 +261,7 @@ function handleGpsPosition(pos: GeolocationPosition) {
   storeState.addPoint(pt);
 }
 
-const startGpsWatch = async () => {
+export const startGpsWatch = async () => {
   if (watchIdRef !== null) return; // already watching
   
   requestWakeLock();
@@ -314,7 +317,7 @@ const startGpsWatch = async () => {
   }
 };
 
-const stopGpsWatch = async () => {
+export const stopGpsWatch = async () => {
   if (watchIdRef !== null) {
     if (Capacitor.isNativePlatform()) {
       try { await Geolocation.clearWatch({ id: watchIdRef as string }); } catch {}
@@ -350,6 +353,7 @@ interface CardioState {
   elevationGainM: number;
   gpsStatus: GpsStatus;
   gpsAccuracy: number;
+  currentLocation: { lat: number, lng: number } | null;
 
   // Actions
   startTracking: (type: CardioActivityType) => void;
@@ -377,6 +381,7 @@ const IDLE: Partial<CardioState> = {
   elevationGainM: 0,
   gpsStatus: 'off' as GpsStatus,
   gpsAccuracy: 0,
+  currentLocation: null,
 };
 
 export const useCardioStore = create<CardioState>()(
@@ -408,6 +413,7 @@ export const useCardioStore = create<CardioState>()(
           elevationGainM: 0,
           gpsStatus: 'waiting' as GpsStatus,
           gpsAccuracy: 0,
+          currentLocation: null,
         });
         // Start GPS after state is ready
         startGpsWatch();
@@ -635,6 +641,7 @@ export const useCardioStore = create<CardioState>()(
       },
 
       reset: () => {
+        stopGpsWatch();
         resetKalmanFilters();
         resetSpeedBuffer();
         lastMovementTs = 0;
