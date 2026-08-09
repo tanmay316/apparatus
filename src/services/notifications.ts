@@ -22,6 +22,7 @@ export async function getUserNotifications(userId: string): Promise<AppNotificat
     const q = query(
       collection(db, 'app_notifications'),
       where('userId', '==', userId),
+      orderBy('createdAt', 'desc'),
       limit(20)
     );
     const snap = await getDocs(q);

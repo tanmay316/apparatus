@@ -8,15 +8,18 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "deploy": "npm run build && firebase deploy --only hosting"
+    "deploy": "npm run build && firebase deploy --only hosting",
+    "ota:upload": "npm run build && npx @capgo/cli upload -k 5bdb3e7d-afa9-4b84-8be0-9efb8902f057"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",
-    "@capacitor/cli": "^8.4.2",
-    "@capacitor/core": "^8.4.2",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@capacitor/geolocation": "^8.2.1",
     "@capacitor/local-notifications": "^8.2.1",
     "@capgo/capacitor-pedometer": "^8.0.38",
+    "@capgo/capacitor-updater": "^8.51.3",
+    "@codetrix-studio/capacitor-google-auth": "^3.4.0-rc.4",
     "@tanstack/react-query": "^5.59.0",
     "@types/leaflet": "^1.9.22",
     "clsx": "^2.1.1",

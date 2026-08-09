@@ -13,6 +13,10 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.token.email == 'tanmay.sharma4334@gmail.com';
     }
 
+    function isClanCoLeader(clanId) {
+      return isAuthenticated() && get(/databases/$(database)/documents/clan_memberships/$(clanId + '_' + request.auth.uid)).data.role == 'co_leader';
+    }
+
     function canReadPlan(planId) {
       let plan = get(/databases/$(database)/documents/plans/$(planId)).data;
       return plan.isPublic == true || isOwner(plan.ownerId);
@@ -273,42 +277,65 @@ service cloud.firestore {
     // ─── Community V2 (Clans, Challenges, Events) ───────────────
     match /clans_v2/{clanId} {
       allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.leaderId == request.auth.uid;
+      allow update: if isOwner(resource.data.leaderId) || isAdmin() || isClanCoLeader(clanId)
+        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberCount']));
+      allow delete: if isOwner(resource.data.leaderId) || isAdmin();
     }
 
     match /clan_memberships/{membershipId} {
       allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
+        || isOwner(get(/databases/$(database)/documents/clans_v2/$(resource.data.clanId)).data.leaderId)
+        || isClanCoLeader(resource.data.clanId) || isAdmin();
+      allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid)
+        || isOwner(get(/databases/$(database)/documents/clans_v2/$(resource.data.clanId)).data.leaderId)
+        || isClanCoLeader(resource.data.clanId) || isAdmin();
     }
 
     match /challenges_v2/{challengeId} {
       allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isOwner(resource.data.createdBy) || isAdmin()
+        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participantCount']));
+      allow delete: if isOwner(resource.data.createdBy) || isAdmin();
     }
 
     match /challenge_participants/{participantId} {
       allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || resource.data.userId == request.auth.uid);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     match /simple_events/{eventId} {
       allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isOwner(resource.data.createdBy) || isAdmin()
+        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participantCount']));
+      allow delete: if isOwner(resource.data.createdBy) || isAdmin();
     }
 
     match /simple_event_participants/{participantId} {
       allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || resource.data.userId == request.auth.uid);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     match /community_posts/{postId} {
       allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isOwner(resource.data.authorId) || isAdmin()
+        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'likedUserIds']));
+      allow delete: if isOwner(resource.data.authorId) || isAdmin();
     }
 
     match /community_post_comments/{commentId} {
       allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
     }
 
     match /app_notifications/{notifId} {

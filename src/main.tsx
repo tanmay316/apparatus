@@ -3,10 +3,14 @@ import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { useAuthStore } from './stores/auth-store';
 import { logError } from '@/services/logger';
+import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import './index.css';
 
 // Initialize Firebase auth listener
 useAuthStore.getState().init();
+
+// Notify Capgo that the bundle loaded successfully so it doesn't rollback
+CapacitorUpdater.notifyAppReady();
 
 // Global unhandled error logging
 window.addEventListener('error', (event) => {

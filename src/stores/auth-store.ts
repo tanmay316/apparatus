@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as firebaseSignOut } from 'firebase/auth';
+import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult, signOut as firebaseSignOut } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider, ADMIN_EMAIL } from '@/lib/firebase';
 import { sanitizeUsername, validateDisplayName } from '@/lib/validation';
@@ -171,7 +172,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signInWithGoogle: async () => {
     set({ loading: true });
     try {
-      // Use popup by default for all devices (works best in Chrome PWAs)
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+          GoogleAuth.initialize();
+          const googleUser = await GoogleAuth.signIn();
+          const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+          await signInWithCredential(auth, credential);
+          set({ loading: false });
+          return;
+        } catch (nativeErr: any) {
+          console.warn('Native GoogleAuth error, trying web fallback:', nativeErr);
+        }
+      }
+
+      // Use popup by default for web/PWA
       await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
       console.error('Google sign-in failed:', error);

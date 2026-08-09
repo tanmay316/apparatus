@@ -12,6 +12,8 @@ dependencies {
     implementation project(':capacitor-geolocation')
     implementation project(':capacitor-local-notifications')
     implementation project(':capgo-capacitor-pedometer')
+    implementation project(':capgo-capacitor-updater')
+    implementation project(':codetrix-studio-capacitor-google-auth')
 
 }
 

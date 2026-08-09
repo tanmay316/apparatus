@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 import path from 'path';
+import pkg from './package.json';
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), basicSsl()],
@@ -11,6 +12,7 @@ export default defineConfig(({ mode }) => ({
     },
   },
   define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
     __BUNDLED_DEV__: 'false',
     __SERVER_FORWARD_CONSOLE__: 'false',
   },
