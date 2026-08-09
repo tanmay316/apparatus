@@ -8,7 +8,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createSimpleEvent } from '@/services/community';
 import { Timestamp } from 'firebase/firestore';
 
-export function CreateEventSheet({ onClose }: { onClose: () => void }) {
+export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => void, prefilledClanId?: string }) {
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
@@ -19,7 +19,7 @@ export function CreateEventSheet({ onClose }: { onClose: () => void }) {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [locationName, setLocationName] = useState('');
-  const [visibility, setVisibility] = useState<'public' | 'clan_only'>('public');
+  const [visibility, setVisibility] = useState<'public' | 'clan_only'>(prefilledClanId ? 'clan_only' : 'public');
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -39,6 +39,7 @@ export function CreateEventSheet({ onClose }: { onClose: () => void }) {
         createdBy: user.uid,
         creatorName: user.displayName || 'Unknown',
         creatorPhoto: user.photoURL || '',
+        clanId: prefilledClanId,
       });
     },
     onSuccess: () => {
@@ -56,7 +57,7 @@ export function CreateEventSheet({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end">
+    <div className="fixed inset-0 z-[300] flex flex-col justify-end">
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
@@ -113,17 +114,21 @@ export function CreateEventSheet({ onClose }: { onClose: () => void }) {
                 ]}
               />
             </div>
-            <div>
-              <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Visibility</label>
+            <div className="space-y-1 relative z-30">
+              <label className="text-[10px] font-mono text-bone-dim uppercase">Visibility</label>
               <CustomSelect
-                className="w-full"
+                className="w-full text-sm"
                 value={visibility}
+                disabled={!!prefilledClanId}
                 onChange={(val) => setVisibility(val as any)}
                 options={[
                   { value: 'public', label: 'Public' },
                   { value: 'clan_only', label: 'Clan Only' }
                 ]}
               />
+              {prefilledClanId && (
+                <p className="text-[10px] font-mono text-sienna mt-1">Locked to clan because you are creating from within a clan.</p>
+              )}
             </div>
           </div>
 

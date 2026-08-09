@@ -270,7 +270,43 @@ service cloud.firestore {
       allow create, update, delete: if isAuthenticated();
     }
 
+    // ─── Community V2 (Clans, Challenges, Events) ───────────────
+    match /clans_v2/{clanId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    match /clan_memberships/{membershipId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    match /challenges_v2/{challengeId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    match /challenge_participants/{participantId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    match /simple_events/{eventId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    match /simple_event_participants/{participantId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
     match /community_posts/{postId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
+    match /community_post_comments/{commentId} {
       allow read: if true;
       allow create, update, delete: if isAuthenticated();
     }

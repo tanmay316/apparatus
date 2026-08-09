@@ -266,7 +266,7 @@ export function CalendarPage() {
                 value={profile?.activePlanId || ''}
                 onChange={handleActivePlanChange}
                 placeholder="No active plan"
-                options={allPlans.map(p => ({ value: p.id, label: p.title }))}
+                options={allPlans.map(p => ({ value: p.id || '', label: p.title }))}
               />
             </div>
           </div>
@@ -599,7 +599,7 @@ export function CalendarPage() {
                           value={selectedFollowerPlanId}
                           onChange={setSelectedFollowerPlanId}
                           placeholder="Select a plan..."
-                          options={followerPlans.map(p => ({ value: p.id, label: `${p.title} (${p.daysPerWeek} days)` }))}
+                          options={followerPlans.map(p => ({ value: p.id || '', label: `${p.title} (${p.daysPerWeek} days)` }))}
                         />
                       </div>
                     )}

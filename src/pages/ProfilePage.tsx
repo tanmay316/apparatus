@@ -4,7 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { doc, getDoc } from 'firebase/firestore';
-import { ChevronLeft, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check } from 'lucide-react';
+import { ChevronLeft, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -404,7 +404,7 @@ export function ProfilePage() {
               )}
 
               <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs font-mono text-[var(--muted)]">
-                <span className="flex items-center gap-1"><CalendarIcon size={12} /> Joined {joinDate}</span>
+                <span className="flex items-center gap-1"><Calendar size={12} /> Joined {joinDate}</span>
                 <span>•</span>
                 <span>{stats?.xp || 0} XP</span>
               </div>

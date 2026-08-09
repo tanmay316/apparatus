@@ -400,6 +400,7 @@ export interface CommunityPost {
   likesCount: number;
   likedUserIds?: string[];
   commentsCount: number;
+  imageUrl?: string;
   createdAt: Timestamp | null;
 }
 

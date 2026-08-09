@@ -151,6 +151,14 @@ function attachVisibilityListener() {
       const state = useCardioStore.getState();
       if (state.isTracking && !state.isPaused) {
         requestWakeLock();
+        
+        // Android/iOS aggressively kill watchPosition when locked.
+        // Restart the GPS watch to ensure it's still alive.
+        if (watchIdRef !== null) {
+          stopGpsWatch().then(() => startGpsWatch());
+        } else {
+          startGpsWatch();
+        }
       }
     }
   });
@@ -500,9 +508,7 @@ export const useCardioStore = create<CardioState>()(
           const dtSec = (now - prev.ts) / 1000;
 
           // ── Background Gap Detection ──────────────────
-          // If > 30 seconds between points, GPS was probably suspended.
-          // Add the point (to resume trace) but do NOT count distance
-          // (prevents "teleport line" across buildings).
+          // (Removed distance dropping on gap so background locked tracking still counts distance)
           const isGpsGap = dtSec > 30;
 
           // ── Stillness Detection ───────────────────────
@@ -534,15 +540,13 @@ export const useCardioStore = create<CardioState>()(
             return;
           }
 
-          if (!isGpsGap) {
-            // ── Strava-style distance filtering ──────────────────
-            // Ignore teleport jumps (> 500 meters) — GPS glitches
-            // Sanity-check implied speed to reject impossible bursts
-            if (rawDistance < 0.5) {
-              const impliedSpeedKmh = dtSec > 0 ? (rawDistance / dtSec) * 3600 : 0;
-              if (impliedSpeedKmh < MAX_SANE_SPEED_KMH) {
-                addedDistance = rawDistance;
-              }
+          // ── Strava-style distance filtering ──────────────────
+          // Ignore teleport jumps (> 500 meters) — GPS glitches
+          // Sanity-check implied speed to reject impossible bursts
+          if (rawDistance < 0.5 || isGpsGap) {
+            const impliedSpeedKmh = dtSec > 0 ? (rawDistance / dtSec) * 3600 : 0;
+            if (impliedSpeedKmh < MAX_SANE_SPEED_KMH) {
+              addedDistance = rawDistance;
             }
           }
 

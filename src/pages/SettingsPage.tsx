@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ImagePlus, Loader2, Save, Trash2, Crown, Eye, User, Globe, Ruler, MapPin, Download, Sun, Moon } from 'lucide-react';
+import { ImagePlus, Loader2, Save, Trash2, Crown, Eye, User, Globe, Ruler, MapPin, Download, Sun, Moon, Upload, Check, Scale } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { deleteUser, reauthenticateWithPopup } from 'firebase/auth';
 import { useAuthStore } from '@/stores/auth-store';

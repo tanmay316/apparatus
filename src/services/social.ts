@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch, onSnapshot, documentId } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { validateComment } from '@/lib/validation';
 import type { Activity, Comment, Notification as AppNotification, UserProfile } from '@/types';
@@ -118,7 +118,7 @@ export async function getUsersByUids(uids: string[]): Promise<any[]> {
   
   const results = [];
   for (const chunk of chunks) {
-    const q = query(collection(db, 'users'), where('__name__', 'in', chunk));
+    const q = query(collection(db, 'users'), where(documentId(), 'in', chunk));
     const snap = await getDocs(q);
     results.push(...snap.docs.filter(d => d.data().isPublic === true).map(d => ({ uid: d.id, ...d.data() })));
   }
@@ -362,7 +362,7 @@ export async function getBookmarkedActivities(bookmarkIds: string[]): Promise<Ac
   
   const results: Activity[] = [];
   for (const chunk of chunks) {
-    const q = query(collection(db, 'activities'), where('__name__', 'in', chunk));
+    const q = query(collection(db, 'activities'), where(documentId(), 'in', chunk));
     const snap = await getDocs(q);
     results.push(...snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity)));
   }

@@ -3,13 +3,13 @@ import { getPublicClans, getUserClans } from '@/services/community';
 import { useAuthStore } from '@/stores/auth-store';
 import { Shield, Users, MapPin } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import { ClanDetailSheet } from './ClanDetailSheet';
 
 export function ClansTab() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [filter, setFilter] = useState<'discover' | 'my_clans'>('discover');
-  const [selectedClanId, setSelectedClanId] = useState<string | null>(null);
 
   const { data: publicClans = [], isLoading: loadingPublic } = useQuery({
     queryKey: ['publicClans'],
@@ -67,8 +67,8 @@ export function ClansTab() {
           {clans.map(clan => (
             <div 
               key={clan.id} 
-              onClick={() => setSelectedClanId(clan.id!)}
-              className="card overflow-hidden group hover:border-sienna/50 transition-colors flex flex-col justify-between cursor-pointer"
+              onClick={() => navigate(`/clan/${clan.id}`)}
+              className="bg-bg shadow-sm border border-line/10 rounded-3xl overflow-hidden group hover:border-sienna/50 transition-colors flex flex-col justify-between cursor-pointer"
             >
               <div>
                 <div className="h-32 bg-ink-3 relative overflow-hidden">
@@ -106,14 +106,6 @@ export function ClansTab() {
         </div>
       )}
 
-      <AnimatePresence>
-        {selectedClanId && (
-          <ClanDetailSheet 
-            clanId={selectedClanId} 
-            onClose={() => setSelectedClanId(null)} 
-          />
-        )}
-      </AnimatePresence>
     </div>
   );
 }

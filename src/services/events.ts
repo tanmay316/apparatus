@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp, increment, orderBy, addDoc, Timestamp, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp, increment, orderBy, addDoc, Timestamp, writeBatch, documentId } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Community, AppEvent, EventRegistration, EventReview, CommunityAnnouncement, CommunityPoll, CommunityChallenge, CommunityPost } from '@/types';
 
@@ -118,7 +118,7 @@ export async function getUserCommunities(userId: string): Promise<Community[]> {
   
   const results: Community[] = [];
   for (const chunk of chunks) {
-    const cq = query(collection(db, 'communities'), where('__name__', 'in', chunk));
+    const cq = query(collection(db, 'communities'), where(documentId(), 'in', chunk));
     const cs = await getDocs(cq);
     results.push(...cs.docs.map(d => ({ id: d.id, ...d.data() } as Community)));
   }
@@ -298,7 +298,7 @@ export async function getEventsByIds(eventIds: string[]): Promise<AppEvent[]> {
   
   const results: AppEvent[] = [];
   for (const chunk of chunks) {
-    const q = query(collection(db, 'events'), where('__name__', 'in', chunk));
+    const q = query(collection(db, 'events'), where(documentId(), 'in', chunk));
     const snap = await getDocs(q);
     results.push(...snap.docs.map(d => ({ id: d.id, ...d.data() } as AppEvent)));
   }

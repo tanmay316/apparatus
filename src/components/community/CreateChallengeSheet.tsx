@@ -9,7 +9,7 @@ import { createChallenge } from '@/services/community';
 import { ChallengeMetric } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
-export function CreateChallengeSheet({ onClose }: { onClose: () => void }) {
+export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: () => void, prefilledClanId?: string }) {
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
@@ -19,7 +19,7 @@ export function CreateChallengeSheet({ onClose }: { onClose: () => void }) {
   const [metric, setMetric] = useState<ChallengeMetric>('distance');
   const [target, setTarget] = useState('');
   const [unit, setUnit] = useState('km');
-  const [visibility, setVisibility] = useState<'public' | 'clan_only'>('public');
+  const [visibility, setVisibility] = useState<'public' | 'clan_only'>(prefilledClanId ? 'clan_only' : 'public');
   const [durationDays, setDurationDays] = useState('30');
   const [coverUrl, setCoverUrl] = useState('https://images.unsplash.com/photo-1552674605-171ff7ea90b9?q=80&w=1470&auto=format&fit=crop');
 
@@ -43,6 +43,7 @@ export function CreateChallengeSheet({ onClose }: { onClose: () => void }) {
         createdBy: user.uid,
         creatorName: user.displayName || 'Unknown',
         creatorPhoto: user.photoURL || '',
+        clanId: prefilledClanId,
       });
     },
     onSuccess: () => {
@@ -60,7 +61,7 @@ export function CreateChallengeSheet({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end">
+    <div className="fixed inset-0 z-[300] flex flex-col justify-end">
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
@@ -137,18 +138,22 @@ export function CreateChallengeSheet({ onClose }: { onClose: () => void }) {
                 ]}
               />
             </div>
-            <div>
-              <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Visibility</label>
-              <CustomSelect
-                className="w-full"
-                value={visibility}
-                onChange={(val) => setVisibility(val as any)}
-                options={[
-                  { value: 'public', label: 'Public' },
-                  { value: 'clan_only', label: 'Clan Only' }
-                ]}
-              />
-            </div>
+            <div className="space-y-1 relative z-30">
+            <label className="text-[10px] font-mono text-bone-dim uppercase">Visibility</label>
+            <CustomSelect
+              className="w-full text-sm"
+              value={visibility}
+              disabled={!!prefilledClanId}
+              onChange={(val) => setVisibility(val as any)}
+              options={[
+                { value: 'public', label: 'Public' },
+                { value: 'clan_only', label: 'Clan Only' }
+              ]}
+            />
+            {prefilledClanId && (
+              <p className="text-[10px] font-mono text-sienna mt-1">Locked to clan because you are creating from within a clan.</p>
+            )}
+          </div>
           </div>
 
           <div>

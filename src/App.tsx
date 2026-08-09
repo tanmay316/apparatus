@@ -17,6 +17,7 @@ import { ProgressPage } from '@/pages/ProgressPage';
 import { CalendarPage } from '@/pages/CalendarPage';
 import { FeedPage } from '@/pages/FeedPage';
 import { CommunityPage } from '@/pages/CommunityPage';
+import { ClanPage } from '@/pages/ClanPage';
 import { AchievementsPage } from '@/pages/AchievementsPage';
 import { SkillsPage } from '@/pages/SkillsPage';
 import { MeasurementsPage } from '@/pages/MeasurementsPage';
@@ -107,6 +108,7 @@ export function App() {
             <Route path="feed" element={<FeedPage />} />
             <Route path="post/:id" element={<SinglePostPage />} />
             <Route path="community" element={<CommunityPage />} />
+            <Route path="clan/:id" element={<ClanPage />} />
             <Route path="nutrition" element={<NutritionDashboard />} />
             <Route path="profile/:username" element={<ProfilePage />} />
             <Route path="settings" element={<SettingsPage />} />

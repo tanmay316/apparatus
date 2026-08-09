@@ -13,6 +13,7 @@ interface CustomSelectProps {
   options: SelectOption[];
   className?: string;
   placeholder?: string;
+  disabled?: boolean;
 }
 
 export function CustomSelect({
@@ -20,7 +21,8 @@ export function CustomSelect({
   onChange,
   options,
   className = '',
-  placeholder = 'Select an option',
+  placeholder = 'Select...',
+  disabled = false,
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -44,8 +46,9 @@ export function CustomSelect({
     <div className={`relative ${className}`} ref={containerRef}>
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="input-field w-full flex items-center justify-between text-left focus:ring-2 transition-all group"
+        disabled={disabled}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`input-field w-full flex items-center justify-between text-left focus:ring-2 transition-all group ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
       >
         <span className={selectedOption ? 'text-bone' : 'text-bone-dim/50'}>
           {selectedOption ? selectedOption.label : placeholder}

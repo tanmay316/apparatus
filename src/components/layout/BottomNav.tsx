@@ -47,7 +47,7 @@ export function BottomNav() {
     return format(date, 'EEEE');
   };
 
-  const isWorkoutRoute = location.pathname.startsWith("/workout/") || location.pathname.startsWith("/cardio");
+  const isHiddenRoute = location.pathname.startsWith("/workout/") || location.pathname.startsWith("/cardio") || location.pathname.startsWith("/clan");
 
   const activeIndex = useMemo(() => {
     const index = TABS.findIndex((tab) => {
@@ -67,7 +67,7 @@ export function BottomNav() {
     navigate(path);
   };
 
-  if (isWorkoutRoute) return null;
+  if (isHiddenRoute) return null;
 
   return (
     <>

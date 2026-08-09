@@ -1,6 +1,6 @@
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp, increment, orderBy, addDoc, Timestamp, writeBatch, limit } from 'firebase/firestore';
+import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, increment, setDoc, writeBatch, Timestamp, documentId } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric } from '@/types';
+import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric, CommunityPost } from '@/types';
 
 // ─── CLANS (V2) ──────────────────────────────────────────────────
 
@@ -39,7 +39,6 @@ export async function getPublicClans(limitCount = 20): Promise<ClanV2[]> {
     collection(db, 'clans_v2'),
     where('visibility', '==', 'public'),
     where('status', '==', 'active'),
-    orderBy('memberCount', 'desc'),
     limit(limitCount)
   );
   const snap = await getDocs(q);
@@ -53,14 +52,16 @@ export async function getUserClans(userId: string): Promise<ClanV2[]> {
   
   if (clanIds.length === 0) return [];
   
-  // Firestore IN queries support max 10
+  const clanPromises = clanIds.map(id => getDoc(doc(db, 'clans_v2', id)));
+  const clanSnaps = await Promise.all(clanPromises);
+  
   const results: ClanV2[] = [];
-  for (let i = 0; i < clanIds.length; i += 10) {
-    const chunk = clanIds.slice(i, i + 10);
-    const cq = query(collection(db, 'clans_v2'), where('__name__', 'in', chunk));
-    const cs = await getDocs(cq);
-    results.push(...cs.docs.map(d => ({ id: d.id, ...d.data() } as ClanV2)));
-  }
+  clanSnaps.forEach(s => {
+    if (s.exists()) {
+      results.push({ id: s.id, ...s.data() } as ClanV2);
+    }
+  });
+  
   return results;
 }
 
@@ -72,11 +73,28 @@ export async function updateClan(id: string, data: Partial<ClanV2>): Promise<voi
 }
 
 export async function disbandClan(id: string, reason?: string): Promise<void> {
-  await updateDoc(doc(db, 'clans_v2', id), {
-    status: 'disbanded',
-    disbandReason: reason,
-    updatedAt: serverTimestamp()
-  });
+  const batch = writeBatch(db);
+
+  // 1. Delete all posts
+  const postsSnap = await getDocs(query(collection(db, 'community_posts'), where('communityId', '==', id)));
+  postsSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // 2. Delete all events
+  const eventsSnap = await getDocs(query(collection(db, 'simple_events'), where('clanId', '==', id)));
+  eventsSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // 3. Delete all challenges
+  const challengesSnap = await getDocs(query(collection(db, 'challenges_v2'), where('clanId', '==', id)));
+  challengesSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // 4. Delete all memberships
+  const membershipsSnap = await getDocs(query(collection(db, 'clan_memberships'), where('clanId', '==', id)));
+  membershipsSnap.docs.forEach(d => batch.delete(d.ref));
+
+  // 5. Delete clan
+  batch.delete(doc(db, 'clans_v2', id));
+
+  await batch.commit();
 }
 
 export async function joinClan(userId: string, userName: string, userPhoto: string, clanId: string): Promise<void> {
@@ -164,7 +182,6 @@ export async function getPublicChallenges(limitCount = 20): Promise<ChallengeV2[
     collection(db, 'challenges_v2'),
     where('visibility', '==', 'public'),
     where('status', 'in', ['upcoming', 'active']),
-    orderBy('createdAt', 'desc'),
     limit(limitCount)
   );
   const snap = await getDocs(q);
@@ -175,11 +192,27 @@ export async function getClanChallenges(clanId: string): Promise<ChallengeV2[]> 
   const q = query(
     collection(db, 'challenges_v2'),
     where('clanId', '==', clanId),
-    where('status', 'in', ['upcoming', 'active', 'completed']),
-    orderBy('createdAt', 'desc')
+    where('status', 'in', ['upcoming', 'active', 'completed'])
   );
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as ChallengeV2));
+}
+
+export async function updateChallenge(id: string, data: Partial<ChallengeV2>): Promise<void> {
+  await updateDoc(doc(db, 'challenges_v2', id), {
+    ...data,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function deleteChallenge(id: string): Promise<void> {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'challenges_v2', id));
+  
+  const participantsSnap = await getDocs(query(collection(db, 'challenge_participants'), where('challengeId', '==', id)));
+  participantsSnap.docs.forEach(d => batch.delete(d.ref));
+  
+  await batch.commit();
 }
 
 export async function getUserChallenges(userId: string): Promise<ChallengeV2[]> {
@@ -192,7 +225,7 @@ export async function getUserChallenges(userId: string): Promise<ChallengeV2[]> 
   const results: ChallengeV2[] = [];
   for (let i = 0; i < challengeIds.length; i += 10) {
     const chunk = challengeIds.slice(i, i + 10);
-    const cq = query(collection(db, 'challenges_v2'), where('__name__', 'in', chunk));
+    const cq = query(collection(db, 'challenges_v2'), where(documentId(), 'in', chunk));
     const cs = await getDocs(cq);
     results.push(...cs.docs.map(d => ({ id: d.id, ...d.data() } as ChallengeV2)));
   }
@@ -294,8 +327,7 @@ export async function getPublicEvents(limitCount = 20): Promise<SimpleEvent[]> {
   const q = query(
     collection(db, 'simple_events'),
     where('visibility', '==', 'public'),
-    where('status', 'in', ['upcoming', 'active']),
-    orderBy('startTime', 'asc'),
+    where('status', 'in', ['upcoming', 'ongoing']),
     limit(limitCount)
   );
   const snap = await getDocs(q);
@@ -306,11 +338,27 @@ export async function getClanEvents(clanId: string): Promise<SimpleEvent[]> {
   const q = query(
     collection(db, 'simple_events'),
     where('clanId', '==', clanId),
-    where('status', 'in', ['upcoming', 'active', 'completed']),
-    orderBy('startTime', 'asc')
+    where('status', 'in', ['upcoming', 'ongoing', 'completed'])
   );
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as SimpleEvent));
+}
+
+export async function updateSimpleEvent(id: string, data: Partial<SimpleEvent>): Promise<void> {
+  await updateDoc(doc(db, 'simple_events', id), {
+    ...data,
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function deleteSimpleEvent(id: string): Promise<void> {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'simple_events', id));
+  
+  const participantsSnap = await getDocs(query(collection(db, 'simple_event_participants'), where('eventId', '==', id)));
+  participantsSnap.docs.forEach(d => batch.delete(d.ref));
+  
+  await batch.commit();
 }
 
 export async function joinEvent(eventId: string, userId: string, userName: string, userPhoto: string): Promise<void> {
@@ -333,4 +381,72 @@ export async function leaveEvent(eventId: string, userId: string): Promise<void>
   await updateDoc(doc(db, 'simple_events', eventId), {
     participantCount: increment(-1)
   });
+}
+
+// ─── CLAN POSTS & COMMENTS ───────────────────────────────────────
+
+export interface PostComment {
+  id?: string;
+  postId: string;
+  userId: string;
+  userName: string;
+  userPhoto?: string;
+  text: string;
+  createdAt: Timestamp | null;
+}
+
+export const createClanPost = async (postData: Omit<CommunityPost, 'id' | 'likesCount' | 'commentsCount' | 'createdAt' | 'likedUserIds'> & { imageUrl?: string }) => {
+  const docRef = await addDoc(collection(db, 'community_posts'), {
+    ...postData,
+    imageUrl: postData.imageUrl || null,
+    likesCount: 0,
+    commentsCount: 0,
+    likedUserIds: [],
+    createdAt: serverTimestamp()
+  });
+  return docRef.id;
+};
+
+export async function getClanPosts(clanId: string, limitCount = 20): Promise<CommunityPost[]> {
+  const q = query(
+    collection(db, 'community_posts'),
+    where('communityId', '==', clanId),
+    orderBy('createdAt', 'desc'),
+    limit(limitCount)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as CommunityPost));
+}
+
+export async function likeClanPost(postId: string, isLiking: boolean): Promise<void> {
+  const postRef = doc(db, 'community_posts', postId);
+  if (isLiking) {
+    await updateDoc(postRef, { likesCount: increment(1) });
+  } else {
+    await updateDoc(postRef, { likesCount: increment(-1) });
+  }
+}
+
+export async function createPostComment(comment: Omit<PostComment, 'id' | 'createdAt'>): Promise<string> {
+  const docRef = await addDoc(collection(db, 'community_post_comments'), {
+    ...comment,
+    createdAt: serverTimestamp(),
+  });
+  
+  await updateDoc(doc(db, 'community_posts', comment.postId), {
+    commentsCount: increment(1)
+  });
+  
+  return docRef.id;
+}
+
+export async function getPostComments(postId: string, limitCount = 50): Promise<PostComment[]> {
+  const q = query(
+    collection(db, 'community_post_comments'),
+    where('postId', '==', postId),
+    orderBy('createdAt', 'asc'),
+    limit(limitCount)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as PostComment));
 }

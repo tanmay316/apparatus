@@ -42,7 +42,7 @@ export function Layout() {
       />
 
       <main className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-[72px] relative">
-        <AnimatePresence mode="wait">
+        <AnimatePresence>
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0, y: 6 }}

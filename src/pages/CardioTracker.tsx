@@ -59,8 +59,16 @@ export function CardioTracker() {
     return 'select';
   });
   
-  // Map layer state — default to street
-  const [mapLayer, setMapLayer] = useState<MapThemeKey>('street');
+  // Map layer state — default to street, persist in localStorage
+  const [mapLayer, _setMapLayer] = useState<MapThemeKey>(() => {
+    const saved = localStorage.getItem('apparatus_map_layer');
+    return (saved as MapThemeKey) || 'street';
+  });
+
+  const setMapLayer = (layer: MapThemeKey) => {
+    localStorage.setItem('apparatus_map_layer', layer);
+    _setMapLayer(layer);
+  };
 
   // Update screen based on URL params and tracking state
   useEffect(() => {
@@ -90,12 +98,12 @@ export function CardioTracker() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlType]);
 
-  // Start GPS for preview on the ready screen
+  // Start GPS for preview on the ready screen or resume if tracking
   useEffect(() => {
-    if (screen === 'ready') {
+    if (screen === 'ready' || (screen === 'tracking' && !store.isPaused)) {
       startGpsWatch();
     }
-  }, [screen]);
+  }, [screen, store.isPaused]);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [summaryData, setSummaryData] = useState<Partial<CardioActivity> | null>(null);
