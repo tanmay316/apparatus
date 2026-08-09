@@ -6,9 +6,9 @@ import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
-  getClan, getClanMembers, joinClan, leaveClan, updateClanMemberRole, disbandClan, transferLeadership,
+  getClan, joinClan, leaveClan, getClanMembers, updateClanMemberRole, transferLeadership,
   getClanPosts, createClanPost, likeClanPost, getPostComments, createPostComment,
-  getClanChallenges, getClanEvents
+  getClanChallenges, getClanEvents, deleteChallenge, deleteSimpleEvent, deleteClan
 } from '@/services/community';
 import { ClanMembership, ClanV2, CommunityPost, ChallengeV2, SimpleEvent } from '@/types';
 import { useUIStore } from '@/stores/ui-store';
@@ -19,9 +19,8 @@ import { CreatePostSheet } from '@/components/community/CreatePostSheet';
 import { EditClanSheet } from '@/components/community/EditClanSheet';
 import { EditChallengeSheet } from '@/components/community/EditChallengeSheet';
 import { EditEventSheet } from '@/components/community/EditEventSheet';
-import { deleteChallenge, deleteSimpleEvent } from '@/services/community';
 
-const nmBtn = "bg-bg shadow-sm border border-line/20 hover:border-line/40 transition-colors";
+const nmBtn = "bg-ink shadow-sm border border-line/20 hover:border-line/40 transition-colors";
 const nmInset = "bg-ink-2 shadow-inner border border-line/10";
 
 // A component for a single post card in the feed
@@ -43,7 +42,9 @@ function ClanPostItem({ post, onClick }: { post: CommunityPost, onClick: () => v
         </div>
         <div>
           <div className="text-bone text-sm font-bold">{post.authorName}</div>
-          <div className="text-[10px] text-bone-dim font-mono">{post.createdAt?.toDate().toLocaleDateString() || 'Just now'}</div>
+          <div className="text-[10px] text-bone-dim font-mono">
+            {typeof post.createdAt?.toDate === 'function' ? post.createdAt.toDate().toLocaleDateString() : 'Just now'}
+          </div>
         </div>
       </div>
       
@@ -145,22 +146,17 @@ export function ClanPage() {
     onError: (err: any) => showToast(err.message, 'error')
   });
 
-  const disbandMutation = useMutation({
+  const deleteClanMutation = useMutation({
     mutationFn: async () => {
-      if (!isLeader) throw new Error('Only the leader can delete the clan');
-      if (confirm('Are you sure you want to delete this clan? This will delete all posts, challenges, and events. This action cannot be undone.')) {
-        await disbandClan(clanId!, 'Deleted by leader');
-        return true;
-      }
-      return false;
+      await deleteClan(clanId!);
     },
-    onSuccess: (didDelete) => {
-      if (didDelete) {
-        showToast('Clan deleted successfully');
-        navigate('/community');
-      }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['publicClans'] });
+      queryClient.invalidateQueries({ queryKey: ['userClans'] });
+      showToast('Clan deleted successfully');
+      navigate('/community', { replace: true });
     },
-    onError: (err: any) => showToast(err.message, 'error')
+    onError: (err: any) => showToast(err.message || 'Failed to delete clan', 'error')
   });
 
   const deleteChallengeMutation = useMutation({
@@ -213,16 +209,16 @@ export function ClanPage() {
   };
 
   if (loadingClan) {
-    return <div className="min-h-screen bg-bg flex items-center justify-center text-bone font-mono">Loading clan...</div>;
+    return <div className="min-h-screen bg-ink flex items-center justify-center text-bone font-mono">Loading clan...</div>;
   }
   if (!clan) {
-    return <div className="min-h-screen bg-bg flex items-center justify-center text-bone font-mono">Clan not found</div>;
+    return <div className="min-h-screen bg-ink flex items-center justify-center text-bone font-mono">Clan not found</div>;
   }
 
   return (
-    <div className="min-h-[100dvh] bg-bg pb-24">
+    <div className="min-h-[100dvh] bg-ink pb-24">
       {/* Header */}
-      <div className="sticky top-0 z-40 bg-bg/80 backdrop-blur-md border-b border-line px-4 h-14 flex items-center justify-between">
+      <div className="sticky top-0 z-40 bg-ink/80 backdrop-blur-md border-b border-line px-4 h-14 flex items-center justify-between">
         <button onClick={() => navigate('/community')} className="p-2 -ml-2 rounded-full hover:bg-ink-2 text-bone transition-colors">
           <ChevronLeft size={24} />
         </button>
@@ -237,7 +233,7 @@ export function ClanPage() {
         ) : (
           <div className="w-full h-full flex items-center justify-center text-bone-dim"><Shield size={48} /></div>
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/50 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink via-bg/50 to-transparent" />
       </div>
 
       {/* Clan Info */}
@@ -352,7 +348,7 @@ export function ClanPage() {
                   </button>
                   {isLeader && (
                     <button
-                      onClick={() => disbandMutation.mutate()}
+                      onClick={() => deleteClanMutation.mutate()}
                       className="w-full py-3 rounded-xl border border-red-500 text-red-500 font-bold text-sm hover:bg-red-500/10 transition-colors"
                     >
                       Delete Clan
@@ -482,7 +478,9 @@ export function ClanPage() {
                     <div key={e.id} className={`p-5 rounded-3xl ${nmBtn} flex flex-col justify-between`}>
                       <div>
                         <div className="flex justify-between items-start mb-2">
-                          <div className="text-xs font-mono text-sienna">{e.startTime?.toDate().toLocaleDateString()} @ {e.startTime?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                          <div className="text-xs font-mono text-sienna">
+                            {typeof e.startTime?.toDate === 'function' ? e.startTime.toDate().toLocaleDateString() : 'TBD'} @ {typeof e.startTime?.toDate === 'function' ? e.startTime.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD'}
+                          </div>
                           {(isLeader || isCoLeader || user?.uid === e.createdBy) && (
                             <div className="flex items-center gap-1">
                               <button onClick={() => setEditingEvent(e)} className="p-1 hover:text-bone text-bone-dim transition-colors"><span className="text-xs font-mono">Edit</span></button>

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">apparatus</string>
+    <string name="title_activity_main">apparatus</string>
+    <string name="package_name">com.tms.apparatus</string>
+    <string name="custom_url_scheme">com.tms.apparatus</string>
+</resources>

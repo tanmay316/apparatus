@@ -22,6 +22,7 @@ import { calculateWorkoutCalories, calculateWorkoutVolume } from '@/lib/calories
 import { calculateBodyweightReps } from '@/lib/muscle-map';
 import { compareExerciseProgress } from '@/lib/progressive-overload';
 import { updateUserChallengeProgress } from '@/services/community';
+import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification } from '@/utils/notifications';
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -231,6 +232,15 @@ export function WorkoutSession() {
         startedAt: Timestamp.fromMillis(store.startedAt)
       }).catch(console.error);
     }
+    
+    // Request permission and show ongoing notification
+    requestNotificationPermission().then(() => {
+      showPersistentNotification(
+        1001,
+        `${store.dayTitle || 'Workout'} Active`,
+        'Apparatus is tracking your session.'
+      );
+    });
   }, [store.isActive, sessionFinished, store.planId, store.dayId, user, store.startedAt, store.dayTitle, lastExercise, displayCalories]);
 
   // Immediately push exercise changes to live session
@@ -393,9 +403,10 @@ export function WorkoutSession() {
         console.error('Failed to refresh profile stats locally:', refreshError);
       }
 
-      // Navigate or show celebration! We'll show celebration by setting local state or let App handle it.
-      // But user wanted: "after i log my day it should display this type of pop up"
-      // We will show a custom celebration dialog
+      // Celebration and Notifications
+      clearNotification(1001);
+      showNotification(1002, 'Workout Complete', `You completed your session in ${formatStopwatch(elapsedSec)}.`);
+
       setCelebrationData({
         heading: 'DAY COMPLETE',
         sub: `${store.dayTitle} — ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`,

@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers, RotateCcw, ChevronRight, ChevronUp, ChevronDown, LocateFixed } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
+import { useQueryClient } from '@tanstack/react-query';
+import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification } from '@/utils/notifications';
 import { useUIStore } from '@/stores/ui-store';
 import { useCardioStore, startGpsWatch, stopGpsWatch } from '@/stores/cardio-store';
 import { useUserWeight } from '@/hooks/use-user-weight';
@@ -213,6 +215,13 @@ export function CardioTracker() {
     // Clear the URL param so a refresh stays in tracking
     setSearchParams({});
     
+    // Request permission and show ongoing notification
+    await requestNotificationPermission();
+    showPersistentNotification(
+      1001,
+      `${type === 'walk' ? 'Walking' : type === 'run' ? 'Running' : 'Cycling'} Session Active`,
+      'Apparatus is tracking your cardio session.'
+    );
     
     store.startTracking(type);
     setScreen('tracking');
@@ -248,9 +257,12 @@ export function CardioTracker() {
   };
 
   const handleStop = async () => {
+    // Clear the ongoing notification
+    clearNotification(1001);
+    
     store.stopTracking();
 
-    if (user) {
+    if (user && elapsedSec > 0 && store.distanceKm > 0) {
       endActiveSession(user.uid).catch(console.error);
     }
 

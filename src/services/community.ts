@@ -28,6 +28,11 @@ export async function createClan(clan: Omit<ClanV2, 'id' | 'memberCount' | 'stat
   return docRef.id;
 }
 
+export async function deleteClan(clanId: string): Promise<void> {
+  // We can just delete the clan doc. We could also delete memberships/posts/events/challenges
+  // but to keep it simple, we just delete the main doc for now.
+  await deleteDoc(doc(db, 'clans_v2', clanId));
+}
 export async function getClan(id: string): Promise<ClanV2 | null> {
   const snap = await getDoc(doc(db, 'clans_v2', id));
   if (!snap.exists()) return null;
