@@ -28,10 +28,9 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'skills', path: '/skills', label: 'Skills', icon: <Target size={18} />, section: 'PERFORMANCE' },
   { id: 'measurements', path: '/measurements', label: 'Body Log', icon: <Ruler size={18} />, section: 'PERFORMANCE' },
   // Community
-  { id: 'explore', path: '/explore', label: 'Athletes', icon: <Compass size={18} />, section: 'COMMUNITY' },
+  { id: 'explore', path: '/explore?tab=users', label: 'Athletes', icon: <Compass size={18} />, section: 'COMMUNITY' },
   { id: 'feed', path: '/feed', label: 'Activity', icon: <Users size={18} />, section: 'COMMUNITY' },
   { id: 'communities', path: '/communities', label: 'Communities', icon: <Globe size={18} />, section: 'COMMUNITY' },
-  { id: 'events', path: '/events', label: 'Events', icon: <MapPin size={18} />, section: 'COMMUNITY' },
 ];
 
 export function Sidebar() {

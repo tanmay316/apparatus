@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ImagePlus, Loader2, Save, Trash2, Crown, Eye, User, Globe, Ruler, MapPin, Download, Sun, Moon, Upload, Check, Scale } from 'lucide-react';
+import { ImagePlus, Loader2, Save, Trash2, Crown, Eye, User, Globe, Ruler, MapPin, Download, Sun, Moon, Upload, Check, Scale, LogOut, Footprints } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { deleteUser, reauthenticateWithPopup } from 'firebase/auth';
 import { useAuthStore } from '@/stores/auth-store';
 import PersonalAISettings from '@/components/settings/PersonalAISettings';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
+import { usePedometerStore } from '@/stores/pedometer-store';
 import { googleProvider } from '@/lib/firebase';
 import { deleteAccountData, deleteAvatar, downloadJson, exportAccountData, resetUserData, uploadAvatar } from '@/services/account';
 import { getAvatarUrl } from '@/lib/avatar';
@@ -24,7 +25,8 @@ const item = {
 
 export function SettingsPage() {
   const { user, profile, updateProfile, signOut } = useAuthStore();
-  const { showToast, theme, units, language, setTheme, setUnits, setLanguage } = useUIStore();
+  const { showToast, theme, setTheme, units, setUnits, language, setLanguage } = useUIStore();
+  const { backgroundEnabled, toggleBackground, isSupported: pedometerSupported } = usePedometerStore();
   const navigate = useNavigate();
 
   const [displayName, setDisplayName] = useState(profile?.displayName || '');
@@ -39,6 +41,7 @@ export function SettingsPage() {
   const [experienceLevel, setExperienceLevel] = useState(profile?.experienceLevel || 'beginner');
   const [preferredWorkoutType, setPreferredWorkoutType] = useState(profile?.preferredWorkoutType || '');
   const [isPublic, setIsPublic] = useState(profile?.isPublic !== false);
+  const [stepGoal, setLocalStepGoal] = useState((profile?.stepGoal || 10000).toString());
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -74,7 +77,9 @@ export function SettingsPage() {
         experienceLevel: experienceLevel as 'beginner' | 'intermediate' | 'advanced',
         preferredWorkoutType,
         isPublic,
+        stepGoal: parseInt(stepGoal) || 10000
       });
+
       setSuccess(true);
       showToast('Settings saved successfully!');
       setTimeout(() => setSuccess(false), 3000);
@@ -436,7 +441,39 @@ export function SettingsPage() {
               />
             </div>
           </div>
-          <p className="text-xs text-bone-dim">Theme, units, and language are saved locally and apply immediately. Profile measurements remain stored in metric for consistent analytics.</p>
+          {pedometerSupported && (
+            <div className="space-y-4 border-t border-line/20 pt-4 mt-4">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="pedometerEnabled"
+                  className="mt-1 accent-sienna cursor-pointer"
+                  checked={backgroundEnabled}
+                  onChange={() => toggleBackground()}
+                />
+                <div>
+                  <label htmlFor="pedometerEnabled" className="font-bold text-sm text-bone cursor-pointer select-none flex items-center gap-2">
+                    <Footprints size={14} /> Background Step Tracking
+                  </label>
+                  <p className="text-xs text-bone-dim leading-relaxed">
+                    Track your daily steps passively in the background. Note: this relies on device sensors and may require permissions.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="label w-32 shrink-0">Daily Step Goal</label>
+                <input
+                  type="number"
+                  className="input-field bg-ink-2 max-w-[150px]"
+                  value={stepGoal}
+                  onChange={(e) => setLocalStepGoal(e.target.value)}
+                  min="1000"
+                  step="500"
+                />
+              </div>
+            </div>
+          )}
+          <p className="text-xs text-bone-dim mt-4">Theme, units, and language are saved locally and apply immediately. Profile measurements remain stored in metric for consistent analytics.</p>
         </motion.div>
 
         <motion.div variants={item} className="card p-5 space-y-4">
@@ -447,6 +484,17 @@ export function SettingsPage() {
           <p className="text-sm text-bone-dim leading-relaxed">Download a JSON copy of your profile, plans, workouts, measurements, skills, activities, and notifications.</p>
           <button type="button" onClick={handleExport} disabled={exporting} className="btn-secondary inline-flex items-center gap-2">
             <Download size={14} /> {exporting ? 'Preparing export...' : 'Export account data'}
+          </button>
+        </motion.div>
+
+        <motion.div variants={item} className="card p-5 space-y-4 border-t-4 border-amber/40">
+          <div className="flex items-center gap-2 pb-2 border-b border-line/30 mb-2">
+            <LogOut size={18} className="text-amber" />
+            <h3 className="font-display text-base uppercase tracking-wide text-amber">Account Access</h3>
+          </div>
+          <p className="text-sm text-bone-dim leading-relaxed">Sign out of your current session on this device.</p>
+          <button type="button" onClick={handleLogout} className="btn-secondary border-amber/40 text-amber hover:bg-amber/10 inline-flex items-center gap-2">
+            <LogOut size={14} /> Sign Out
           </button>
         </motion.div>
 

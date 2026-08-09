@@ -384,6 +384,7 @@ export interface ActiveSession {
   startedAt: any;
   updatedAt: any;
   caloriesBurned: number;
+  steps?: number;
 }
 
 export async function startActiveSession(uid: string, sessionData: Omit<ActiveSession, 'uid' | 'updatedAt'> & { startedAt?: any }) {

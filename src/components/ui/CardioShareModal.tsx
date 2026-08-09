@@ -19,6 +19,7 @@ export interface CardioShareData {
   elevationGainM?: number;
   route?: RoutePoint[];
   currentLocation?: { lat: number; lng: number } | null;
+  steps?: number;
 }
 
 interface Props {
@@ -302,6 +303,14 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                             {data.elevationGainM || 0}m
                           </div>
                         </div>
+                        {data.steps !== undefined && data.steps > 0 && (
+                          <div>
+                            <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Steps</div>
+                            <div className="font-display font-bold text-xl text-white">
+                              {data.steps.toLocaleString()}
+                            </div>
+                          </div>
+                        )}
                         <div>
                           <div className="text-[9px] font-bold uppercase tracking-widest mb-0.5 bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">Calories</div>
                           <div className="font-display font-bold text-xl bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">

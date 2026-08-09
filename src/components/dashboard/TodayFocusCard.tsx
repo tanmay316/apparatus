@@ -1,6 +1,9 @@
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Clock, Target, Layers, Compass, Plus } from 'lucide-react';
+import { Play, Clock, Target, Layers, Compass, Plus, Footprints } from 'lucide-react';
+import { usePedometerStore } from '@/stores/pedometer-store';
+import { useAuthStore } from '@/stores/auth-store';
 import type { Plan, PlanDay } from '@/types';
 
 interface TodayFocusCardProps {
@@ -13,6 +16,11 @@ interface TodayFocusCardProps {
 }
 
 export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentDayIndex, isActive, sessionProgress }: TodayFocusCardProps) {
+  const { isSupported, backgroundEnabled, dailySteps } = usePedometerStore();
+  const { profile } = useAuthStore();
+  const [showStepInfo, setShowStepInfo] = useState(false);
+  
+  const stepGoal = profile?.stepGoal || 10000;
   // No active plan
   if (!activePlan || activeDays.length === 0) {
     return (
@@ -63,7 +71,7 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="relative overflow-hidden p-4 mb-3 rounded-[16px] bg-[#fbe1d1]/40 backdrop-blur-xl border border-white/40 shadow-lg text-[#5d2a1a]"
+      className="relative p-4 mb-3 rounded-[16px] bg-[#fbe1d1]/40 backdrop-blur-xl border border-white/40 shadow-lg text-[#5d2a1a]"
     >
       <div className="relative flex items-center justify-between gap-3">
         {/* Info */}
@@ -94,8 +102,69 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
           </div>
         </div>
 
-        {/* CTA Buttons — compact */}
-        <div className="shrink-0 flex items-center gap-2">
+        {/* CTA Buttons & Step Ring — 2x2 grid */}
+        <div className="shrink-0 grid grid-cols-2 gap-2">
+          
+          {/* Step Ring */}
+          {isSupported && backgroundEnabled && (
+            <div className="relative">
+              <button 
+                type="button"
+                onClick={() => setShowStepInfo(!showStepInfo)}
+                onBlur={() => setShowStepInfo(false)}
+                className="relative w-10 h-10 flex items-center justify-center rounded-full bg-white/60 shadow-[4px_4px_10px_rgba(0,0,0,0.1),-4px_-4px_10px_rgba(255,255,255,0.8)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5d2a1a]"
+                title={`${dailySteps.toLocaleString()} / ${stepGoal.toLocaleString()} steps`}
+              >
+                <svg className="absolute inset-0 w-full h-full -rotate-90 pointer-events-none" viewBox="0 0 36 36">
+                  {/* Background circle */}
+                  <path
+                    className="text-white"
+                    strokeWidth="3.5"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                  {/* Progress circle */}
+                  <path
+                    className="text-[#5d2a1a] transition-all duration-1000 ease-out"
+                    strokeDasharray={`${dailySteps > 0 ? Math.max(Math.min((dailySteps / stepGoal) * 100, 100), 1) : 0}, 100`}
+                    strokeWidth="3.5"
+                    strokeLinecap="round"
+                    stroke="currentColor"
+                    fill="none"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                  />
+                </svg>
+                <span className="text-[10px] font-bold font-mono text-[#5d2a1a] relative z-10 tracking-tighter">
+                  {dailySteps >= 10000 ? `${(dailySteps / 1000).toFixed(0)}k` : dailySteps >= 1000 ? `${(dailySteps / 1000).toFixed(1)}k` : dailySteps}
+                </span>
+              </button>
+
+              <AnimatePresence>
+                {showStepInfo && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 5, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute bottom-full right-0 mb-3 px-3 py-2 bg-[#5d2a1a] text-[#fbe1d1] text-xs font-medium rounded-lg shadow-xl whitespace-nowrap z-50 flex flex-col items-end pointer-events-none"
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5 text-[10px] text-white/70 uppercase tracking-wider">
+                      <Footprints size={10} /> Daily Steps
+                    </div>
+                    <div className="font-mono text-sm">
+                      <span className="text-white font-bold">{dailySteps.toLocaleString()}</span> / {stepGoal.toLocaleString()}
+                    </div>
+                    
+                    {/* Small triangle arrow at the bottom pointing to the button */}
+                    <div className="absolute top-full right-3 -mt-1 w-2 h-2 bg-[#5d2a1a] rotate-45" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {/* Action Buttons */}
           <Link
             to={`/workout/${activePlan.id}/day/${todayDay.id}`}
             className="w-10 h-10 rounded-full bg-[#5d2a1a] text-[#fbe1d1] inline-flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.2),-4px_-4px_10px_rgba(255,255,255,0.5)]"
@@ -103,16 +172,18 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
           >
             <Play size={18} fill="currentColor" className="ml-0.5" />
           </Link>
+          
           <Link
             to="/explore"
-            className="w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] inline-flex items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.1),-4px_-4px_10px_rgba(255,255,255,0.8)]"
+            className="inline-flex w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.1),-4px_-4px_10px_rgba(255,255,255,0.8)]"
             title="Explore Programs & Community Workouts"
           >
             <Compass size={18} />
           </Link>
+          
           <Link
             to="/plans"
-            className="w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] inline-flex items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.1),-4px_-4px_10px_rgba(255,255,255,0.8)]"
+            className="inline-flex w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.1),-4px_-4px_10px_rgba(255,255,255,0.8)]"
             title="My Custom Plan"
           >
             <Plus size={18} />

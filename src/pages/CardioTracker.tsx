@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification } from '@/utils/notifications';
 import { useUIStore } from '@/stores/ui-store';
 import { useCardioStore, startGpsWatch, stopGpsWatch } from '@/stores/cardio-store';
+import { usePedometerStore } from '@/stores/pedometer-store';
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { saveCardioActivity, getUserCardioActivities } from '@/services/cardio';
 import { calculateCardioCalories } from '@/lib/calories';
@@ -51,6 +52,9 @@ export function CardioTracker() {
   const { showToast } = useUIStore();
   const userWeight = useUserWeight();
   const store = useCardioStore();
+  const [elapsedSec, setElapsedSec] = useState(0);
+
+  const pedometerStore = usePedometerStore();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const urlType = searchParams.get('type') as CardioActivityType | null;
@@ -106,7 +110,6 @@ export function CardioTracker() {
       startGpsWatch();
     }
   }, [screen, store.isPaused]);
-  const [elapsedSec, setElapsedSec] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [summaryData, setSummaryData] = useState<Partial<CardioActivity> | null>(null);
   const [showShare, setShowShare] = useState(false);
@@ -136,7 +139,7 @@ export function CardioTracker() {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [store.isTracking, store.startedAt, store.isPaused, store.totalPausedMs, store.isAutoPaused, store.autoPausedAt, store.totalAutoPausedMs]);
+  }, [store.isTracking, store.startedAt, store.isPaused, store.isAutoPaused, store.totalPausedMs, store.totalAutoPausedMs, store.autoPausedAt]);
 
   // Update live session periodically
   useEffect(() => {
@@ -151,7 +154,8 @@ export function CardioTracker() {
       );
       updateActiveSession(user.uid, {
         currentExercise: `${store.distanceKm.toFixed(2)} km`,
-        caloriesBurned: cals
+        caloriesBurned: cals,
+        steps: pedometerStore.isSessionActive && store.activityType === 'walk' ? pedometerStore.sessionSteps : undefined
       }).catch(console.error);
     }, 10000);
     return () => clearInterval(interval);
@@ -177,28 +181,28 @@ export function CardioTracker() {
 
     if (user && dist > 0.01) {
       const durationMin = durationSec / 60;
-      const avgSpeed = durationSec > 0 ? (dist / durationSec) * 3600 : 0;
-      const pace = formatPace(dist, durationSec);
-      const calories = calculateCardioCalories(type, dist, durationMin, userWeight || 70, avgSpeed);
+      const avgSpeedKmh = durationSec > 0 ? (dist / durationSec) * 3600 : 0;
+      const calories = calculateCardioCalories(type, dist, durationMin, userWeight || 70, avgSpeedKmh);
 
-      saveCardioActivity(user.uid, {
+      await saveCardioActivity(user.uid, {
         userId: user.uid,
         userName: user.displayName || 'Athlete',
         userPhoto: user.photoURL || '',
         type,
-        date: localDateKey(new Date()),
+        date: localDateKey(new Date(startedAt || Date.now())),
         startedAt: startedAt ? Timestamp.fromMillis(startedAt) : Timestamp.now(),
         finishedAt: Timestamp.now(),
         durationSec,
-        distanceKm: Math.round(dist * 1000) / 1000,
-        avgSpeedKmh: Math.round(avgSpeed * 10) / 10,
+        distanceKm: dist,
+        avgSpeedKmh: Math.round(avgSpeedKmh * 10) / 10,
         maxSpeedKmh: Math.round(maxSpeed * 10) / 10,
-        avgPace: `${pace} /km`,
+        avgPace: formatPace(dist, durationSec),
         calories,
         elevationGainM: Math.round(elevation),
         route,
         visibility: 'followers',
         notes: 'Auto-saved session',
+        steps: pedometerStore.isSessionActive && type === 'walk' ? pedometerStore.sessionSteps : undefined,
       }).catch(console.error);
     }
   };
@@ -215,6 +219,10 @@ export function CardioTracker() {
     // Clear the URL param so a refresh stays in tracking
     setSearchParams({});
     
+    if (type === 'walk') {
+      await pedometerStore.startSession();
+    }
+
     // Request permission and show ongoing notification
     await requestNotificationPermission();
     showPersistentNotification(
@@ -260,6 +268,10 @@ export function CardioTracker() {
     // Clear the ongoing notification
     clearNotification(1001);
     
+    if (store.activityType === 'walk') {
+      pedometerStore.stopSession();
+    }
+
     store.stopTracking();
 
     if (user && elapsedSec > 0 && store.distanceKm > 0) {
@@ -302,20 +314,21 @@ export function CardioTracker() {
           userId: user.uid,
           userName: user.displayName || 'Athlete',
           userPhoto: user.photoURL || '',
-          type: data.type!,
+          type: store.activityType!,
           date: localDateKey(new Date()),
           startedAt: store.startedAt ? Timestamp.fromMillis(store.startedAt) : Timestamp.now(),
           finishedAt: Timestamp.now(),
-          durationSec: data.durationSec!,
-          distanceKm: data.distanceKm!,
-          avgSpeedKmh: data.avgSpeedKmh!,
-          maxSpeedKmh: data.maxSpeedKmh!,
-          avgPace: data.avgPace!,
-          calories: data.calories!,
-          elevationGainM: data.elevationGainM!,
-          route: data.route!,
+          durationSec: durationSec,
+          distanceKm: dist,
+          avgSpeedKmh: Math.round(avgSpeed * 10) / 10,
+          maxSpeedKmh: Math.round(store.maxSpeedKmh * 10) / 10,
+          avgPace: `${pace} /km`,
+          calories: calories,
+          elevationGainM: Math.round(store.elevationGainM),
+          route: store.routePoints,
           visibility: 'followers',
           notes: '',
+          steps: pedometerStore.isSessionActive && store.activityType === 'walk' ? pedometerStore.sessionSteps : undefined,
         });
 
         // Post to activity feed
@@ -695,6 +708,23 @@ export function CardioTracker() {
                   <RotateCcw size={28} />
                 </button>
               </div>
+
+              {pedometerStore.isSessionActive && (
+                <div className="card p-5 mt-4 bg-white/5 backdrop-blur border-white/10 flex items-center justify-between pointer-events-auto">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-sienna/20 flex items-center justify-center text-sienna">
+                      <Footprints size={20} />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-[var(--text)]">Steps</div>
+                      <div className="text-xs text-bone-dim">Walking Session</div>
+                    </div>
+                  </div>
+                  <div className="font-serif text-3xl font-medium tracking-tight">
+                    {pedometerStore.sessionSteps.toLocaleString()}
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         </div>

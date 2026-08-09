@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, orderBy, onSnapshot, where, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
+import { useWorkoutStore } from '@/stores/workout-store';
+import { useCardioStore } from '@/stores/cardio-store';
 import { sendLiveMessage } from '@/services/social';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, MessageCircle } from 'lucide-react';
@@ -16,7 +18,11 @@ export function LiveChatOverlay() {
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
   const [replyText, setReplyText] = useState('');
   
-  const mountTime = useRef(Timestamp.now());
+  const workoutStore = useWorkoutStore();
+  const cardioStore = useCardioStore();
+
+  const isActive = workoutStore.isActive || cardioStore.isTracking;
+  const startedAtMs = workoutStore.isActive ? workoutStore.startedAt : (cardioStore.isTracking ? cardioStore.startedAt : 0);
 
   const themeStyles = theme === 'dark' ? {
     '--bg': '#0a0d14',
@@ -37,12 +43,17 @@ export function LiveChatOverlay() {
   } as React.CSSProperties;
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isActive || !startedAtMs) {
+      setMessages([]);
+      return;
+    }
     
+    const sessionStart = Timestamp.fromMillis(startedAtMs);
+
     // Listen for NEW messages arriving in this active session
     const q = query(
       collection(db, 'activeSessions', user.uid, 'chat'),
-      where('createdAt', '>=', mountTime.current),
+      where('createdAt', '>=', sessionStart),
       orderBy('createdAt', 'asc')
     );
 

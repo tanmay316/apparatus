@@ -54,7 +54,7 @@ export function FeedPage() {
 
   const handleShareActivity = (activity: Activity) => {
     const details = (activity.details as Record<string, any>) || {};
-    const isCardio = activity.type === 'walk' || activity.type === 'run' || activity.type === 'cycle' || ['walk', 'run', 'cycle'].includes(details.activityType);
+    const isCardio = activity.type === 'walk' || activity.type === 'run' || activity.type === 'cycle' || ['walk', 'run', 'cycle'].includes(details.activityType) || (details.distanceKm !== undefined && !details.exercises && !details.exerciseLogs);
     const createdDate = activity.createdAt?.seconds
       ? new Date(activity.createdAt.seconds * 1000)
       : new Date();

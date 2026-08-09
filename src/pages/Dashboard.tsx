@@ -260,6 +260,8 @@ export function Dashboard() {
         sessionProgress={sessionProgress}
       />
 
+      {/* 2.5 Daily Steps removed (moved to TodayFocusCard) */}
+
       {/* 3. Compact Stats */}
       <StatsPills
         totalWorkouts={totalWorkouts}

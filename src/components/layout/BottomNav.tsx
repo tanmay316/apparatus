@@ -47,7 +47,8 @@ export function BottomNav() {
     return format(date, 'EEEE');
   };
 
-  const isHiddenRoute = location.pathname.startsWith("/workout/") || location.pathname.startsWith("/cardio") || location.pathname.startsWith("/clan");
+  const mainPages = ["/", "/nutrition", "/progress", "/community", "/plans", "/explore"];
+  const isHiddenRoute = !mainPages.includes(location.pathname);
 
   const activeIndex = useMemo(() => {
     const index = TABS.findIndex((tab) => {

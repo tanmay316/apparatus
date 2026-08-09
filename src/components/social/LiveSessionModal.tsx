@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, Flame, Clock, Play } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { X, Send, Flame, Clock, Play, Footprints } from 'lucide-react';
+import { collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { sendLiveMessage, type ActiveSession } from '@/services/social';
@@ -60,8 +60,11 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
 
   // Chat listener
   useEffect(() => {
+    if (!session.startedAt) return;
+    
     const q = query(
       collection(db, 'activeSessions', session.uid, 'chat'),
+      where('createdAt', '>=', session.startedAt),
       orderBy('createdAt', 'asc')
     );
 
@@ -136,19 +139,27 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
             <div className="font-serif text-lg font-medium leading-tight">{session.dayTitle}</div>
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid ${session.steps && session.steps > 0 ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
             <div className="bg-[var(--bg)] rounded-xl p-3 border border-[var(--border)]">
               <div className="flex items-center gap-1.5 text-[10px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">
-                <Clock size={12} className="text-teal-500" /> Elapsed Time
+                <Clock size={12} className="text-teal-500" /> Time
               </div>
               <div className="font-mono text-xl font-bold tracking-tight">{elapsed || '0:00'}</div>
             </div>
             <div className="bg-[var(--bg)] rounded-xl p-3 border border-[var(--border)]">
               <div className="flex items-center gap-1.5 text-[10px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">
-                <Flame size={12} className="text-amber-500" /> Est. Calories
+                <Flame size={12} className="text-amber-500" /> Cals
               </div>
-              <div className="font-mono text-xl font-bold tracking-tight">{session.caloriesBurned || 0} <span className="text-xs text-[var(--muted)] font-sans">kcal</span></div>
+              <div className="font-mono text-xl font-bold tracking-tight">{session.caloriesBurned || 0}</div>
             </div>
+            {session.steps !== undefined && session.steps > 0 && (
+              <div className="bg-[var(--bg)] rounded-xl p-3 border border-[var(--border)]">
+                <div className="flex items-center gap-1.5 text-[10px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">
+                  <Footprints size={12} className="text-sienna" /> Steps
+                </div>
+                <div className="font-mono text-xl font-bold tracking-tight">{session.steps.toLocaleString()}</div>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-sm font-medium p-3 rounded-xl bg-sienna/10 text-sienna border border-sienna/20">

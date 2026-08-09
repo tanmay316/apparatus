@@ -754,7 +754,7 @@ export function ProfilePage() {
                     const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
                     const exerciseNamesList = rawExLogs.map((e: any) => typeof e === 'string' ? e : e.name);
 
-                      const isCardio = workout.type === 'walk' || workout.type === 'run' || workout.type === 'cycle' || ['walk', 'run', 'cycle'].includes((workout.details as any)?.activityType);
+                      const isCardio = workout.type === 'walk' || workout.type === 'run' || workout.type === 'cycle' || ['walk', 'run', 'cycle'].includes((workout.details as any)?.activityType) || (workout.details?.distanceKm !== undefined && !workout.details?.exercises && !workout.details?.exerciseLogs);
                       
                       const activityItem: ActivityType = isCardio ? {
                         id: workout.id,

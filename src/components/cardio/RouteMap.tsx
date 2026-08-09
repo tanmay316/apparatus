@@ -169,10 +169,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
   const startColor = isGradient ? '#fbbf24' : highlightColor || '#fbbf24';
   const endColor = isGradient ? '#a855f7' : highlightColor || '#a855f7';
 
-  // Fix URL for deployed environments (Safari / React Router)
-  const pageUrl = window.location.href.split('#')[0];
-  // html-to-image creates an isolated SVG context, so it requires the local URL.
-  const strokeColor = isGradient ? (isCapturing ? 'url(#route-gradient)' : `url(${pageUrl}#route-gradient)`) : highlightColor;
+  const strokeColor = isGradient ? 'url(#route-gradient)' : highlightColor;
 
   const startIcon = useMemo(() => new L.DivIcon({
     html: `<div style="width: 16px; height: 16px; background: ${startColor}; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,

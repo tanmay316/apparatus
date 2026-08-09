@@ -23,6 +23,7 @@ export interface UserProfile {
   bookmarks?: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  stepGoal?: number;
 }
 
 export interface UserStats {
@@ -454,6 +455,7 @@ export interface CardioActivity {
   route: RoutePoint[];
   visibility: 'public' | 'followers' | 'private';
   notes: string;
+  steps?: number;
 }
 
 // ─── Clan System (V2) ────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Users, Download, Copy, LayoutTemplate, Search, UserPlus, UserMinus } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -69,7 +69,15 @@ function AthleteCard({ athlete, myUid }: { athlete: any; myUid: string }) {
 }
 
 export function ExplorePage() {
-  const [tab, setTab] = useState<'plans' | 'users'>('plans');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = (searchParams.get('tab') as 'plans' | 'users') || 'plans';
+  const [tab, setTab] = useState<'plans' | 'users'>(initialTab);
+
+  const handleTabChange = (newTab: 'plans' | 'users') => {
+    setTab(newTab);
+    setSearchParams({ tab: newTab });
+  };
+
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
@@ -115,13 +123,13 @@ export function ExplorePage() {
         <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1">
           <button 
             className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'plans' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
-            onClick={() => setTab('plans')}
+            onClick={() => handleTabChange('plans')}
           >
             <LayoutTemplate size={14} /> Programs
           </button>
           <button 
             className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full text-sm font-mono transition-colors ${tab === 'users' ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
-            onClick={() => setTab('users')}
+            onClick={() => handleTabChange('users')}
           >
             <Users size={14} /> Athletes
           </button>

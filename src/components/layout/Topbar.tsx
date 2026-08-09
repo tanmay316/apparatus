@@ -330,15 +330,6 @@ export function Topbar() {
                 <Settings size={16} />
               </Link>
 
-              {/* Sign Out Button */}
-              <button
-                onClick={handleSignOut}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-line text-bone-dim hover:text-danger hover:border-danger/40 hover:bg-danger/10 flex items-center justify-center transition-all duration-200"
-                title="Sign Out"
-              >
-                <LogOut size={16} />
-              </button>
-
               {/* Avatar */}
               <Link to={`/profile/${profile.username}`}>
                 <img
