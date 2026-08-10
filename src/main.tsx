@@ -4,6 +4,7 @@ import { App } from './App';
 import { useAuthStore } from './stores/auth-store';
 import { logError } from '@/services/logger';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
+import { defineCustomElements } from '@ionic/pwa-elements/loader';
 import './index.css';
 
 // Initialize Firebase auth listener
@@ -21,6 +22,9 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
   logError(event.reason || new Error('Unhandled Promise Rejection'), 'unhandled_rejection');
 });
+
+// Initialize PWA elements for Capacitor (e.g., Camera overlay)
+defineCustomElements(window);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

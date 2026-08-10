@@ -1,6 +1,9 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Camera, X, RotateCcw, Upload, ScanLine } from 'lucide-react';
+import { Camera as CameraIcon, X, RotateCcw, Upload, ScanLine } from 'lucide-react';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { Capacitor } from '@capacitor/core';
+import { useUIStore } from '@/stores/ui-store';
 
 interface CameraScannerProps {
   onCapture: (base64: string, mimeType: string) => void;
@@ -9,26 +12,39 @@ interface CameraScannerProps {
 }
 
 export default function CameraScanner({ onCapture, onClose, isAnalyzing }: CameraScannerProps) {
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const { showToast } = useUIStore();
 
-  const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const takeNativePhoto = async (source: CameraSource) => {
+    try {
+      const image = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.Base64,
+        source: source,
+        width: 1024 // resize to save memory and bandwidth
+      });
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(',')[1];
-      const mime = file.type || 'image/jpeg';
-      setPreview(dataUrl);
-      onCapture(base64, mime);
-    };
-    reader.readAsDataURL(file);
-    // Reset the input so the same file can be selected again
-    e.target.value = '';
-  }, [onCapture]);
+      if (image.base64String) {
+        const mime = `image/${image.format}`;
+        const dataUrl = `data:${mime};base64,${image.base64String}`;
+        setPreview(dataUrl);
+        onCapture(image.base64String, mime);
+      }
+    } catch (error: any) {
+      if (error.message && !error.message.includes('User cancelled')) {
+        showToast('Camera error: ' + error.message, 'error');
+      }
+    }
+  };
+
+  const handleCameraClick = () => {
+    takeNativePhoto(CameraSource.Camera);
+  };
+
+  const handleGalleryClick = () => {
+    takeNativePhoto(CameraSource.Photos);
+  };
 
   const retake = useCallback(() => {
     setPreview(null);
@@ -69,13 +85,13 @@ export default function CameraScanner({ onCapture, onClose, isAnalyzing }: Camer
             </p>
             <div className="flex flex-col gap-3 max-w-xs mx-auto">
               <button
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={handleCameraClick}
                 className="btn-primary w-full justify-center py-3"
               >
-                <Camera size={18} /> Take Photo
+                <CameraIcon size={18} /> Take Photo
               </button>
               <button
-                onClick={() => galleryInputRef.current?.click()}
+                onClick={handleGalleryClick}
                 className="w-full py-3 rounded-xl bg-white/[0.04] border border-line text-bone text-sm font-medium flex items-center justify-center gap-2 hover:bg-white/[0.08] transition-colors"
               >
                 <Upload size={16} /> Upload from Gallery
@@ -116,25 +132,6 @@ export default function CameraScanner({ onCapture, onClose, isAnalyzing }: Camer
           </button>
         )}
       </div>
-
-      {/* Hidden file inputs */}
-      {/* This one opens the native camera on mobile (capture attribute) */}
-      <input
-        ref={cameraInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={handleFile}
-      />
-      {/* This one opens the gallery / file picker (no capture attribute) */}
-      <input
-        ref={galleryInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFile}
-      />
     </motion.div>
   );
 }
