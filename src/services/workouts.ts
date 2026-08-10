@@ -30,11 +30,12 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
   let progressiveOverload;
   try {
     const previousSnapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)));
+    const isFirstWorkoutEver = previousSnapshot.empty;
     const previousWorkout = previousSnapshot.docs
       .map(item => ({ id: item.id, ...item.data() } as Workout))
       .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0))
       .find(item => item.dayId === workout.dayId && item.date !== workout.date && (item.exercises || []).length > 0) || null;
-    progressiveOverload = summarizeProgressiveOverload(workout, previousWorkout);
+    progressiveOverload = summarizeProgressiveOverload(workout, previousWorkout, isFirstWorkoutEver);
   } catch {
     // Progressive overload is a nice-to-have — don't let it block saving.
     progressiveOverload = undefined;

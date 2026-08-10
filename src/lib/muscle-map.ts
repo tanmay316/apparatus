@@ -1,9 +1,40 @@
-/**
- * Muscle Map — Maps exercise names to anatomical muscle regions
- * Used to determine which muscles to highlight on the share card anatomy figure.
- */
-
 import { COMPACT_LIBRARY } from '@/services/library';
+import { EXERCISE_ONTOLOGY, MODIFIERS, type MuscleWeight } from './exercise-ontology';
+
+export const MUSCLE_GROUPS = [
+  'Chest', 'Back', 'Shoulders', 'Quads', 'Glutes', 
+  'Hamstrings', 'Calves', 'Biceps', 'Forearms', 'Triceps', 'Core'
+];
+
+export type MuscleRegion =
+  | 'chest'
+  | 'upper_chest'
+  | 'lower_chest'
+  | 'abs'
+  | 'lower_abs'
+  | 'obliques'
+  | 'quads'
+  | 'biceps'
+  | 'forearms'
+  | 'front_delts'
+  | 'side_delts'
+  | 'rear_delts'
+  | 'hip_flexors'
+  | 'traps'
+  | 'lats'
+  | 'rhomboids'
+  | 'triceps'
+  | 'lower_back'
+  | 'glutes'
+  | 'hamstrings'
+  | 'calves'
+  | 'adductors';
+
+export interface MuscleScore {
+  muscle: MuscleRegion;
+  score: number;
+  role: 'primary' | 'secondary' | 'stabilizer';
+}
 
 export const isWarmupOrCooldown = (name: string, section?: string): boolean => {
   if (section === 'warmup' || section === 'cooldown') return true;
@@ -30,163 +61,163 @@ export const isWarmupOrCooldown = (name: string, section?: string): boolean => {
   return false;
 };
 
-// Canonical muscle region IDs used by the anatomy SVG
-export type MuscleRegion =
-  | 'chest'
-  | 'abs'
-  | 'obliques'
-  | 'quads'
-  | 'biceps'
-  | 'forearms'
-  | 'front_delts'
-  | 'hip_flexors'
-  | 'traps'
-  | 'lats'
-  | 'rear_delts'
-  | 'triceps'
-  | 'lower_back'
-  | 'glutes'
-  | 'hamstrings'
-  | 'calves';
-
-// Map library muscle group names → anatomy region IDs
-export const MUSCLE_GROUPS = [
-  'Chest', 'Back', 'Shoulders', 'Quads', 'Glutes', 
-  'Hamstrings', 'Calves', 'Biceps', 'Forearms', 'Triceps', 'Core'
-];
-
-const GROUP_TO_REGIONS: Record<string, MuscleRegion[]> = {
-  'Chest':        ['chest'],
-  'Back':         ['lats', 'traps'],
-  'Shoulders':    ['front_delts', 'rear_delts'],
-  'Quads':        ['quads'],
-  'Glutes':       ['glutes'],
-  'Hamstrings':   ['hamstrings'],
-  'Calves':       ['calves'],
-  'Biceps':       ['biceps'],
-  'Forearms':     ['forearms'],
-  'Triceps':      ['triceps'],
-  'Core':         ['abs', 'obliques'],
-  // Secondary muscle labels
-  'Traps':        ['traps'],
-  'Upper Back':   ['traps', 'rear_delts'],
-  'Lats':         ['lats'],
-  'Rear Delts':   ['rear_delts'],
-  'Front Delts':  ['front_delts'],
-  'Obliques':     ['obliques'],
-  'Lower Back':   ['lower_back'],
-  'Hip Flexors':  ['hip_flexors'],
-  'Lower Abs':    ['abs'],
-  'Abs':          ['abs'],
-  'Lower Chest':  ['chest'],
-  'Upper Chest':  ['chest'],
-  'Rotator Cuff': ['rear_delts'],
-  'Shoulder Girdle': ['front_delts', 'rear_delts'],
-};
-
-function normalizeExerciseName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
-}
-
-/** Determine which anatomy regions are activated by a list of exercise names. */
-export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
-  const active = new Set<MuscleRegion>();
-  const libraryByName = new Map(COMPACT_LIBRARY.map(ex => [normalizeExerciseName(ex.name), ex]));
-
-  for (const name of exerciseNames) {
-    const ex = libraryByName.get(normalizeExerciseName(name));
-    if (ex) {
-      // Primary muscle group
-      const primaryRegions = GROUP_TO_REGIONS[ex.muscleGroup];
-      if (primaryRegions) primaryRegions.forEach(r => active.add(r));
-
-      // Secondary muscles
-      for (const sec of ex.secondaryMuscles) {
-        const secRegions = GROUP_TO_REGIONS[sec];
-        if (secRegions) secRegions.forEach(r => active.add(r));
-      }
-    } else {
-      // Fuzzy fallback for custom exercises not in library
-      const n = normalizeExerciseName(name);
-
-      // Advanced Calisthenics Skills
-      if (/\b(planche)\b/.test(n)) { active.add('front_delts'); active.add('chest'); active.add('triceps'); }
-      if (/\b(front lever)\b/.test(n)) { active.add('lats'); active.add('abs'); }
-      if (/\b(back lever)\b/.test(n)) { active.add('lats'); active.add('chest'); active.add('lower_back'); }
-      if (/\b(handstand)\b/.test(n)) { active.add('front_delts'); active.add('traps'); active.add('triceps'); }
-      if (/\b(l sit|l-sit|v sit|v-sit|tuck sit)\b/.test(n)) { active.add('abs'); active.add('quads'); active.add('triceps'); }
-      if (/\b(dragon flag|human flag)\b/.test(n)) { active.add('abs'); active.add('obliques'); active.add('lats'); }
-      if (/\b(muscle up|muscle-up)\b/.test(n)) { active.add('lats'); active.add('triceps'); active.add('chest'); }
-      if (/\b(skin the cat)\b/.test(n)) { active.add('lats'); active.add('chest'); active.add('front_delts'); }
-      if (/\b(iron cross)\b/.test(n)) { active.add('chest'); active.add('lats'); active.add('biceps'); }
-
-      // Triceps & Biceps
-      if (/\b(tricep|triceps|extension|pushdown)\b/.test(n)) active.add('triceps');
-      if (/\b(bicep|biceps|curl)\b/.test(n) && !/\b(leg curl|hamstring curl)\b/.test(n)) active.add('biceps');
-
-      // Chest
-      if (/\b(push|bench|fly|chest|pec|pecs)\b/.test(n) && !/\b(pushdown|push down|pike push|handstand push)\b/.test(n)) { 
-        active.add('chest'); active.add('triceps'); active.add('front_delts'); 
-      }
-      if (/\b(dip|dips)\b/.test(n)) { active.add('triceps'); active.add('chest'); active.add('front_delts'); }
-
-      // Back & Pulls
-      if (/\b(face pull|pull apart|pull-apart)\b/.test(n)) {
-        active.add('rear_delts'); active.add('traps');
-      } else if (/\b(pull|row|lat|lats|chin)\b/.test(n)) { 
-        active.add('lats'); active.add('traps'); active.add('biceps');
-        if (/\b(row)\b/.test(n)) active.add('rear_delts');
-      }
-
-      // Shoulders
-      if (/\b(pike push|handstand push)\b/.test(n)) { active.add('front_delts'); active.add('triceps'); }
-      if (/\b(shoulder|delt|delts|press|raise|lateral|overhead)\b/.test(n) && !/\b(calf|calves|calve|leg|knee|rear)\b/.test(n)) {
-        active.add('front_delts');
-      }
-      if (/\b(rear delt|rear delts)\b/.test(n)) active.add('rear_delts');
-
-      // Legs
-      if (/\b(squat|lunge|leg press)\b/.test(n)) { active.add('quads'); active.add('glutes'); }
-      if (/\b(nordic|leg curl|hamstring curl)\b/.test(n)) { active.add('hamstrings'); active.add('glutes'); }
-      if (/\b(deadlift|hip|glute|bridge)\b/.test(n)) { active.add('hamstrings'); active.add('glutes'); active.add('lower_back'); }
-      if (/\b(calf|calves|calve)\b/.test(n)) active.add('calves');
-
-      // Core
-      if (/\b(plank|crunch|sit up|core|ab|abs|hollow)\b/.test(n)) active.add('abs');
-      if (/\b(leg raise|knee raise|toes to bar)\b/.test(n)) { active.add('abs'); active.add('hip_flexors'); }
-    }
-  }
-
-  return active;
+export function normalizeExerciseName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\bdumbbells?\b/g, "db")
+    .replace(/\bbarbells?\b/g, "bb")
+    .replace(/\bresistance bands?\b/g, "band")
+    .replace(/\s+/g, " ")
+    .replace(/[^a-z0-9 ]/g, "")
+    .trim();
 }
 
 /**
- * Determine activated regions from workout logs. An exercise contributes to
- * the anatomy only when at least one of its sets was explicitly completed.
- * This is the source of truth for workout sharing, so skipped/unstarted
- * exercises cannot appear as highlighted muscles.
+ * Resolves a single exercise name deterministically to its weighted muscle scores.
  */
-export function getActiveMusclesFromLogs(
-  exerciseLogs: Array<{ name: string; muscleGroup?: string; sets: Array<{ completed?: boolean }> }>
-): Set<MuscleRegion> {
-  const active = new Set<MuscleRegion>();
-  const completedExerciseNames: string[] = [];
+export function resolveExercise(name: string): MuscleScore[] {
+  const norm = normalizeExerciseName(name);
 
-  exerciseLogs.forEach(log => {
-    if (log.sets.some(set => set.completed === true)) {
-      completedExerciseNames.push(log.name);
-      if (log.muscleGroup) {
-        const regions = GROUP_TO_REGIONS[log.muscleGroup];
-        if (regions) {
-          regions.forEach(r => active.add(r));
-        }
+  // 1. Exact ID match
+  let def = EXERCISE_ONTOLOGY.find(ex => ex.id === norm);
+
+  // 2. Exact canonical name match
+  if (!def) {
+    def = EXERCISE_ONTOLOGY.find(ex => normalizeExerciseName(ex.name) === norm);
+  }
+
+  // 3. Alias match
+  if (!def) {
+    def = EXERCISE_ONTOLOGY.find(ex => ex.aliases.some(alias => normalizeExerciseName(alias) === norm));
+  }
+
+  // 4. Base exercise match
+  let matchedModifiers: string[] = [];
+  if (!def) {
+    const sortedOntology = [...EXERCISE_ONTOLOGY].sort((a, b) => b.name.length - a.name.length);
+    for (const ex of sortedOntology) {
+      if (norm.includes(normalizeExerciseName(ex.name)) || ex.aliases.some(a => norm.includes(normalizeExerciseName(a)))) {
+        def = ex;
+        break;
       }
     }
-  });
+    
+    if (def) {
+      Object.keys(MODIFIERS).forEach(mod => {
+        if (norm.includes(mod.replace('_', ' '))) {
+          matchedModifiers.push(mod);
+        }
+      });
+    }
+  }
 
-  const libraryActive = getActiveMuscles(completedExerciseNames);
-  libraryActive.forEach(r => active.add(r));
-  return active;
+  if (def) {
+    const scoresMap = new Map<MuscleRegion, MuscleScore>();
+
+    const addScore = (mw: MuscleWeight, role: 'primary' | 'secondary' | 'stabilizer') => {
+      scoresMap.set(mw.muscle, {
+        muscle: mw.muscle,
+        score: mw.weight,
+        role
+      });
+    };
+
+    def.muscles.primary.forEach(m => addScore(m, 'primary'));
+    def.muscles.secondary.forEach(m => addScore(m, 'secondary'));
+    if (def.muscles.stabilizers) {
+      def.muscles.stabilizers.forEach(m => addScore(m, 'stabilizer'));
+    }
+
+    matchedModifiers.forEach(mod => {
+      const adjustments = MODIFIERS[mod];
+      Object.entries(adjustments).forEach(([region, delta]) => {
+        const m = region as MuscleRegion;
+        if (scoresMap.has(m)) {
+          scoresMap.get(m)!.score += (delta as number);
+        } else if ((delta as number) > 0) {
+          scoresMap.set(m, { muscle: m, score: (delta as number), role: 'secondary' });
+        }
+      });
+    });
+
+    return Array.from(scoresMap.values())
+      .filter(s => s.score >= 0.7)
+      .map(s => ({
+        ...s,
+        score: s.score // already >= 0.7, prevent negative no longer needed
+      }));
+  }
+
+  return [];
+}
+
+/**
+ * Aggregates a list of exercises and their completed sets into a normalized
+ * list of muscle scores, scaled such that the highest activated muscle is 1.0 (100%).
+ */
+export function aggregateWorkoutMuscles(
+  exercises: { name: string; sets: number; isWarmup?: boolean }[]
+): MuscleScore[] {
+  const aggregated = new Map<MuscleRegion, MuscleScore>();
+
+  for (const ex of exercises) {
+    if (ex.isWarmup || isWarmupOrCooldown(ex.name)) continue;
+    if (ex.sets === 0) continue;
+
+    const scores = resolveExercise(ex.name);
+    for (const score of scores) {
+      const existing = aggregated.get(score.muscle);
+      const addedScore = score.score * ex.sets;
+
+      if (existing) {
+        existing.score += addedScore;
+        if (score.role === 'primary' && existing.role !== 'primary') {
+          existing.role = 'primary';
+        }
+      } else {
+        aggregated.set(score.muscle, {
+          muscle: score.muscle,
+          score: addedScore,
+          role: score.role
+        });
+      }
+    }
+  }
+
+  const values = Array.from(aggregated.values());
+  if (values.length === 0) return [];
+
+  const maxScore = Math.max(...values.map(v => v.score));
+  
+  return values
+    .map(v => ({
+      ...v,
+      score: v.score / maxScore
+    }))
+    .sort((a, b) => b.score - a.score);
+}
+
+export function getActiveMuscleScores(exerciseNames: string[]): MuscleScore[] {
+  return aggregateWorkoutMuscles(exerciseNames.map(n => ({ name: n, sets: 1 })));
+}
+
+export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
+  const aggregated = getActiveMuscleScores(exerciseNames);
+  return new Set(aggregated.map(a => a.muscle));
+}
+
+/**
+ * Determine activated regions from workout logs.
+ */
+export function getActiveMusclesFromLogs(
+  exerciseLogs: Array<{ name: string; sets: Array<{ completed?: boolean }> }>
+): MuscleScore[] {
+  const exercises = exerciseLogs.map(log => ({
+    name: log.name,
+    sets: log.sets.filter(s => s.completed).length
+  }));
+
+  return aggregateWorkoutMuscles(exercises);
 }
 
 // ─── Bodyweight exercises for volume calculation ─────────────
@@ -212,13 +243,10 @@ function isLoggedSet(set: { completed?: boolean; reps?: number; weight?: number;
 function isBodyweightExercise(name: string): boolean {
   const n = name.toLowerCase();
   if (BODYWEIGHT_EXERCISES.has(n)) return true;
-  // Fuzzy: if it has "bodyweight" in the name
   if (n.includes('bodyweight') || n.includes('body weight') || n.includes('split squat') || n.includes('pistol squat')) return true;
   return false;
 }
 
-/** Reps performed without external resistance, displayed separately from
- * external kg·reps so bodyweight work is not reported as fake lifted weight. */
 export function calculateBodyweightReps(
   exerciseLogs: Array<{ name: string; sets: Array<{ completed?: boolean; reps?: number }> }>
 ): number {
@@ -228,8 +256,6 @@ export function calculateBodyweightReps(
   }, 0));
 }
 
-/** Calculate external-load volume for sharing. Bodyweight contributes to
- * calories, not kg·reps, so the displayed number stays meaningful. */
 export function calculateShareVolume(exerciseLogs: any[], bodyweightKg: number = 70): number {
   let totalVolume = 0;
   for (const log of exerciseLogs) {
@@ -245,9 +271,11 @@ export function calculateShareVolume(exerciseLogs: any[], bodyweightKg: number =
   return Math.round(totalVolume);
 }
 
-/** Calculate total completed sets */
 export function calculateTotalSets(
   exerciseLogs: Array<{ sets: Array<{ completed?: boolean }> }>
 ): number {
-  return exerciseLogs.reduce((total, log) => total + log.sets.filter(isLoggedSet).length, 0);
+  return exerciseLogs.reduce(
+    (total, log) => total + log.sets.filter(set => set.completed).length,
+    0
+  );
 }

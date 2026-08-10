@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { addComment, getComments, hasLiked, toggleLike, deleteActivity } from '@/services/social';
 import type { Activity, Comment } from '@/types';
-import { calculateBodyweightReps, calculateShareVolume, getActiveMuscles } from '@/lib/muscle-map';
+import { calculateBodyweightReps, calculateShareVolume, getActiveMuscleScores } from '@/lib/muscle-map';
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { COMPACT_LIBRARY } from '@/services/library';
 import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
@@ -62,8 +62,8 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
     : Number(details.calories || 0);
 
   // Active muscle heatmap regions
-  const activeMuscleSet = getActiveMuscles(exerciseNames);
-  const activeMuscleList = Array.from(activeMuscleSet).slice(0, 5);
+  const activeMuscles = getActiveMuscleScores(exerciseNames);
+  const activeMuscleList = activeMuscles.map(s => s.muscle).slice(0, 5);
   
   const isCardio = activity.type === 'walk' || activity.type === 'run' || activity.type === 'cycle' || ['walk', 'run', 'cycle'].includes(details.activityType) || (details.distanceKm !== undefined && !details.exercises && !details.exerciseLogs);
 
@@ -321,10 +321,10 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               </div>
 
               {/* Small size Anatomy figure beside workout day title */}
-              {activeMuscleSet.size > 0 && (
+              {activeMuscles.length > 0 && (
                 <div className="flex items-center gap-1.5 shrink-0 bg-[#fdfbfb] p-2 rounded-2xl shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)]" title="Muscles Targeted">
-                  <AnatomyFigureSVG view="front" activeMuscles={activeMuscleSet} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
-                  <AnatomyFigureSVG view="back" activeMuscles={activeMuscleSet} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
+                  <AnatomyFigureSVG view="front" activeMuscles={activeMuscles} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
+                  <AnatomyFigureSVG view="back" activeMuscles={activeMuscles} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
                 </div>
               )}
             </div>

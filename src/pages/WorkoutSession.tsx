@@ -393,7 +393,7 @@ export function WorkoutSession() {
         console.error('Failed to query workouts for progressive overload check:', workoutQueryError);
       }
 
-      if (savedProgress) {
+      if (savedProgress?.message) {
         try {
           await createSelfNotification(user.uid, savedProgress.message);
         } catch (notificationError) {

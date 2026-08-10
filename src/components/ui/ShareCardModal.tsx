@@ -3,11 +3,11 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Share2, Check, Image as ImageIcon, List } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
-import { getActiveMuscles, getActiveMusclesFromLogs, calculateShareVolume, calculateBodyweightReps, calculateTotalSets, isWarmupOrCooldown } from '@/lib/muscle-map';
+import { getActiveMuscles, getActiveMuscleScores, getActiveMusclesFromLogs, calculateShareVolume, calculateBodyweightReps, calculateTotalSets, isWarmupOrCooldown } from '@/lib/muscle-map';
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { drawAnatomyOnCanvas, ACTIVE_ORANGE } from '@/components/ui/AnatomySvg';
 import { format } from 'date-fns';
-import type { MuscleRegion } from '@/lib/muscle-map';
+import type { MuscleRegion, MuscleScore } from '@/lib/muscle-map';
 
 export interface ShareCardData {
   dayTitle: string;
@@ -68,7 +68,7 @@ function calculateMaxWeight(exerciseLogs?: ShareCardData['exerciseLogs']): numbe
 function drawAnatomyCard(
   canvas: HTMLCanvasElement,
   data: ShareCardData,
-  activeMuscles: Set<MuscleRegion>,
+  activeMuscles: MuscleScore[],
   transparent: boolean,
   volume: number,
   totalSets: number,
@@ -431,7 +431,7 @@ export const HIGHLIGHT_COLORS: HighlightColor[] = [
 function drawCombinedCard(
   canvas: HTMLCanvasElement,
   data: ShareCardData,
-  activeMuscles: Set<MuscleRegion>,
+  activeMuscles: MuscleScore[],
   transparent: boolean,
   volume: number,
   totalSets: number,
@@ -660,9 +660,9 @@ export function ShareCardModal({ data: originalData, onClose }: Props) {
 
   // Completed set logs are authoritative. Older activity records may only
   // contain exercise names, so retain the name-based fallback for those.
-  const activeMuscles = data.exerciseLogs !== undefined
+  const activeMuscles = data.exerciseLogs 
     ? getActiveMusclesFromLogs(data.exerciseLogs)
-    : getActiveMuscles(data.exerciseNames);
+    : getActiveMuscleScores(data.exerciseNames);
 
   // Robust Volume calculation with fallback
   let volume = 0;
@@ -791,7 +791,7 @@ export function ShareCardModal({ data: originalData, onClose }: Props) {
   return createPortal(
     (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[250] flex items-end md:items-center justify-center p-0 md:p-4 pb-safe">
+      <div className="fixed inset-0 z-[9999] flex items-end md:items-center justify-center p-0 md:p-4 pb-safe">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

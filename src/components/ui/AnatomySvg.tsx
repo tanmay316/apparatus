@@ -4,7 +4,7 @@
  * Renders each muscle sub-polygon as an independent shape to eliminate path-winding cutouts.
  */
 
-import type { MuscleRegion } from '@/lib/muscle-map';
+import type { MuscleRegion, MuscleScore } from '@/lib/muscle-map';
 
 export interface MusclePath {
   id: MuscleRegion;
@@ -23,24 +23,142 @@ export const ACTIVE_ORANGE_STROKE = '#FFAA66';
 export const FRONT_VIEWBOX = '0 95 727 1280';
 export const BACK_VIEWBOX = '718 95 727 1280';
 
+// Map logical expanded muscles to physical SVG paths if they don't have one
+const SVG_MUSCLE_MAPPING: Partial<Record<MuscleRegion, MuscleRegion[]>> = {
+  side_delts: ['front_delts', 'rear_delts'],
+  upper_chest: ['chest'],
+  lower_chest: ['chest'],
+  rhomboids: ['traps'],
+  lower_abs: ['abs'],
+  adductors: ['quads', 'hamstrings']
+};
+
+// ─── Canvas rendering helper ──────────────────────────────────────
+function applySvgMapping(scores: MuscleScore[]): Map<MuscleRegion, number> {
+  const map = new Map<MuscleRegion, number>();
+  
+  for (const s of scores) {
+    const physicalTargets = SVG_MUSCLE_MAPPING[s.muscle] || [s.muscle];
+    
+    for (const physical of physicalTargets) {
+      const existing = map.get(physical) || 0;
+      // Use the maximum score if a physical muscle is targeted by multiple logical muscles
+      map.set(physical, Math.max(existing, s.score));
+    }
+  }
+  return map;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function drawAnatomyOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  view: 'front' | 'back',
+  activeMuscles: MuscleScore[],
+  x: number,
+  y: number,
+  scale: number = 1,
+  activeColor: string = ACTIVE_ORANGE,
+  activeGlow: string = ACTIVE_ORANGE_GLOW,
+  gender: 'male' | 'female' = 'male'
+) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  if (gender === 'female') {
+    // scale to roughly match male height (1280 / 1450 ≈ 0.88)
+    const scaleRatio = 1280 / 1450;
+    ctx.scale(scale * scaleRatio, scale * scaleRatio);
+    if (view === 'back') {
+      ctx.translate(-823, 0);
+    } else {
+      ctx.translate(0, 0);
+    }
+  } else {
+    ctx.scale(scale, scale);
+    if (view === 'back') {
+      ctx.translate(-718, -95);
+    } else {
+      ctx.translate(0, -95);
+    }
+  }
+
+  const muscles = gender === 'female' 
+    ? (view === 'front' ? FEMALE_FRONT_MUSCLES : FEMALE_BACK_MUSCLES)
+    : (view === 'front' ? FRONT_MUSCLES : BACK_MUSCLES);
+
+  const basePaths = gender === 'female'
+    ? (view === 'front' ? FEMALE_FRONT_BASE_PATHS : FEMALE_BACK_BASE_PATHS)
+    : (view === 'front' ? FRONT_BASE_PATHS : BACK_BASE_PATHS);
+
+  const mappedScores = applySvgMapping(activeMuscles);
+
+  // 1. Draw base connective shapes independently
+  ctx.fillStyle = MUSCLE_INACTIVE_FILL;
+  ctx.strokeStyle = MUSCLE_INACTIVE_STROKE;
+  ctx.lineWidth = 1.2;
+  for (const str of basePaths) {
+    const p = new Path2D(str);
+    ctx.fill(p);
+    ctx.stroke(p);
+  }
+
+  // 2. Draw inactive muscles (each path string rendered as a distinct shape)
+  for (const muscle of muscles) {
+    if (!mappedScores.has(muscle.id)) {
+      ctx.fillStyle = MUSCLE_INACTIVE_FILL;
+      ctx.strokeStyle = MUSCLE_INACTIVE_STROKE;
+      ctx.lineWidth = 1.2;
+      for (const str of muscle.paths) {
+        const p = new Path2D(str);
+        ctx.fill(p);
+        ctx.stroke(p);
+      }
+    }
+  }
+
+  // 3. Draw active muscles with dynamic opacity/intensity
+  for (const muscle of muscles) {
+    const score = mappedScores.get(muscle.id);
+    if (score !== undefined) {
+      // Scale opacity between 0.4 and 1.0 based on score
+      const opacity = 0.4 + (0.6 * score);
+      ctx.fillStyle = hexToRgba(activeColor, opacity);
+      ctx.strokeStyle = activeColor;
+      ctx.lineWidth = 1.5;
+      
+      // Only apply glow for high-scoring primary muscles
+      if (score > 0.7) {
+        ctx.shadowColor = activeGlow;
+        ctx.shadowBlur = 12 * score;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+
+      for (const str of muscle.paths) {
+        const p = new Path2D(str);
+        ctx.fill(p);
+        ctx.stroke(p);
+      }
+      ctx.shadowBlur = 0; // Reset
+    }
+  }
+
+  ctx.restore();
+}
+
 export const FRONT_BASE_PATHS: string[] = [
   "M362.65 290.52q-1.14-1.37-1.86-3.41-5.33-15.15-12.14-29.75c-2.37-5.06-1.07-9.07-7.92-10.99q-1.01-.28.02-.47c5.98-1.08 15.25.91 21.33 2q2.37.42 4.81-.09 10.09-2.13 20.45-2.12a.37.37 0 01.08.73c-6.34 1.46-5.45 5.64-7.57 10.21q-6.1 13.1-11 26.69-1.3 3.62-2.9 6.81a1.99 1.99 0 01-3.3.39z",
   "M354.01 315.07q-3.49-3.65-5.9-8.23c-6.46-12.3-11.03-25.42-16.12-38.77-2.92-7.66-1.98-19.44-1.61-27.6q.03-.58.47-.21c9.06 7.39 11.33 17.46 15.67 27.62 5.4 12.61 15.4 33.31 9.11 46.92a1 .99 35.5 01-1.62.27z",
   "M345.77 316c-4.12-1.96-12.78-6.76-15.07-11.38-4.29-8.65-2.69-16.02-2.28-25.25a1 1 0 011.95-.28c4.29 12.42 10.5 24.4 15.71 36.61q.23.55-.31.3z",
   "M372.75 314.71c-5.78-9.67 1.71-31.17 6.17-40.68 5.95-12.68 8.21-24.68 18.35-33.9a.49.49 0 01.82.35c.28 8.68.84 19.39-1.97 27.72-5.26 15.58-11.39 33.46-21.42 46.62a1.18 1.18 0 01-1.95-.11z",
   "M398.01 278.49a.5.49 35.5 01.87-.14c2.01 2.7 1.62 11.6 1.61 15.13-.04 12.42-8.2 17.45-17.9 22.58a.35.35 0 01-.48-.46c5.51-12.02 11.85-24.46 15.9-37.11z",
-  "M100.98 745.85c-9.03-6.62-15.78-13.18-13.3-24.59 2.67-12.29 15.01-20.6 25.37-26.21 7.76-4.21 18.22-1.68 26.15.97 7.14 2.39 11.11 6.16 11.1 13.86q-.04 18.51-4.75 36.37c-5.47 20.76-34.48 6.99-44.57-.4z",
-  "M53.81 746.32a.91.91 0 01-.74-.95c.14-2.49-.23-6.34 2.25-7.8 4.66-2.71 11.37-5.53 14.15-10.3q6.32-10.86 16.56-20.3 1.27-1.17.64.44c-1.45 3.73-2.86 7.21-3.87 11.59-2.76 11.9-14.62 30-28.99 27.32z",
-  "M87.21 745.05c1.44.46 8.14 2.66 8.61 4.55 1.26 5.12-4.42 8.54-7 12.25-7.73 11.1-15.12 23.38-24.25 33.28a1.22 1.22 0 01-2.11-.86c.11-3.93.38-7.1 2.43-10.65q10.27-17.71 19.31-36.11.32-.65 2.13-2.27.38-.35.88-.19z",
-  "M108.11 758.12a2.16 2.16 0 011.07 2.87q-10.49 22.55-19.92 45.81c-1.45 3.56-4.37 5.15-7.82 6.04a1.35 1.34-8.1 01-1.69-1.26c-.11-3.05.37-5.87 1.58-8.9q8.1-20.28 15.15-40.96c.41-1.2.62-3.33 1.69-4.85a1.21 1.21 0 01.91-.49q4.72-.21 9.03 1.74z",
-  "M134.09 799.9q-1.16-1.7-1.41-3.73-2.1-17.07-1.18-34.29.03-.6.61-.75l6.93-1.85q.68-.19.65.52-.51 10.9-.85 21.71c-.28 8.58.1 12.65-4.17 18.4a.36.36 0 01-.58-.01z",
-  "M108.13 814.65a1.48 1.48 0 01-1.62-1.47c-.02-2.83-.14-5.66.32-8.53q2.9-17.79 5.4-35.65.53-3.84 1.58-7.56a.66.66 0 01.76-.48l7.26 1.24a.97.97 0 01.78 1.14q-4.76 23.96-9.1 46.26-.9 4.64-5.38 5.05z",
-  "M591.31 755.99c-8.06-2.93-8.66-9.76-10.28-17.06q-3.22-14.42-3.1-29.3.04-4.06 1.46-6.55c4.34-7.57 18.16-9.91 25.63-10.35 8.75-.51 18.37 6.96 24.99 12.27q8.92 7.17 10.74 17.52c2.45 13.89-12.11 23.41-22.7 29.04-6.95 3.69-18.63 7.39-26.74 4.43z",
-  "M641.97 706.78q10.85 9.65 17.61 21.91c1.63 2.97 9.74 6.76 12.87 8.59 2.9 1.7 3.03 4.81 2.55 8.5q-.06.42-.48.49c-8.16 1.32-11.99-1.93-17.72-7.23-10.35-9.58-10.5-20.33-15.33-31.9q-.54-1.29.5-.36z",
-  "M638 760.07c-2.54-3.42-7.52-6.03-5.44-11.11q.18-.44.61-.63l7.41-3.3q1.29-.58 2.05.62 3.33 5.23 5.69 10.04 6.84 13.94 14.71 27.33c1.35 2.29 4.28 10.16 2.25 12.11a1.22 1.22 0 01-1.77-.08c-9.43-10.98-16.85-23.36-25.51-34.98z",
-  "M647.83 812.68c-4 .24-7.71-2.87-9.11-6.38q-9.28-23.27-19.74-45.33a2.05 2.05 0 01.92-2.71q4.5-2.28 9.62-1.7a1.09 1.07 83.8 01.89.73q7.5 23.06 16.57 45.5 1.8 4.46 1.5 9.24a.7.7 0 01-.65.65z",
-  "M596.17 761.18a.84.84 0 01.62.81c-.01 4.86.95 35.3-2.71 37.67q-.49.32-.82-.17-3.41-5.21-3.51-8.49-.45-15.62-1.16-31.23-.03-.72.66-.52l6.92 1.93z",
-  "M621.09 814.28c-4.35 1.91-5.92-3.77-6.5-6.56q-4.52-21.91-8.88-43.95a1.41 1.41 0 011.14-1.66l6.8-1.18a.92.92 0 011.06.76q2.79 16.32 5.09 32.91c.85 6.17 2.2 12.25 1.8 18.95q-.03.52-.51.73z",
+
   "M297.69 1008.37c-7.27 7.29-16.34 3.42-19.64-5.18q-6.18-16.11-9.57-30.68c-1.99-8.6-2.24-19.68 9.72-19.91q13.12-.24 26.05 2.15 1.71.32 3.29 1.02a1.17 1.15 4.2 01.63.72c3.17 10.27 2.5 23.36.05 33.69q-2.37 10.01-10.53 18.19z",
   "M288.03 1059.54c-6.99-5.81 13.75-46.43 17.3-53.91q7.3-15.38 10.9-32.01c.74-3.42 2-6.31 4.18-8.64a1.36 1.35 54.7 012.23.39c3.97 9.09 1.66 13.86-1.67 24.65q-10.23 33.19-27.2 63.57-1.8 3.23-4.2 5.84a1.13 1.12-49 01-1.54.11z",
   "M430.44 1008.31c-12.92-12.62-14.34-33.49-10.92-50.31.31-1.53 1.09-2.53 2.73-2.86q11.44-2.25 23.08-2.59c14.13-.42 17.31 5.67 14.54 18.63q-3.13 14.69-9.12 30.37c-3.45 9.03-11.63 15.25-20.31 6.76z",
@@ -313,87 +431,7 @@ export const BACK_MUSCLES: MusclePath[] = [
   }
 ];
 
-// ─── Canvas rendering helper ──────────────────────────────────────
-export function drawAnatomyOnCanvas(
-  ctx: CanvasRenderingContext2D,
-  view: 'front' | 'back',
-  activeMuscles: Set<MuscleRegion>,
-  x: number,
-  y: number,
-  scale: number = 1,
-  activeColor: string = ACTIVE_ORANGE,
-  activeGlow: string = ACTIVE_ORANGE_GLOW,
-  gender: 'male' | 'female' = 'male'
-) {
-  ctx.save();
-  ctx.translate(x, y);
 
-  if (gender === 'female') {
-    // scale to roughly match male height (1280 / 1450 ≈ 0.88)
-    const scaleRatio = 1280 / 1450;
-    ctx.scale(scale * scaleRatio, scale * scaleRatio);
-    if (view === 'back') {
-      ctx.translate(-823, 0);
-    } else {
-      ctx.translate(0, 0);
-    }
-  } else {
-    ctx.scale(scale, scale);
-    if (view === 'back') {
-      ctx.translate(-718, -95);
-    } else {
-      ctx.translate(0, -95);
-    }
-  }
-
-  const muscles = gender === 'female' 
-    ? (view === 'front' ? FEMALE_FRONT_MUSCLES : FEMALE_BACK_MUSCLES)
-    : (view === 'front' ? FRONT_MUSCLES : BACK_MUSCLES);
-
-  const basePaths = gender === 'female'
-    ? (view === 'front' ? FEMALE_FRONT_BASE_PATHS : FEMALE_BACK_BASE_PATHS)
-    : (view === 'front' ? FRONT_BASE_PATHS : BACK_BASE_PATHS);
-
-  // 1. Draw base connective shapes independently
-  ctx.fillStyle = MUSCLE_INACTIVE_FILL;
-  ctx.strokeStyle = MUSCLE_INACTIVE_STROKE;
-  ctx.lineWidth = 1.2;
-  for (const str of basePaths) {
-    const p = new Path2D(str);
-    ctx.fill(p);
-    ctx.stroke(p);
-  }
-
-  // 2. Draw inactive muscles (each path string rendered as a distinct shape)
-  for (const muscle of muscles) {
-    if (!activeMuscles.has(muscle.id)) {
-      ctx.fillStyle = MUSCLE_INACTIVE_FILL;
-      ctx.strokeStyle = MUSCLE_INACTIVE_STROKE;
-      ctx.lineWidth = 1.2;
-      for (const str of muscle.paths) {
-        const p = new Path2D(str);
-        ctx.fill(p);
-        ctx.stroke(p);
-      }
-    }
-  }
-
-  // 3. Draw active glowing muscles on top (fill only, no internal stroke lines)
-  for (const muscle of muscles) {
-    if (activeMuscles.has(muscle.id)) {
-      ctx.shadowColor = activeGlow;
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = activeColor;
-
-      for (const str of muscle.paths) {
-        const p = new Path2D(str);
-        ctx.fill(p);
-      }
-    }
-  }
-
-  ctx.restore();
-}
 
 export function AnatomyFigureSVG({
   view,
@@ -402,7 +440,7 @@ export function AnatomyFigureSVG({
   gender,
 }: {
   view: 'front' | 'back';
-  activeMuscles: Set<MuscleRegion>;
+  activeMuscles: MuscleScore[];
   className?: string;
   gender?: 'male' | 'female';
 }) {
@@ -418,6 +456,8 @@ export function AnatomyFigureSVG({
     ? (view === 'front' ? FEMALE_FRONT_VIEWBOX : FEMALE_BACK_VIEWBOX)
     : (view === 'front' ? FRONT_VIEWBOX : BACK_VIEWBOX);
 
+  const mappedScores = applySvgMapping(activeMuscles);
+
   return (
     <svg
       viewBox={viewBox}
@@ -429,17 +469,23 @@ export function AnatomyFigureSVG({
           <path key={i} d={d} fill={MUSCLE_INACTIVE_FILL} stroke={MUSCLE_INACTIVE_STROKE} strokeWidth={1.2} />
         ))}
         {muscles.map((muscle) => {
-          const active = activeMuscles.has(muscle.id);
+          const score = mappedScores.get(muscle.id);
+          const active = score !== undefined;
+          const opacity = active ? 0.4 + (0.6 * score) : 1;
+          const fill = active ? hexToRgba(ACTIVE_ORANGE, opacity) : MUSCLE_INACTIVE_FILL;
+          const stroke = active ? 'none' : MUSCLE_INACTIVE_STROKE;
+          const filter = (active && score > 0.7) ? `drop-shadow(0 0 ${8 * score}px ${ACTIVE_ORANGE_GLOW})` : undefined;
+
           return (
             <g key={muscle.id}>
               {muscle.paths.map((d, i) => (
                 <path
                   key={i}
                   d={d}
-                  fill={active ? ACTIVE_ORANGE : MUSCLE_INACTIVE_FILL}
-                  stroke={active ? 'none' : MUSCLE_INACTIVE_STROKE}
+                  fill={fill}
+                  stroke={stroke}
                   strokeWidth={active ? 0 : 1.2}
-                  style={active ? { filter: `drop-shadow(0 0 8px ${ACTIVE_ORANGE_GLOW})` } : undefined}
+                  style={filter ? { filter } : undefined}
                 />
               ))}
             </g>

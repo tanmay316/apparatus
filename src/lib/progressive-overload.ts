@@ -26,7 +26,7 @@ export function compareExerciseProgress(current: ExerciseLog, previous?: Exercis
   };
 }
 
-export function summarizeProgressiveOverload(currentWorkout: Pick<Workout, 'exercises'>, previousWorkout?: Pick<Workout, 'date' | 'exercises'> | null): ProgressiveOverloadSummary {
+export function summarizeProgressiveOverload(currentWorkout: Pick<Workout, 'exercises'>, previousWorkout?: Pick<Workout, 'date' | 'exercises'> | null, isFirstWorkoutEver?: boolean): ProgressiveOverloadSummary {
   const currentExercises = currentWorkout.exercises || [];
   const previousExercises = previousWorkout?.exercises || [];
   const progressed: string[] = [];
@@ -42,7 +42,8 @@ export function summarizeProgressiveOverload(currentWorkout: Pick<Workout, 'exer
   }
 
   if (!previousWorkout) {
-    return { status: 'first_session', message: 'First logged session — this is your baseline.', currentVolume, exercisesProgressed: [], exercisesTracked: currentExercises.length };
+    const message = isFirstWorkoutEver ? 'First logged session. This is your baseline.' : undefined;
+    return { status: 'first_session', message, currentVolume, exercisesProgressed: [], exercisesTracked: currentExercises.length };
   }
   const volumeChangePercent = previousVolume > 0 ? Math.round(((currentVolume - previousVolume) / previousVolume) * 100) : undefined;
   const status = progressed.length > 0 || currentVolume > previousVolume ? 'progressed' : currentVolume < previousVolume ? 'regressed' : 'maintained';
