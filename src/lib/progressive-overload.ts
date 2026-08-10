@@ -42,7 +42,7 @@ export function summarizeProgressiveOverload(currentWorkout: Pick<Workout, 'exer
   }
 
   if (!previousWorkout) {
-    const message = isFirstWorkoutEver ? 'First logged session. This is your baseline.' : undefined;
+    const message = isFirstWorkoutEver ? 'First logged session. This is your baseline.' : '';
     return { status: 'first_session', message, currentVolume, exercisesProgressed: [], exercisesTracked: currentExercises.length };
   }
   const volumeChangePercent = previousVolume > 0 ? Math.round(((currentVolume - previousVolume) / previousVolume) * 100) : undefined;
