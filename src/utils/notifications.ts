@@ -13,6 +13,13 @@ export async function requestNotificationPermission() {
 }
 
 export async function showPersistentNotification(id: number, title: string, body: string) {
+  if (Capacitor.getPlatform() === 'android') {
+    // On Android, we already use the Foreground Service for an ongoing notification.
+    // Creating a second local notification that is 'ongoing: true' will cause it to get 
+    // permanently stuck if the user swipe-kills the app because JS can't run to clear it.
+    return;
+  }
+
   if (Capacitor.isNativePlatform()) {
     await LocalNotifications.schedule({
       notifications: [
@@ -20,7 +27,7 @@ export async function showPersistentNotification(id: number, title: string, body
           title,
           body,
           id,
-          ongoing: true, // Prevents the user from swiping it away easily
+          ongoing: true, // Only for iOS, though iOS doesn't strictly support ongoing like Android does
           autoCancel: false,
         }
       ]

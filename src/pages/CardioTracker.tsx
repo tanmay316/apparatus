@@ -233,9 +233,7 @@ export function CardioTracker() {
       store.reset();
     }
     
-    // Clear the URL param so a refresh stays in tracking
-    setSearchParams({});
-    
+
     if (type === 'walk') {
       await pedometerStore.startSession();
     }
@@ -267,6 +265,10 @@ export function CardioTracker() {
     store.startTracking(type);
     setScreen('tracking');
     setElapsedSec(0);
+
+    // Clear the URL param so a refresh stays in tracking
+    // Done here synchronously AFTER state updates so useEffect doesn't misfire
+    setSearchParams({}, { replace: true });
 
     if (user) {
       startActiveSession(user.uid, {
