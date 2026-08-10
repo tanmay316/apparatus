@@ -310,7 +310,7 @@ export function CardioTracker() {
     store.stopTracking();
     stopWorkoutForegroundService();
 
-    if (user && elapsedSec > 0 && store.distanceKm > 0) {
+    if (user) {
       endActiveSession(user.uid).catch(console.error);
     }
 

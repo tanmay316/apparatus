@@ -108,6 +108,7 @@ export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
     } else {
       // Fuzzy fallback for custom exercises not in library
       const n = normalizeExerciseName(name);
+
       // Advanced Calisthenics Skills
       if (/\b(planche)\b/.test(n)) { active.add('front_delts'); active.add('chest'); active.add('triceps'); }
       if (/\b(front lever)\b/.test(n)) { active.add('lats'); active.add('abs'); }
@@ -119,28 +120,40 @@ export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
       if (/\b(skin the cat)\b/.test(n)) { active.add('lats'); active.add('chest'); active.add('front_delts'); }
       if (/\b(iron cross)\b/.test(n)) { active.add('chest'); active.add('lats'); active.add('biceps'); }
 
-      // Standard movements
-      if (/\b(nordic|leg curl|hamstring curl)\b/.test(n)) { active.add('hamstrings'); active.add('glutes'); }
-      else if (/\b(pike push|handstand push)\b/.test(n)) { active.add('front_delts'); active.add('triceps'); }
-      else if (/\b(squat|lunge|leg press)\b/.test(n)) { active.add('quads'); active.add('glutes'); }
-      else if (/\b(push|bench|fly|chest|pec|pecs)\b/.test(n)) active.add('chest');
-      else if (/\b(pull|row|lat|lats|chin)\b/.test(n)) { active.add('lats'); active.add('traps'); active.add('rear_delts'); }
-      else if (/\b(curl|bicep|biceps)\b/.test(n)) active.add('biceps');
-      
-      if (/\b(dip|dips)\b/.test(n)) { active.add('triceps'); active.add('chest'); }
-      if (/\b(tricep|triceps|extension)\b/.test(n)) active.add('triceps');
-      if (/\b(deadlift|hip|glute|bridge)\b/.test(n)) { active.add('hamstrings'); active.add('glutes'); active.add('lower_back'); }
-      
-      if (/\b(calf|calves|calve)\b/.test(n)) {
-        active.add('calves');
-      } else if (/\b(leg raise|knee raise|toes to bar)\b/.test(n)) {
-        active.add('abs');
-      } else if (/\b(shoulder|delt|delts|press|raise|lateral|overhead)\b/.test(n)) {
-        active.add('front_delts');
+      // Triceps & Biceps
+      if (/\b(tricep|triceps|extension|pushdown)\b/.test(n)) active.add('triceps');
+      if (/\b(bicep|biceps|curl)\b/.test(n) && !/\b(leg curl|hamstring curl)\b/.test(n)) active.add('biceps');
+
+      // Chest
+      if (/\b(push|bench|fly|chest|pec|pecs)\b/.test(n) && !/\b(pushdown|push down|pike push|handstand push)\b/.test(n)) { 
+        active.add('chest'); active.add('triceps'); active.add('front_delts'); 
+      }
+      if (/\b(dip|dips)\b/.test(n)) { active.add('triceps'); active.add('chest'); active.add('front_delts'); }
+
+      // Back & Pulls
+      if (/\b(face pull|pull apart|pull-apart)\b/.test(n)) {
+        active.add('rear_delts'); active.add('traps');
+      } else if (/\b(pull|row|lat|lats|chin)\b/.test(n)) { 
+        active.add('lats'); active.add('traps'); active.add('biceps');
+        if (/\b(row)\b/.test(n)) active.add('rear_delts');
       }
 
+      // Shoulders
+      if (/\b(pike push|handstand push)\b/.test(n)) { active.add('front_delts'); active.add('triceps'); }
+      if (/\b(shoulder|delt|delts|press|raise|lateral|overhead)\b/.test(n) && !/\b(calf|calves|calve|leg|knee|rear)\b/.test(n)) {
+        active.add('front_delts');
+      }
+      if (/\b(rear delt|rear delts)\b/.test(n)) active.add('rear_delts');
+
+      // Legs
+      if (/\b(squat|lunge|leg press)\b/.test(n)) { active.add('quads'); active.add('glutes'); }
+      if (/\b(nordic|leg curl|hamstring curl)\b/.test(n)) { active.add('hamstrings'); active.add('glutes'); }
+      if (/\b(deadlift|hip|glute|bridge)\b/.test(n)) { active.add('hamstrings'); active.add('glutes'); active.add('lower_back'); }
+      if (/\b(calf|calves|calve)\b/.test(n)) active.add('calves');
+
+      // Core
       if (/\b(plank|crunch|sit up|core|ab|abs|hollow)\b/.test(n)) active.add('abs');
-      if (/\b(face pull|rear delt)\b/.test(n)) active.add('rear_delts');
+      if (/\b(leg raise|knee raise|toes to bar)\b/.test(n)) { active.add('abs'); active.add('hip_flexors'); }
     }
   }
 

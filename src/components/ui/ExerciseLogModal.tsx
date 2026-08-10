@@ -34,13 +34,16 @@ async function openInAppBrowser(url: string) {
 function ExerciseMedia({ exercise }: { exercise: Exercise }) {
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(false);
 
   // Extract a YouTube video ID if the exercise already has a direct YT link
   const youtubeId = (() => {
     const value = exercise.yt || '';
-    const match = value.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\\w-]{11})/i);
+    const match = value.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/i);
     return match?.[1] || null;
   })();
+  
+  const [resolvedYoutubeId, setResolvedYoutubeId] = useState<string | null>(youtubeId);
 
   const searchQuery = `${exercise.name} correct form short`;
   const formUrl = exercise.yt?.startsWith('http')
@@ -53,6 +56,7 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
     // If the exercise has a direct YouTube link, use its thumbnail immediately
     if (youtubeId) {
       setThumbnailUrl(`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`);
+      setResolvedYoutubeId(youtubeId);
       setLoading(false);
       return () => { cancelled = true; };
     }
@@ -78,6 +82,7 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
           const results = await res.json();
           const firstVideo = results?.[0];
           if (firstVideo?.videoId) {
+            if (!cancelled) setResolvedYoutubeId(firstVideo.videoId);
             return `https://i.ytimg.com/vi/${firstVideo.videoId}/hqdefault.jpg`;
           }
         } catch {
@@ -101,17 +106,32 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
 
   const handleDemoClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    openInAppBrowser(formUrl);
+    if (resolvedYoutubeId) {
+      setIsPlaying(true);
+    } else {
+      openInAppBrowser(formUrl);
+    }
   };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line/60 bg-ink">
-      {thumbnailUrl ? (
+      {isPlaying && resolvedYoutubeId ? (
+        <div className="relative w-full bg-black flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${resolvedYoutubeId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&fs=1`}
+            title={`${exercise.name} form`}
+            className="absolute top-0 left-0 w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      ) : thumbnailUrl ? (
         <div className="relative cursor-pointer group" onClick={handleDemoClick}>
           <img 
             src={thumbnailUrl} 
             alt={`${exercise.name} correct form`} 
-            className="h-48 w-full object-cover" 
+            className="w-full object-cover" 
+            style={{ aspectRatio: '16/9' }}
             loading="lazy" 
             referrerPolicy="no-referrer" 
           />
@@ -123,13 +143,26 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
           </div>
         </div>
       ) : (
-        <div className="flex h-32 items-center justify-center gap-3 px-5 text-center text-xs text-bone-dim">
+        <div className="flex items-center justify-center gap-3 px-5 text-center text-xs text-bone-dim" style={{ aspectRatio: '16/9' }}>
           {loading ? <><LoaderCircle size={18} className="animate-spin text-sienna" /> Finding exercise reference…</> : <>No video reference available for this movement yet.</>}
         </div>
       )}
       <div className="flex items-center justify-between gap-3 border-t border-line/60 px-4 py-3">
-        <div><div className="text-[10px] font-mono uppercase tracking-widest text-sienna">Technique reference</div><div className="mt-1 text-xs text-bone-dim">{thumbnailUrl ? 'Tap image or button to watch' : 'Open the exercise demo'}</div></div>
-        <button onClick={handleDemoClick} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/10"><Play size={12} /> Watch</button>
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-widest text-sienna">Technique reference</div>
+          <div className="mt-1 text-xs text-bone-dim">
+            {isPlaying ? 'Playing video' : thumbnailUrl ? 'Tap image or button to watch' : 'Open the exercise demo'}
+          </div>
+        </div>
+        {isPlaying ? (
+          <button onClick={(e) => { e.preventDefault(); openInAppBrowser(formUrl); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/10">
+            <ExternalLink size={12} /> More Videos
+          </button>
+        ) : (
+          <button onClick={handleDemoClick} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/10">
+            <Play size={12} /> Watch
+          </button>
+        )}
       </div>
     </div>
   );

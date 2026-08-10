@@ -184,7 +184,8 @@ export function WorkoutSession() {
         if (userRef.current) {
           endActiveSession(userRef.current.uid).catch(console.error);
         }
-        cancelWorkoutRef.current();
+        // Avoid calling navigate() during unmount to prevent redirect bugs on page refresh
+        useWorkoutStore.getState().cancelWorkout();
         stopWorkoutForegroundService();
       }
     };
@@ -459,6 +460,9 @@ export function WorkoutSession() {
       // Celebration and Notifications
       clearNotification(1001);
       showNotification(1002, 'Workout Complete', `You completed your session in ${formatStopwatch(elapsedSec)}.`);
+      if (user) {
+        endActiveSession(user.uid).catch(console.error);
+      }
       
       // Smart Background Reminders
       cancelRemainingTodayReminders().catch(() => {});

@@ -7,7 +7,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Toast } from '@/components/ui/Toast';
 import { UpdateNotifier } from '@/components/ui/UpdateNotifier';
 import { useUIStore } from '@/stores/ui-store';
-
+import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
@@ -96,6 +96,15 @@ function PreferencesSync() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.lang = language;
+
+    // Status Bar config to prevent overlap and adjust colors dynamically
+    if (Capacitor.isNativePlatform()) {
+      import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
+        StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+        StatusBar.setStyle({ style: theme === 'dark' ? Style.Dark : Style.Light }).catch(() => {});
+        StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#18181B' : '#FFFFFF' }).catch(() => {});
+      }).catch(() => {});
+    }
   }, [theme, language]);
 
   // Wake up backend and handle Capacitor global events
@@ -119,8 +128,12 @@ function PreferencesSync() {
 
     // Hardware back button for Android
     const backListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      // If there is an active hash (e.g. #ai-chat modal), pop it
+      if (window.location.hash) {
+        window.history.back();
+      } 
       // If we are not at the root route and can go back, pop the history
-      if (window.location.pathname !== '/' && window.location.pathname !== '/auth') {
+      else if (window.location.pathname !== '/' && window.location.pathname !== '/auth') {
         window.history.back();
       } else {
         // Otherwise natively exit the app
@@ -169,8 +182,6 @@ export function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
-        <UpdateNotifier />
-        <OTAUpdater />
         <Toast />
       </BrowserRouter>
     </QueryClientProvider>

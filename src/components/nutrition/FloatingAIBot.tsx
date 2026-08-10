@@ -23,6 +23,25 @@ export default function FloatingAIBot() {
     }
   }, [isAllowedRoute]);
 
+  // Sync modal state with URL hash for Android back button support
+  useEffect(() => {
+    if (isOpen) {
+      window.location.hash = 'ai-chat';
+    } else if (window.location.hash === '#ai-chat') {
+      window.history.back();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      if (window.location.hash !== '#ai-chat' && isOpen) {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [isOpen]);
+
   // Listen for custom event to open the bot from anywhere
   useEffect(() => {
     const handleOpenBot = () => {

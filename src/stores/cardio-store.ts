@@ -402,11 +402,11 @@ export const useCardioStore = create<CardioState>()(
           currentSpeedKmh: 0,
           maxSpeedKmh: 0,
           elevationGainM: 0,
-          gpsStatus: 'waiting' as GpsStatus,
-          gpsAccuracy: 0,
-          currentLocation: null,
+          gpsStatus: get().currentLocation ? 'active' : 'waiting',
+          gpsAccuracy: get().gpsAccuracy || 0,
+          // Keep currentLocation to avoid the 20s re-locating delay on start
         });
-        // Start GPS after state is ready
+        // Start GPS after state is ready (if not already running)
         startGpsWatch();
       },
 
