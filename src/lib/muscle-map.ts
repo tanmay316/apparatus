@@ -2,7 +2,7 @@ import { COMPACT_LIBRARY } from '@/services/library';
 import { EXERCISE_ONTOLOGY, MODIFIERS, type MuscleWeight } from './exercise-ontology';
 
 export const MUSCLE_GROUPS = [
-  'Chest', 'Back', 'Shoulders', 'Quads', 'Glutes', 
+  'Chest', 'Back', 'Shoulders', 'Quads', 'Glutes',
   'Hamstrings', 'Calves', 'Biceps', 'Forearms', 'Triceps', 'Core'
 ];
 
@@ -101,7 +101,7 @@ export function resolveExercise(name: string): MuscleScore[] {
         break;
       }
     }
-    
+
     if (def) {
       Object.keys(MODIFIERS).forEach(mod => {
         if (norm.includes(mod.replace('_', ' '))) {
@@ -188,7 +188,7 @@ export function aggregateWorkoutMuscles(
   if (values.length === 0) return [];
 
   const maxScore = Math.max(...values.map(v => v.score));
-  
+
   return values
     .map(v => ({
       ...v,
