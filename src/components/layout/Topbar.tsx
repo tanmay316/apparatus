@@ -1,4 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { Browser } from '@capacitor/browser';
+import { Capacitor } from '@capacitor/core';
 import { Menu, Bell, Search, Flame, Dumbbell, BookOpen, User, X, ExternalLink, Settings, LogOut } from 'lucide-react';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -189,20 +191,21 @@ export function Topbar() {
                       </div>
                       <div className="space-y-1">
                         {matchingExercises.map((ex, idx) => (
-                          <a
+                          <button
                             key={idx}
-                            href={`https://www.youtube.com/results?search_query=${encodeURIComponent(ex.youtubeSearch || (ex.name + ' form tutorial'))}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={() => setSearchFocused(false)}
-                            className="flex items-center justify-between p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group"
+                            onClick={() => {
+                              setSearchFocused(false);
+                              const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.youtubeSearch || (ex.name + ' form tutorial'))}`;
+                              if (Capacitor.isNativePlatform()) { Browser.open({ url, presentationStyle: 'popover' }); } else { window.open(url, '_blank'); }
+                            }}
+                            className="flex items-center justify-between p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group w-full text-left"
                           >
                             <div>
                               <div className="text-xs text-bone font-medium group-hover:text-bone transition-colors">{ex.name}</div>
                               <div className="text-[10px] font-mono text-bone-dim">{ex.muscleGroup} · {ex.equipment}</div>
                             </div>
                             <ExternalLink size={12} className="text-bone-dim/50 group-hover:text-bone" />
-                          </a>
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -371,15 +374,16 @@ export function Topbar() {
                 <div>
                   <div className="text-[10px] font-mono text-bone uppercase mb-1">Exercises</div>
                   {matchingExercises.map((ex, idx) => (
-                    <a
+                    <button
                       key={idx}
-                      href={`https://www.youtube.com/results?search_query=${encodeURIComponent(ex.youtubeSearch || (ex.name + ' form tutorial'))}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block p-1.5 text-xs text-bone hover:text-bone font-mono truncate"
+                      onClick={() => {
+                        const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.youtubeSearch || (ex.name + ' form tutorial'))}`;
+                        if (Capacitor.isNativePlatform()) { Browser.open({ url, presentationStyle: 'popover' }); } else { window.open(url, '_blank'); }
+                      }}
+                      className="block p-1.5 text-xs text-bone hover:text-bone font-mono truncate w-full text-left"
                     >
                       {ex.name} ({ex.muscleGroup})
-                    </a>
+                    </button>
                   ))}
                 </div>
               )}

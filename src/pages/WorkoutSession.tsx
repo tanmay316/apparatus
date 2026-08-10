@@ -131,6 +131,9 @@ export function WorkoutSession() {
     }
   }, [plan, currentDay, hasCompletedToday, todayWorkoutsLoading, store.isActive, store.planId, store.dayId]);
 
+  const lastExerciseRef = useRef('Warming up...');
+  const displayCaloriesRef = useRef(0);
+
   // Stopwatch state
   const [elapsedSec, setElapsedSec] = useState(0);
   useEffect(() => {
@@ -142,7 +145,12 @@ export function WorkoutSession() {
           setElapsedSec(Math.max(0, currentSec));
 
           if (currentSec % 5 === 0) {
-            updateWorkoutForegroundService('gym', store.isPaused ? 'Workout Paused' : `${store.dayTitle || 'Workout'} Live`, `${formatStopwatch(currentSec)}`, store.isPaused);
+            updateWorkoutForegroundService(
+              'gym', 
+              store.isPaused ? 'Workout Paused' : `${store.dayTitle || 'Workout'} Live`, 
+              `${formatStopwatch(currentSec)} • ${lastExerciseRef.current} • ${Math.round(displayCaloriesRef.current)} kcal`, 
+              store.isPaused
+            );
           }
         }
       }, 1000);
@@ -237,10 +245,17 @@ export function WorkoutSession() {
   useEffect(() => {
     if (activeExercise?.name) setLastExercise(activeExercise.name);
   }, [activeExercise?.name]);
+  
+  useEffect(() => {
+    lastExerciseRef.current = lastExercise;
+    displayCaloriesRef.current = displayCalories;
+  }, [lastExercise, displayCalories]);
 
   // Setup background service and listeners once when active session starts
   useEffect(() => {
     if (!store.isActive || sessionFinished || !store.startedAt || !user) return;
+
+    if (!store.planId || !store.dayId) return;
 
     // Start active session in backend
     startActiveSession(user.uid, {
@@ -279,11 +294,7 @@ export function WorkoutSession() {
     });
   }, [store.isActive, sessionFinished, store.startedAt, store.planId, store.dayId, user]);
 
-  // Update foreground service when state changes (calories, exercise, paused)
-  useEffect(() => {
-    if (!store.isActive || sessionFinished) return;
-    updateWorkoutForegroundService('gym', `${store.dayTitle || 'Workout'} Active`, `${formatStopwatch(elapsedSec)} • ${lastExercise} • ${Math.round(displayCalories)} kcal`, store.isPaused);
-  }, [store.isActive, sessionFinished, store.dayTitle, elapsedSec, lastExercise, displayCalories, store.isPaused]);
+  // Unthrottled foreground service update removed to prevent Android IPC lag
 
   // Immediately push exercise changes to live session
   useEffect(() => {
@@ -298,12 +309,12 @@ export function WorkoutSession() {
     if (!user || !store.isActive || sessionFinished || !store.startedAt) return;
     const interval = setInterval(() => {
       updateActiveSession(user.uid, {
-        currentExercise: lastExercise,
-        caloriesBurned: Math.round(displayCalories) || 0,
+        currentExercise: lastExerciseRef.current,
+        caloriesBurned: Math.round(displayCaloriesRef.current) || 0,
       }).catch(console.error);
     }, 10000); // Update every 10s
     return () => clearInterval(interval);
-  }, [store.isActive, sessionFinished, lastExercise, displayCalories, user, store.startedAt]);
+  }, [store.isActive, sessionFinished, user, store.startedAt]);
 
   let maxWeight = 0;
   activeLogs.forEach(log => {

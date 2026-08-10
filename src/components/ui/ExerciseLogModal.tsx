@@ -5,6 +5,8 @@ import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useWorkoutStore } from '@/stores/workout-store';
 import type { Exercise, SetData } from '@/types';
 import { MUSCLE_GROUPS } from '@/lib/muscle-map';
+import { Browser } from '@capacitor/browser';
+import { Capacitor } from '@capacitor/core';
 
 interface Props {
   exercise: Exercise;
@@ -16,77 +18,118 @@ interface Props {
   previousLog?: any;
 }
 
+/** Opens a URL inside the app's in-app browser (native) or a new tab (web). */
+async function openInAppBrowser(url: string) {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await Browser.open({ url, presentationStyle: 'popover' });
+    } catch {
+      window.open(url, '_blank');
+    }
+  } else {
+    window.open(url, '_blank');
+  }
+}
+
 function ExerciseMedia({ exercise }: { exercise: Exercise }) {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Extract a YouTube video ID if the exercise already has a direct YT link
   const youtubeId = (() => {
     const value = exercise.yt || '';
-    const match = value.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/i);
+    const match = value.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\\w-]{11})/i);
     return match?.[1] || null;
   })();
+
+  const searchQuery = `${exercise.name} correct form short`;
   const formUrl = exercise.yt?.startsWith('http')
     ? exercise.yt
     : `https://www.youtube.com/results?search_query=${encodeURIComponent(`${exercise.name} correct form`)}`;
 
   useEffect(() => {
     let cancelled = false;
+
+    // If the exercise has a direct YouTube link, use its thumbnail immediately
     if (youtubeId) {
-      setImageUrl(`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`);
+      setThumbnailUrl(`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`);
       setLoading(false);
       return () => { cancelled = true; };
     }
 
+    // Search YouTube for the exercise via a public Invidious instance to get
+    // the first relevant video thumbnail. This avoids showing wrong/unrelated images.
     setLoading(true);
-    fetch('https://wger.de/api/v2/exerciseinfo/?language=2&limit=1000')
-      .then(response => response.ok ? response.json() : null)
-      .then(catalog => {
-        const needle = exercise.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-        const scored = (catalog?.results || []).map((item: any) => {
-          const names = (item.translations || []).map((translation: any) => String(translation.name || '').toLowerCase());
-          const exact = names.some((name: string) => name.replace(/[^a-z0-9]+/g, ' ').trim() === needle);
-          const partial = names.some((name: string) => name.includes(needle) || needle.includes(name));
-          const tokenScore = names.reduce((best: number, name: string) => {
-            const tokens = needle.split(' ').filter(token => token.length > 2);
-            const matches = tokens.filter(token => name.includes(token)).length;
-            return Math.max(best, tokens.length ? matches / tokens.length : 0);
-          }, 0);
-          return { item, score: exact ? 3 : partial ? 2 : tokenScore >= 0.6 ? 1 : 0 };
-        }).filter((entry: any) => entry.score > 0).sort((a: any, b: any) => b.score - a.score)[0]?.item;
-        return scored || null;
-      })
-      .then(details => {
-        if (cancelled) return;
-        const image = details?.images?.find((item: any) => item.image)?.image || null;
-        if (image) {
-          setImageUrl(image);
-          return null;
+
+    const INVIDIOUS_INSTANCES = [
+      'https://vid.puffyan.us',
+      'https://invidious.fdn.fr',
+      'https://y.com.sb',
+    ];
+
+    const tryFetch = async () => {
+      for (const instance of INVIDIOUS_INSTANCES) {
+        try {
+          const res = await fetch(
+            `${instance}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video&sort_by=relevance`,
+            { signal: AbortSignal.timeout(5000) }
+          );
+          if (!res.ok) continue;
+          const results = await res.json();
+          const firstVideo = results?.[0];
+          if (firstVideo?.videoId) {
+            return `https://i.ytimg.com/vi/${firstVideo.videoId}/hqdefault.jpg`;
+          }
+        } catch {
+          continue; // Try next instance
         }
-        return fetch(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(`${exercise.name} exercise`)}&gsrnamespace=6&prop=imageinfo&iiprop=url&iiurlwidth=640&format=json&origin=*`)
-          .then(response => response.ok ? response.json() : null)
-          .then(search => {
-            const page = search?.query?.pages ? Object.values(search.query.pages)[0] as any : null;
-            return page?.imageinfo?.[0]?.thumburl || page?.imageinfo?.[0]?.url || null;
-          });
-      })
-      .then(image => { if (!cancelled && image) setImageUrl(image); })
-      .catch(() => { if (!cancelled) setImageUrl(null); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      }
+      return null;
+    };
+
+    tryFetch().then(url => {
+      if (cancelled) return;
+      setThumbnailUrl(url);
+    }).catch(() => {
+      if (!cancelled) setThumbnailUrl(null);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
 
     return () => { cancelled = true; };
-  }, [exercise.name, exercise.yt, youtubeId]);
+  }, [exercise.name, exercise.yt, youtubeId, searchQuery]);
+
+  const handleDemoClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    openInAppBrowser(formUrl);
+  };
 
   return (
     <div className="overflow-hidden rounded-2xl border border-line/60 bg-ink">
-      {imageUrl ? (
-        <img src={imageUrl} alt={`${exercise.name} correct form`} className="h-48 w-full object-cover" loading="lazy" referrerPolicy="no-referrer" />
+      {thumbnailUrl ? (
+        <div className="relative cursor-pointer group" onClick={handleDemoClick}>
+          <img 
+            src={thumbnailUrl} 
+            alt={`${exercise.name} correct form`} 
+            className="h-48 w-full object-cover" 
+            loading="lazy" 
+            referrerPolicy="no-referrer" 
+          />
+          {/* Play overlay */}
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center shadow-lg">
+              <Play size={24} className="text-white ml-1" fill="white" />
+            </div>
+          </div>
+        </div>
       ) : (
         <div className="flex h-32 items-center justify-center gap-3 px-5 text-center text-xs text-bone-dim">
-          {loading ? <><LoaderCircle size={18} className="animate-spin text-sienna" /> Finding an exercise reference…</> : <>No image reference is available for this movement yet.</>}
+          {loading ? <><LoaderCircle size={18} className="animate-spin text-sienna" /> Finding exercise reference…</> : <>No video reference available for this movement yet.</>}
         </div>
       )}
       <div className="flex items-center justify-between gap-3 border-t border-line/60 px-4 py-3">
-        <div><div className="text-[10px] font-mono uppercase tracking-widest text-sienna">Technique reference</div><div className="mt-1 text-xs text-bone-dim">{imageUrl ? 'Exercise-specific media' : 'Open the exercise demo'}</div></div>
-        <a href={formUrl} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/10"><ExternalLink size={12} /> Demo</a>
+        <div><div className="text-[10px] font-mono uppercase tracking-widest text-sienna">Technique reference</div><div className="mt-1 text-xs text-bone-dim">{thumbnailUrl ? 'Tap image or button to watch' : 'Open the exercise demo'}</div></div>
+        <button onClick={handleDemoClick} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/10"><Play size={12} /> Watch</button>
       </div>
     </div>
   );

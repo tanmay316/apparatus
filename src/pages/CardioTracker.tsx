@@ -157,21 +157,25 @@ export function CardioTracker() {
   useEffect(() => {
     if (!store.isTracking || !user || !store.activityType) return;
     const interval = setInterval(() => {
+      // Fetch latest state to avoid closure staleness and interval reset bugs
+      const st = useCardioStore.getState();
+      const currentElapsedSec = Math.floor((Date.now() - (st.startedAt || Date.now()) - st.totalPausedMs) / 1000);
+      
       const cals = calculateCardioCalories(
-        store.activityType!,
-        store.distanceKm,
-        elapsedSec / 60,
+        st.activityType!,
+        st.distanceKm,
+        currentElapsedSec / 60,
         userWeight || 70,
-        store.currentSpeedKmh
+        st.currentSpeedKmh
       );
       updateActiveSession(user.uid, {
-        currentExercise: `${store.distanceKm.toFixed(2)} km`,
+        currentExercise: `${st.distanceKm.toFixed(2)} km`,
         caloriesBurned: cals,
-        steps: pedometerStore.isSessionActive && store.activityType === 'walk' ? pedometerStore.sessionSteps : undefined
+        steps: pedometerStore.isSessionActive && st.activityType === 'walk' ? pedometerStore.sessionSteps : undefined
       }).catch(console.error);
     }, 10000);
     return () => clearInterval(interval);
-  }, [store.isTracking, user, store.activityType, store.distanceKm, elapsedSec, userWeight, store.currentSpeedKmh]);
+  }, [store.isTracking, user, store.activityType, userWeight, pedometerStore.isSessionActive]);
 
   // GPS and WakeLock logic moved to global cardio-store.ts
 

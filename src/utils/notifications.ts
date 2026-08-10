@@ -68,7 +68,7 @@ export async function scheduleDailyReminders() {
   // ID format: Day (1-7) * 100 + Hour.
   // Example: Day 1 at 5am = 105. Day 1 at 8am = 108. Day 1 at 5pm = 117.
 
-  const notifications = [];
+  const notifications: any[] = [];
   const now = new Date();
   
   for (let i = 1; i <= 7; i++) {
@@ -138,7 +138,7 @@ export async function scheduleInactivityReminders() {
     await LocalNotifications.cancel({ notifications: inactivityIds.map(id => ({ id })) });
   }
 
-  const notifications = [];
+  const notifications: any[] = [];
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
 

@@ -64,6 +64,9 @@ export function LiveChatOverlay() {
           // Don't show our own messages in the overlay
           if (data.senderUid !== user.uid) {
             setMessages(prev => [...prev, data]);
+            import('@/utils/notifications').then(({ showNotification }) => {
+              showNotification(Math.floor(Math.random() * 100000), `Message from ${data.senderName}`, data.text).catch(() => {});
+            });
           }
         }
       });

@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/web-DRGq0HYb.js","assets/index-DggzHrnU.js","assets/rolldown-runtime-CNC7AqOf.js","assets/vendor-motion-BH4b_M8o.js","assets/vendor-react-kT9P2M8v.js","assets/vendor-firebase-BAjPa3Mi.js","assets/index-OS8Ir5Ol.css"])))=>i.map(i=>d[i]);
+import{ct as e,vt as t}from"./index-DggzHrnU.js";var n=t(`GoogleAuth`,{web:()=>e(()=>import(`./web-DRGq0HYb.js`).then(e=>new e.GoogleAuthWeb),__vite__mapDeps([0,1,2,3,4,5,6]))});export{n as GoogleAuth};
