@@ -6,7 +6,7 @@ import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mount
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQueryClient } from '@tanstack/react-query';
-import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification } from '@/utils/notifications';
+import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification, cancelRemainingTodayReminders, scheduleInactivityReminders } from '@/utils/notifications';
 import { requestForegroundPermissions, startWorkoutForegroundService, updateWorkoutForegroundService, stopWorkoutForegroundService, setupForegroundServiceListeners } from '@/utils/foreground-service';
 import { useUIStore } from '@/stores/ui-store';
 import { useCardioStore, startGpsWatch, stopGpsWatch } from '@/stores/cardio-store';
@@ -400,6 +400,10 @@ export function CardioTracker() {
         } catch (err) {
           console.error('Failed to update challenges:', err);
         }
+
+        // Smart Background Reminders
+        cancelRemainingTodayReminders().catch(() => {});
+        scheduleInactivityReminders().catch(() => {});
 
         showToast('Activity saved!');
       } catch (err) {

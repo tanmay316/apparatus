@@ -123,7 +123,10 @@ export function Topbar() {
   const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-line bg-ink/90 backdrop-blur-xl">
+    <header 
+      className="sticky top-0 z-50 border-b border-line bg-ink/90 backdrop-blur-xl"
+      style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
+    >
       <div className="max-w-[1440px] mx-auto px-4 sm:px-5 h-14 flex items-center justify-between gap-3">
         {/* Left — Collapse + Logo */}
         <div className="flex items-center gap-3 shrink-0">

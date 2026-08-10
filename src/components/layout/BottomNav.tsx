@@ -78,7 +78,7 @@ export function BottomNav() {
         .nav-tab-icon-inactive { color: rgba(93, 42, 26, 0.7); }
         .dark .nav-tab-icon-inactive { color: rgba(255, 255, 255, 0.6); }
       `}</style>
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[92%] max-w-[420px] z-[500]">
+      <div className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+12px)] left-1/2 -translate-x-1/2 w-[92%] max-w-[420px] z-[500]">
         <nav
           className="bg-gradient-to-r from-[#5d2a1a]/10 to-[#d9a441]/10 dark:from-ink-2/90 dark:to-ink/90 backdrop-blur-xl border border-[#5d2a1a]/20 dark:border-white/20 rounded-[32px] shadow-2xl p-2"
           style={

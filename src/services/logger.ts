@@ -24,9 +24,9 @@ export async function logError(error: Error | unknown, context?: string): Promis
     const logData = {
       userId: user?.uid || null,
       userName: user?.displayName || null,
-      message: error instanceof Error ? error.message : String(error),
+      message: error instanceof Error ? error.message : typeof error === 'object' ? JSON.stringify(error) : String(error),
       stack: error instanceof Error ? error.stack || null : null,
-      context: context || 'app_error',
+      context: typeof context === 'object' ? JSON.stringify(context) : context || 'app_error',
       url: window.location.href,
       userAgent: navigator.userAgent,
       createdAt: serverTimestamp(),

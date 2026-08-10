@@ -20,8 +20,9 @@ import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
 import type { Exercise } from '@/types';
 import { calculateWorkoutCalories, calculateWorkoutVolume } from '@/lib/calories';
 import { usePedometerStore } from '@/stores/pedometer-store';
-import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification } from '@/utils/notifications';
+import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification, cancelRemainingTodayReminders, scheduleInactivityReminders } from '@/utils/notifications';
 import { requestForegroundPermissions, startWorkoutForegroundService, updateWorkoutForegroundService, stopWorkoutForegroundService, setupForegroundServiceListeners } from '@/utils/foreground-service';
+import { playSuccessChime } from '@/utils/audio';
 import { calculateBodyweightReps } from '@/lib/muscle-map';
 import { compareExerciseProgress } from '@/lib/progressive-overload';
 import { updateUserChallengeProgress } from '@/services/community';
@@ -112,7 +113,7 @@ export function WorkoutSession() {
   const handleCancel = () => {
     store.cancelWorkout();
     stopWorkoutForegroundService();
-    navigate(-1);
+    navigate('/plans', { replace: true });
   };
 
   // Initialize workout if not active or if plan/day mismatch
@@ -237,25 +238,19 @@ export function WorkoutSession() {
     if (activeExercise?.name) setLastExercise(activeExercise.name);
   }, [activeExercise?.name]);
 
-  // Sync active session with backend
+  // Setup background service and listeners once when active session starts
   useEffect(() => {
-    if (!user) return;
+    if (!store.isActive || sessionFinished || !store.startedAt || !user) return;
 
-    if (sessionFinished || !store.isActive || !store.startedAt) {
-      endActiveSession(user.uid).catch(console.error);
-      return;
-    }
-
-    if (store.isActive && store.planId && store.dayId && store.startedAt) {
-      startActiveSession(user.uid, {
-        planId: store.planId,
-        dayId: store.dayId,
-        dayTitle: store.dayTitle,
-        currentExercise: lastExercise,
-        caloriesBurned: Math.round(displayCalories) || 0,
-        startedAt: Timestamp.fromMillis(store.startedAt)
-      }).catch(console.error);
-    }
+    // Start active session in backend
+    startActiveSession(user.uid, {
+      planId: store.planId,
+      dayId: store.dayId,
+      dayTitle: store.dayTitle,
+      currentExercise: lastExercise,
+      caloriesBurned: Math.round(displayCalories) || 0,
+      startedAt: Timestamp.fromMillis(store.startedAt)
+    }).catch(console.error);
 
     // Request permission and show ongoing notification
     requestNotificationPermission().then(() => {
@@ -272,7 +267,7 @@ export function WorkoutSession() {
             const st = useWorkoutStore.getState();
             st.cancelWorkout();
             stopWorkoutForegroundService();
-            navigate(-1);
+            navigate('/plans', { replace: true });
           }
         );
       });
@@ -282,7 +277,13 @@ export function WorkoutSession() {
         'Apparatus is tracking your session.'
       );
     });
-  }, [store.isActive, sessionFinished, store.planId, store.dayId, user, store.startedAt, store.dayTitle, lastExercise, displayCalories, store.isPaused]);
+  }, [store.isActive, sessionFinished, store.startedAt, store.planId, store.dayId, user]);
+
+  // Update foreground service when state changes (calories, exercise, paused)
+  useEffect(() => {
+    if (!store.isActive || sessionFinished) return;
+    updateWorkoutForegroundService('gym', `${store.dayTitle || 'Workout'} Active`, `${formatStopwatch(elapsedSec)} • ${lastExercise} • ${Math.round(displayCalories)} kcal`, store.isPaused);
+  }, [store.isActive, sessionFinished, store.dayTitle, elapsedSec, lastExercise, displayCalories, store.isPaused]);
 
   // Immediately push exercise changes to live session
   useEffect(() => {
@@ -319,6 +320,9 @@ export function WorkoutSession() {
   const handleFinish = async () => {
     if (!user || !store.isActive || isSaving) return;
     setIsSaving(true);
+    
+    // Play celebration sound
+    playSuccessChime();
 
     const exLogs = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed));
     const allExercises = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown];
@@ -444,6 +448,10 @@ export function WorkoutSession() {
       // Celebration and Notifications
       clearNotification(1001);
       showNotification(1002, 'Workout Complete', `You completed your session in ${formatStopwatch(elapsedSec)}.`);
+      
+      // Smart Background Reminders
+      cancelRemainingTodayReminders().catch(() => {});
+      scheduleInactivityReminders().catch(() => {});
 
       setCelebrationData({
         heading: 'DAY COMPLETE',

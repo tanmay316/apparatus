@@ -46,7 +46,7 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
       
       <AiPlanGeneratorModal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} />
 
-      <div className="flex gap-4 overflow-x-auto px-1 -mx-1 pb-6 pt-2 snap-x snap-mandatory touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex gap-4 overflow-x-auto px-1 -mx-1 pb-6 pt-2 snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {activeDays.map((day, index) => {
           const wasCompleted = todayWorkouts.some((w: any) => w.dayId === day.id)
             || recentWorkouts.some((w: any) => w.dayId === day.id);

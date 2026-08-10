@@ -47,8 +47,16 @@ const queryClient = new QueryClient({
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen bg-ink flex items-center justify-center">
-      <div className="w-10 h-10 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
+    <div className="fixed inset-0 bg-[#f4a080] flex flex-col items-center justify-center z-[9999]">
+      <div className="relative flex flex-col items-center">
+        <img 
+          src="/logo.png" 
+          alt="Apparatus" 
+          className="w-32 h-auto mb-8 animate-[pulse_3s_ease-in-out_infinite] mix-blend-multiply opacity-90"
+          style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
+        />
+        <div className="w-8 h-8 border-[3px] border-ink/20 border-t-ink/80 rounded-full animate-spin" />
+      </div>
     </div>
   );
 }
@@ -91,6 +99,11 @@ function PreferencesSync() {
 
     // Hide Splash Screen immediately once React mounts to prevent double-loading screens
     SplashScreen.hide().catch(() => {});
+
+    // Schedule background daily reminders (will request permission if needed)
+    import('@/utils/notifications').then(({ scheduleDailyReminders }) => {
+      scheduleDailyReminders().catch(() => {});
+    });
 
     // Notify Capgo that the app is ready so it doesn't rollback updates
     if (CapacitorApp) {

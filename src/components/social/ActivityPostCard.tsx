@@ -151,8 +151,8 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
     >
       {/* ─── SECTION 1: HEADER ────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 mb-5 relative z-20">
-        <div className="flex items-center gap-3">
-          <Link to={`/profile/${activity.username || activity.userId}`} className="shrink-0">
+        <div className="flex items-start md:items-center gap-3">
+          <Link to={`/profile/${activity.username || activity.userId}`} className="shrink-0 mt-1 md:mt-0">
             <img
               src={activity.userPhoto || getAvatarUrl(activity.userName, theme)}
               alt={activity.userName}
@@ -160,31 +160,31 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
               referrerPolicy="no-referrer"
             />
           </Link>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
               <Link
                 to={`/profile/${activity.username || activity.userId}`}
-                className="font-bold text-sm hover:text-[#5d2a1a] transition-colors text-[#17191c]"
+                className="font-bold text-sm hover:text-[#5d2a1a] transition-colors text-[#17191c] truncate max-w-[120px] sm:max-w-[180px]"
               >
                 {activity.userName}
               </Link>
               {activity.username && (
-                <span className="text-[11px] font-mono text-[#777b86] hidden sm:inline">@{activity.username}</span>
+                <span className="text-[11px] font-mono text-[#777b86] hidden sm:inline truncate max-w-[80px]">@{activity.username}</span>
               )}
               {profile?.experienceLevel && (
-                <span className="text-[10px] font-mono font-medium uppercase px-2.5 py-0.5 rounded-full bg-[#fdfbfb] text-[#777b86] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)]">
+                <span className="text-[9px] md:text-[10px] font-mono font-medium uppercase px-2 py-0.5 rounded-full bg-[#fdfbfb] text-[#777b86] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] shrink-0">
                   {profile.experienceLevel}
                 </span>
               )}
             </div>
-            <div className="text-[11px] font-sans font-semibold text-[#777b86] tracking-wider uppercase mt-0.5">
+            <div className="text-[10px] md:text-[11px] font-sans font-semibold text-[#777b86] tracking-wider uppercase mt-0.5 md:mt-1 leading-snug">
               {activity.type === 'event_join' ? 'REGISTERED FOR AN EVENT' : isCardio ? 'COMPLETED A CARDIO SESSION' : 'COMPLETED A WORKOUT'}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-mono text-[#777b86]">
+        <div className="flex items-center gap-1 md:gap-2 shrink-0">
+          <span className="text-[9px] md:text-xs font-mono text-[#777b86] whitespace-nowrap">
             {timeAgo(activity.createdAt?.seconds)}
           </span>
           <div className="relative">

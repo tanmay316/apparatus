@@ -240,7 +240,7 @@ export function AdminPage() {
                 </div>
               </div>
               
-              <div className="text-bone font-semibold mb-1">{log.message}</div>
+              <div className="text-bone font-semibold mb-1 whitespace-pre-wrap break-words">{log.message}</div>
               {log.stack && (
                 <pre className="text-[10px] text-bone-dim/80 bg-ink-2/65 p-2 rounded max-h-40 overflow-y-auto whitespace-pre-wrap select-text leading-snug border border-line/10">
                   {log.stack}
