@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Download, Check, Share2 } from 'lucide-react';
+import { X, Download, Check, Share2, LocateFixed } from 'lucide-react';
 import { format } from 'date-fns';
 import { toCanvas } from 'html-to-image';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
@@ -36,15 +36,18 @@ function formatDuration(sec: number): string {
 }
 
 type ShareLayout = 
-  | 'map-stats' | 'map-only' | 'path-stats' | 'path-only' | 'stats-only'
-  | 'map-distance' | 'path-distance' 
-  | 'polaroid-transparent';
+  | 'map-stats' | 'map-distance' | 'map-only' | 'map-path-only'
+  | 'path-stats' | 'path-distance' | 'path-only' | 'path-only-nomarker'
+  | 'stats-only'
+  | 'polaroid-transparent'
+  | 'a-shape' | 'a-shape-transparent';
 
 const LAYOUTS: ShareLayout[] = [
-  'map-stats', 'map-distance', 'map-only', 
-  'path-stats', 'path-distance', 'path-only', 
+  'map-stats', 'map-distance', 'map-only', 'map-path-only',
+  'path-stats', 'path-distance', 'path-only', 'path-only-nomarker',
   'stats-only', 
-  'polaroid-transparent'
+  'polaroid-transparent',
+  'a-shape', 'a-shape-transparent'
 ];
 
 const AVAILABLE_THEMES = Object.keys(MAP_THEMES) as MapThemeKey[];
@@ -55,22 +58,47 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const [didCopy, setDidCopy] = useState(false);
   const [layoutIndex, setLayoutIndex] = useState(0);
   const [selectedTheme, setSelectedTheme] = useState<MapThemeKey>(mapTheme === 'dark' ? 'dark' : mapTheme as MapThemeKey);
+  
+  const [recenterTrigger, setRecenterTrigger] = useState(0);
+  const [pathColor, setPathColor] = useState('gradient');
+  const [textColor, setTextColor] = useState('orange');
 
   const typeLabel = data.type === 'walk' ? 'WALK' : data.type === 'run' ? 'RUN' : 'RIDE';
   const displayDate = format(new Date(data.date), 'EEEE, MMM d, yyyy');
   
-  // Theme-based line color: gradient
-  const lineColor = 'url(#route-gradient)';
+  const PATH_COLORS = [
+    { id: 'gradient', bg: 'bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7]' },
+    { id: '#f97316', bg: 'bg-orange-500' },
+    { id: '#3b82f6', bg: 'bg-blue-500' },
+    { id: '#10b981', bg: 'bg-emerald-500' },
+    { id: '#a855f7', bg: 'bg-purple-500' },
+    { id: '#f43f5e', bg: 'bg-rose-500' },
+  ];
+
+  const TEXT_COLORS = [
+    { id: 'orange', cls: 'text-orange-500', bg: 'bg-orange-500' },
+    { id: 'gradient', cls: 'bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text', bg: 'bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7]' },
+    { id: 'blue', cls: 'text-blue-500', bg: 'bg-blue-500' },
+    { id: 'emerald', cls: 'text-emerald-500', bg: 'bg-emerald-500' },
+    { id: 'purple', cls: 'text-purple-500', bg: 'bg-purple-500' },
+    { id: 'rose', cls: 'text-rose-500', bg: 'bg-rose-500' },
+    { id: 'white', cls: 'text-white', bg: 'bg-white' },
+  ];
+
+  const lineColor = pathColor === 'gradient' ? 'url(#route-gradient)' : pathColor;
+  const currentTextColorCls = TEXT_COLORS.find(t => t.id === textColor)?.cls || TEXT_COLORS[0].cls;
 
   const safeLayoutIndex = layoutIndex >= LAYOUTS.length ? 0 : layoutIndex;
   const layout = LAYOUTS[safeLayoutIndex];
   
   const isPolaroid = layout === 'polaroid-transparent';
-  const isTransparent = layout.includes('path-') || isPolaroid;
+  const isTransparent = layout.includes('path-') || isPolaroid || layout === 'a-shape-transparent';
   const isSolidBg = layout === 'stats-only';
+  const isAShape = layout.includes('a-shape');
   
-  const showMapBackground = !isSolidBg && !isPolaroid && !isTransparent; // Only for map-* layouts
-  const showPathBackground = layout.startsWith('path-'); // For path-* layouts
+  const showMapBackground = !isSolidBg && !isPolaroid && !isTransparent; // Only for map-* and a-shape layouts
+  const showPathBackground = layout.startsWith('path-') || layout === 'a-shape-transparent'; // For path-* layouts
+  const hideMarkers = layout === 'map-path-only' || layout === 'path-only-nomarker';
 
   const hideMapTiles = isTransparent;
   const showOverlayStats = layout === 'map-stats' || layout === 'path-stats';
@@ -80,7 +108,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
     if (!cardRef.current) return null;
     const canvas = await toCanvas(cardRef.current, {
       pixelRatio: 2,
-      backgroundColor: isTransparent ? 'rgba(0,0,0,0)' : '#121212',
+      backgroundColor: isTransparent ? undefined : '#121212',
     });
     
     // Apply clipping to match the 1.8rem border-radius of the card
@@ -96,7 +124,16 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
         // We multiply by scale=2 -> approx 58px.
         const radius = 58; 
         clipCtx.beginPath();
-        clipCtx.roundRect(0, 0, canvas.width, canvas.height, radius);
+        clipCtx.moveTo(radius, 0);
+        clipCtx.lineTo(canvas.width - radius, 0);
+        clipCtx.quadraticCurveTo(canvas.width, 0, canvas.width, radius);
+        clipCtx.lineTo(canvas.width, canvas.height - radius);
+        clipCtx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height);
+        clipCtx.lineTo(radius, canvas.height);
+        clipCtx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius);
+        clipCtx.lineTo(0, radius);
+        clipCtx.quadraticCurveTo(0, 0, radius, 0);
+        clipCtx.closePath();
         clipCtx.fill();
         ctx.drawImage(clipCanvas, 0, 0);
       }
@@ -204,16 +241,32 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
               {(showMapBackground || showPathBackground) && (
                 <div className="absolute inset-0 z-0">
                   {(data.route && data.route.length > 0) || data.currentLocation ? (
-                    <RouteMap 
-                      route={data.route || []} 
-                      currentLocation={data.currentLocation}
-                      theme={selectedTheme} 
-                      height="100%" 
-                      highlightColor={lineColor}
-                      hideMap={hideMapTiles}
-                      noGlow={true}
-                      isCapturing={downloading}
-                    />
+                    <div 
+                      className="w-full h-full"
+                      style={isAShape ? {
+                        WebkitMaskImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M50 5 L15 95 L35 95 L50 50 L65 95 L85 95 Z' fill='black'/></svg>")`,
+                        WebkitMaskSize: 'contain',
+                        WebkitMaskRepeat: 'no-repeat',
+                        WebkitMaskPosition: 'center',
+                        transform: 'scale(1.1)' // Scale up slightly to fit better
+                      } : {}}
+                    >
+                      <RouteMap 
+                        route={data.route || []} 
+                        currentLocation={data.currentLocation}
+                        theme={selectedTheme} 
+                        height="100%" 
+                        highlightColor={lineColor}
+                        hideMap={hideMapTiles}
+                        noGlow={true}
+                        isCapturing={downloading}
+                        recenterTrigger={recenterTrigger}
+                        cardioType={data.type}
+                        hideMarkers={hideMarkers}
+                        mapPaddingBottomRight={showOverlayStats ? [40, 200] : showDistanceOnly ? [40, 100] : [40, 40]}
+                        mapPaddingTopLeft={isAShape ? [60, 40] : [40, 40]}
+                      />
+                    </div>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-white/30 font-medium">
                       No GPS recorded
@@ -224,7 +277,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                     <div className="absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/60 via-black/20 to-transparent z-[1000]" />
                   )}
                   {/* Subtle top gradient for logo */}
-                  {(showOverlayStats || showDistanceOnly || layout === 'map-only' || layout === 'path-only') && (
+                  {(showOverlayStats || showDistanceOnly || layout === 'map-only' || layout === 'path-only' || layout === 'map-path-only' || layout === 'path-only-nomarker') && !isAShape && (
                     <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/30 to-transparent z-[1000]" />
                   )}
                 </div>
@@ -243,9 +296,9 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
               <div className="relative z-10 w-full h-full flex flex-col justify-between p-6">
                 
                 {/* Header Logo (Hidden for polaroid) */}
-                {!isPolaroid && (
+                {!isPolaroid && !isAShape && (
                   <div className={`flex flex-col items-center justify-center gap-1 ${isSolidBg ? 'mt-4' : 'mt-2'}`}>
-                    <span className="font-sans tracking-[0.3em] text-[18px] font-black text-white">
+                    <span className="font-sans tracking-[0.3em] text-[18px] font-black text-white drop-shadow-md">
                       ΛPPΛRΛTUS
                     </span>
                   </div>
@@ -258,15 +311,15 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                 {(showOverlayStats || showDistanceOnly) && (
                   <div className="flex flex-col gap-3 mb-2 w-full">
                     <div className="flex items-end gap-2 mb-2">
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-display text-6xl font-black text-white tracking-tighter">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-display text-6xl font-black text-white">
                           {data.distanceKm.toFixed(2)}
                         </span>
-                        <span className="text-xl font-bold text-white/90 uppercase tracking-widest">
+                        <span className="text-xl font-bold text-white/90 uppercase tracking-widest pl-1">
                           km
                         </span>
                       </div>
-                      <span className="text-xl font-black uppercase tracking-widest ml-auto mb-1 bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">
+                      <span className={`text-xl font-black uppercase tracking-widest ml-auto mb-1 ${currentTextColorCls}`}>
                         {typeLabel}
                       </span>
                     </div>
@@ -312,8 +365,8 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                           </div>
                         )}
                         <div>
-                          <div className="text-[9px] font-bold uppercase tracking-widest mb-0.5 bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">Calories</div>
-                          <div className="font-display font-bold text-xl bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">
+                          <div className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${currentTextColorCls}`}>Calories</div>
+                          <div className={`font-display font-bold text-xl ${currentTextColorCls}`}>
                             {data.calories}
                           </div>
                         </div>
@@ -345,8 +398,8 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                         <div className="text-[9px] font-bold text-white/50 uppercase tracking-widest">Pace</div>
                       </div>
                       <div className="text-center">
-                        <div className="font-display font-bold text-2xl mb-1 bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">{data.calories}</div>
-                        <div className="text-[9px] font-bold opacity-80 uppercase tracking-widest bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text">Cals</div>
+                        <div className={`font-display font-bold text-2xl mb-1 ${currentTextColorCls}`}>{data.calories}</div>
+                        <div className={`text-[9px] font-bold opacity-80 uppercase tracking-widest ${currentTextColorCls}`}>Cals</div>
                       </div>
                       <div className="text-center">
                         <div className="font-display font-bold text-2xl text-white mb-1">{data.avgSpeedKmh?.toFixed(1) || '0.0'}</div>
@@ -369,7 +422,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                   <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none p-6 pb-12">
                     <div className="bg-[#fcfbf9] rounded-sm p-4 pb-10 shadow-[0_20px_40px_rgba(0,0,0,0.6)] w-full rotate-[1deg] border border-black/5">
                       <div className="w-full aspect-square bg-gray-200 rounded-sm overflow-hidden relative">
-                        <RouteMap route={data.route || []} theme="satellite" height="100%" hideMap={false} highlightColor="#f43f5e" />
+                        <RouteMap route={data.route || []} theme="satellite" height="100%" hideMap={false} highlightColor="#f43f5e" cardioType={data.type as any} />
                       </div>
                       <div className="mt-6 flex flex-col items-center gap-1 font-sans text-gray-800">
                         <div className="text-2xl font-black italic">{data.distanceKm.toFixed(2)} km {typeLabel}</div>
@@ -379,9 +432,9 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                   </div>
                 )}
 
-                {/* Just Date for map-only and path-only */}
-                {(layout === 'map-only' || layout === 'path-only') && (
-                  <div className="text-right">
+                {/* Just Date for map-only variants */}
+                {(layout === 'map-only' || layout === 'path-only' || layout === 'map-path-only' || layout === 'path-only-nomarker' || isAShape) && (
+                  <div className={`text-right ${isAShape ? 'mt-auto' : ''}`}>
                     <span className="text-xs font-bold text-white/80 drop-shadow-md uppercase tracking-wider bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm">
                       {displayDate}
                     </span>
@@ -426,8 +479,39 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
             </div>
           )}
 
+          {/* Color Pickers */}
+          <div className="w-full max-w-[95vw] mx-auto bg-white/5 backdrop-blur-xl rounded-[24px] border border-white/10 overflow-hidden p-3 flex flex-col gap-3">
+            {/* Path Color */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-white/60 uppercase tracking-wider w-16 shrink-0">Path</span>
+              <div className="flex overflow-x-auto gap-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {PATH_COLORS.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => setPathColor(c.id)}
+                    className={`shrink-0 w-8 h-8 rounded-full ${c.bg} transition-all duration-300 border-2 ${pathColor === c.id ? 'border-white scale-110 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'border-transparent opacity-50 hover:opacity-100'}`}
+                  />
+                ))}
+              </div>
+            </div>
+            
+            {/* Text Color */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-white/60 uppercase tracking-wider w-16 shrink-0">Text</span>
+              <div className="flex overflow-x-auto gap-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {TEXT_COLORS.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => setTextColor(c.id)}
+                    className={`shrink-0 w-8 h-8 rounded-full ${c.bg} transition-all duration-300 border-2 ${textColor === c.id ? 'border-white scale-110 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'border-transparent opacity-50 hover:opacity-100'}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Actions */}
-          <div className="flex justify-center gap-8 w-full mt-2">
+          <div className="flex justify-center gap-6 w-full mt-2">
             <svg width="0" height="0" className="absolute">
               <defs>
                 <linearGradient id="icon-gradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
@@ -455,6 +539,17 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
             >
               <Share2 size={28} style={{ stroke: 'url(#icon-gradient)' }} />
             </button>
+
+            {(!hideMapTiles || showMapBackground || showPathBackground) && (
+              <button
+                onClick={() => setRecenterTrigger(prev => prev + 1)}
+                disabled={downloading}
+                className="p-4 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-[0.90] disabled:opacity-50"
+                title="Recenter Map"
+              >
+                <LocateFixed size={28} style={{ stroke: 'url(#icon-gradient)' }} />
+              </button>
+            )}
           </div>
         </div>
       </motion.div>

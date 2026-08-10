@@ -278,6 +278,7 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
                   route={details.route} 
                   theme={theme === 'dark' ? 'dark' : 'light'} 
                   height="150px" 
+                  cardioType={activity.type as any}
                 />
               </div>
             ) : (

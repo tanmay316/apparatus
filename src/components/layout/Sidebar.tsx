@@ -30,7 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   // Community
   { id: 'explore', path: '/explore?tab=users', label: 'Athletes', icon: <Compass size={18} />, section: 'COMMUNITY' },
   { id: 'feed', path: '/feed', label: 'Activity', icon: <Users size={18} />, section: 'COMMUNITY' },
-  { id: 'communities', path: '/communities', label: 'Communities', icon: <Globe size={18} />, section: 'COMMUNITY' },
+  { id: 'communities', path: '/community', label: 'Communities', icon: <Globe size={18} />, section: 'COMMUNITY' },
 ];
 
 export function Sidebar() {
@@ -60,7 +60,7 @@ export function Sidebar() {
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[290]"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[510]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -72,7 +72,7 @@ export function Sidebar() {
 
       {/* Sidebar panel */}
       <motion.div
-        className="fixed top-0 left-0 h-screen w-[260px] max-w-[82vw] bg-ink-2 border-r border-line z-[300] flex flex-col"
+        className="fixed top-0 left-0 h-screen w-[260px] max-w-[82vw] bg-ink-2 border-r border-line z-[520] flex flex-col"
         style={{ boxShadow: sidebarOpen ? '8px 0 40px rgba(0,0,0,0.5)' : 'none' }}
         initial={false}
         animate={{ x: sidebarOpen ? 0 : '-105%' }}

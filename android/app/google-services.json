@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "716398124057",
+    "project_id": "apparatus-46b1b",
+    "storage_bucket": "apparatus-46b1b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:716398124057:android:69f5c8946df3330b67de88",
+        "android_client_info": {
+          "package_name": "com.tms.apparatus"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "716398124057-hhg54cto4lnft33chuh0gmb5ofkp4qki.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7waUkMxwOouKT8cq4bO32HYIVnmNzW5w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "716398124057-hhg54cto4lnft33chuh0gmb5ofkp4qki.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

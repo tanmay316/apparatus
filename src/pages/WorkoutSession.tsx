@@ -19,10 +19,12 @@ import { db } from '@/lib/firebase';
 import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
 import type { Exercise } from '@/types';
 import { calculateWorkoutCalories, calculateWorkoutVolume } from '@/lib/calories';
+import { usePedometerStore } from '@/stores/pedometer-store';
+import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification } from '@/utils/notifications';
+import { requestForegroundPermissions, startWorkoutForegroundService, updateWorkoutForegroundService, stopWorkoutForegroundService, setupForegroundServiceListeners } from '@/utils/foreground-service';
 import { calculateBodyweightReps } from '@/lib/muscle-map';
 import { compareExerciseProgress } from '@/lib/progressive-overload';
 import { updateUserChallengeProgress } from '@/services/community';
-import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification } from '@/utils/notifications';
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -49,7 +51,7 @@ export function WorkoutSession() {
   const { showToast, units } = useUIStore();
   const queryClient = useQueryClient();
   const userWeight = useUserWeight();
-  
+
   const store = useWorkoutStore();
 
   const { data: plan, isLoading: planLoading } = useQuery({
@@ -82,16 +84,24 @@ export function WorkoutSession() {
   });
 
   const { data: workoutHistory = [] } = useQuery({
-    queryKey: ['exerciseHistory', user?.uid],
-    queryFn: () => getUserWorkouts(user!.uid, 250),
-    enabled: !!user,
-    staleTime: 30_000,
+    queryKey: ['workoutHistory', user?.uid, planId, dayId],
+    queryFn: async () => {
+      const q = query(
+        collection(db, 'workouts'),
+        where('userId', '==', user!.uid),
+        where('planId', '==', planId),
+        where('dayId', '==', dayId)
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map(doc => doc.data()).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
+    },
+    enabled: !!user && !!planId && !!dayId,
   });
 
   const currentDay = days.find(d => d.id === dayId);
   const todayCompletedWorkouts = todayWorkouts.filter((w: any) => w.dayId === dayId);
   const hasCompletedToday = todayCompletedWorkouts.length > 0;
-  
+
   const [selectedWorkoutIndex, setSelectedWorkoutIndex] = useState(0);
   const completedWorkoutForDay = todayCompletedWorkouts[selectedWorkoutIndex];
 
@@ -99,12 +109,18 @@ export function WorkoutSession() {
   const [sessionFinished, setSessionFinished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  const handleCancel = () => {
+    store.cancelWorkout();
+    stopWorkoutForegroundService();
+    navigate(-1);
+  };
+
   // Initialize workout if not active or if plan/day mismatch
   useEffect(() => {
     if (todayWorkoutsLoading || !plan || !currentDay) return;
 
     if (store.isActive && (store.planId !== plan.id || store.dayId !== currentDay.id)) {
-      store.cancelWorkout();
+      handleCancel();
       return;
     }
 
@@ -119,13 +135,21 @@ export function WorkoutSession() {
   useEffect(() => {
     if (store.isActive && store.startedAt && !sessionFinished) {
       const interval = setInterval(() => {
-        setElapsedSec(Math.floor((Date.now() - store.startedAt!) / 1000));
+        if (!store.isPaused) {
+          const raw = Date.now() - store.startedAt! - store.totalPausedMs;
+          const currentSec = Math.floor(raw / 1000);
+          setElapsedSec(Math.max(0, currentSec));
+
+          if (currentSec % 5 === 0) {
+            updateWorkoutForegroundService('gym', store.isPaused ? 'Workout Paused' : `${store.dayTitle || 'Workout'} Live`, `${formatStopwatch(currentSec)}`, store.isPaused);
+          }
+        }
       }, 1000);
       return () => clearInterval(interval);
     } else if (store.isActive && !store.startedAt) {
       setElapsedSec(0);
     }
-  }, [store.isActive, store.startedAt, sessionFinished]);
+  }, [store.isActive, store.startedAt, store.isPaused, store.totalPausedMs, sessionFinished, store.dayTitle]);
 
   const hasLoggedSets = Object.values(store.logs).some(ex => ex.sets.some(s => s.completed));
   const hasLoggedSetsRef = useRef(hasLoggedSets);
@@ -134,15 +158,15 @@ export function WorkoutSession() {
   }, [hasLoggedSets]);
 
   // Keep references to current store methods/state for unmount cleanup
-  const cancelWorkoutRef = useRef(store.cancelWorkout);
+  const cancelWorkoutRef = useRef(handleCancel);
   const isActiveRef = useRef(store.isActive);
   const userRef = useRef(user);
 
   useEffect(() => {
-    cancelWorkoutRef.current = store.cancelWorkout;
+    cancelWorkoutRef.current = handleCancel;
     isActiveRef.current = store.isActive;
     userRef.current = user;
-  }, [store.cancelWorkout, store.isActive, user]);
+  }, [handleCancel, store.isActive, user]);
 
   // Handle cancellation on unmount ONLY if no sets were logged
   useEffect(() => {
@@ -152,10 +176,10 @@ export function WorkoutSession() {
           endActiveSession(userRef.current.uid).catch(console.error);
         }
         cancelWorkoutRef.current();
+        stopWorkoutForegroundService();
       }
     };
   }, []);
-
 
   useEffect(() => {
     if (!store.isActive && completedWorkoutForDay) {
@@ -163,9 +187,9 @@ export function WorkoutSession() {
     }
   }, [store.isActive, completedWorkoutForDay]);
 
-  const [activeExercise, setActiveExercise] = useState<{name: string, mode: 'reps'|'hold'|'freeform', index: number, section: 'warmup' | 'skillWork' | 'strength' | 'cooldown'} | null>(null);
+  const [activeExercise, setActiveExercise] = useState<{ name: string, mode: 'reps' | 'hold' | 'freeform', index: number, section: 'warmup' | 'skillWork' | 'strength' | 'cooldown' } | null>(null);
   const [privacy, setPrivacy] = useState<'public' | 'followers' | 'private'>('followers');
-  
+
   // Add exercise state
   const [addSection, setAddSection] = useState<'warmup' | 'skillWork' | 'strength' | 'cooldown' | null>(null);
   const [addName, setAddName] = useState('');
@@ -206,9 +230,9 @@ export function WorkoutSession() {
     ? estimatedCalories
     : Number(completedWorkoutForDay?.calories || 0);
   const externalVolume = calculateWorkoutVolume(activeExercises, activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)), userWeight || 70);
-  
+
   const [lastExercise, setLastExercise] = useState('Warming up...');
-  
+
   useEffect(() => {
     if (activeExercise?.name) setLastExercise(activeExercise.name);
   }, [activeExercise?.name]);
@@ -216,12 +240,12 @@ export function WorkoutSession() {
   // Sync active session with backend
   useEffect(() => {
     if (!user) return;
-    
+
     if (sessionFinished || !store.isActive || !store.startedAt) {
       endActiveSession(user.uid).catch(console.error);
       return;
     }
-    
+
     if (store.isActive && store.planId && store.dayId && store.startedAt) {
       startActiveSession(user.uid, {
         planId: store.planId,
@@ -232,16 +256,33 @@ export function WorkoutSession() {
         startedAt: Timestamp.fromMillis(store.startedAt)
       }).catch(console.error);
     }
-    
+
     // Request permission and show ongoing notification
     requestNotificationPermission().then(() => {
+      requestForegroundPermissions().then(() => {
+        startWorkoutForegroundService('gym', `${store.dayTitle || 'Workout'} Active`, '0:00', store.isPaused);
+        setupForegroundServiceListeners(
+          () => {
+            const st = useWorkoutStore.getState();
+            if (st.isPaused) st.resumeTimer();
+            else st.pauseTimer();
+          },
+          () => {
+            // End tracking
+            const st = useWorkoutStore.getState();
+            st.cancelWorkout();
+            stopWorkoutForegroundService();
+            navigate(-1);
+          }
+        );
+      });
       showPersistentNotification(
         1001,
         `${store.dayTitle || 'Workout'} Active`,
         'Apparatus is tracking your session.'
       );
     });
-  }, [store.isActive, sessionFinished, store.planId, store.dayId, user, store.startedAt, store.dayTitle, lastExercise, displayCalories]);
+  }, [store.isActive, sessionFinished, store.planId, store.dayId, user, store.startedAt, store.dayTitle, lastExercise, displayCalories, store.isPaused]);
 
   // Immediately push exercise changes to live session
   useEffect(() => {
@@ -262,7 +303,7 @@ export function WorkoutSession() {
     }, 10000); // Update every 10s
     return () => clearInterval(interval);
   }, [store.isActive, sessionFinished, lastExercise, displayCalories, user, store.startedAt]);
-  
+
   let maxWeight = 0;
   activeLogs.forEach(log => {
     log.sets.forEach((s: any) => {
@@ -278,7 +319,7 @@ export function WorkoutSession() {
   const handleFinish = async () => {
     if (!user || !store.isActive || isSaving) return;
     setIsSaving(true);
-    
+
     const exLogs = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed));
     const allExercises = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown];
     const totalVol = calculateWorkoutVolume(allExercises, exLogs, userWeight || 70);
@@ -286,9 +327,6 @@ export function WorkoutSession() {
     const calories = displayCalories;
 
     try {
-      // Exercises added or edited during a session are part of the user's
-      // plan going forward. The workout document below remains the source of
-      // truth for the actual reps, weights, and completed sets.
       if (currentDay && store.planId) {
         try {
           await savePlanDay(store.planId, {
@@ -386,7 +424,7 @@ export function WorkoutSession() {
       } catch (err) {
         console.error('Failed to update challenges:', err);
       }
-      
+
       // Invalidate queries to refresh dashboard metrics immediately
       queryClient.invalidateQueries({ queryKey: ['stats'] });
       queryClient.invalidateQueries({ queryKey: ['profile'] });
@@ -445,7 +483,7 @@ export function WorkoutSession() {
     }
   };
 
-  const [celebrationData, setCelebrationData] = useState<{heading: string, sub: string, xpBreakdown: {label: string, val: number}[], totalXp: number} | null>(null);
+  const [celebrationData, setCelebrationData] = useState<{ heading: string, sub: string, xpBreakdown: { label: string, val: number }[], totalXp: number } | null>(null);
   const [shareData, setShareData] = useState<ShareCardData | null>(null);
 
   if (planLoading || daysLoading) {
@@ -515,14 +553,14 @@ export function WorkoutSession() {
             </div>
             <h4 className="font-display text-lg">{title}</h4>
           </div>
-          <button 
+          <button
             onClick={() => setAddSection(sectionKey)}
             className="text-[10px] text-sienna font-mono border border-sienna/30 px-1.5 py-0.5 rounded bg-sienna/5 flex items-center gap-1 hover:bg-sienna/15 transition-all"
           >
             <Plus size={10} /> Add
           </button>
         </div>
-        
+
         <div className="space-y-3">
           {exercises.length === 0 ? (
             <div className="text-xs text-bone-dim py-4 px-4 border border-dashed border-line rounded">
@@ -543,15 +581,15 @@ export function WorkoutSession() {
               const isDone = (!store.isActive && hasCompletedToday)
                 ? !!(histLog && histLog.sets?.some((s: any) => s.completed))
                 : !!(log && log.sets.some((s: any) => s.completed));
-              
+
               return (
-                <div 
-                  key={idx} 
+                <div
+                  key={idx}
                   onClick={() => setActiveExercise({ name: e.name, mode: exMode(e.sets), index: idx, section: sectionKey })}
                   className="card-hover p-4 flex items-center justify-between cursor-pointer group"
                 >
                   <div className="flex items-center gap-4">
-                    <button 
+                    <button
                       onClick={(event) => {
                         event.stopPropagation();
                         if (!store.isActive && hasCompletedToday) return;
@@ -600,7 +638,7 @@ export function WorkoutSession() {
           {formatStopwatch(elapsedSec)}
         </div>
       </div>
-      
+
       <div className="mb-8 pb-6 border-b border-line">
         <div className="flex justify-between items-center mb-1">
           <div className="font-mono text-amber text-[11px] tracking-widest uppercase">
@@ -608,9 +646,9 @@ export function WorkoutSession() {
           </div>
           {(!store.isActive && hasCompletedToday) && todayCompletedWorkouts.length > 0 && (
             <div className="relative z-10 w-[140px]">
-              <CustomSelect 
+              <CustomSelect
                 className="w-full text-xs font-mono"
-                value={selectedWorkoutIndex.toString()} 
+                value={selectedWorkoutIndex.toString()}
                 onChange={(val) => setSelectedWorkoutIndex(Number(val))}
                 options={todayCompletedWorkouts.map((w: any, idx: number) => {
                   let ms = Date.now();
@@ -634,14 +672,14 @@ export function WorkoutSession() {
           SKILL: <span className="text-bone">{currentDay.skill || 'None'}</span> • PROGRESS: <span className="text-sienna">{activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length}/{activeExercises.length}</span>
         </div>
         <div className="w-full h-1.5 bg-line/20 rounded-full overflow-hidden mt-3 max-w-sm">
-          <motion.div 
+          <motion.div
             className="h-full bg-sienna rounded-full"
             initial={{ width: 0 }}
             animate={{ width: `${activeExercises.length ? Math.round((activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length / activeExercises.length) * 100) : 0}%` }}
             transition={{ duration: 0.3, ease: 'easeOut' }}
           />
         </div>
-        
+
         {/* Dynamic metrics strip */}
         <div className="flex sm:grid sm:grid-cols-3 gap-3 mt-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="bg-ink-2 border border-line p-4 rounded-lg min-w-[140px] shrink-0">
@@ -665,47 +703,47 @@ export function WorkoutSession() {
       {renderSection('5-10 min', 'COOLDOWN', 'bg-bone text-ink', store.isActive ? store.cooldown : displayCooldown, 'cooldown')}
 
       <div className="mt-12 flex flex-col items-center justify-center gap-3 pb-20">
-         <div className="flex items-center gap-3 bg-ink-2 p-2 px-4 rounded border border-line z-10 w-full max-w-[300px]">
-           <span className="text-xs font-mono text-bone-dim uppercase">Workout Privacy:</span>
-           <CustomSelect
-             className="flex-1 text-xs font-mono"
-             value={privacy}
-             onChange={(val) => setPrivacy(val as any)}
-             options={[
-               { value: 'followers', label: 'Followers only' },
-               { value: 'public', label: 'Public' },
-               { value: 'private', label: 'Private' }
-             ]}
-           />
-         </div>
-          <button 
-            onClick={() => {
-              if (!store.isActive && hasCompletedToday) {
-                setSessionFinished(false);
-                store.startWorkout(plan, currentDay);
-              } else {
-                handleFinish();
-              }
-            }}
-            disabled={sessionFinished || isSaving}
-            className={`py-3.5 px-8 text-base w-full max-w-md font-bold tracking-wider rounded-lg transition-all ${sessionFinished || isSaving ? 'bg-line text-bone-dim cursor-not-allowed opacity-50' : 'bg-sienna text-bone hover:bg-sienna/90'}`}
-          >
-            {isSaving ? 'Saving...' : sessionFinished ? '✓ Saved' : (!store.isActive && hasCompletedToday) ? 'Log Again' : 'Finish Workout'}
-          </button>
+        <div className="flex items-center gap-3 bg-ink-2 p-2 px-4 rounded border border-line z-10 w-full max-w-[300px]">
+          <span className="text-xs font-mono text-bone-dim uppercase">Workout Privacy:</span>
+          <CustomSelect
+            className="flex-1 text-xs font-mono"
+            value={privacy}
+            onChange={(val) => setPrivacy(val as any)}
+            options={[
+              { value: 'followers', label: 'Followers only' },
+              { value: 'public', label: 'Public' },
+              { value: 'private', label: 'Private' }
+            ]}
+          />
+        </div>
+        <button
+          onClick={() => {
+            if (!store.isActive && hasCompletedToday) {
+              setSessionFinished(false);
+              store.startWorkout(plan, currentDay);
+            } else {
+              handleFinish();
+            }
+          }}
+          disabled={sessionFinished || isSaving}
+          className={`py-3.5 px-8 text-base w-full max-w-md font-bold tracking-wider rounded-lg transition-all ${sessionFinished || isSaving ? 'bg-line text-bone-dim cursor-not-allowed opacity-50' : 'bg-sienna text-bone hover:bg-sienna/90'}`}
+        >
+          {isSaving ? 'Saving...' : sessionFinished ? '✓ Saved' : (!store.isActive && hasCompletedToday) ? 'Log Again' : 'Finish Workout'}
+        </button>
       </div>
 
       {activeExercise && (store[activeExercise.section][activeExercise.index] || (!store.isActive && hasCompletedToday)) && (
-        <ExerciseLogModal 
-          isOpen={true} 
-          onClose={() => setActiveExercise(null)} 
+        <ExerciseLogModal
+          isOpen={true}
+          onClose={() => setActiveExercise(null)}
           exercise={
-            (store[activeExercise.section] && store[activeExercise.section][activeExercise.index]) || 
+            (store[activeExercise.section] && store[activeExercise.section][activeExercise.index]) ||
             activeExercises.find(e => e.name === activeExercise.name)!
           }
           section={activeExercise.section}
           index={activeExercise.index}
-            historicalLog={(!store.isActive && hasCompletedToday) ? completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === activeExercise.name) : undefined}
-            previousLog={workoutHistory.find((workout: any) => workout.dayId === dayId && workout.date !== completedWorkoutForDay?.date && workout.exercises?.some((ex: any) => ex.name === activeExercise.name))?.exercises?.find((ex: any) => ex.name === activeExercise.name)}
+          historicalLog={(!store.isActive && hasCompletedToday) ? completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === activeExercise.name) : undefined}
+          previousLog={workoutHistory.find((workout: any) => workout.dayId === dayId && workout.date !== completedWorkoutForDay?.date && workout.exercises?.some((ex: any) => ex.name === activeExercise.name))?.exercises?.find((ex: any) => ex.name === activeExercise.name)}
         />
       )}
 
@@ -713,7 +751,7 @@ export function WorkoutSession() {
       {addSection && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-ink/80 backdrop-blur-sm" onClick={() => setAddSection(null)} />
-          <motion.div 
+          <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             className="relative w-full max-w-md bg-ink-2 border border-line rounded-xl p-6 z-10 max-h-[90vh] overflow-y-auto"
@@ -727,7 +765,7 @@ export function WorkoutSession() {
                 <X size={18} />
               </button>
             </div>
-            
+
             <form onSubmit={handleAddExercise} className="space-y-4">
               <div>
                 <label className="text-xs font-mono text-bone-dim block mb-1">Exercise Name</label>
@@ -738,12 +776,12 @@ export function WorkoutSession() {
                   placeholder="e.g. Lat Pulldown"
                 />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-mono text-bone-dim block mb-1">Sets (e.g., 4 x 10 or 3 x 20 sec)</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="e.g., 3 x 10"
                     className="input-field w-full"
                     value={addSets}
@@ -752,8 +790,8 @@ export function WorkoutSession() {
                 </div>
                 <div>
                   <label className="text-xs font-mono text-bone-dim block mb-1">Tempo (e.g., 2-1-2)</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="e.g., 2-1-2"
                     className="input-field w-full"
                     value={addTempo}
@@ -764,8 +802,8 @@ export function WorkoutSession() {
 
               <div>
                 <label className="text-xs font-mono text-bone-dim block mb-1">Rest (e.g., 90s or 2 min)</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="e.g., 90s"
                   className="input-field w-full"
                   value={addRest}
@@ -775,7 +813,7 @@ export function WorkoutSession() {
 
               <div>
                 <label className="text-xs font-mono text-bone-dim block mb-1">Form Cues (one per line)</label>
-                <textarea 
+                <textarea
                   placeholder="Keep arms locked..."
                   className="input-field w-full h-20 text-sm"
                   value={addCues}
@@ -785,8 +823,8 @@ export function WorkoutSession() {
 
               <div>
                 <label className="text-xs font-mono text-bone-dim block mb-1">YouTube Search or Link</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   placeholder="Leave blank to search by name"
                   className="input-field w-full"
                   value={addYt}
@@ -806,7 +844,7 @@ export function WorkoutSession() {
       {celebrationData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-ink/90 backdrop-blur" />
-          <motion.div 
+          <motion.div
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             className="relative w-full max-w-md bg-ink-2 border border-line rounded-xl p-8 z-10 text-center"
@@ -814,7 +852,7 @@ export function WorkoutSession() {
             <div className="text-5xl mb-4">🎉</div>
             <h2 className="font-display text-3xl mb-1 text-bone">{celebrationData.heading}</h2>
             <p className="text-sm text-bone-dim mb-6">{celebrationData.sub}</p>
-            
+
             <div className="bg-ink border border-line rounded-lg p-4 mb-6">
               {celebrationData.xpBreakdown.map((row, idx) => (
                 <div key={idx} className="flex justify-between items-center text-sm py-1.5 border-b border-line/30 last:border-b-0">
@@ -837,12 +875,12 @@ export function WorkoutSession() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <button 
+              <button
                 onClick={() => {
                   setCelebrationData(null);
                   store.finishWorkout();
                   navigate('/');
-                }} 
+                }}
                 className="btn-primary py-3"
               >
                 Nice – back to it

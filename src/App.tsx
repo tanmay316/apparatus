@@ -8,6 +8,11 @@ import { Toast } from '@/components/ui/Toast';
 import { UpdateNotifier } from '@/components/ui/UpdateNotifier';
 import { useUIStore } from '@/stores/ui-store';
 
+import { App as CapacitorApp } from '@capacitor/app';
+import { SplashScreen } from '@capacitor/splash-screen';
+import { CapacitorUpdater } from '@capgo/capacitor-updater';
+import { OTAUpdater } from '@/components/ui/OTAUpdater';
+
 const AuthPage = lazy(() => import('@/pages/AuthPage').then(m => ({ default: m.AuthPage })));
 const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
@@ -78,11 +83,34 @@ function PreferencesSync() {
     document.documentElement.lang = language;
   }, [theme, language]);
 
-  // Wake up backend (Render free tier sleeps after 15m)
+  // Wake up backend and handle Capacitor global events
   useEffect(() => {
     const apiBase = import.meta.env.VITE_NUTRITION_API_URL || 'http://localhost:8000/api/v1';
     fetch(`${apiBase}/health`)
       .catch(e => console.debug('Backend wakeup ping failed', e));
+
+    // Hide Splash Screen immediately once React mounts to prevent double-loading screens
+    SplashScreen.hide().catch(() => {});
+
+    // Notify Capgo that the app is ready so it doesn't rollback updates
+    if (CapacitorApp) {
+      CapacitorUpdater.notifyAppReady().catch(() => {});
+    }
+
+    // Hardware back button for Android
+    const backListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      // If we are not at the root route and can go back, pop the history
+      if (window.location.pathname !== '/' && window.location.pathname !== '/auth') {
+        window.history.back();
+      } else {
+        // Otherwise natively exit the app
+        CapacitorApp.exitApp();
+      }
+    });
+
+    return () => {
+      backListener.then(l => l.remove());
+    };
   }, []);
 
   return null;
@@ -122,6 +150,7 @@ export function App() {
           </Routes>
         </Suspense>
         <UpdateNotifier />
+        <OTAUpdater />
         <Toast />
       </BrowserRouter>
     </QueryClientProvider>

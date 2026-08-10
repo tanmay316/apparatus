@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Save, Plus, GripVertical, Play, X, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -145,6 +145,7 @@ function ExerciseSection({
 
 export function DayView() {
   const { planId, dayId } = useParams<{ planId: string, dayId: string }>();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
@@ -189,11 +190,8 @@ export function DayView() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-24">
       <div className="flex items-center justify-between mb-6">
-        <Link to={`/plans/${planId}`} className="inline-flex items-center gap-2 text-sm text-bone-dim hover:text-bone transition-colors">
-          <ArrowLeft size={16} /> Back to Plan
-        </Link>
-        <button className="btn-primary flex items-center gap-2 bg-sienna text-bone hover:bg-sienna/80">
-          <Play size={16} fill="currentColor"/> Start Workout
+        <button onClick={() => navigate(-1)} className="inline-flex items-center gap-2 text-sm text-bone-dim hover:text-bone transition-colors">
+          <ArrowLeft size={16} /> Back
         </button>
       </div>
 
@@ -220,6 +218,12 @@ export function DayView() {
             {day.skill && <div className="font-mono text-sienna text-sm mt-1">{day.skill}</div>}
           </div>
         )}
+
+        <div className="mt-8">
+          <Link to={`/workout/${planId}/day/${dayId}`} className="flex items-center justify-center gap-3 w-full py-4 bg-sienna text-bone font-bold text-lg rounded-xl hover:bg-sienna/90 transition-all shadow-lg shadow-sienna/20">
+            <Play size={20} fill="currentColor"/> Start Workout
+          </Link>
+        </div>
       </div>
 
       <ExerciseSection title="Warm-up" exercises={day.warmup || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ warmup: exs })} />

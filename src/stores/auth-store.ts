@@ -182,7 +182,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           set({ loading: false });
           return;
         } catch (nativeErr: any) {
-          console.warn('Native GoogleAuth error, trying web fallback:', nativeErr);
+          console.error('Native GoogleAuth error:', nativeErr);
+          set({ loading: false });
+          const msg = nativeErr?.message || String(nativeErr);
+          if (msg.includes('12500') || msg.includes('APIException')) {
+            useUIStore.getState().showToast('Firebase Error: SHA-1 fingerprint missing in Firebase Console for this Android app.', 'error');
+          } else {
+            useUIStore.getState().showToast(`Native Login Failed: ${msg}`, 'error');
+          }
+          return; // STOP! Don't fallback to web OAuth on Android
         }
       }
 

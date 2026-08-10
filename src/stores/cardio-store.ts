@@ -147,12 +147,13 @@ function attachVisibilityListener() {
       // Page coming back to foreground
       pageHiddenAt = null;
 
-      // Re-acquire wake lock (it's automatically released when screen turns off)
+      // Android/iOS aggressively kill watchPosition when locked.
+      // However, we now have a true Native Foreground Service running in the background,
+      // which automatically holds a native OS Wake Lock and prevents process death.
+      // We no longer need legacy DOM keep-alive intervals or screen wake locks.
+      
       const state = useCardioStore.getState();
       if (state.isTracking && !state.isPaused) {
-        requestWakeLock();
-        
-        // Android/iOS aggressively kill watchPosition when locked.
         // Restart the GPS watch to ensure it's still alive.
         if (watchIdRef !== null) {
           stopGpsWatch().then(() => startGpsWatch());
@@ -164,61 +165,25 @@ function attachVisibilityListener() {
   });
 }
 
-/** A periodic no-op interval that helps keep the browser process alive in background */
-function startKeepAlive() {
-  if (keepAliveIntervalId !== null) return;
-  keepAliveIntervalId = setInterval(() => {
-    // No-op tick — this periodic work keeps the JS event loop alive,
-    // reducing the chance the browser suspends our tab while GPS is active.
-    // We also take this opportunity to re-request wake lock if needed.
-    if (document.visibilityState === 'visible') {
-      const state = useCardioStore.getState();
-      if (state.isTracking && !state.isPaused) {
-        requestWakeLock();
-      }
-    }
-  }, 5000);
-}
-
-function stopKeepAlive() {
-  if (keepAliveIntervalId !== null) {
-    clearInterval(keepAliveIntervalId);
-    keepAliveIntervalId = null;
-  }
-}
-
 import { Geolocation } from '@capacitor/geolocation';
 import { Capacitor } from '@capacitor/core';
 
+// Haversine formula to calculate distance between two lat/lon coordinates in meters
+function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371e3; // Radius of the earth in m
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 // ────────────────────────────────────────────────────────────
-// Global GPS & Wake Lock (lives outside React for persistence)
+// Global GPS (lives outside React for persistence)
 // ────────────────────────────────────────────────────────────
 let watchIdRef: string | number | null = null;
-let wakeLockRef: any = null;
-
-const requestWakeLock = async () => {
-  try {
-    if ('wakeLock' in navigator) {
-      wakeLockRef = await (navigator as any).wakeLock.request('screen');
-      // Re-acquire on release (e.g. screen off on some browsers)
-      wakeLockRef.addEventListener('release', () => {
-        wakeLockRef = null;
-        // Try to re-acquire if still tracking
-        const state = useCardioStore.getState();
-        if (state.isTracking && !state.isPaused) {
-          setTimeout(() => requestWakeLock(), 1000);
-        }
-      });
-    }
-  } catch { /* silent — wake lock can fail if page isn't visible */ }
-};
-
-const releaseWakeLock = () => {
-  if (wakeLockRef) {
-    wakeLockRef.release().catch(() => {});
-    wakeLockRef = null;
-  }
-};
 
 const checkPermissionsNative = async () => {
   try {
@@ -257,6 +222,20 @@ function handleGpsPosition(pos: GeolocationPosition) {
     return; // Reject inaccurate point
   }
 
+  // Distance Filtering (Save RAM & CPU):
+  // Don't store the point if we have moved less than 2 meters from the last raw point.
+  // This heavily reduces array bloat and React re-renders when the user is standing still!
+  if (pointCount > 0) {
+    const lastRawPt = storeState.routePoints[pointCount - 1];
+    const distToLastRaw = getDistanceFromLatLonInMeters(
+      lastRawPt.lat, lastRawPt.lng,
+      pos.coords.latitude, pos.coords.longitude
+    );
+    if (distToLastRaw < 2) {
+      return; 
+    }
+  }
+
   const pt = {
     lat: pos.coords.latitude,
     lng: pos.coords.longitude,
@@ -272,9 +251,7 @@ function handleGpsPosition(pos: GeolocationPosition) {
 export const startGpsWatch = async () => {
   if (watchIdRef !== null) return; // already watching
   
-  requestWakeLock();
   attachVisibilityListener();
-  startKeepAlive();
 
   if (Capacitor.isNativePlatform()) {
     // NATIVE CAPACITOR APP
@@ -286,10 +263,18 @@ export const startGpsWatch = async () => {
     }
     try {
       useCardioStore.setState({ gpsStatus: 'waiting' });
+      
+      // Kickstart the location services by asking for a low-accuracy network fix first.
+      // This often wakes up the GPS chip much faster on Android cold starts.
+      Geolocation.getCurrentPosition({ enableHighAccuracy: false, maximumAge: Infinity }).catch(() => {});
+
       watchIdRef = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 },
+        { enableHighAccuracy: true, maximumAge: 3000 },
         (pos, err) => {
           if (err) {
+            console.warn('[CardioStore] GPS watch error:', err);
+            // Don't set error state immediately on timeout, let it keep trying.
+            if (err.message && err.message.includes('timeout')) return;
             useCardioStore.setState({ gpsStatus: 'error' });
             return;
           }
@@ -334,8 +319,6 @@ export const stopGpsWatch = async () => {
     }
     watchIdRef = null;
   }
-  releaseWakeLock();
-  stopKeepAlive();
 };
 
 // ────────────────────────────────────────────────────────────

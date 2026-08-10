@@ -4,4 +4,5 @@
     <string name="title_activity_main">apparatus</string>
     <string name="package_name">com.tms.apparatus</string>
     <string name="custom_url_scheme">com.tms.apparatus</string>
+    <string name="server_client_id">716398124057-hhg54cto4lnft33chuh0gmb5ofkp4qki.apps.googleusercontent.com</string>
 </resources>

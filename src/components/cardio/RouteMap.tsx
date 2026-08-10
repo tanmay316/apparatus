@@ -4,17 +4,29 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { RoutePoint } from '@/types';
 
-// currentIcon stays as a static icon for live tracking
-const currentIcon = new L.DivIcon({
+// Helper to get high-quality SVG silhouette for cardio type
+const getCardioSvg = (type?: 'walk' | 'run' | 'cycle') => {
+  if (type === 'cycle') {
+    return `<svg xmlns="http://www.w3.org/2000/svg" height="28" viewBox="0 -960 960 960" width="28" fill="#8b5cf6" stroke="white" stroke-width="40" stroke-linejoin="round"><path d="M200-80q-83 0-141.5-58.5T0-280q0-83 58.5-141.5T200-480q83 0 141.5 58.5T400-280q0 83-58.5 141.5T200-80Zm85-115q35-35 35-85t-35-85q-35-35-85-35t-85 35q-35 35-35 85t35 85q35 35 85 35t85-35Zm243-441-96 96 66 69q11 11 16.5 25t5.5 30v176q0 17-11.5 28.5T480-200q-17 0-28.5-11.5T440-240v-160L312-512q-12-11-18-25.5t-6-30.5q0-16 6.5-30.5T312-624l112-112q12-12 27.5-18t32.5-6q17 0 32.5 6t27.5 18l76 76q23 23 50.5 37.5T729-603q17 3 26.5 16t6.5 30q-3 17-16 26.5t-30 6.5q-45-8-84.5-28T560-604l-32-32Zm35.5-127.5Q540-787 540-820t23.5-56.5Q587-900 620-900t56.5 23.5Q700-853 700-820t-23.5 56.5Q653-740 620-740t-56.5-23.5ZM760-80q-83 0-141.5-58.5T560-280q0-83 58.5-141.5T760-480q83 0 141.5 58.5T960-280q0 83-58.5 141.5T760-80Zm85-115q35-35 35-85t-35-85q-35-35-85-35t-85 35q-35 35-35 85t35 85q35 35 85 35t85-35Z"/></svg>`;
+  }
+  if (type === 'run') {
+    return `<svg xmlns="http://www.w3.org/2000/svg" height="28" viewBox="0 -960 960 960" width="28" fill="#8b5cf6" stroke="white" stroke-width="40" stroke-linejoin="round"><path d="M520-80v-200l-84-80-31 138q-4 16-17.5 24.5T358-192l-198-40q-17-3-26-17t-6-31q3-17 17-26.5t31-5.5l152 32 64-324-72 28v96q0 17-11.5 28.5T280-440q-17 0-28.5-11.5T240-480v-122q0-12 6.5-21.5T264-638l134-58q35-15 51.5-19.5T480-720q21 0 39 11t29 29l40 64q21 34 54.5 59t77.5 33q17 3 28.5 15t11.5 29q0 17-11.5 28t-27.5 9q-54-8-101-33.5T540-540l-24 120 72 68q6 6 9 13.5t3 15.5v243q0 17-11.5 28.5T560-40q-17 0-28.5-11.5T520-80Zm-36.5-683.5Q460-787 460-820t23.5-56.5Q507-900 540-900t56.5 23.5Q620-853 620-820t-23.5 56.5Q573-740 540-740t-56.5-23.5Z"/></svg>`;
+  }
+  // Default: walk
+  return `<svg xmlns="http://www.w3.org/2000/svg" height="28" viewBox="0 -960 960 960" width="28" fill="#8b5cf6" stroke="white" stroke-width="40" stroke-linejoin="round"><path d="M436-364 371-72q-3 14-14.5 23T330-40q-20 0-32-15t-8-34l102-515-72 28v96q0 17-11.5 28.5T280-440q-17 0-28.5-11.5T240-480v-122q0-12 6.5-21.5T264-638l178-76q14-6 29.5-7t29.5 4q14 5 26.5 14t20.5 23l40 64q13 20 30.5 38t39.5 31q14 8 31 14.5t34 9.5q16 3 26.5 14.5T760-480q0 17-12 28t-29 9q-56-8-100.5-35T541-543l-25 123 72 68q6 6 9 13.5t3 15.5v243q0 17-11.5 28.5T560-40q-17 0-28.5-11.5T520-80v-220l-84-64Zm47.5-399.5Q460-787 460-820t23.5-56.5Q507-900 540-900t56.5 23.5Q620-853 620-820t-23.5 56.5Q573-740 540-740t-56.5-23.5Z"/></svg>`;
+};
+
+// currentIcon dynamically generated based on type
+const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle') => new L.DivIcon({
   html: `
     <div class="gps-pulse-ring"></div>
-    <div style="width: 20px; height: 20px; background: #3b82f6; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 15px rgba(59,130,246,0.5); display: flex; align-items: center; justify-content: center; position: relative; z-index: 2;">
-      <div style="width: 6px; height: 6px; background: white; border-radius: 50%;"></div>
+    <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; position: relative; z-index: 2; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+      ${getCardioSvg(type)}
     </div>
   `,
   className: 'relative flex items-center justify-center',
-  iconSize: [20, 20],
-  iconAnchor: [10, 10]
+  iconSize: [24, 24],
+  iconAnchor: [12, 12]
 });
 
 // All available map themes with tile URLs
@@ -41,6 +53,10 @@ interface Props {
   noGlow?: boolean;
   isCapturing?: boolean;
   currentLocation?: { lat: number, lng: number } | null;
+  cardioType?: 'walk' | 'run' | 'cycle';
+  hideMarkers?: boolean;
+  mapPaddingBottomRight?: [number, number];
+  mapPaddingTopLeft?: [number, number];
 }
 
 /** Keeps the map centered on the last route point when live tracking or when recenterTrigger changes */
@@ -82,17 +98,34 @@ function MapAutoCenter({ route, recenterTrigger, currentLocation }: { route: Rou
 }
 
 /** Fits the map to the bounds of the entire route (for summary/share views) */
-function FitBounds({ positions }: { positions: [number, number][] }) {
+function FitBounds({ positions, recenterTrigger, paddingBottomRight, paddingTopLeft }: { positions: [number, number][], recenterTrigger?: number, paddingBottomRight?: [number, number], paddingTopLeft?: [number, number] }) {
   const map = useMap();
   const fitted = useRef(false);
+  const lastRecenter = useRef(recenterTrigger);
 
   useEffect(() => {
+    let shouldFit = false;
+    
     if (positions.length > 1 && !fitted.current) {
-      const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+      shouldFit = true;
       fitted.current = true;
     }
-  }, [positions, map]);
+    
+    if (recenterTrigger !== lastRecenter.current) {
+      shouldFit = true;
+    }
+
+    if (shouldFit && positions.length > 1) {
+      const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
+      map.fitBounds(bounds, { 
+        paddingBottomRight: paddingBottomRight || [40, 40],
+        paddingTopLeft: paddingTopLeft || [40, 40],
+        maxZoom: 17 
+      });
+    }
+    
+    lastRecenter.current = recenterTrigger;
+  }, [positions, map, recenterTrigger]);
 
   return null;
 }
@@ -148,7 +181,7 @@ function InjectGradient() {
   return null;
 }
 
-export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false, isCapturing = false, currentLocation }: Props) {
+export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false, isCapturing = false, currentLocation, cardioType, hideMarkers, mapPaddingBottomRight, mapPaddingTopLeft }: Props) {
   const positions: [number, number][] = useMemo(
     () => route.map(p => [p.lat, p.lng]),
     [route]
@@ -180,12 +213,14 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
 
   const endIcon = useMemo(() => new L.DivIcon({
     html: `<div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: ${endColor}; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));">
-      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="currentColor" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
+      ${getCardioSvg(cardioType)}
     </div>`,
     className: '',
     iconSize: [28, 28],
-    iconAnchor: [4, 28]
-  }), [endColor]);
+    iconAnchor: [14, 14]
+  }), [endColor, cardioType]);
+
+  const liveIcon = useMemo(() => getCurrentIcon(cardioType), [cardioType]);
 
   return (
     <div style={{ height, width: '100%', overflow: 'hidden' }} className="relative">
@@ -242,26 +277,26 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
         )}
 
         {/* Start marker */}
-        {positions.length > 0 && (
+        {!hideMarkers && positions.length > 0 && (
           <Marker position={positions[0]} icon={startIcon} />
         )}
 
         {/* Current position marker */}
-        {(isLive || currentLocation) && (
+        {!hideMarkers && (isLive || currentLocation) && (
           currentLocation ? (
-            <Marker position={[currentLocation.lat, currentLocation.lng]} icon={currentIcon} />
+            <Marker position={[currentLocation.lat, currentLocation.lng]} icon={liveIcon} />
           ) : positions.length > 0 ? (
-            <Marker position={positions[positions.length - 1]} icon={currentIcon} />
+            <Marker position={positions[positions.length - 1]} icon={liveIcon} />
           ) : null
         )}
 
         {/* End marker (only in static mode) */}
-        {!isLive && positions.length > 1 && (
+        {!hideMarkers && !isLive && positions.length > 1 && (
           <Marker position={positions[positions.length - 1]} icon={endIcon} />
         )}
 
-        {(isLive || currentLocation) && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} currentLocation={currentLocation} />}
-        {!isLive && positions.length > 1 && <FitBounds positions={positions} />}
+        {(isLive || currentLocation) && !hideMarkers && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} currentLocation={currentLocation} />}
+        {!isLive && positions.length > 1 && <FitBounds positions={positions} recenterTrigger={recenterTrigger} paddingBottomRight={mapPaddingBottomRight} paddingTopLeft={mapPaddingTopLeft} />}
       </MapContainer>
     </div>
   );

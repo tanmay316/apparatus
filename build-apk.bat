@@ -4,16 +4,20 @@ echo   Starting Android APK Build Process
 echo ===================================================
 echo.
 
-echo [1/3] Syncing latest web assets to Android...
+echo [1/4] Building web assets...
+call npm run build
+
+echo.
+echo [2/4] Syncing latest web assets to Android...
 call npx cap sync android
 
 echo.
-echo [2/3] Configuring Java Runtime and Android SDK...
+echo [3/4] Configuring Java Runtime and Android SDK...
 set JAVA_HOME=C:\Program Files\Android\Android Studio\jbr
 set ANDROID_HOME=C:\Users\Tms\AppData\Local\Android\Sdk
 
 echo.
-echo [3/3] Compiling the APK (This may take a minute)...
+echo [4/4] Compiling the APK (This may take a minute)...
 cd android
 call .\gradlew.bat assembleDebug
 cd ..

@@ -7,6 +7,7 @@ import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQueryClient } from '@tanstack/react-query';
 import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification } from '@/utils/notifications';
+import { requestForegroundPermissions, startWorkoutForegroundService, updateWorkoutForegroundService, stopWorkoutForegroundService, setupForegroundServiceListeners } from '@/utils/foreground-service';
 import { useUIStore } from '@/stores/ui-store';
 import { useCardioStore, startGpsWatch, stopGpsWatch } from '@/stores/cardio-store';
 import { usePedometerStore } from '@/stores/pedometer-store';
@@ -135,7 +136,18 @@ export function CardioTracker() {
           ? Date.now() - store.autoPausedAt : 0;
         const totalPause = store.totalPausedMs + store.totalAutoPausedMs + currentAutoPause;
         const raw = Date.now() - store.startedAt! - totalPause;
-        setElapsedSec(Math.max(0, Math.floor(raw / 1000)));
+        const currentSec = Math.max(0, Math.floor(raw / 1000));
+        setElapsedSec(currentSec);
+
+        // Update Foreground Service (Throttle to every 5s to prevent massive Android OS lag)
+        if (currentSec % 5 === 0) {
+          const st = useCardioStore.getState();
+          const type = st.activityType;
+          if (type) {
+            const title = st.isPaused ? 'Workout Paused' : `${type === 'walk' ? 'Walking' : type === 'run' ? 'Running' : 'Cycling'} Live`;
+            updateWorkoutForegroundService('cardio', title, `${formatDuration(currentSec)} • ${st.distanceKm.toFixed(2)} km`, st.isPaused);
+          }
+        }
       }
     }, 1000);
     return () => clearInterval(interval);
@@ -174,6 +186,7 @@ export function CardioTracker() {
     const maxSpeed = store.maxSpeedKmh;
 
     store.stopTracking();
+    stopWorkoutForegroundService();
 
     if (user) {
       endActiveSession(user.uid).catch(console.error);
@@ -225,10 +238,26 @@ export function CardioTracker() {
 
     // Request permission and show ongoing notification
     await requestNotificationPermission();
+    await requestForegroundPermissions();
     showPersistentNotification(
       1001,
       `${type === 'walk' ? 'Walking' : type === 'run' ? 'Running' : 'Cycling'} Session Active`,
       'Apparatus is tracking your cardio session.'
+    );
+    
+    startWorkoutForegroundService('cardio', `${type === 'walk' ? 'Walking' : type === 'run' ? 'Running' : 'Cycling'} Live`, '0:00 • 0.00 km', false);
+    setupForegroundServiceListeners(
+      () => {
+        const st = useCardioStore.getState();
+        if (st.isPaused) st.resumeTracking();
+        else st.pauseTracking();
+      },
+      () => {
+        // In a true headless setup we would save here, but for now just stop tracking.
+        const st = useCardioStore.getState();
+        st.pauseTracking();
+        stopWorkoutForegroundService();
+      }
     );
     
     store.startTracking(type);
@@ -273,6 +302,7 @@ export function CardioTracker() {
     }
 
     store.stopTracking();
+    stopWorkoutForegroundService();
 
     if (user && elapsedSec > 0 && store.distanceKm > 0) {
       endActiveSession(user.uid).catch(console.error);
@@ -467,7 +497,9 @@ export function CardioTracker() {
         
         {/* Background Map */}
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive={false} height="100%" theme={mapLayer} />
+          {store.gpsStatus === 'active' && (
+            <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive={false} height="100%" theme={mapLayer} cardioType={store.activityType as any} />
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg)] via-transparent to-transparent z-[1]" />
         </div>
 
@@ -543,7 +575,7 @@ export function CardioTracker() {
         
         {/* Full Screen Map Background */}
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} />
+          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} cardioType={store.activityType as any} />
         </div>
 
         {/* Top Header */}
@@ -753,7 +785,7 @@ export function CardioTracker() {
           {/* Map (if exists) */}
           {summaryData.route && summaryData.route.length > 1 && (
             <div className="h-[250px] w-full border-b border-line/30 relative">
-              <RouteMap route={summaryData.route} height="100%" />
+              <RouteMap route={summaryData.route} height="100%" cardioType={summaryData.type as any} />
               <div className="absolute inset-0 pointer-events-none shadow-[inset_0_-20px_40px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_-20px_40px_rgba(0,0,0,0.5)] z-10" />
             </div>
           )}

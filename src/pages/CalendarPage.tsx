@@ -262,7 +262,7 @@ export function CalendarPage() {
             <span className="text-[9px] font-mono text-bone-dim uppercase tracking-wider mb-1">Active Plan</span>
             <div className="relative z-10 w-[200px]">
               <CustomSelect
-                className={`w-full ${nmInset}`}
+                className={`w-full rounded-xl ${nmInset}`}
                 value={profile?.activePlanId || ''}
                 onChange={handleActivePlanChange}
                 placeholder="No active plan"

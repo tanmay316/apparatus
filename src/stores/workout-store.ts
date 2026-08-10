@@ -22,6 +22,9 @@ const IDLE_STATE = {
   planTitle: '',
   dayTitle: '',
   startedAt: null,
+  isPaused: false,
+  pausedAt: null,
+  totalPausedMs: 0,
   warmup: [] as Exercise[],
   skillWork: [] as Exercise[],
   strength: [] as Exercise[],
@@ -36,6 +39,9 @@ interface WorkoutState {
   planTitle: string;
   dayTitle: string;
   startedAt: number | null;
+  isPaused: boolean;
+  pausedAt: number | null;
+  totalPausedMs: number;
   
   // Dynamic exercises lists during this workout
   warmup: Exercise[];
@@ -47,6 +53,8 @@ interface WorkoutState {
   
   startWorkout: (plan: Plan, day: PlanDay) => void;
   startTimer: () => void;
+  pauseTimer: () => void;
+  resumeTimer: () => void;
   updateSet: (exerciseName: string, mode: 'reps' | 'hold' | 'freeform', setIndex: number, data: SetData) => void;
   addSet: (exerciseName: string, mode: 'reps' | 'hold' | 'freeform') => void;
   removeSet: (exerciseName: string, setIndex: number) => void;
@@ -99,6 +107,9 @@ export const useWorkoutStore = create<WorkoutState>()(
           planTitle: plan.title,
           dayTitle: day.title,
           startedAt: null,
+          isPaused: false,
+          pausedAt: null,
+          totalPausedMs: 0,
           warmup: day.warmup || [],
           skillWork: day.skillWork || [],
           strength: day.strength || [],
@@ -108,7 +119,18 @@ export const useWorkoutStore = create<WorkoutState>()(
       },
 
       startTimer: () => {
-        set({ startedAt: Date.now() });
+        set({ startedAt: Date.now(), isPaused: false, pausedAt: null, totalPausedMs: 0 });
+      },
+
+      pauseTimer: () => {
+        set({ isPaused: true, pausedAt: Date.now() });
+      },
+
+      resumeTimer: () => {
+        const { pausedAt, totalPausedMs } = get();
+        if (pausedAt) {
+          set({ isPaused: false, pausedAt: null, totalPausedMs: totalPausedMs + (Date.now() - pausedAt) });
+        }
       },
 
       updateSet: (exerciseName, mode, setIndex, data) => {
