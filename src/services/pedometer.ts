@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { CapacitorPedometer as NativePedometer } from '@capgo/capacitor-pedometer';
 
-export type StepUpdateCallback = (steps: number) => void;
+export type StepUpdateCallback = (steps: number, isNative: boolean) => void;
 
 class PedometerService {
   private isNative: boolean;
@@ -55,7 +55,7 @@ class PedometerService {
         // Native pedometer usually resets daily or we must keep track of diffs
         // We'll listen for step events if supported
         (NativePedometer as any).addListener('measurement', (data: any) => {
-          if (this.callback) this.callback(data.numberOfSteps || 1);
+          if (this.callback) this.callback(data.numberOfSteps || 1, true);
         });
       } catch (err) {
         console.error('Failed to start native pedometer:', err);
@@ -109,7 +109,7 @@ class PedometerService {
         lastPeakTime = now;
         if (this.callback) {
           // For web fallback, pass total step count for the current session
-          this.callback(this.webSteps);
+          this.callback(this.webSteps, false);
         }
       }
       lastMag = mag;

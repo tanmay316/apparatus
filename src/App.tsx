@@ -55,8 +55,15 @@ function LoadingScreen() {
           className="w-32 h-auto mb-8 animate-[pulse_3s_ease-in-out_infinite] mix-blend-multiply opacity-90"
           style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
         />
-        <div className="w-8 h-8 border-[3px] border-ink/20 border-t-ink/80 rounded-full animate-spin" />
       </div>
+    </div>
+  );
+}
+
+function PageLoader() {
+  return (
+    <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
+      <div className="w-8 h-8 border-[3px] border-ink/20 border-t-ink/80 rounded-full animate-spin" />
     </div>
   );
 }
@@ -134,7 +141,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <PreferencesSync />
       <BrowserRouter>
-        <Suspense fallback={<LoadingScreen />}>
+        <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/auth" element={<PublicOnly><AuthPage /></PublicOnly>} />
             <Route element={<RequireAuth><Layout /></RequireAuth>}>

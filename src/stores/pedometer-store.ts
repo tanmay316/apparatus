@@ -54,19 +54,17 @@ export const usePedometerStore = create<PedometerState>()(
 
         set({ sessionSteps: 0, isSupported: true, isSessionActive: true, nativeInitialSteps: null });
         
-        pedometerService.start((steps) => {
+        pedometerService.start((steps, isNative) => {
           // 'steps' could be absolute daily steps from native or absolute session steps from web
           const state = get();
           if (!state.isSessionActive) return;
 
           if (typeof steps === 'number') {
-            // Check if it's the web fallback which starts from 1
-            // or native which might return 5430.
-            if (steps < 1000 && state.nativeInitialSteps === null && steps <= 2) {
-               // Likely web fallback
+            if (!isNative) {
+               // Web fallback (starts from 1, relative to session)
                set({ sessionSteps: steps });
             } else {
-               // Likely native absolute steps
+               // Native (often absolute steps since boot/midnight, so we must track the diff)
                if (state.nativeInitialSteps === null) {
                  set({ nativeInitialSteps: steps, sessionSteps: 0 });
                } else {
