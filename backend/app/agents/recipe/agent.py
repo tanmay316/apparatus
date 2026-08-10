@@ -60,9 +60,9 @@ class RecipeAgent:
         if goal:
             constraints.append(f"Fitness goal: {goal}")
         if calorie_target:
-            constraints.append(f"Target calories per serving: ~{calorie_target:.0f} kcal")
+            constraints.append(f"User's TOTAL DAILY calorie goal: ~{calorie_target:.0f} kcal. Make this single recipe a realistic portion of their day (e.g., 25-30% of daily total if it's a main meal).")
         if protein_target:
-            constraints.append(f"Target protein per serving: ~{protein_target:.0f}g")
+            constraints.append(f"User's TOTAL DAILY protein goal: ~{protein_target:.0f}g. Ensure this single meal is high protein but a realistic fraction of their daily total (e.g., 25-35%).")
 
         constraint_str = "\n".join(f"- {c}" for c in constraints) if constraints else "None"
 
