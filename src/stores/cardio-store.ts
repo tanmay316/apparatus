@@ -211,9 +211,9 @@ function handleGpsPosition(pos: GeolocationPosition) {
 
   // ── GPS Warmup: discard early inaccurate points ──────────
   // When GPS first starts, the first few readings can be wildly off.
-  // Wait until we get a reading with accuracy < 30m before recording.
+  // Wait until we get a reading with accuracy < 80m before recording.
   const pointCount = storeState.routePoints.length;
-  if (pointCount < 5 && accuracy > 30) {
+  if (pointCount < 5 && accuracy > 80) {
     return; // Skip inaccurate warmup readings
   }
 
