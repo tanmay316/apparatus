@@ -12,6 +12,7 @@ import { usePedometerStore } from '@/stores/pedometer-store';
 import { googleProvider } from '@/lib/firebase';
 import { deleteAccountData, deleteAvatar, downloadJson, exportAccountData, resetUserData, uploadAvatar } from '@/services/account';
 import { getAvatarUrl } from '@/lib/avatar';
+import type { UserProfile } from '@/types';
 
 const container = {
   hidden: { opacity: 0 },
@@ -37,7 +38,7 @@ export function SettingsPage() {
   return <SettingsForm profile={profile} />;
 }
 
-function SettingsForm({ profile }: { profile: any }) {
+function SettingsForm({ profile }: { profile: any }) { console.log('PROFILE DATA:', profile);
   const { user, updateProfile, signOut } = useAuthStore();
   const { showToast, theme, setTheme, units, setUnits, language, setLanguage } = useUIStore();
   const { backgroundEnabled, toggleBackground, isSupported: pedometerSupported } = usePedometerStore();
@@ -65,8 +66,6 @@ function SettingsForm({ profile }: { profile: any }) {
   const [showClans, setShowClans] = useState(profile.privacySettings?.showClansToFollowers !== false);
   const [showStats, setShowStats] = useState(profile.privacySettings?.showStatsToFollowers !== false);
 
-  const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -78,41 +77,11 @@ function SettingsForm({ profile }: { profile: any }) {
     setWeight(profile.weight == null ? '' : (units === 'imperial' ? (profile.weight * 2.20462).toFixed(1) : profile.weight.toString()));
   }, [units, profile]);
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setSuccess(false);
-
+  const handleSaveField = async (updates: Partial<UserProfile & { stepGoal?: number }>) => {
     try {
-      await updateProfile({
-        displayName,
-        photoURL,
-        bio,
-        height: height ? (units === 'imperial' ? parseFloat(height) * 2.54 : parseFloat(height)) : null,
-        weight: weight ? (units === 'imperial' ? parseFloat(weight) / 2.20462 : parseFloat(weight)) : null,
-        age: age ? parseInt(age) : null,
-        gender,
-        fitnessGoal,
-        experienceLevel: experienceLevel as 'beginner' | 'intermediate' | 'advanced',
-        preferredWorkoutType,
-        isPublic: profileVisibility === 'public',
-        stepGoal: parseInt(stepGoal) || 10000,
-        privacySettings: {
-          profileVisibility,
-          showEventsToFollowers: showEvents,
-          showClansToFollowers: showClans,
-          showStatsToFollowers: showStats
-        }
-      });
-
-      setSuccess(true);
-      showToast('Settings saved successfully!');
-      setTimeout(() => setSuccess(false), 3000);
+      await updateProfile(updates);
     } catch (err: any) {
-      console.error(err);
-      showToast(err.message || 'Failed to save settings.', 'error');
-    } finally {
-      setSaving(false);
+      showToast(err.message || 'Failed to save', 'error');
     }
   };
 
@@ -218,10 +187,10 @@ function SettingsForm({ profile }: { profile: any }) {
         </div>
       </motion.div>
 
-      <form onSubmit={handleSave} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* left: Profile settings */}
-          <motion.div variants={item} className="card p-5 md:col-span-2 space-y-4">
+      <div className="space-y-6">
+        <div className="space-y-6">
+          {/* Profile settings */}
+          <motion.div variants={item} className="card p-5 space-y-4">
             <div className="flex items-center gap-2 pb-2 border-b border-line/30 mb-2">
               <User size={18} className="text-sienna" />
               <h3 className="font-display text-base uppercase tracking-wide text-bone">Profile Details</h3>
@@ -236,6 +205,7 @@ function SettingsForm({ profile }: { profile: any }) {
                   className="input-field bg-ink-2"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
+                  onBlur={() => handleSaveField({ displayName })}
                 />
               </div>
               <div>
@@ -257,6 +227,7 @@ function SettingsForm({ profile }: { profile: any }) {
                 placeholder="https://example.com/avatar.jpg"
                 value={photoURL}
                 onChange={(e) => setPhotoURL(e.target.value)}
+                onBlur={() => handleSaveField({ photoURL })}
               />
               <div className="flex flex-wrap items-center gap-3 mt-2">
                 <label className="btn-secondary py-2 text-xs inline-flex items-center gap-2 cursor-pointer">
@@ -274,41 +245,13 @@ function SettingsForm({ profile }: { profile: any }) {
                 placeholder="Tell other athletes about your training goals..."
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
+                onBlur={() => handleSaveField({ bio })}
               />
             </div>
             
             <PersonalAISettings />
           </motion.div>
 
-          {/* right: Avatar preview & Actions */}
-          <motion.div variants={item} className="card p-5 md:col-span-1 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="relative group">
-              <img
-                src={photoURL || getAvatarUrl(displayName, theme, 128)}
-                alt={displayName}
-                className="w-24 h-24 rounded-full border-2 border-sienna object-cover"
-                referrerPolicy="no-referrer"
-              />
-            </div>
-            <div>
-              <h4 className="font-display text-lg">{displayName}</h4>
-              <p className="font-mono text-xs text-bone-dim">@{profile.username}</p>
-            </div>
-            <div className="w-full pt-4 border-t border-line/30 space-y-3">
-              {success && (
-                <div className="text-xs text-sienna font-mono bg-sienna/10 p-2 rounded border border-sienna/20 flex items-center justify-center gap-1">
-                  <Check size={14} /> Saved successfully!
-                </div>
-              )}
-              <button
-                type="submit"
-                disabled={saving}
-                className="btn-primary w-full py-2 flex items-center justify-center gap-2"
-              >
-                <Save size={16} /> {saving ? 'Saving...' : 'Save Settings'}
-              </button>
-            </div>
-          </motion.div>
         </div>
 
         {/* Physical Details & Fitness */}
@@ -327,6 +270,7 @@ function SettingsForm({ profile }: { profile: any }) {
                 className="input-field bg-ink-2 font-mono"
                 value={height}
                 onChange={(e) => setHeight(e.target.value)}
+                onBlur={() => handleSaveField({ height: height ? (units === 'imperial' ? parseFloat(height) * 2.54 : parseFloat(height)) : null })}
               />
             </div>
             <div>
@@ -338,6 +282,7 @@ function SettingsForm({ profile }: { profile: any }) {
                 className="input-field bg-ink-2 font-mono"
                 value={weight}
                 onChange={(e) => setWeight(e.target.value)}
+                onBlur={() => handleSaveField({ weight: weight ? (units === 'imperial' ? parseFloat(weight) / 2.20462 : parseFloat(weight)) : null })}
               />
             </div>
             <div>
@@ -348,6 +293,7 @@ function SettingsForm({ profile }: { profile: any }) {
                 className="input-field bg-ink-2 font-mono"
                 value={age}
                 onChange={(e) => setAge(e.target.value)}
+                onBlur={() => handleSaveField({ age: age ? parseInt(age) : null })}
               />
             </div>
             <div>
@@ -355,7 +301,7 @@ function SettingsForm({ profile }: { profile: any }) {
               <CustomSelect
                 className="w-full"
                 value={gender}
-                onChange={setGender}
+                onChange={(val) => { setGender(val); handleSaveField({ gender: val }); }}
                 options={GENDERS.map(g => ({ value: g, label: g || 'Select Gender' }))}
               />
             </div>
@@ -367,7 +313,7 @@ function SettingsForm({ profile }: { profile: any }) {
               <CustomSelect
                 className="w-full"
                 value={fitnessGoal}
-                onChange={setFitnessGoal}
+                onChange={(val) => { setFitnessGoal(val); handleSaveField({ fitnessGoal: val }); }}
                 options={FITNESS_GOALS.map(g => ({ value: g, label: g || 'Select Goal' }))}
               />
             </div>
@@ -376,7 +322,11 @@ function SettingsForm({ profile }: { profile: any }) {
               <CustomSelect
                 className="w-full capitalize"
                 value={experienceLevel}
-                onChange={(val) => setExperienceLevel(val as 'beginner' | 'intermediate' | 'advanced')}
+                onChange={(val) => {
+                  const level = val as 'beginner' | 'intermediate' | 'advanced';
+                  setExperienceLevel(level);
+                  handleSaveField({ experienceLevel: level });
+                }}
                 options={[
                   { value: 'beginner', label: 'Beginner' },
                   { value: 'intermediate', label: 'Intermediate' },
@@ -392,6 +342,7 @@ function SettingsForm({ profile }: { profile: any }) {
                 className="input-field bg-ink-2"
                 value={preferredWorkoutType}
                 onChange={(e) => setPreferredWorkoutType(e.target.value)}
+                onBlur={() => handleSaveField({ preferredWorkoutType })}
               />
             </div>
           </div>
@@ -410,7 +361,19 @@ function SettingsForm({ profile }: { profile: any }) {
               <CustomSelect
                 className="w-full"
                 value={profileVisibility}
-                onChange={(val) => setProfileVisibility(val as any)}
+                onChange={(val) => {
+                  const newValue = val as 'public' | 'followers' | 'private';
+                  setProfileVisibility(newValue);
+                  handleSaveField({
+                    isPublic: newValue === 'public',
+                    privacySettings: {
+                      profileVisibility: newValue,
+                      showEventsToFollowers: showEvents,
+                      showClansToFollowers: showClans,
+                      showStatsToFollowers: showStats
+                    }
+                  });
+                }}
                 options={[
                   { value: 'public', label: 'Public (Everyone can follow & view)' },
                   { value: 'followers', label: 'Followers Only (Must follow to view)' },
@@ -425,21 +388,39 @@ function SettingsForm({ profile }: { profile: any }) {
             <div className="pt-2 space-y-3">
               <label className="label">Profile Features (For Followers)</label>
               <label className="flex items-start gap-3 cursor-pointer group">
-                <input type="checkbox" className="mt-1 accent-sienna" checked={showEvents} onChange={(e) => setShowEvents(e.target.checked)} />
+                <input type="checkbox" className="mt-1 accent-sienna" checked={showEvents} onChange={(e) => {
+                  const checked = e.target.checked;
+                  setShowEvents(checked);
+                  handleSaveField({
+                    privacySettings: { profileVisibility, showEventsToFollowers: checked, showClansToFollowers: showClans, showStatsToFollowers: showStats }
+                  });
+                }} />
                 <div>
                   <span className="text-sm font-bold text-bone">Show Events & Competitions</span>
                   <p className="text-[10px] text-bone-dim leading-tight">Display your event ranks and registrations on your profile.</p>
                 </div>
               </label>
               <label className="flex items-start gap-3 cursor-pointer group">
-                <input type="checkbox" className="mt-1 accent-sienna" checked={showClans} onChange={(e) => setShowClans(e.target.checked)} />
+                <input type="checkbox" className="mt-1 accent-sienna" checked={showClans} onChange={(e) => {
+                  const checked = e.target.checked;
+                  setShowClans(checked);
+                  handleSaveField({
+                    privacySettings: { profileVisibility, showEventsToFollowers: showEvents, showClansToFollowers: checked, showStatsToFollowers: showStats }
+                  });
+                }} />
                 <div>
                   <span className="text-sm font-bold text-bone">Show Clan Affiliations</span>
                   <p className="text-[10px] text-bone-dim leading-tight">Display the clans you belong to and your roles.</p>
                 </div>
               </label>
               <label className="flex items-start gap-3 cursor-pointer group">
-                <input type="checkbox" className="mt-1 accent-sienna" checked={showStats} onChange={(e) => setShowStats(e.target.checked)} />
+                <input type="checkbox" className="mt-1 accent-sienna" checked={showStats} onChange={(e) => {
+                  const checked = e.target.checked;
+                  setShowStats(checked);
+                  handleSaveField({
+                    privacySettings: { profileVisibility, showEventsToFollowers: showEvents, showClansToFollowers: showClans, showStatsToFollowers: checked }
+                  });
+                }} />
                 <div>
                   <span className="text-sm font-bold text-bone">Show Overall Stats</span>
                   <p className="text-[10px] text-bone-dim leading-tight">Display your total workouts, calories, and streaks.</p>
@@ -518,6 +499,7 @@ function SettingsForm({ profile }: { profile: any }) {
                   className="input-field bg-ink-2 max-w-[150px]"
                   value={stepGoal}
                   onChange={(e) => setLocalStepGoal(e.target.value)}
+                  onBlur={() => handleSaveField({ stepGoal: parseInt(stepGoal) || 10000 })}
                   min="1000"
                   step="500"
                 />
@@ -565,7 +547,7 @@ function SettingsForm({ profile }: { profile: any }) {
             </button>
           </div>
         </motion.div>
-      </form>
+      </div>
     </motion.div>
   );
 }

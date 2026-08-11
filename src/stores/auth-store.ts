@@ -210,6 +210,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     try {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
+          GoogleAuth.initialize();
+          await GoogleAuth.signOut();
+        } catch (e) {
+          console.error('Failed to sign out of native GoogleAuth:', e);
+        }
+      }
       await firebaseSignOut(auth);
       set({ user: null, profile: null, stats: null });
     } catch (error) {

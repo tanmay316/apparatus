@@ -17,22 +17,15 @@ export function Topbar() {
   const { toggleSidebar, theme } = useUIStore();
   const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [searchFocused, setSearchFocused] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   const queryClient = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
-  const searchRef = useRef<HTMLDivElement>(null);
 
   // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setNotificationsOpen(false);
-      }
-      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
-        setSearchFocused(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -46,47 +39,7 @@ export function Topbar() {
     navigate('/auth');
   };
 
-  // ─── Semantic Search Logic ───────────────────────────────
-
-  // 1. Local Exercise Library Search
-  const matchingExercises = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return COMPACT_LIBRARY.filter(ex =>
-      ex.name.toLowerCase().includes(q) ||
-      ex.muscleGroup.toLowerCase().includes(q) ||
-      ex.equipment.toLowerCase().includes(q) ||
-      ex.tags?.some(t => t.toLowerCase().includes(q))
-    ).slice(0, 5);
-  }, [searchQuery]);
-
-  // 2. Sample Plans Query
-  const { data: samplePlans = [] } = useQuery({
-    queryKey: ['samplePlansSearch'],
-    queryFn: getSamplePlans,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const matchingPlans = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return samplePlans.filter(p =>
-      p.title.toLowerCase().includes(q) ||
-      p.description?.toLowerCase().includes(q) ||
-      p.tags?.some(t => t.toLowerCase().includes(q))
-    ).slice(0, 4);
-  }, [searchQuery, samplePlans]);
-
-  // 3. Athlete Search Query
-  const { data: matchingAthletes = [] } = useQuery({
-    queryKey: ['searchUsers', searchQuery],
-    queryFn: () => searchUsers(searchQuery),
-    enabled: searchQuery.trim().length >= 2,
-    staleTime: 30 * 1000,
-  });
-
-  const hasSearchQuery = searchQuery.trim().length >= 1;
-  const hasSearchResults = matchingExercises.length > 0 || matchingPlans.length > 0 || matchingAthletes.length > 0;
+  // ─── Semantic Search Logic (Moved to SearchPage) ───
 
   // ─── Notifications Listener ─────────────────────────────────
   const { data: notifications = [] } = useQuery({
@@ -170,136 +123,23 @@ export function Topbar() {
           </Link>
         </div>
 
-        {/* Center — Desktop Semantic Search Bar */}
-        <div className="flex-1 max-w-md mx-auto relative hidden md:block" ref={searchRef}>
+        {/* Center — Desktop Search Bar Redirect */}
+        <div className="flex-1 max-w-md mx-auto relative hidden md:block">
           <div
-            className={`flex items-center gap-2.5 h-9 px-3.5 rounded-xl border transition-all duration-200 ${
-              searchFocused
-                ? 'border-bone/40 bg-ink-2 shadow-[0_0_16px_rgba(0,0,0,0.08)]'
-                : 'border-line bg-white/[0.03]'
-            }`}
+            className="flex items-center gap-2.5 h-9 px-3.5 rounded-xl border border-line bg-white/[0.03] hover:border-bone/40 cursor-pointer transition-all duration-200"
+            onClick={() => navigate('/search')}
           >
             <Search size={14} className="text-bone-dim shrink-0" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search exercises, plans, athletes…"
-              className="bg-transparent text-xs text-bone placeholder:text-bone-dim/60 outline-none w-full font-mono"
-              onFocus={() => setSearchFocused(true)}
-            />
-            {searchQuery ? (
-              <button onClick={() => setSearchQuery('')} className="text-bone-dim hover:text-bone">
-                <X size={13} />
-              </button>
-            ) : (
-              <kbd className="hidden lg:inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono text-bone-dim/50 border border-line rounded">⌘K</kbd>
-            )}
+            <span className="text-xs text-bone-dim/60 flex-1 font-mono">Search app...</span>
+            <kbd className="hidden lg:inline-flex items-center px-1.5 py-0.5 text-[9px] font-mono text-bone-dim/50 border border-line rounded">⌘K</kbd>
           </div>
-
-          {/* Semantic Search Results Dropdown */}
-          {searchFocused && hasSearchQuery && (
-            <div
-              className="absolute left-0 right-0 top-11 rounded-2xl border border-line shadow-2xl z-[80] overflow-hidden max-h-[420px] overflow-y-auto divide-y divide-line/30 bg-ink-2/95 backdrop-blur-xl"
-            >
-              {!hasSearchResults ? (
-                <div className="p-4 text-center text-xs text-bone-dim font-mono">
-                  No matching exercises, plans, or athletes found.
-                </div>
-              ) : (
-                <>
-                  {/* Athletes */}
-                  {matchingAthletes.length > 0 && (
-                    <div className="p-3">
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-bone tracking-wider uppercase mb-2">
-                        <User size={12} /> Athletes ({matchingAthletes.length})
-                      </div>
-                      <div className="space-y-1">
-                        {matchingAthletes.map((athlete: any) => (
-                          <Link
-                            key={athlete.uid}
-                            to={`/profile/${athlete.username || athlete.uid}`}
-                            onClick={() => setSearchFocused(false)}
-                            className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group"
-                          >
-                            <img
-                              src={athlete.photoURL || getAvatarUrl(athlete.displayName, theme)}
-                              alt={athlete.displayName}
-                              className="w-7 h-7 rounded-full object-cover border border-line"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs text-bone font-medium truncate group-hover:text-bone transition-colors">{athlete.displayName}</div>
-                              <div className="text-[10px] font-mono text-bone-dim truncate">@{athlete.username || 'athlete'}</div>
-                            </div>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Plans */}
-                  {matchingPlans.length > 0 && (
-                    <div className="p-3">
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-bone tracking-wider uppercase mb-2">
-                        <BookOpen size={12} /> Training Plans ({matchingPlans.length})
-                      </div>
-                      <div className="space-y-1">
-                        {matchingPlans.map((plan) => (
-                          <Link
-                            key={plan.id}
-                            to={`/plans/${plan.id}`}
-                            onClick={() => setSearchFocused(false)}
-                            className="flex items-center justify-between p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group"
-                          >
-                            <div>
-                              <div className="text-xs text-bone font-medium group-hover:text-bone transition-colors">{plan.title}</div>
-                              <div className="text-[10px] font-mono text-bone-dim">{plan.daysPerWeek} days/week · {plan.estimatedDuration || 'Custom'}</div>
-                            </div>
-                            <span className="text-[10px] font-mono text-bone bg-bone/10 px-2 py-0.5 rounded-full">View</span>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Exercises */}
-                  {matchingExercises.length > 0 && (
-                    <div className="p-3">
-                      <div className="flex items-center gap-1.5 font-mono text-[10px] text-bone tracking-wider uppercase mb-2">
-                        <Dumbbell size={12} /> Exercises ({matchingExercises.length})
-                      </div>
-                      <div className="space-y-1">
-                        {matchingExercises.map((ex, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => {
-                              setSearchFocused(false);
-                              const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.youtubeSearch || (ex.name + ' form tutorial'))}`;
-                              if (Capacitor.isNativePlatform()) { Browser.open({ url, presentationStyle: 'popover' }); } else { window.open(url, '_blank'); }
-                            }}
-                            className="flex items-center justify-between p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group w-full text-left"
-                          >
-                            <div>
-                              <div className="text-xs text-bone font-medium group-hover:text-bone transition-colors">{ex.name}</div>
-                              <div className="text-[10px] font-mono text-bone-dim">{ex.muscleGroup} · {ex.equipment}</div>
-                            </div>
-                            <ExternalLink size={12} className="text-bone-dim/50 group-hover:text-bone" />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
         </div>
 
-        {/* Right — Search button (mobile), Notifications, Settings, Sign Out, Avatar */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        {/* Right — Actions & Profile */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Mobile search toggle button */}
           <button
-            onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+            onClick={() => navigate('/search')}
             className="md:hidden w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-line text-bone-dim hover:text-bone flex items-center justify-center transition-colors"
             aria-label="Search"
           >
@@ -374,86 +214,6 @@ export function Topbar() {
           )}
         </div>
       </div>
-
-      {/* Mobile Search Overlay Bar */}
-      {mobileSearchOpen && (
-        <div className="md:hidden border-t border-line p-3 bg-ink-2/95 backdrop-blur-md">
-          <div className="flex items-center gap-2 h-9 px-3 rounded-xl border border-bone/40 bg-ink">
-            <Search size={14} className="text-bone shrink-0" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search exercises, plans, athletes…"
-              className="bg-transparent text-xs text-bone outline-none w-full font-mono"
-              autoFocus
-            />
-            <button onClick={() => { setMobileSearchOpen(false); setSearchQuery(''); }} className="text-bone-dim">
-              <X size={14} />
-            </button>
-          </div>
-
-          {hasSearchQuery && (
-            <div className="mt-2 rounded-xl border border-white/[0.08] bg-ink-2 p-2 max-h-72 overflow-y-auto space-y-3">
-              {matchingAthletes.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-mono text-bone uppercase mb-1 px-1.5">Athletes</div>
-                  {matchingAthletes.map((athlete: any) => (
-                    <Link
-                      key={athlete.uid}
-                      to={`/profile/${athlete.username || athlete.uid}`}
-                      onClick={() => setMobileSearchOpen(false)}
-                      className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group"
-                    >
-                      <img
-                        src={athlete.photoURL || getAvatarUrl(athlete.displayName, theme)}
-                        alt={athlete.displayName}
-                        className="w-7 h-7 rounded-full object-cover border border-line"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs text-bone font-medium truncate group-hover:text-bone transition-colors">{athlete.displayName}</div>
-                        <div className="text-[10px] font-mono text-bone-dim truncate">@{athlete.username || 'athlete'}</div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-              {matchingPlans.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-mono text-bone uppercase mb-1 px-1.5">Plans</div>
-                  {matchingPlans.map(plan => (
-                    <Link
-                      key={plan.id}
-                      to={`/plans/${plan.id}`}
-                      onClick={() => setMobileSearchOpen(false)}
-                      className="block p-1.5 text-xs text-bone hover:text-bone font-mono truncate px-2"
-                    >
-                      {plan.title}
-                    </Link>
-                  ))}
-                </div>
-              )}
-              {matchingExercises.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-mono text-bone uppercase mb-1 px-1.5">Exercises</div>
-                  {matchingExercises.map((ex, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.youtubeSearch || (ex.name + ' form tutorial'))}`;
-                        if (Capacitor.isNativePlatform()) { Browser.open({ url, presentationStyle: 'popover' }); } else { window.open(url, '_blank'); }
-                      }}
-                      className="block p-1.5 px-2 text-xs text-bone hover:text-bone font-mono truncate w-full text-left"
-                    >
-                      {ex.name} <span className="text-[10px] text-bone-dim ml-1">({ex.muscleGroup})</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
     </header>
   );
 }

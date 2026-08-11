@@ -35,6 +35,7 @@ const SettingsPage = lazy(() => import('@/pages/SettingsPage').then(m => ({ defa
 const GuidePage = lazy(() => import('@/pages/GuidePage').then(m => ({ default: m.GuidePage })));
 const CardioTracker = lazy(() => import('@/pages/CardioTracker').then(m => ({ default: m.CardioTracker })));
 const SinglePostPage = lazy(() => import('@/pages/SinglePostPage').then(m => ({ default: m.SinglePostPage })));
+const SearchPage = lazy(() => import('@/pages/SearchPage').then(m => ({ default: m.SearchPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -181,6 +182,7 @@ export function App() {
               <Route path="measurements" element={<MeasurementsPage />} />
               <Route path="achievements" element={<AchievementsPage />} />
               <Route path="explore" element={<ExplorePage />} />
+              <Route path="search" element={<SearchPage />} />
               <Route path="cardio" element={<CardioTracker />} />
               <Route path="feed" element={<FeedPage />} />
               <Route path="post/:id" element={<SinglePostPage />} />

@@ -281,6 +281,17 @@ export async function getActivity(activityId: string): Promise<Activity | null> 
   return snap.exists() ? ({ id: snap.id, ...snap.data() } as Activity) : null;
 }
 
+export async function getPublicActivities(limitCount = 100): Promise<Activity[]> {
+  const q = query(
+    collection(db, 'activities'),
+    where('visibility', '==', 'public'),
+    orderBy('createdAt', 'desc'),
+    limit(limitCount)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity));
+}
+
 export async function getFeed(userId: string, followingUids: string[]): Promise<Activity[]> {
   // Keep each query scoped to one owner so Firestore can prove the followers-only
   // rule. A server-side fan-out worker can materialize a feed later without

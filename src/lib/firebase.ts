@@ -39,6 +39,7 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // Admin email — loaded from environment variable for flexibility
 export const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
