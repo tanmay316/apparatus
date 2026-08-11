@@ -11,14 +11,23 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
     ? activity.route.filter((_, i) => i % Math.ceil(activity.route.length / 500) === 0)
     : activity.route;
 
-  await setDoc(ref, {
+  const dataToSave = {
     ...activity,
     id,
     route,
     startedAt: activity.startedAt || Timestamp.now(),
     finishedAt: activity.finishedAt || Timestamp.now(),
     createdAt: Timestamp.now(),
+  };
+
+  // Firestore rejects 'undefined' values, so we strip them
+  Object.keys(dataToSave).forEach(key => {
+    if ((dataToSave as any)[key] === undefined) {
+      delete (dataToSave as any)[key];
+    }
   });
+
+  await setDoc(ref, dataToSave);
 
   return id;
 };

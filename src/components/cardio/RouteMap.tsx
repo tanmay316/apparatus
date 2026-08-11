@@ -182,10 +182,13 @@ function InjectGradient() {
 }
 
 export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false, isCapturing = false, currentLocation, cardioType, hideMarkers, mapPaddingBottomRight, mapPaddingTopLeft }: Props) {
-  const positions: [number, number][] = useMemo(
-    () => route.map(p => [p.lat, p.lng]),
-    [route]
-  );
+  const positions: [number, number][] = useMemo(() => {
+    const pts = route.map(p => [p.lat, p.lng] as [number, number]);
+    if (isLive && currentLocation) {
+      pts.push([currentLocation.lat, currentLocation.lng]);
+    }
+    return pts;
+  }, [route, isLive, currentLocation]);
 
   const center: [number, number] = currentLocation
     ? [currentLocation.lat, currentLocation.lng]

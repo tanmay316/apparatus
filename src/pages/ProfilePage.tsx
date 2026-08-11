@@ -4,14 +4,14 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { doc, getDoc } from 'firebase/firestore';
-import { ChevronLeft, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus } from 'lucide-react';
+import { ChevronLeft, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus, Clock } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
 import { useUserWeight } from '@/hooks/use-user-weight';
-import { followUser, unfollowUser, isFollowing, getFollowCounts, getFollowers, getFollowing, getUsersByUids, getBookmarkedActivities } from '@/services/social';
+import { followUser, unfollowUser, isFollowing, hasRequestedFollow, removeFollower, acceptFollowRequest, declineFollowRequest, getFollowRequests, getFollowCounts, getFollowers, getFollowing, getUsersByUids, getBookmarkedActivities } from '@/services/social';
 import type { Activity as ActivityType, UserProfile, UserStats } from '@/types';
 import { createReport } from '@/services/admin';
 import { getPublicWorkoutsForUser, getUserWorkouts } from '@/services/workouts';
@@ -22,7 +22,8 @@ import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioSh
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { ActivityPostCard } from '@/components/social/ActivityPostCard';
 import { getUserSkills } from '@/services/skills';
-import { getUserEventRegistrations, getEventsByIds, getUserCommunities } from '@/services/events';
+import { getUserEventRegistrations, getEventsByIds } from '@/services/events';
+import { getUserClans } from '@/services/community';
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
@@ -92,13 +93,13 @@ export function ProfilePage() {
       const eventIds = registrations.map((r: any) => r.eventId);
       return await getEventsByIds(eventIds);
     },
-    enabled: isOwnProfile && !!viewProfile?.uid && feedTab === 'events',
+    enabled: !!viewProfile?.uid,
   });
 
-  const { data: userCommunities = [] } = useQuery({
-    queryKey: ['userCommunities', viewProfile?.uid],
-    queryFn: () => getUserCommunities(viewProfile!.uid),
-    enabled: isOwnProfile && !!viewProfile?.uid && feedTab === 'communities',
+  const { data: userClans = [] } = useQuery({
+    queryKey: ['userClans', viewProfile?.uid],
+    queryFn: () => getUserClans(viewProfile!.uid),
+    enabled: !!viewProfile?.uid,
   });
 
   // Theme support local properties mapping
@@ -125,6 +126,12 @@ export function ProfilePage() {
     queryKey: ['userSkills', viewProfile?.uid],
     queryFn: () => getUserSkills(viewProfile!.uid),
     enabled: !!viewProfile?.uid,
+  });
+
+  const { data: isFollowingProfile = false } = useQuery({
+    queryKey: ['isFollowing', myProfile?.uid, viewProfile?.uid],
+    queryFn: () => isFollowing(myProfile!.uid, viewProfile!.uid),
+    enabled: !!myProfile?.uid && !!viewProfile?.uid && !isOwnProfile,
   });
 
   const { data: activePlan } = useQuery({
@@ -323,6 +330,9 @@ export function ProfilePage() {
     return `${days} days ago`;
   }
 
+  const isPrivateAccount = viewProfile.privacySettings?.profileVisibility === 'private' || viewProfile.privacySettings?.profileVisibility === 'followers';
+  const isLocked = !isOwnProfile && isPrivateAccount && !isFollowingProfile;
+
   return (
     <div style={themeStyles} className="bg-[var(--bg)] text-[var(--text)] transition-colors duration-300 min-h-screen rounded-3xl border border-[var(--border)] p-4 sm:p-6 lg:p-8">
       <motion.div variants={container} initial="hidden" animate="show" className="max-w-6xl mx-auto space-y-6">
@@ -439,19 +449,17 @@ export function ProfilePage() {
             <div className="flex gap-6">
               <FollowCountDisplay uid={viewProfile.uid} />
             </div>
-            <div className="flex gap-5 text-xs font-mono text-[var(--muted)]">
-              <div>
-                <span className="text-[var(--text)] font-bold text-sm block">{stats?.totalWorkouts || 0}</span> workouts
-              </div>
+            {!isLocked && (
+              <div className="flex gap-5 text-xs font-mono text-[var(--muted)]">
+                <div>
+                  <span className="text-[var(--text)] font-bold text-sm block">{stats?.totalWorkouts || 0}</span> workouts
+                </div>
               <div className="w-[1px] h-6 bg-[var(--border)] self-center" />
               <div>
                 <span className="text-[var(--text)] font-bold text-sm block">{stats?.currentStreak || 0}d</span> streak
               </div>
-              <div className="w-[1px] h-6 bg-[var(--border)] self-center" />
-              <div>
-                <span className="text-[var(--text)] font-bold text-sm block">{completionPercent}%</span> completion
               </div>
-            </div>
+            )}
           </div>
         </motion.div>
 
@@ -527,8 +535,18 @@ export function ProfilePage() {
           </motion.div>
         )}
 
-        {/* TWO COLUMN GRID FOR CONTENT */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {isLocked ? (
+          <motion.div variants={item} className="flex flex-col items-center justify-center py-24 px-4 text-center border border-[var(--border)] rounded-3xl bg-[var(--card)] shadow-sm">
+            <div className="w-20 h-20 rounded-full border border-[var(--border)] bg-[var(--bg)] flex items-center justify-center mb-6">
+              <Lock size={32} className="text-[var(--muted)]" />
+            </div>
+            <h2 className="font-serif text-2xl text-[var(--text)] mb-2">This Account is Private</h2>
+            <p className="text-[var(--muted)] max-w-md font-mono text-sm leading-relaxed">
+              Follow {viewProfile.displayName} to see their workouts, plans, events, and clan affiliations.
+            </p>
+          </motion.div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
           {/* LEFT PANEL: TIMELINE & PROGRESS POSTS */}
           <div className="lg:col-span-8 space-y-6">
@@ -637,18 +655,6 @@ export function ProfilePage() {
                   >
                     Saved Bookmarks
                   </button>
-                  <button
-                    onClick={() => setFeedTab('events')}
-                    className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono transition-colors ${feedTab === 'events' ? 'bg-[var(--teal)] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]'}`}
-                  >
-                    My Events
-                  </button>
-                  <button
-                    onClick={() => setFeedTab('communities')}
-                    className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono transition-colors ${feedTab === 'communities' ? 'bg-[var(--teal)] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]'}`}
-                  >
-                    My Communities
-                  </button>
                 </div>
               )}
 
@@ -688,40 +694,6 @@ export function ProfilePage() {
                           }
                         }}
                       />
-                    ))}
-                  </div>
-                )
-              ) : feedTab === 'events' && isOwnProfile ? (
-                userEvents.length === 0 ? (
-                  <p className="text-sm text-[var(--muted)]">No registered events yet. Find events in the Community section.</p>
-                ) : (
-                  <div className="space-y-4">
-                    {userEvents.map((event: any) => (
-                      <div key={event.id} className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg)] flex items-start gap-4">
-                        <img src={event.banner || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-16 h-16 rounded-xl object-cover" />
-                        <div>
-                          <h4 className="font-semibold text-[var(--text)]">{event.title}</h4>
-                          <p className="text-xs text-[var(--muted)] line-clamp-2 mt-1">{event.description}</p>
-                          <Link to="/events" className="text-[var(--teal)] text-xs font-semibold inline-block mt-2 hover:underline">View in Events</Link>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )
-              ) : feedTab === 'communities' && isOwnProfile ? (
-                userCommunities.length === 0 ? (
-                  <p className="text-sm text-[var(--muted)]">Not a member of any communities yet.</p>
-                ) : (
-                  <div className="space-y-4">
-                    {userCommunities.map((community: any) => (
-                      <div key={community.id} className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg)] flex items-center gap-4">
-                        <img src={community.avatarUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-12 h-12 rounded-xl object-cover" />
-                        <div>
-                          <h4 className="font-semibold text-[var(--text)]">{community.name}</h4>
-                          <p className="text-xs text-[var(--muted)]">{community.membersCount} Members</p>
-                          <Link to="/communities" className="text-[var(--teal)] text-xs font-semibold inline-block mt-1 hover:underline">View in Communities</Link>
-                        </div>
-                      </div>
                     ))}
                   </div>
                 )
@@ -854,26 +826,55 @@ export function ProfilePage() {
             {/* RIGHT PANEL: PERFORMANCE & METRICS */}
           <div className="lg:col-span-4 space-y-6">
 
-            {/* SECTION 5: BODY METRICS */}
-            <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
-              <div className="flex items-center gap-2 mb-4">
-                <Scale className="text-[var(--teal)]" size={16} />
-                <h3 className="font-serif text-base tracking-tight">Athlete Biometrics</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                {[
-                  { label: 'Weight', value: p.weight ? `${p.weight} kg` : '—' },
-                  { label: 'Height', value: p.height ? `${p.height} cm` : '—' },
-                  { label: 'BMI', value: bmi },
-                  { label: 'Body Fat', value: (p as any).bodyFat ? `${(p as any).bodyFat}%` : '—' },
-                ].map(metric => (
-                  <div key={metric.label} className="bg-[var(--bg)] border border-[var(--border)] rounded-2xl p-3 text-center">
-                    <div className="text-[10px] font-mono text-[var(--muted)] uppercase tracking-wider">{metric.label}</div>
-                    <div className="text-base font-bold font-mono text-[var(--text)] mt-1">{metric.value}</div>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
+            {/* SECTION: CLAN AFFILIATIONS */}
+            {(isOwnProfile || viewProfile.privacySettings?.showClansToFollowers !== false) && userClans.length > 0 && (
+              <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] overflow-hidden shadow-md">
+                <div className="px-6 py-4 flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg)]">
+                  <Shield className="text-[var(--teal)]" size={16} />
+                  <h3 className="font-serif text-base tracking-tight">Clan Affiliations</h3>
+                </div>
+                <div className="p-4 space-y-4">
+                  {userClans.map((clan: any) => (
+                    <Link to={`/clan/${clan.id}`} key={clan.id} className="block relative rounded-2xl overflow-hidden border border-[var(--border)] group hover:border-[var(--teal)]/50 transition-colors">
+                      <div className="h-16 w-full bg-slate-800 relative">
+                        <img src={clan.coverUrl || 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[var(--card)] to-transparent" />
+                      </div>
+                      <div className="px-4 pb-4 pt-1 flex items-start gap-3 relative z-10 -mt-6">
+                        <img src={clan.avatarUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-12 h-12 rounded-xl object-cover border-2 border-[var(--card)] shadow-sm bg-[var(--bg)]" />
+                        <div className="flex-1 min-w-0 pt-6">
+                          <h4 className="font-semibold text-sm text-[var(--text)] truncate leading-tight">{clan.name}</h4>
+                          <p className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-mono mt-1">{clan.memberCount} Athletes</p>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+
+            {/* SECTION: EVENTS & COMPETITIONS */}
+            {(isOwnProfile || viewProfile.privacySettings?.showEventsToFollowers !== false) && userEvents.length > 0 && (
+              <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
+                <div className="flex items-center gap-2 mb-4">
+                  <Calendar className="text-[var(--teal)]" size={16} />
+                  <h3 className="font-serif text-base tracking-tight">Events & Competitions</h3>
+                </div>
+                <div className="space-y-4">
+                  {userEvents.map((event: any) => (
+                    <div key={event.id} className="flex gap-4 p-3 rounded-2xl bg-[var(--bg)] border border-[var(--border)] hover:border-[var(--teal)]/50 transition-colors">
+                      <img src={event.banner || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" />
+                      <div>
+                        <h4 className="font-semibold text-sm text-[var(--text)] leading-tight mb-1 line-clamp-1">{event.title}</h4>
+                        <div className="flex items-center gap-2 text-xs text-[var(--muted)] font-mono">
+                          <MapPin size={10} /> {event.location || 'Virtual'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
 
             {/* SECTION 6: ACHIEVEMENTS / BADGES */}
             <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
@@ -908,7 +909,7 @@ export function ProfilePage() {
           </div>
 
         </div>
-
+        )}
       </motion.div>
 
       {/* REPORT CONSOLE */}
@@ -978,16 +979,26 @@ function FollowButton({ myUid, targetUid }: { myUid: string; targetUid: string }
     queryFn: () => isFollowing(myUid, targetUid),
   });
 
+  const { data: requested = false } = useQuery({
+    queryKey: ['hasRequestedFollow', myUid, targetUid],
+    queryFn: () => hasRequestedFollow(myUid, targetUid),
+  });
+
   const mutation = useMutation({
-    mutationFn: () => following ? unfollowUser(myUid, targetUid) : followUser(myUid, targetUid),
+    mutationFn: async () => {
+      if (following) return unfollowUser(myUid, targetUid);
+      if (requested) return declineFollowRequest(targetUid, myUid); // Withdraw request
+      return followUser(myUid, targetUid);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['isFollowing', myUid, targetUid] });
+      queryClient.invalidateQueries({ queryKey: ['hasRequestedFollow', myUid, targetUid] });
       queryClient.invalidateQueries({ queryKey: ['followCounts', targetUid] });
       queryClient.invalidateQueries({ queryKey: ['followCounts', myUid] });
       queryClient.invalidateQueries({ queryKey: ['following'] });
       queryClient.invalidateQueries({ queryKey: ['followList'] });
       queryClient.invalidateQueries({ queryKey: ['feed'] });
-      showToast(following ? 'Unfollowed' : 'Following!');
+      showToast(following ? 'Unfollowed' : requested ? 'Request Withdrawn' : 'Action successful');
     },
   });
 
@@ -996,10 +1007,12 @@ function FollowButton({ myUid, targetUid }: { myUid: string; targetUid: string }
       onClick={() => mutation.mutate()}
       disabled={mutation.isPending}
       className={`flex items-center justify-center gap-1.5 text-xs py-2.5 px-5 rounded-xl font-mono transition-all w-full ${
-        following ? 'bg-[var(--border)] border border-[var(--border)] hover:bg-red-600/10 hover:text-red-500 text-[var(--text)]' : 'btn-primary'
+        following ? 'bg-[var(--border)] border border-[var(--border)] hover:bg-red-600/10 hover:text-red-500 text-[var(--text)]' 
+        : requested ? 'bg-[var(--border)] border border-[var(--border)] text-[var(--muted)]'
+        : 'btn-primary'
       }`}
     >
-      {following ? <><UserMinus size={14} /> Unfollow</> : <><UserPlus size={14} /> Follow</>}
+      {following ? <><UserMinus size={14} /> Unfollow</> : requested ? <><Clock size={14} /> Requested</> : <><UserPlus size={14} /> Follow</>}
     </button>
   );
 }
@@ -1037,6 +1050,9 @@ function FollowCountDisplay({ uid }: { uid: string }) {
 // ─── Follow List Modal ──────────────────────────────────
 function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'followers' | 'following' | null, isOpen: boolean, onClose: () => void }) {
   const { theme } = useUIStore();
+  const { user } = useAuthStore();
+  const queryClient = useQueryClient();
+  const isOwnList = user?.uid === uid;
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['followList', uid, type],
     queryFn: async () => {
@@ -1046,6 +1062,40 @@ function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'f
       return getUsersByUids(uids);
     },
     enabled: isOpen && !!type,
+  });
+
+  const { data: requestUsers = [] } = useQuery({
+    queryKey: ['followRequestsList', uid],
+    queryFn: async () => {
+      const uids = await getFollowRequests(uid);
+      if (uids.length === 0) return [];
+      return getUsersByUids(uids);
+    },
+    enabled: isOpen && type === 'followers' && isOwnList,
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (followerId: string) => removeFollower(uid, followerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['followList', uid, type] });
+      queryClient.invalidateQueries({ queryKey: ['followCounts', uid] });
+    }
+  });
+
+  const acceptMutation = useMutation({
+    mutationFn: (requesterId: string) => acceptFollowRequest(uid, requesterId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['followRequestsList', uid] });
+      queryClient.invalidateQueries({ queryKey: ['followList', uid, type] });
+      queryClient.invalidateQueries({ queryKey: ['followCounts', uid] });
+    }
+  });
+
+  const declineMutation = useMutation({
+    mutationFn: (requesterId: string) => declineFollowRequest(uid, requesterId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['followRequestsList', uid] });
+    }
   });
 
   const themeStyles = theme === 'dark' ? {
@@ -1092,30 +1142,70 @@ function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'f
             <div className="flex justify-center py-12">
               <div className="w-7 h-7 border-2 border-[var(--teal)] border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : users.length === 0 ? (
+          ) : users.length === 0 && requestUsers.length === 0 ? (
             <div className="text-center py-16 text-[var(--muted)] text-sm font-mono">
               No {type} yet.
             </div>
           ) : (
-            <div className="space-y-1 pb-4">
-              {users.map(u => (
-                <Link
-                  key={u.uid}
-                  to={`/profile/${u.username}`}
-                  onClick={onClose}
-                  className="flex items-center gap-4 p-3 rounded-2xl hover:bg-[var(--card)] transition-colors group"
-                >
-                  <img
-                    src={u.photoURL || getAvatarUrl(u.displayName, theme)}
-                    alt={u.displayName}
-                    className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm group-hover:scale-105 transition-transform"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-bold text-[15px] truncate text-[var(--text)]">{u.displayName}</div>
-                    <div className="text-xs text-[var(--muted)] font-mono truncate mt-0.5">@{u.username}</div>
-                  </div>
-                </Link>
-              ))}
+            <div className="space-y-4 pb-4">
+              {requestUsers.length > 0 && (
+                <div className="space-y-1">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted)] px-2 py-1">Follow Requests</h3>
+                  {requestUsers.map(u => (
+                    <div key={u.uid} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-[var(--card)] transition-colors group">
+                      <Link to={`/profile/${u.username}`} onClick={onClose}>
+                        <img
+                          src={u.photoURL || getAvatarUrl(u.displayName, theme)}
+                          alt={u.displayName}
+                          className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm group-hover:scale-105 transition-transform"
+                        />
+                      </Link>
+                      <div className="flex-1 min-w-0">
+                        <Link to={`/profile/${u.username}`} onClick={onClose} className="font-bold text-[15px] truncate text-[var(--text)] hover:underline block">{u.displayName}</Link>
+                        <div className="text-xs text-[var(--muted)] font-mono truncate mt-0.5">@{u.username}</div>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => acceptMutation.mutate(u.uid)} disabled={acceptMutation.isPending} className="p-2 bg-[var(--teal)]/10 text-[var(--teal)] hover:bg-[var(--teal)] hover:text-white rounded-lg transition-colors">
+                          <Check size={16} />
+                        </button>
+                        <button onClick={() => declineMutation.mutate(u.uid)} disabled={declineMutation.isPending} className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors">
+                          <X size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {users.length > 0 && (
+                <div className="space-y-1">
+                  {requestUsers.length > 0 && <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted)] px-2 py-1">All {type}</h3>}
+                  {users.map(u => (
+                    <div key={u.uid} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-[var(--card)] transition-colors group relative">
+                      <Link to={`/profile/${u.username}`} onClick={onClose} className="flex-1 flex items-center gap-4 min-w-0">
+                        <img
+                          src={u.photoURL || getAvatarUrl(u.displayName, theme)}
+                          alt={u.displayName}
+                          className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm group-hover:scale-105 transition-transform flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-bold text-[15px] truncate text-[var(--text)]">{u.displayName}</div>
+                          <div className="text-xs text-[var(--muted)] font-mono truncate mt-0.5">@{u.username}</div>
+                        </div>
+                      </Link>
+                      {isOwnList && type === 'followers' && (
+                        <button 
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeMutation.mutate(u.uid); }}
+                          disabled={removeMutation.isPending}
+                          className="px-3 py-1.5 text-xs font-mono rounded-lg bg-[var(--border)] text-[var(--muted)] hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

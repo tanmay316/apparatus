@@ -32,12 +32,37 @@ function formatDuration(sec: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+function formatPaceMs(paceMs: number): string {
+  if (paceMs <= 0 || !isFinite(paceMs)) return '--:--';
+  const secPerKm = paceMs / 1000;
+  if (secPerKm > 3600) return '>60:00'; // Cap display to > 60 min/km
+  const paceMin = Math.floor(secPerKm / 60);
+  const paceSec = Math.floor(secPerKm % 60);
+  return `${paceMin}:${String(paceSec).padStart(2, '0')}`;
+}
+
 function formatPace(distKm: number, durationSec: number): string {
   if (distKm <= 0 || durationSec <= 0) return '--:--';
   const secPerKm = durationSec / distKm;
   const paceMin = Math.floor(secPerKm / 60);
   const paceSec = Math.floor(secPerKm % 60);
   return `${paceMin}:${String(paceSec).padStart(2, '0')}`;
+}
+
+function getLiveSteps(
+  type: CardioActivityType | null, 
+  distKm: number, 
+  pedStore: { isSessionActive: boolean, sessionSteps: number }
+): number | undefined {
+  if (type !== 'walk' && type !== 'run') return undefined;
+  // Estimate steps based on average stride length (1m for run, 0.762m for walk)
+  const estSteps = Math.round(distKm * 1000 / (type === 'run' ? 1.0 : 0.762));
+  
+  // If native pedometer works, use it, but fallback to distance if pedometer is heavily undercounting (e.g. background PWA suspension)
+  if (pedStore.isSessionActive && pedStore.sessionSteps > estSteps * 0.2) {
+    return pedStore.sessionSteps;
+  }
+  return estSteps;
 }
 
 const ACTIVITY_OPTIONS: { type: CardioActivityType | 'workout'; label: string; icon: React.ReactNode; color: string; description: string }[] = [
@@ -130,11 +155,9 @@ export function CardioTracker() {
   useEffect(() => {
     if (!store.isTracking || !store.startedAt) return;
     const interval = setInterval(() => {
-      if (!store.isPaused && !store.isAutoPaused) {
-        // Subtract both manual pause time and accumulated auto-pause time
-        const currentAutoPause = store.isAutoPaused && store.autoPausedAt
-          ? Date.now() - store.autoPausedAt : 0;
-        const totalPause = store.totalPausedMs + store.totalAutoPausedMs + currentAutoPause;
+      if (!store.isPaused && store.autoPauseStatus !== 'PAUSED') {
+        // Timer is frozen when paused. We only need total accumulated paused ms.
+        const totalPause = store.totalPausedMs;
         const raw = Date.now() - store.startedAt! - totalPause;
         const currentSec = Math.max(0, Math.floor(raw / 1000));
         setElapsedSec(currentSec);
@@ -151,7 +174,7 @@ export function CardioTracker() {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [store.isTracking, store.startedAt, store.isPaused, store.isAutoPaused, store.totalPausedMs, store.totalAutoPausedMs, store.autoPausedAt]);
+  }, [store.isTracking, store.startedAt, store.isPaused, store.autoPauseStatus, store.totalPausedMs, store.autoPausedAt]);
 
   // Update live session periodically
   useEffect(() => {
@@ -171,7 +194,7 @@ export function CardioTracker() {
       updateActiveSession(user.uid, {
         currentExercise: `${st.distanceKm.toFixed(2)} km`,
         caloriesBurned: cals,
-        steps: pedometerStore.isSessionActive && st.activityType === 'walk' ? pedometerStore.sessionSteps : undefined
+        steps: getLiveSteps(st.activityType, st.distanceKm, pedometerStore)
       }).catch(console.error);
     }, 10000);
     return () => clearInterval(interval);
@@ -219,7 +242,7 @@ export function CardioTracker() {
         route,
         visibility: 'followers',
         notes: 'Auto-saved session',
-        steps: pedometerStore.isSessionActive && type === 'walk' ? pedometerStore.sessionSteps : undefined,
+        steps: getLiveSteps(type, dist, usePedometerStore.getState()),
       }).catch(console.error);
     }
   };
@@ -234,7 +257,7 @@ export function CardioTracker() {
     }
     
 
-    if (type === 'walk') {
+    if (type === 'walk' || type === 'run') {
       await pedometerStore.startSession();
     }
 
@@ -364,7 +387,7 @@ export function CardioTracker() {
           route: store.routePoints,
           visibility: 'followers',
           notes: '',
-          steps: pedometerStore.isSessionActive && store.activityType === 'walk' ? pedometerStore.sessionSteps : undefined,
+          steps: getLiveSteps(store.activityType, dist, usePedometerStore.getState()),
         });
 
         // Post to activity feed
@@ -576,7 +599,7 @@ export function CardioTracker() {
     const isDarkMap = mapLayer === 'dark' || mapLayer === 'satellite' || mapLayer === 'toner';
     
     const avgSpeed = elapsedSec > 0 ? (store.distanceKm / (elapsedSec / 3600)).toFixed(1) : '0.0';
-    const currentPace = formatPace(store.distanceKm, elapsedSec);
+    const currentPace = formatPaceMs(store.currentPaceMs);
     const activityType = store.activityType || 'run';
     const typeLabel = activityType === 'walk' ? 'Walk' : activityType === 'run' ? 'Run' : 'Cycle';
 
@@ -673,7 +696,7 @@ export function CardioTracker() {
             </button>
 
             {/* Auto-Pause Indicator */}
-            {store.isAutoPaused && (
+            {store.autoPauseStatus === 'PAUSED' && (
               <div className="flex items-center justify-center gap-2 py-1.5 bg-amber-500/20 backdrop-blur-sm border-b border-amber-500/30">
                 <Pause size={12} className="text-amber-400 animate-pulse" />
                 <span className="text-[11px] font-bold uppercase tracking-widest text-amber-400 animate-pulse">Auto-Paused · Standing Still</span>
@@ -684,10 +707,10 @@ export function CardioTracker() {
             <div className="px-6 pb-4 shrink-0" onClick={() => !isExpanded && setIsExpanded(true)}>
               <div className="flex justify-between items-end mb-4">
                 <div>
-                  <div className={`text-[2.5rem] leading-none font-black tracking-tighter drop-shadow-md ${store.isAutoPaused ? 'opacity-50' : ''}`}>
+                  <div className={`text-[2.5rem] leading-none font-black tracking-tighter drop-shadow-md ${store.autoPauseStatus === 'PAUSED' ? 'opacity-50' : ''}`}>
                     {formatDuration(elapsedSec)}
                   </div>
-                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>{store.isAutoPaused ? 'Paused' : 'Timer'}</div>
+                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>{store.autoPauseStatus === 'PAUSED' ? 'Paused' : 'Timer'}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[2rem] leading-none font-black tracking-tighter drop-shadow-md">
@@ -751,7 +774,7 @@ export function CardioTracker() {
                 </button>
               </div>
 
-              {pedometerStore.isSessionActive && (
+              {(store.activityType === 'walk' || store.activityType === 'run') && (
                 <div className="card p-5 mt-4 bg-white/5 backdrop-blur border-white/10 flex items-center justify-between pointer-events-auto">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-sienna/20 flex items-center justify-center text-sienna">
@@ -759,11 +782,11 @@ export function CardioTracker() {
                     </div>
                     <div>
                       <div className="text-sm font-bold text-[var(--text)]">Steps</div>
-                      <div className="text-xs text-bone-dim">Walking Session</div>
+                      <div className="text-xs text-bone-dim">{store.activityType === 'walk' ? 'Walking' : 'Running'} Session</div>
                     </div>
                   </div>
                   <div className="font-serif text-3xl font-medium tracking-tight">
-                    {pedometerStore.sessionSteps.toLocaleString()}
+                    {getLiveSteps(store.activityType, store.distanceKm, pedometerStore)?.toLocaleString()}
                   </div>
                 </div>
               )}

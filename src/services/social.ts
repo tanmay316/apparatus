@@ -43,6 +43,16 @@ export async function deleteActivity(activityId: string): Promise<void> {
 
 export async function followUser(myUid: string, targetUid: string): Promise<void> {
   if (myUid === targetUid) throw new Error('You cannot follow yourself');
+
+  const targetSnap = await getDoc(doc(db, 'users', targetUid));
+  if (!targetSnap.exists()) throw new Error('User not found');
+  const targetData = targetSnap.data();
+  const isPrivate = targetData.privacySettings?.profileVisibility === 'private';
+
+  if (isPrivate) {
+    return requestFollow(myUid, targetUid);
+  }
+
   const followingRef = doc(db, `followers/${myUid}/following`, targetUid);
   const followerRef = doc(db, `followers/${targetUid}/followers`, myUid);
   
@@ -61,6 +71,63 @@ export async function followUser(myUid: string, targetUid: string): Promise<void
     targetId: sender.username || myUid,
     read: false,
   });
+}
+
+export async function requestFollow(myUid: string, targetUid: string): Promise<void> {
+  if (myUid === targetUid) throw new Error('You cannot follow yourself');
+  const requestRef = doc(db, `followers/${targetUid}/requests`, myUid);
+  await setDoc(requestRef, { uid: myUid, timestamp: serverTimestamp() });
+  
+  const senderSnap = await getDoc(doc(db, 'users', myUid));
+  const sender = senderSnap.exists() ? senderSnap.data() : {};
+  await notify(targetUid, {
+    type: 'follow',
+    senderId: myUid,
+    senderName: sender.displayName || 'An athlete',
+    senderPhoto: sender.photoURL || '',
+    message: `${sender.displayName || 'An athlete'} requested to follow you`,
+    targetId: sender.username || myUid,
+    read: false,
+  });
+}
+
+export async function acceptFollowRequest(myUid: string, requesterUid: string): Promise<void> {
+  const requestRef = doc(db, `followers/${myUid}/requests`, requesterUid);
+  const followingRef = doc(db, `followers/${requesterUid}/following`, myUid);
+  const followerRef = doc(db, `followers/${myUid}/followers`, requesterUid);
+  
+  const batch = writeBatch(db);
+  batch.set(followingRef, { uid: myUid, followedAt: serverTimestamp() });
+  batch.set(followerRef, { uid: requesterUid, followedAt: serverTimestamp() });
+  batch.delete(requestRef);
+  await batch.commit();
+
+  const senderSnap = await getDoc(doc(db, 'users', myUid));
+  const sender = senderSnap.exists() ? senderSnap.data() : {};
+  await notify(requesterUid, {
+    type: 'follow',
+    senderId: myUid,
+    senderName: sender.displayName || 'An athlete',
+    senderPhoto: sender.photoURL || '',
+    message: `${sender.displayName || 'An athlete'} accepted your follow request`,
+    targetId: sender.username || myUid,
+    read: false,
+  });
+}
+
+export async function declineFollowRequest(myUid: string, requesterUid: string): Promise<void> {
+  const requestRef = doc(db, `followers/${myUid}/requests`, requesterUid);
+  await deleteDoc(requestRef);
+}
+
+export async function removeFollower(myUid: string, followerUid: string): Promise<void> {
+  const followingRef = doc(db, `followers/${followerUid}/following`, myUid);
+  const followerRef = doc(db, `followers/${myUid}/followers`, followerUid);
+  
+  const batch = writeBatch(db);
+  batch.delete(followingRef);
+  batch.delete(followerRef);
+  await batch.commit();
 }
 
 export async function unfollowUser(myUid: string, targetUid: string): Promise<void> {
@@ -90,8 +157,19 @@ export async function isFollowing(myUid: string, targetUid: string): Promise<boo
   return snap.exists();
 }
 
+export async function hasRequestedFollow(myUid: string, targetUid: string): Promise<boolean> {
+  const requestRef = doc(db, `followers/${targetUid}/requests`, myUid);
+  const snap = await getDoc(requestRef);
+  return snap.exists();
+}
+
 export async function getFollowing(uid: string): Promise<string[]> {
   const snap = await getDocs(collection(db, `followers/${uid}/following`));
+  return snap.docs.map(d => d.id);
+}
+
+export async function getFollowRequests(uid: string): Promise<string[]> {
+  const snap = await getDocs(collection(db, `followers/${uid}/requests`));
   return snap.docs.map(d => d.id);
 }
 

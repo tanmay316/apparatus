@@ -17,103 +17,83 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 // ────────────────────────────────────────────────────────────
-// 1. Kalman Filter — smooths GPS lat/lng to eliminate drift
+// 1. Plausibility & Speed Engine Configuration
 // ────────────────────────────────────────────────────────────
 
-class KalmanFilter1D {
-  private x: number;    // estimated value
-  private p: number;    // estimation error covariance
-  private q: number;    // process noise (how much we expect the value to change)
-  private r: number;    // measurement noise (how noisy the GPS readings are)
-  private initialized = false;
+/** Returns the maximum believable speed (km/h) and acceleration (km/h/s) */
+const ACTIVITY_SPEED_LIMITS = {
+  walk: { maxSpeed: 15, maxAccel: 5 },
+  run: { maxSpeed: 35, maxAccel: 10 },
+  cycle: { maxSpeed: 100, maxAccel: 15 },
+};
 
-  constructor(q = 0.00001, r = 0.0005) {
-    this.x = 0;
-    this.p = 1;
-    this.q = q;
-    this.r = r;
-  }
-
-  /** Filter a new measurement. Returns smoothed value. */
-  filter(measurement: number, accuracy?: number): number {
-    if (!this.initialized) {
-      this.x = measurement;
-      this.p = accuracy ? accuracy * 0.00001 : 1;
-      this.initialized = true;
-      return measurement;
-    }
-
-    // Prediction step (position is the state, so prediction = last estimate)
-    this.p += this.q;
-
-    // If we have GPS accuracy info, scale measurement noise accordingly
-    // Higher accuracy number = less accurate = trust measurement less
-    const effectiveR = accuracy ? this.r * Math.max(1, accuracy / 10) : this.r;
-
-    // Update step
-    const k = this.p / (this.p + effectiveR); // Kalman gain
-    this.x += k * (measurement - this.x);
-    this.p *= (1 - k);
-
-    return this.x;
-  }
-
-  /** Adjust process noise — higher = tracks fast movement more closely */
-  setProcessNoise(q: number) {
-    this.q = q;
-  }
-
-  reset() {
-    this.initialized = false;
-    this.x = 0;
-    this.p = 1;
-  }
+function getSpeedLimits(type: CardioActivityType | null) {
+  if (!type) return ACTIVITY_SPEED_LIMITS.walk;
+  return ACTIVITY_SPEED_LIMITS[type] || ACTIVITY_SPEED_LIMITS.walk;
 }
 
-// Global Kalman filter instances (live outside React for persistence across renders)
-let kalmanLat = new KalmanFilter1D();
-let kalmanLng = new KalmanFilter1D();
+// EMA Alpha determines smoothing factor. Lower = smoother but more lag.
+const EMA_ALPHA = 0.3; 
+const SPEED_BUFFER_SIZE = 3; // For median filter
+let rawSpeedBuffer: number[] = [];
+let emaSpeed = 0;
+let lastTrustedSpeedKmh: number | null = null;
 
-function resetKalmanFilters() {
-  kalmanLat = new KalmanFilter1D();
-  kalmanLng = new KalmanFilter1D();
+// GPS state is intentionally kept separate from the rendered route. Route points are
+// downsampled for the map and must never be used as the source of truth for distance.
+let lastRawGpsPoint: RoutePoint | null = null;
+let lastAcceptedDistancePoint: RoutePoint | null = null;
+let lastRoutePoint: RoutePoint | null = null;
+let lastMovementPoint: RoutePoint | null = null;
+let gpsFixCount = 0;
+let goodFixCount = 0;
+let gapRecoveryFixes = 0;
+
+function resetTrackingSegmentState() {
+  lastRawGpsPoint = null;
+  lastAcceptedDistancePoint = null;
+  lastRoutePoint = null;
+  lastMovementPoint = null;
+  lastTrustedSpeedKmh = null;
+  gpsFixCount = 0;
+  goodFixCount = 0;
+  gapRecoveryFixes = 0;
 }
-
-// ────────────────────────────────────────────────────────────
-// 2. Smart Accuracy Thresholds
-// ────────────────────────────────────────────────────────────
-
-/** Returns the max acceptable GPS accuracy (meters) based on current speed */
-function getAccuracyThreshold(speedKmh: number): number {
-  if (speedKmh > 15) return 25;   // Fast cycling — need tight accuracy
-  if (speedKmh > 5) return 40;    // Running — medium accuracy
-  return 80;                      // Walking / stationary — lenient
-}
-
-// ────────────────────────────────────────────────────────────
-// 2b. Per-Activity Max Plausible Speed (km/h)
-// ────────────────────────────────────────────────────────────
-
-/** Returns the maximum believable speed for any human-powered or e-assisted activity.
- *  This is NOT a cap — it's a GPS-glitch sanity filter. 150 km/h covers e-bikes
- *  on downhills while still rejecting obvious GPS teleportation artifacts. */
-const MAX_SANE_SPEED_KMH = 150;
-
-// ────────────────────────────────────────────────────────────
-// 2c. Speed Smoothing Buffer — 3-sample moving average
-// ────────────────────────────────────────────────────────────
-
-const SPEED_BUFFER_SIZE = 3;
-let speedBuffer: number[] = [];
 
 function pushSpeed(raw: number): number {
-  speedBuffer.push(raw);
-  if (speedBuffer.length > SPEED_BUFFER_SIZE) speedBuffer.shift();
-  return speedBuffer.reduce((a, b) => a + b, 0) / speedBuffer.length;
+  // 1. Sliding window for Median
+  rawSpeedBuffer.push(raw);
+  if (rawSpeedBuffer.length > SPEED_BUFFER_SIZE) {
+    rawSpeedBuffer.shift();
+  }
+  
+  // Calculate median
+  const sorted = [...rawSpeedBuffer].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+
+  // 2. Exponential Moving Average
+  if (emaSpeed === 0 && median > 0) {
+    emaSpeed = median; // Initialize EMA on first movement
+  } else {
+    emaSpeed = (EMA_ALPHA * median) + ((1 - EMA_ALPHA) * emaSpeed);
+  }
+  
+  return emaSpeed;
 }
 
-function resetSpeedBuffer() {
-  speedBuffer = [];
+function resetSpeedEngine() {
+  rawSpeedBuffer = [];
+  emaSpeed = 0;
+  lastTrustedSpeedKmh = null;
+}
+
+function accuracyConfidence(accuracy?: number): number {
+  if (accuracy == null || !Number.isFinite(accuracy)) return 0.5;
+  if (accuracy <= 10) return 1;
+  if (accuracy <= 20) return 0.8;
+  if (accuracy <= 40) return 0.55;
+  if (accuracy <= 60) return 0.3;
+  return 0;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -147,10 +127,8 @@ function attachVisibilityListener() {
       // Page coming back to foreground
       pageHiddenAt = null;
 
-      // Android/iOS aggressively kill watchPosition when locked.
-      // However, we now have a true Native Foreground Service running in the background,
-      // which automatically holds a native OS Wake Lock and prevents process death.
-      // We no longer need legacy DOM keep-alive intervals or screen wake locks.
+      // A foreground service improves Android process priority, but location updates
+      // still originate from Capacitor's watch. Re-start the watch on foregrounding.
       
       const state = useCardioStore.getState();
       if (state.isTracking && !state.isPaused) {
@@ -167,6 +145,8 @@ function attachVisibilityListener() {
 
 import { Geolocation } from '@capacitor/geolocation';
 import { Capacitor } from '@capacitor/core';
+import type { PluginListenerHandle } from '@capacitor/core';
+import { NativeWorkoutLocation, type NativeWorkoutPoint } from '@/utils/native-workout-location';
 
 // Haversine formula to calculate distance between two lat/lon coordinates in meters
 function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -184,7 +164,24 @@ function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number,
 // Global GPS (lives outside React for persistence)
 // ────────────────────────────────────────────────────────────
 let watchIdRef: string | number | null = null;
+let nativeLocationListener: PluginListenerHandle | null = null;
 
+function handleNativeLocation(point: NativeWorkoutPoint) {
+  handleGpsPosition({
+    coords: {
+      latitude: point.lat,
+      longitude: point.lng,
+      accuracy: point.accuracy ?? 999,
+      altitude: point.altitude,
+      altitudeAccuracy: null,
+      heading: null,
+      speed: point.speed,
+      toJSON: () => ({}),
+    },
+    timestamp: point.timestamp || Date.now(),
+    toJSON: () => ({}),
+  } as unknown as GeolocationPosition);
+}
 const checkPermissionsNative = async () => {
   try {
     let perm = await Geolocation.checkPermissions();
@@ -206,40 +203,20 @@ function handleGpsPosition(pos: GeolocationPosition) {
   const storeState = useCardioStore.getState();
   
   const accuracy = pos.coords.accuracy;
-  const currentSpeed = storeState.currentSpeedKmh;
-  const maxAccuracy = getAccuracyThreshold(currentSpeed);
-
   // ── GPS Warmup: discard early inaccurate points ──────────
   // When GPS first starts, the first few readings can be wildly off.
   // Wait until we get a reading with accuracy < 80m before recording.
-  const pointCount = storeState.routePoints.length;
-  if (pointCount < 5 && accuracy > 80) {
-    return; // Skip inaccurate warmup readings
-  }
+  // Keep rendering the latest location, but do not use unusable fixes for
+  // distance. The store turns normal accuracy into a confidence score.
+  if (!Number.isFinite(accuracy) || accuracy > 150) return;
 
-  // Smart accuracy thresholding: apply dynamic accuracy filtering
-  if (pointCount >= 5 && accuracy > maxAccuracy) {
-    return; // Reject inaccurate point
-  }
-
-  // Distance Filtering (Save RAM & CPU):
-  // Don't store the point if we have moved less than 2 meters from the last raw point.
-  // This heavily reduces array bloat and React re-renders when the user is standing still!
-  if (pointCount > 0) {
-    const lastRawPt = storeState.routePoints[pointCount - 1];
-    const distToLastRaw = getDistanceFromLatLonInMeters(
-      lastRawPt.lat, lastRawPt.lng,
-      pos.coords.latitude, pos.coords.longitude
-    );
-    if (distToLastRaw < 2) {
-      return; 
-    }
-  }
+  // We no longer filter by 2 meters here. The raw stream must reach the Speed/Distance engines.
+  // We only reject absolutely invalid points during warmup.
 
   const pt = {
     lat: pos.coords.latitude,
     lng: pos.coords.longitude,
-    ts: Date.now(),
+    ts: pos.timestamp || Date.now(),
     accuracy,
   } as RoutePoint & { accuracy?: number };
   if (pos.coords.altitude != null) pt.alt = pos.coords.altitude;
@@ -248,8 +225,16 @@ function handleGpsPosition(pos: GeolocationPosition) {
   storeState.addPoint(pt);
 }
 
-export const startGpsWatch = async () => {
-  if (watchIdRef !== null) return; // already watching
+export const startGpsWatch = async (newSession = false) => {
+  // Promote the ready-screen preview watch to the durable Android service when
+  // the user actually starts the workout.
+  if (watchIdRef !== null) {
+    if (newSession && Capacitor.isNativePlatform() && watchIdRef !== 'native-workout-location') {
+      await stopGpsWatch();
+    } else {
+      return;
+    }
+  }
   
   attachVisibilityListener();
 
@@ -263,26 +248,18 @@ export const startGpsWatch = async () => {
     }
     try {
       useCardioStore.setState({ gpsStatus: 'waiting' });
-      
-      // Kickstart the location services by asking for a low-accuracy network fix first.
-      // This often wakes up the GPS chip much faster on Android cold starts.
-      Geolocation.getCurrentPosition({ enableHighAccuracy: false, maximumAge: Infinity }).catch(() => {});
-
-      watchIdRef = await Geolocation.watchPosition(
-        { enableHighAccuracy: true, maximumAge: 3000 },
-        (pos, err) => {
-          if (err) {
-            console.warn('[CardioStore] GPS watch error:', err);
-            // Don't set error state immediately on timeout, let it keep trying.
-            if (err.message && err.message.includes('timeout')) return;
-            useCardioStore.setState({ gpsStatus: 'error' });
-            return;
-          }
-          if (pos) {
-            handleGpsPosition(pos as unknown as GeolocationPosition);
-          }
-        }
-      );
+      if (!useCardioStore.getState().isTracking) {
+        watchIdRef = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, maximumAge: 1000 },
+          (pos) => { if (pos) handleGpsPosition(pos as unknown as GeolocationPosition); }
+        );
+        return;
+      }
+      nativeLocationListener = await NativeWorkoutLocation.addListener('location', handleNativeLocation);
+      await NativeWorkoutLocation.start({ reset: newSession });
+      watchIdRef = 'native-workout-location';
+      const buffered = await NativeWorkoutLocation.getLocationsAfter({ timestamp: useCardioStore.getState().lastGpsTimestamp });
+      buffered.points.forEach(handleNativeLocation);
     } catch (e) {
       console.warn('[CardioStore] Failed native GPS:', e);
       useCardioStore.setState({ gpsStatus: 'error' });
@@ -305,7 +282,7 @@ export const startGpsWatch = async () => {
           useCardioStore.setState({ gpsStatus: 'error' });
         }
       },
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
     );
   }
 };
@@ -313,7 +290,13 @@ export const startGpsWatch = async () => {
 export const stopGpsWatch = async () => {
   if (watchIdRef !== null) {
     if (Capacitor.isNativePlatform()) {
-      try { await Geolocation.clearWatch({ id: watchIdRef as string }); } catch {}
+      if (watchIdRef === 'native-workout-location') {
+        try { await NativeWorkoutLocation.stop(); } catch {}
+        await nativeLocationListener?.remove();
+        nativeLocationListener = null;
+      } else {
+        try { await Geolocation.clearWatch({ id: watchIdRef as string }); } catch {}
+      }
     } else {
       navigator.geolocation.clearWatch(watchIdRef as number);
     }
@@ -330,21 +313,23 @@ type GpsStatus = 'off' | 'waiting' | 'active' | 'error' | 'denied';
 interface CardioState {
   isTracking: boolean;
   isPaused: boolean;
-  isAutoPaused: boolean;
+  autoPauseStatus: 'MOVING' | 'CANDIDATE_STOP' | 'PAUSED';
   autoPausedAt: number | null;
-  totalAutoPausedMs: number;
   activityType: CardioActivityType | null;
   startedAt: number | null;
   pausedAt: number | null;
   totalPausedMs: number;
   routePoints: RoutePoint[];
+  paceWindow: { dist: number; dt: number; ts: number }[]; // Rolling moving-time pace
   distanceKm: number;
   currentSpeedKmh: number;
+  currentPaceMs: number; // min/km in ms (e.g. 5:00 = 300000ms)
   maxSpeedKmh: number;
   elevationGainM: number;
   gpsStatus: GpsStatus;
   gpsAccuracy: number;
   currentLocation: { lat: number, lng: number } | null;
+  lastGpsTimestamp: number;
 
   // Actions
   startTracking: (type: CardioActivityType) => void;
@@ -358,21 +343,23 @@ interface CardioState {
 const IDLE: Partial<CardioState> = {
   isTracking: false,
   isPaused: false,
-  isAutoPaused: false,
+  autoPauseStatus: 'MOVING',
   autoPausedAt: null,
-  totalAutoPausedMs: 0,
   activityType: null,
   startedAt: null,
   pausedAt: null,
   totalPausedMs: 0,
   routePoints: [],
+  paceWindow: [],
   distanceKm: 0,
   currentSpeedKmh: 0,
+  currentPaceMs: 0,
   maxSpeedKmh: 0,
   elevationGainM: 0,
   gpsStatus: 'off' as GpsStatus,
   gpsAccuracy: 0,
   currentLocation: null,
+  lastGpsTimestamp: 0,
 };
 
 export const useCardioStore = create<CardioState>()(
@@ -381,57 +368,57 @@ export const useCardioStore = create<CardioState>()(
       ...(IDLE as CardioState),
 
       startTracking: (type) => {
-        // Reset Kalman filters and speed buffer for a fresh session
-        resetKalmanFilters();
-        resetSpeedBuffer();
+        resetSpeedEngine();
+        resetTrackingSegmentState();
         lastMovementTs = Date.now();
 
         // IMPORTANT: set isTracking FIRST so GPS callbacks aren't dropped
         set({
           isTracking: true,
           isPaused: false,
-          isAutoPaused: false,
+          autoPauseStatus: 'MOVING',
           autoPausedAt: null,
-          totalAutoPausedMs: 0,
           activityType: type,
           startedAt: Date.now(),
           pausedAt: null,
           totalPausedMs: 0,
           routePoints: [],
+          paceWindow: [],
           distanceKm: 0,
           currentSpeedKmh: 0,
+          currentPaceMs: 0,
           maxSpeedKmh: 0,
           elevationGainM: 0,
           gpsStatus: get().currentLocation ? 'active' : 'waiting',
           gpsAccuracy: get().gpsAccuracy || 0,
+          lastGpsTimestamp: 0,
           // Keep currentLocation to avoid the 20s re-locating delay on start
         });
         // Start GPS after state is ready (if not already running)
-        startGpsWatch();
+        startGpsWatch(true);
       },
 
       pauseTracking: () => {
         stopGpsWatch();
-        const { isAutoPaused, autoPausedAt, totalAutoPausedMs } = get();
+        resetTrackingSegmentState();
+        const { autoPauseStatus, autoPausedAt } = get();
         // If auto-paused, collapse the auto-pause into totalPausedMs before manual pause
         let extraAutoPause = 0;
-        if (isAutoPaused && autoPausedAt) {
+        if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
           extraAutoPause = Date.now() - autoPausedAt;
         }
         set({
           isPaused: true,
           pausedAt: Date.now(),
-          isAutoPaused: false,
+          autoPauseStatus: 'MOVING',
           autoPausedAt: null,
-          totalAutoPausedMs: 0,
-          totalPausedMs: get().totalPausedMs + totalAutoPausedMs + extraAutoPause,
+          totalPausedMs: get().totalPausedMs + extraAutoPause,
         });
       },
 
       resumeTracking: () => {
-        // Reset Kalman filters and speed buffer when resuming so we don't smooth across the gap
-        resetKalmanFilters();
-        resetSpeedBuffer();
+        resetSpeedEngine();
+        resetTrackingSegmentState();
         lastMovementTs = Date.now();
 
         startGpsWatch();
@@ -440,9 +427,8 @@ export const useCardioStore = create<CardioState>()(
         set({
           isPaused: false,
           pausedAt: null,
-          isAutoPaused: false,
+          autoPauseStatus: 'MOVING',
           autoPausedAt: null,
-          totalAutoPausedMs: 0,
           totalPausedMs: totalPausedMs + addedPause,
         });
       },
@@ -453,184 +439,214 @@ export const useCardioStore = create<CardioState>()(
 
         const accuracy = (point as any).accuracy as number | undefined;
         const now = point.ts;
+        if (now <= state.lastGpsTimestamp) return;
 
-        // ── Kalman Filtering ──────────────────────────────
-        // Adapt Kalman process noise based on speed — fast movement
-        // needs tighter tracking, slow movement needs heavier smoothing
-        const speedForKalman = state.currentSpeedKmh;
-        if (speedForKalman > 10) {
-          kalmanLat.setProcessNoise(0.00005);  // Track closely at speed
-          kalmanLng.setProcessNoise(0.00005);
-        } else if (speedForKalman > 3) {
-          kalmanLat.setProcessNoise(0.00002);  // Medium smoothing
-          kalmanLng.setProcessNoise(0.00002);
-        } else {
-          kalmanLat.setProcessNoise(0.000005); // Heavy smoothing when slow/still
-          kalmanLng.setProcessNoise(0.000005);
-        }
+        const rawPt: RoutePoint = { lat: point.lat, lng: point.lng, ts: now };
+        if (point.alt !== undefined) rawPt.alt = point.alt;
+        if (point.speed !== undefined) rawPt.speed = point.speed;
 
-        const smoothedLat = kalmanLat.filter(point.lat, accuracy);
-        const smoothedLng = kalmanLng.filter(point.lng, accuracy);
-
-        // Build the smoothed point (without the accuracy field for storage)
-        const smoothedPoint: RoutePoint = {
-          lat: smoothedLat,
-          lng: smoothedLng,
-          ts: now,
-        };
-        if (point.alt !== undefined) smoothedPoint.alt = point.alt;
-        if (point.speed !== undefined) smoothedPoint.speed = point.speed;
-
-        const prev = state.routePoints[state.routePoints.length - 1];
+        const limits = getSpeedLimits(state.activityType);
+        // Raw fixes drive the physics. The route is only a downsampled map view.
+        const prev = lastRawGpsPoint;
+        lastRawGpsPoint = rawPt;
+        gpsFixCount += 1;
+        const confidence = accuracyConfidence(accuracy);
+        if (confidence >= 0.55) goodFixCount += 1;
+        
         let addedDistance = 0;
         let addedElevation = 0;
-        let speed = 0;
+        let dtSec = 0;
+
+        // 1. Native Speed takes absolute priority (uses Doppler, highly accurate)
+        // pos.coords.speed is in m/s, convert to km/h
+        const nativeSpeedKmh = point.speed != null && point.speed >= 0 ? point.speed * 3.6 : null;
+        let currentSpeed = 0;
 
         if (prev) {
-          const rawDistance = haversineKm(prev.lat, prev.lng, smoothedPoint.lat, smoothedPoint.lng);
-          const dtSec = (now - prev.ts) / 1000;
+          dtSec = (now - prev.ts) / 1000;
+          if (dtSec < 0) return; // Ignore negative time jumps
 
-          // ── Background Gap Detection ──────────────────
-          // (Removed distance dropping on gap so background locked tracking still counts distance)
-          const isGpsGap = dtSec > 30;
+          const rawDistance = haversineKm(prev.lat, prev.lng, rawPt.lat, rawPt.lng);
+          const isGpsGap = dtSec > 20;
 
-          // ── Stillness Detection ───────────────────────
-          // If device hasn't moved more than 3 meters, don't add the point at all.
-          // This prevents GPS drift circles when standing still.
-          if (rawDistance < 0.003 && !isGpsGap) {
-            // Still update speed to 0 so auto-pause can detect stillness
-            const gpsSpeed = point.speed != null && point.speed > 0
-              ? Math.min(point.speed * 3.6, MAX_SANE_SPEED_KMH) : 0;
-            
-            // ── Auto-Pause Logic (while stationary) ──────
-            if (gpsSpeed < AUTO_PAUSE_SPEED_THRESHOLD) {
-              if (!state.isAutoPaused && (now - lastMovementTs > AUTO_PAUSE_DELAY_MS)) {
-                // User has been still for 10+ seconds — trigger auto-pause
-                set({
-                  isAutoPaused: true,
-                  autoPausedAt: now,
-                  currentSpeedKmh: 0,
-                  gpsAccuracy: accuracy || 0,
-                });
-                return;
-              }
-            } else {
-              lastMovementTs = now;
-            }
-
-            // Update GPS accuracy display but don't add the still point
-            set({ currentSpeedKmh: 0, gpsAccuracy: accuracy || 0 });
+          // Do not bridge missing fixes. Require two normal, reasonably accurate
+          // fixes after every start/resume/gap before accumulating a segment.
+          if (isGpsGap) {
+            lastAcceptedDistancePoint = rawPt;
+            lastMovementPoint = rawPt;
+            gapRecoveryFixes = 0;
+            resetSpeedEngine();
+            set({ currentSpeedKmh: 0, gpsAccuracy: accuracy || 0, lastGpsTimestamp: now });
+            return;
+          }
+          if (gapRecoveryFixes < 2) {
+            if (confidence >= 0.55) gapRecoveryFixes += 1;
+            lastAcceptedDistancePoint = rawPt;
+            set({ gpsAccuracy: accuracy || 0, lastGpsTimestamp: now });
             return;
           }
 
-          // ── Strava-style distance filtering ──────────────────
-          // Ignore teleport jumps (> 500 meters) — GPS glitches
-          // Sanity-check implied speed to reject impossible bursts
-          if (rawDistance < 0.5 || isGpsGap) {
-            const impliedSpeedKmh = dtSec > 0 ? (rawDistance / dtSec) * 3600 : 0;
-            if (impliedSpeedKmh < MAX_SANE_SPEED_KMH) {
-              addedDistance = rawDistance;
+          // 2. Derived speed from Haversine
+          const derivedSpeedKmh = dtSec > 0 ? (rawDistance / dtSec) * 3600 : 0;
+          
+          // Use Native if valid, else fallback to Derived
+          const candidateSpeed = nativeSpeedKmh !== null ? nativeSpeedKmh : derivedSpeedKmh;
+          const accel = lastTrustedSpeedKmh == null ? 0 : Math.abs(candidateSpeed - lastTrustedSpeedKmh) / dtSec;
+          const nativeIsPlausible = nativeSpeedKmh !== null && nativeSpeedKmh <= limits.maxSpeed && accel <= limits.maxAccel;
+          const derivedIsPlausible = derivedSpeedKmh <= limits.maxSpeed && accel <= limits.maxAccel;
+          currentSpeed = nativeIsPlausible ? nativeSpeedKmh! : (derivedIsPlausible ? derivedSpeedKmh : 0);
+          if (nativeIsPlausible || derivedIsPlausible) lastTrustedSpeedKmh = currentSpeed;
+
+          // ── Spatial Downsampling & Quality Gate ──────────────
+          let acceptDistance = true;
+          
+          if (!isGpsGap) {
+            if (!nativeIsPlausible && !derivedIsPlausible) {
+              acceptDistance = false;
+            } else {
+              if (accel > limits.maxAccel && rawDistance > 0.05) {
+                acceptDistance = false; // Glitch jump
+              }
             }
           }
-
-          // Elevation gain (only count uphill)
-          if (smoothedPoint.alt !== undefined && prev.alt !== undefined) {
-            const diff = smoothedPoint.alt - prev.alt;
-            // Ignore small fluctuations (< 2m) as barometric noise
-            if (diff > 2) addedElevation = diff;
+          
+          // ZIGZAG FIX: Only accumulate distance if we have moved substantially
+          // Minimum distance threshold: 5 meters (0.005 km)
+          const MIN_DISTANCE_KM = 0.005;
+          
+          const distanceAnchor = lastAcceptedDistancePoint ?? prev;
+          const distanceCandidate = haversineKm(distanceAnchor.lat, distanceAnchor.lng, rawPt.lat, rawPt.lng);
+          if (acceptDistance && confidence >= 0.3 && distanceCandidate > MIN_DISTANCE_KM) {
+            addedDistance = distanceCandidate;
+            lastAcceptedDistancePoint = rawPt;
           }
 
-          // Calculate speed from distance/time
-          if (dtSec > 0 && addedDistance > 0) {
-            speed = (addedDistance / dtSec) * 3600; // km/h
-          }
-        }
-
-        // Prefer GPS-reported speed when available (more accurate than derived)
-        if (point.speed !== undefined && point.speed > 0) {
-          const gpsSpeedKmh = point.speed * 3.6; // m/s → km/h
-          if (gpsSpeedKmh < MAX_SANE_SPEED_KMH) {
-            speed = gpsSpeedKmh;
-          }
-        }
-
-        // Smooth speed through moving average to reject momentary spikes
-        speed = pushSpeed(speed);
-
-        // ── Auto-Pause Logic ──────────────────────────────
-        if (speed >= AUTO_PAUSE_SPEED_THRESHOLD) {
-          lastMovementTs = now;
-
-          // Was auto-paused? Resume and accumulate the paused duration
-          if (state.isAutoPaused && state.autoPausedAt) {
-            const autoPauseDuration = now - state.autoPausedAt;
-            set({
-              isAutoPaused: false,
-              autoPausedAt: null,
-              totalAutoPausedMs: state.totalAutoPausedMs + autoPauseDuration,
-            });
+          if (rawPt.alt !== undefined && distanceAnchor.alt !== undefined) {
+            const diff = rawPt.alt - distanceAnchor.alt;
+            if (diff > 2 && acceptDistance) addedElevation = diff;
           }
         } else {
-          // Speed is below threshold — check if we should auto-pause
-          if (!state.isAutoPaused && (now - lastMovementTs > AUTO_PAUSE_DELAY_MS)) {
-            set({
-              isAutoPaused: true,
-              autoPausedAt: now,
-              currentSpeedKmh: Math.round(speed * 10) / 10,
-              gpsAccuracy: accuracy || 0,
-            });
-            // Still add the point to the route (for trace continuity) but don't count distance
-            set({
-              routePoints: [...state.routePoints, smoothedPoint],
-            });
-            return;
-          }
+           lastAcceptedDistancePoint = rawPt;
+           lastRoutePoint = rawPt;
+           lastMovementPoint = rawPt;
+           if (nativeSpeedKmh !== null) {
+              currentSpeed = nativeSpeedKmh;
+              lastTrustedSpeedKmh = currentSpeed;
+           }
         }
 
-        // If currently auto-paused, add point for trace continuity but don't count distance
-        if (state.isAutoPaused) {
+        // Apply EMA smoothing to the speed for UI display
+        const smoothedSpeed = pushSpeed(currentSpeed);
+        const displaySpeed = Math.round(smoothedSpeed * 10) / 10;
+
+        if (addedDistance > 0) lastMovementPoint = rawPt;
+
+        // ── Auto-Pause State Machine ───────────────────────
+        let { autoPauseStatus, autoPausedAt, totalPausedMs } = state;
+
+        // A zero native speed alone is not enough: GPS chips can report zero while
+        // a user is moving. Require both a low speed signal and little displacement.
+        const speedForPause = nativeSpeedKmh !== null ? nativeSpeedKmh : displaySpeed;
+        const stationaryRadiusM = Math.max(4, Math.min((accuracy || 12) * 0.5, 12));
+        const displacementFromMovementM = lastMovementPoint
+          ? haversineKm(lastMovementPoint.lat, lastMovementPoint.lng, rawPt.lat, rawPt.lng) * 1000
+          : 0;
+        const isStationary = speedForPause < AUTO_PAUSE_SPEED_THRESHOLD && displacementFromMovementM < stationaryRadiusM;
+
+        if (isStationary) {
+          if (autoPauseStatus === 'MOVING') {
+            autoPauseStatus = 'CANDIDATE_STOP';
+            lastMovementTs = now;
+          } else if (autoPauseStatus === 'CANDIDATE_STOP') {
+            if (now - lastMovementTs > AUTO_PAUSE_DELAY_MS) {
+              autoPauseStatus = 'PAUSED';
+              autoPausedAt = now;
+            }
+          }
+        } else {
+          if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
+            totalPausedMs += (now - autoPausedAt);
+          }
+          autoPauseStatus = 'MOVING';
+          autoPausedAt = null;
+          lastMovementTs = now;
+        }
+
+        if (autoPauseStatus === 'PAUSED') {
           set({
-            routePoints: [...state.routePoints, smoothedPoint],
-            currentSpeedKmh: Math.round(speed * 10) / 10,
+            currentSpeedKmh: 0,
             gpsAccuracy: accuracy || 0,
+            autoPauseStatus,
+            autoPausedAt,
+            totalPausedMs,
+            lastGpsTimestamp: now,
           });
           return;
         }
 
-        const clampedSpeed = Math.min(speed, MAX_SANE_SPEED_KMH);
+        // ── Pace Engine (Rolling 60s window) ───────────────
+        let newPaceWindow = [...state.paceWindow];
+        if (addedDistance > 0 && dtSec > 0) {
+          newPaceWindow.push({ dist: addedDistance, dt: dtSec, ts: now });
+        }
+        newPaceWindow = newPaceWindow.filter(p => now - p.ts < 60_000);
+
+        let currentPaceMs = 0;
+        if (newPaceWindow.length > 0) {
+          const sumDist = newPaceWindow.reduce((a, b) => a + b.dist, 0);
+          const sumDt = newPaceWindow.reduce((a, b) => a + b.dt, 0);
+          if (sumDist > 0) {
+            currentPaceMs = (sumDt * 1000) / sumDist;
+          }
+        }
+
+        // Only record the point if we accepted its distance, smoothing the polyline naturally
+        const routeSpacingM = Math.max(5, Math.min((accuracy || 12) * 0.4, 15));
+        const routeDistanceM = lastRoutePoint
+          ? haversineKm(lastRoutePoint.lat, lastRoutePoint.lng, rawPt.lat, rawPt.lng) * 1000
+          : Infinity;
+        const shouldAddRoutePoint = addedDistance > 0 && routeDistanceM >= routeSpacingM;
+        if (shouldAddRoutePoint) lastRoutePoint = rawPt;
+        const nextRoutePoints = shouldAddRoutePoint ? [...state.routePoints, rawPt] : state.routePoints;
+
         set({
-          routePoints: [...state.routePoints, smoothedPoint],
+          routePoints: nextRoutePoints,
           distanceKm: state.distanceKm + addedDistance,
-          currentSpeedKmh: Math.round(clampedSpeed * 10) / 10,
-          maxSpeedKmh: Math.max(state.maxSpeedKmh, Math.round(clampedSpeed * 10) / 10),
+          currentSpeedKmh: displaySpeed,
+          maxSpeedKmh: Math.max(state.maxSpeedKmh, displaySpeed),
           elevationGainM: state.elevationGainM + addedElevation,
           gpsAccuracy: accuracy || 0,
+          autoPauseStatus,
+          autoPausedAt,
+          totalPausedMs,
+          paceWindow: newPaceWindow,
+          currentPaceMs,
+          lastGpsTimestamp: now,
         });
       },
 
       stopTracking: () => {
         stopGpsWatch();
-        // Collapse any remaining auto-pause time into totalPausedMs
-        const { isAutoPaused, autoPausedAt, totalAutoPausedMs, totalPausedMs } = get();
-        let finalAutoPause = totalAutoPausedMs;
-        if (isAutoPaused && autoPausedAt) {
-          finalAutoPause += Date.now() - autoPausedAt;
+        resetTrackingSegmentState();
+        const { autoPauseStatus, autoPausedAt, totalPausedMs } = get();
+        let finalPausedMs = totalPausedMs;
+        if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
+          finalPausedMs += Date.now() - autoPausedAt;
         }
         set({
           isTracking: false,
           isPaused: false,
-          isAutoPaused: false,
+          autoPauseStatus: 'MOVING',
           autoPausedAt: null,
-          totalAutoPausedMs: 0,
-          totalPausedMs: totalPausedMs + finalAutoPause,
+          totalPausedMs: finalPausedMs,
           gpsStatus: 'off' as GpsStatus,
         });
       },
 
       reset: () => {
         stopGpsWatch();
-        resetKalmanFilters();
-        resetSpeedBuffer();
+        resetSpeedEngine();
+        resetTrackingSegmentState();
         lastMovementTs = 0;
         set({ ...(IDLE as CardioState) });
       },

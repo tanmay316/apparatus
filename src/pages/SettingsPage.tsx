@@ -42,6 +42,11 @@ export function SettingsPage() {
   const [preferredWorkoutType, setPreferredWorkoutType] = useState(profile?.preferredWorkoutType || '');
   const [isPublic, setIsPublic] = useState(profile?.isPublic !== false);
   const [stepGoal, setLocalStepGoal] = useState((profile?.stepGoal || 10000).toString());
+  
+  const [profileVisibility, setProfileVisibility] = useState<'public' | 'followers' | 'private'>(profile?.privacySettings?.profileVisibility || 'public');
+  const [showEvents, setShowEvents] = useState(profile?.privacySettings?.showEventsToFollowers !== false);
+  const [showClans, setShowClans] = useState(profile?.privacySettings?.showClansToFollowers !== false);
+  const [showStats, setShowStats] = useState(profile?.privacySettings?.showStatsToFollowers !== false);
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -76,8 +81,14 @@ export function SettingsPage() {
         fitnessGoal,
         experienceLevel: experienceLevel as 'beginner' | 'intermediate' | 'advanced',
         preferredWorkoutType,
-        isPublic,
-        stepGoal: parseInt(stepGoal) || 10000
+        isPublic: profileVisibility === 'public',
+        stepGoal: parseInt(stepGoal) || 10000,
+        privacySettings: {
+          profileVisibility,
+          showEventsToFollowers: showEvents,
+          showClansToFollowers: showClans,
+          showStatsToFollowers: showStats
+        }
       });
 
       setSuccess(true);
@@ -379,21 +390,47 @@ export function SettingsPage() {
             <h3 className="font-display text-base uppercase tracking-wide text-bone">Privacy Settings</h3>
           </div>
 
-          <div className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              id="isPublic"
-              className="mt-1 accent-sienna cursor-pointer"
-              checked={isPublic}
-              onChange={(e) => setIsPublic(e.target.checked)}
-            />
+          <div className="space-y-4">
             <div>
-              <label htmlFor="isPublic" className="font-bold text-sm text-bone cursor-pointer select-none">
-                Make Profile Public
-              </label>
-              <p className="text-xs text-bone-dim leading-relaxed">
-                When enabled, other athletes can discover your account in the Explore tab, follow you, and see your public activity posts in the feed.
+              <label className="label">Account Visibility</label>
+              <CustomSelect
+                className="w-full"
+                value={profileVisibility}
+                onChange={(val) => setProfileVisibility(val as any)}
+                options={[
+                  { value: 'public', label: 'Public (Everyone can follow & view)' },
+                  { value: 'followers', label: 'Followers Only (Must follow to view)' },
+                  { value: 'private', label: 'Private (Requests required to follow)' }
+                ]}
+              />
+              <p className="text-[10px] text-bone-dim mt-1.5 leading-relaxed">
+                {profileVisibility === 'public' ? 'Your profile, workouts, and stats are visible to everyone.' : profileVisibility === 'followers' ? 'Only people who follow you can see your profile.' : 'New followers must be approved by you.'}
               </p>
+            </div>
+
+            <div className="pt-2 space-y-3">
+              <label className="label">Profile Features (For Followers)</label>
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input type="checkbox" className="mt-1 accent-sienna" checked={showEvents} onChange={(e) => setShowEvents(e.target.checked)} />
+                <div>
+                  <span className="text-sm font-bold text-bone">Show Events & Competitions</span>
+                  <p className="text-[10px] text-bone-dim leading-tight">Display your event ranks and registrations on your profile.</p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input type="checkbox" className="mt-1 accent-sienna" checked={showClans} onChange={(e) => setShowClans(e.target.checked)} />
+                <div>
+                  <span className="text-sm font-bold text-bone">Show Clan Affiliations</span>
+                  <p className="text-[10px] text-bone-dim leading-tight">Display the clans you belong to and your roles.</p>
+                </div>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <input type="checkbox" className="mt-1 accent-sienna" checked={showStats} onChange={(e) => setShowStats(e.target.checked)} />
+                <div>
+                  <span className="text-sm font-bold text-bone">Show Overall Stats</span>
+                  <p className="text-[10px] text-bone-dim leading-tight">Display your total workouts, calories, and streaks.</p>
+                </div>
+              </label>
             </div>
           </div>
         </motion.div>

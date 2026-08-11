@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { X, Save, Calculator, Settings, Loader2 } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
@@ -63,14 +64,16 @@ export default function NutritionProfileModal({ onClose, onSaved }: NutritionPro
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4">
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="relative w-full max-w-md bg-ink-2 border border-line rounded-2xl shadow-2xl overflow-hidden"
+        className="relative w-full max-w-md bg-ink-2 border border-line rounded-2xl shadow-2xl overflow-visible"
       >
         <div className="flex items-center justify-between p-4 border-b border-line">
           <div className="flex items-center gap-2 text-bone">
@@ -178,6 +181,7 @@ export default function NutritionProfileModal({ onClose, onSaved }: NutritionPro
           </form>
         )}
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,6 +1,18 @@
 import { Timestamp } from 'firebase/firestore';
 
 // ─── User ────────────────────────────────────────────────────
+export interface PrivacySettings {
+  profileVisibility: 'public' | 'followers' | 'private';
+  showEventsToFollowers: boolean;
+  showClansToFollowers: boolean;
+  showStatsToFollowers: boolean;
+}
+
+export interface FollowRequest {
+  id: string; // the requester's uid
+  timestamp: Timestamp;
+}
+
 export interface UserProfile {
   uid: string;
   displayName: string;
@@ -24,6 +36,7 @@ export interface UserProfile {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   stepGoal?: number;
+  privacySettings?: PrivacySettings;
 }
 
 export interface UserStats {

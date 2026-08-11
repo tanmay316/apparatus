@@ -19,14 +19,16 @@ export async function requestForegroundPermissions() {
 }
 
 export async function startWorkoutForegroundService(type: ForegroundServiceType, title: string, body: string, isPaused: boolean) {
+  // Cardio owns its own native location foreground service and notification.
+  if (type !== 'gym') return;
   if (!Capacitor.isNativePlatform()) return;
   try {
     await ForegroundService.startForegroundService({
-      id: type === 'cardio' ? 101 : 102,
+      id: 102,
       title,
       body,
       smallIcon: 'ic_launcher_foreground',
-      serviceType: type === 'cardio' ? ServiceType.Location : undefined,
+      serviceType: undefined,
       buttons: [
         { id: 1, title: isPaused ? 'RESUME' : 'PAUSE' },
         { id: 2, title: 'STOP' }
@@ -39,10 +41,11 @@ export async function startWorkoutForegroundService(type: ForegroundServiceType,
 }
 
 export async function updateWorkoutForegroundService(type: ForegroundServiceType, title: string, body: string, isPaused: boolean) {
+  if (type !== 'gym') return;
   if (!Capacitor.isNativePlatform()) return;
   try {
     await ForegroundService.updateForegroundService({
-      id: type === 'cardio' ? 101 : 102,
+      id: 102,
       title,
       body,
       smallIcon: 'ic_launcher_foreground',
