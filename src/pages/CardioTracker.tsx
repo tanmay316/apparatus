@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers, RotateCcw, ChevronRight, ChevronUp, ChevronDown, LocateFixed } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers, RotateCcw, ChevronRight, ChevronUp, ChevronDown, LocateFixed, Compass } from 'lucide-react';
+import { useCompassHeading } from '@/hooks/useCompassHeading';
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQueryClient } from '@tanstack/react-query';
@@ -143,6 +144,18 @@ export function CardioTracker() {
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [recenterTrigger, setRecenterTrigger] = useState(0);
+
+  const { heading, requestPermission } = useCompassHeading();
+  const [mapRotationMode, setMapRotationMode] = useState(false);
+
+  const toggleMapRotation = async () => {
+    if (!mapRotationMode) {
+      const granted = await requestPermission();
+      if (granted) setMapRotationMode(true);
+    } else {
+      setMapRotationMode(false);
+    }
+  };
 
   // Fetch recent activities
   useEffect(() => {
@@ -608,7 +621,7 @@ export function CardioTracker() {
         
         {/* Full Screen Map Background */}
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} cardioType={store.activityType as any} />
+          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} cardioType={store.activityType as any} heading={heading} mapRotationMode={mapRotationMode} />
         </div>
 
         {/* Top Header */}
@@ -666,6 +679,13 @@ export function CardioTracker() {
 
         {/* Floating Actions (above the bottom sheet) */}
         <div className="absolute right-4 bottom-[200px] z-10 pointer-events-auto flex flex-col gap-3 transition-all" style={{ transform: isExpanded ? 'translateY(-240px)' : 'translateY(0)' }}>
+          <button
+            onClick={toggleMapRotation}
+            className={`w-12 h-12 flex items-center justify-center rounded-full bg-ink/90 shadow-lg border border-line active:scale-95 transition-transform backdrop-blur-md ${mapRotationMode ? 'text-emerald-500' : 'text-bone'}`}
+            title="Toggle Map Rotation"
+          >
+            <Compass size={22} className={mapRotationMode ? 'animate-pulse' : ''} />
+          </button>
           <button
             onClick={() => setRecenterTrigger(t => t + 1)}
             className="w-12 h-12 flex items-center justify-center rounded-full bg-ink/90 text-blue-500 shadow-lg border border-line active:scale-95 transition-transform backdrop-blur-md"

@@ -16,18 +16,40 @@ const getCardioSvg = (type?: 'walk' | 'run' | 'cycle') => {
   return `<svg xmlns="http://www.w3.org/2000/svg" height="28" viewBox="0 -960 960 960" width="28" fill="#8b5cf6" stroke="white" stroke-width="40" stroke-linejoin="round"><path d="M436-364 371-72q-3 14-14.5 23T330-40q-20 0-32-15t-8-34l102-515-72 28v96q0 17-11.5 28.5T280-440q-17 0-28.5-11.5T240-480v-122q0-12 6.5-21.5T264-638l178-76q14-6 29.5-7t29.5 4q14 5 26.5 14t20.5 23l40 64q13 20 30.5 38t39.5 31q14 8 31 14.5t34 9.5q16 3 26.5 14.5T760-480q0 17-12 28t-29 9q-56-8-100.5-35T541-543l-25 123 72 68q6 6 9 13.5t3 15.5v243q0 17-11.5 28.5T560-40q-17 0-28.5-11.5T520-80v-220l-84-64Zm47.5-399.5Q460-787 460-820t23.5-56.5Q507-900 540-900t56.5 23.5Q620-853 620-820t-23.5 56.5Q573-740 540-740t-56.5-23.5Z"/></svg>`;
 };
 
-// currentIcon dynamically generated based on type
-const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle') => new L.DivIcon({
-  html: `
-    <div class="gps-pulse-ring"></div>
-    <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; position: relative; z-index: 2; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
-      ${getCardioSvg(type)}
-    </div>
-  `,
-  className: 'relative flex items-center justify-center',
-  iconSize: [24, 24],
-  iconAnchor: [12, 12]
-});
+// currentIcon dynamically generated based on type and heading
+const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle', heading?: number | null, mapRotationMode?: boolean) => {
+  const coneRotation = heading || 0;
+  const iconRotation = mapRotationMode ? (heading || 0) : 0;
+
+  const coneHtml = heading !== null && heading !== undefined ? `
+    <svg width="120" height="120" viewBox="0 0 120 120" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(${coneRotation}deg); pointer-events: none; z-index: 1;">
+      <defs>
+        <linearGradient id="coneGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+          <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.4" />
+          <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <path d="M60,60 L25,0 A60,60 0 0,1 95,0 Z" fill="url(#coneGrad)" />
+    </svg>
+  ` : '';
+
+  return new L.DivIcon({
+    html: `
+      <div class="relative w-full h-full flex items-center justify-center">
+        ${coneHtml}
+        <div style="transform: rotate(${iconRotation}deg); transition: transform 0.3s ease-out; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
+          <div class="gps-pulse-ring" style="z-index: 2;"></div>
+          <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; position: relative; z-index: 3; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+            ${getCardioSvg(type)}
+          </div>
+        </div>
+      </div>
+    `,
+    className: 'relative flex items-center justify-center',
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
+  });
+};
 
 // All available map themes with tile URLs
 export const MAP_THEMES = {
@@ -57,6 +79,8 @@ interface Props {
   hideMarkers?: boolean;
   mapPaddingBottomRight?: [number, number];
   mapPaddingTopLeft?: [number, number];
+  heading?: number | null;
+  mapRotationMode?: boolean;
 }
 
 /** Keeps the map centered on the last route point when live tracking or when recenterTrigger changes */
@@ -181,7 +205,7 @@ function InjectGradient() {
   return null;
 }
 
-export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false, isCapturing = false, currentLocation, cardioType, hideMarkers, mapPaddingBottomRight, mapPaddingTopLeft }: Props) {
+export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false, isCapturing = false, currentLocation, cardioType, hideMarkers, mapPaddingBottomRight, mapPaddingTopLeft, heading, mapRotationMode = false }: Props) {
   const positions: [number, number][] = useMemo(() => {
     const pts = route.map(p => [p.lat, p.lng] as [number, number]);
     if (isLive && currentLocation) {
@@ -223,18 +247,28 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
     iconAnchor: [14, 14]
   }), [endColor, cardioType]);
 
-  const liveIcon = useMemo(() => getCurrentIcon(cardioType), [cardioType]);
+  const liveIcon = useMemo(() => getCurrentIcon(cardioType, heading, mapRotationMode), [cardioType, heading, mapRotationMode]);
 
   return (
     <div style={{ height, width: '100%', overflow: 'hidden' }} className="relative">
-      <MapContainer
-        center={center}
-        zoom={zoom}
-        style={{ height: '100%', width: '100%', background: hideMap ? 'transparent' : themeData.bg }}
-        zoomControl={false}
-        attributionControl={false}
-      >
-        <InjectGradient />
+      <div style={{
+        position: 'absolute',
+        top: mapRotationMode ? '-25%' : '0',
+        left: mapRotationMode ? '-25%' : '0',
+        width: mapRotationMode ? '150%' : '100%',
+        height: mapRotationMode ? '150%' : '100%',
+        transform: mapRotationMode && heading !== null && heading !== undefined ? `rotate(${-heading}deg)` : 'none',
+        transformOrigin: 'center center',
+        transition: 'transform 0.3s ease-out, width 0.3s, height 0.3s, top 0.3s, left 0.3s'
+      }}>
+        <MapContainer
+          center={center}
+          zoom={zoom}
+          style={{ height: '100%', width: '100%', background: hideMap ? 'transparent' : themeData.bg }}
+          zoomControl={false}
+          attributionControl={false}
+        >
+          <InjectGradient />
         {!hideMap && <TileLayer url={themeData.url} crossOrigin="anonymous" />}
 
         {positions.length > 1 && (
@@ -301,6 +335,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
         {(isLive || currentLocation) && !hideMarkers && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} currentLocation={currentLocation} />}
         {!isLive && positions.length > 1 && <FitBounds positions={positions} recenterTrigger={recenterTrigger} paddingBottomRight={mapPaddingBottomRight} paddingTopLeft={mapPaddingTopLeft} />}
       </MapContainer>
+      </div>
     </div>
   );
 }
