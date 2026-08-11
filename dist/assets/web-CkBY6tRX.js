@@ -1,0 +1,1 @@
+import{St as e}from"./index-CW-ofXce.js";var t=class extends e{async show(e){}async hide(e){}};export{t as SplashScreenWeb};
