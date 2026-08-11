@@ -36,7 +36,7 @@ function AthleteCard({ athlete, myUid }: { athlete: any; myUid: string }) {
       animate={{ opacity: 1, y: 0 }}
       className="card p-4 flex items-center gap-4"
     >
-      <Link to={`/profile/${athlete.username}`}>
+      <Link to={`/profile/${athlete.username || athlete.uid}`}>
         <img
           src={athlete.photoURL || getAvatarUrl(athlete.displayName, theme)}
           alt={athlete.displayName}
@@ -45,7 +45,7 @@ function AthleteCard({ athlete, myUid }: { athlete: any; myUid: string }) {
         />
       </Link>
       <div className="flex-1 min-w-0">
-        <Link to={`/profile/${athlete.username}`} className="font-bold text-sm hover:text-sienna transition-colors block truncate">
+        <Link to={`/profile/${athlete.username || athlete.uid}`} className="font-bold text-sm hover:text-sienna transition-colors block truncate">
           {athlete.displayName}
         </Link>
         <div className="text-xs text-sienna font-mono truncate">@{athlete.username}</div>

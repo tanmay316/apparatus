@@ -27,12 +27,8 @@ export async function startWorkoutForegroundService(type: ForegroundServiceType,
       id: 102,
       title,
       body,
-      smallIcon: 'ic_launcher_foreground',
+      smallIcon: 'ic_notification',
       serviceType: undefined,
-      buttons: [
-        { id: 1, title: isPaused ? 'RESUME' : 'PAUSE' },
-        { id: 2, title: 'STOP' }
-      ],
       silent: true
     });
   } catch (err) {
@@ -44,20 +40,15 @@ export async function updateWorkoutForegroundService(type: ForegroundServiceType
   if (type !== 'gym') return;
   if (!Capacitor.isNativePlatform()) return;
   try {
-    await ForegroundService.updateForegroundService({
+    await ForegroundService.startForegroundService({
       id: 102,
       title,
       body,
-      smallIcon: 'ic_launcher_foreground',
-      buttons: [
-        { id: 1, title: isPaused ? 'RESUME' : 'PAUSE' },
-        { id: 2, title: 'STOP' }
-      ],
+      smallIcon: 'ic_notification',
       silent: true
     });
   } catch (err) {
-    // If it fails to update, it might not be running. Start it.
-    await startWorkoutForegroundService(type, title, body, isPaused);
+    console.error('[ForegroundService] Failed to update:', err);
   }
 }
 

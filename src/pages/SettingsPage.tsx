@@ -24,29 +24,46 @@ const item = {
 };
 
 export function SettingsPage() {
-  const { user, profile, updateProfile, signOut } = useAuthStore();
+  const { profile } = useAuthStore();
+  
+  if (!profile) {
+    return (
+      <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
+        <div className="w-8 h-8 border-[3px] border-ink/20 border-t-ink/80 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return <SettingsForm profile={profile} />;
+}
+
+function SettingsForm({ profile }: { profile: any }) {
+  const { user, updateProfile, signOut } = useAuthStore();
   const { showToast, theme, setTheme, units, setUnits, language, setLanguage } = useUIStore();
   const { backgroundEnabled, toggleBackground, isSupported: pedometerSupported } = usePedometerStore();
   const navigate = useNavigate();
 
-  const [displayName, setDisplayName] = useState(profile?.displayName || '');
-  const [photoURL, setPhotoURL] = useState(profile?.photoURL || '');
-  const [bio, setBio] = useState(profile?.bio || '');
+  const [displayName, setDisplayName] = useState(profile.displayName || '');
+  const [photoURL, setPhotoURL] = useState(profile.photoURL || '');
+  const [bio, setBio] = useState(profile.bio || '');
   
-  const [height, setHeight] = useState(profile?.height == null ? '' : (units === 'imperial' ? (profile.height / 2.54).toFixed(1) : profile.height.toString()));
-  const [weight, setWeight] = useState(profile?.weight == null ? '' : (units === 'imperial' ? (profile.weight * 2.20462).toFixed(1) : profile.weight.toString()));
-  const [age, setAge] = useState(profile?.age?.toString() || '');
-  const [gender, setGender] = useState(profile?.gender || '');
-  const [fitnessGoal, setFitnessGoal] = useState(profile?.fitnessGoal || '');
-  const [experienceLevel, setExperienceLevel] = useState(profile?.experienceLevel || 'beginner');
-  const [preferredWorkoutType, setPreferredWorkoutType] = useState(profile?.preferredWorkoutType || '');
-  const [isPublic, setIsPublic] = useState(profile?.isPublic !== false);
-  const [stepGoal, setLocalStepGoal] = useState((profile?.stepGoal || 10000).toString());
+  const [height, setHeight] = useState(profile.height == null ? '' : (units === 'imperial' ? (profile.height / 2.54).toFixed(1) : profile.height.toString()));
+  const [weight, setWeight] = useState(profile.weight == null ? '' : (units === 'imperial' ? (profile.weight * 2.20462).toFixed(1) : profile.weight.toString()));
+  const [age, setAge] = useState(profile.age?.toString() || '');
+  const [gender, setGender] = useState(profile.gender || '');
+  const [fitnessGoal, setFitnessGoal] = useState(profile.fitnessGoal || '');
+  const [experienceLevel, setExperienceLevel] = useState(profile.experienceLevel || 'beginner');
+  const [preferredWorkoutType, setPreferredWorkoutType] = useState(profile.preferredWorkoutType || '');
+  const [isPublic, setIsPublic] = useState(profile.isPublic !== false);
+  const [stepGoal, setLocalStepGoal] = useState((profile.stepGoal || 10000).toString());
   
-  const [profileVisibility, setProfileVisibility] = useState<'public' | 'followers' | 'private'>(profile?.privacySettings?.profileVisibility || 'public');
-  const [showEvents, setShowEvents] = useState(profile?.privacySettings?.showEventsToFollowers !== false);
-  const [showClans, setShowClans] = useState(profile?.privacySettings?.showClansToFollowers !== false);
-  const [showStats, setShowStats] = useState(profile?.privacySettings?.showStatsToFollowers !== false);
+  // Use legacy isPublic as fallback if privacySettings is undefined
+  const defaultVisibility = profile.privacySettings?.profileVisibility || (profile.isPublic === false ? 'private' : 'public');
+  const [profileVisibility, setProfileVisibility] = useState<'public' | 'followers' | 'private'>(defaultVisibility);
+  
+  const [showEvents, setShowEvents] = useState(profile.privacySettings?.showEventsToFollowers !== false);
+  const [showClans, setShowClans] = useState(profile.privacySettings?.showClansToFollowers !== false);
+  const [showStats, setShowStats] = useState(profile.privacySettings?.showStatsToFollowers !== false);
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -57,12 +74,9 @@ export function SettingsPage() {
   const cancelWorkout = useWorkoutStore(state => state.cancelWorkout);
 
   useEffect(() => {
-    if (!profile) return;
     setHeight(profile.height == null ? '' : (units === 'imperial' ? (profile.height / 2.54).toFixed(1) : profile.height.toString()));
     setWeight(profile.weight == null ? '' : (units === 'imperial' ? (profile.weight * 2.20462).toFixed(1) : profile.weight.toString()));
-  }, [units]);
-
-  if (!profile) return null;
+  }, [units, profile]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

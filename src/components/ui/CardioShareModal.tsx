@@ -108,7 +108,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
     if (!cardRef.current) return null;
     const canvas = await toCanvas(cardRef.current, {
       pixelRatio: 2,
-      backgroundColor: isTransparent ? undefined : '#121212',
+      backgroundColor: isTransparent ? undefined : '#1f110d',
     });
     
     // Apply clipping to match the 1.8rem border-radius of the card
@@ -235,7 +235,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
 
             <div
               ref={cardRef}
-              className={`w-full h-full relative overflow-hidden flex flex-col pointer-events-none rounded-[1.8rem] ${isTransparent ? 'bg-transparent' : 'bg-[#121212]'}`}
+              className={`w-full h-full relative overflow-hidden flex flex-col pointer-events-none rounded-[1.8rem] ${isTransparent ? 'bg-transparent' : 'bg-[#1f110d]'}`}
             >
               {/* Background Map Layer */}
               {(showMapBackground || showPathBackground) && (
@@ -298,7 +298,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                 {/* Header Logo (Hidden for polaroid) */}
                 {!isPolaroid && !isAShape && (
                   <div className={`flex flex-col items-center justify-center gap-1 ${isSolidBg ? 'mt-4' : 'mt-2'}`}>
-                    <span className="font-sans tracking-[0.3em] text-[18px] font-black text-white drop-shadow-md">
+                    <span className="cardio-share-brand font-sans tracking-[0.3em] text-[18px] font-black text-white drop-shadow-md">
                       ΛPPΛRΛTUS
                     </span>
                   </div>

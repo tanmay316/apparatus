@@ -76,7 +76,7 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
             >
               <Link
                 to={`/workout/${activePlan.id}/day/${day.id}`}
-                className={`relative w-[82vw] sm:w-[260px] min-h-[264px] h-auto p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] shadow-[6px_6px_14px_rgba(0,0,0,0.05),-6px_-6px_14px_rgba(255,255,255,0.8)] ${
+                className={`weekly-plan-card relative w-[82vw] sm:w-[260px] min-h-[264px] h-auto p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] shadow-[6px_6px_14px_rgba(0,0,0,0.05),-6px_-6px_14px_rgba(255,255,255,0.8)] ${
                   isToday
                     ? 'bg-gradient-to-br from-[#fdfbfb] to-[#f4ebe6]'
                     : 'bg-gradient-to-br from-[#fdfbfb] to-[#f5f5f5]'
@@ -140,9 +140,9 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
                   </div>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-gray-100">
+                <div className="weekly-plan-footer mt-4 pt-4 border-t border-gray-100">
                   {isToday ? (
-                     <div className="w-full py-2.5 rounded-xl bg-sienna text-bone font-sans font-semibold text-sm flex items-center justify-center gap-2 hover:bg-sienna-dim transition-colors shadow-[4px_4px_10px_rgba(0,0,0,0.2),-4px_-4px_10px_rgba(255,255,255,0.5)]">
+                     <div className="weekly-plan-start w-full py-2.5 rounded-xl bg-sienna text-bone font-sans font-semibold text-sm flex items-center justify-center gap-2 hover:bg-sienna-dim transition-colors shadow-[4px_4px_10px_rgba(0,0,0,0.2),-4px_-4px_10px_rgba(255,255,255,0.5)]">
                        Start Workout
                      </div>
                   ) : (
@@ -150,9 +150,9 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
                       <div className="flex items-center justify-end text-[10px] font-sans font-medium text-gray-500 mb-1.5 uppercase tracking-wide">
                          <span>{wasCompleted ? '100%' : '0%'}</span>
                       </div>
-                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="weekly-plan-progress-track w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all duration-500 ${wasCompleted ? 'bg-emerald-500' : 'bg-gray-300'}`}
+                          className={`weekly-plan-progress-fill h-full rounded-full transition-all duration-500 ${wasCompleted ? 'bg-emerald-500' : 'bg-gray-300'}`}
                           style={{ width: wasCompleted ? '100%' : '0%' }}
                         />
                       </div>

@@ -124,29 +124,47 @@
 
 /* Steep Dark Theme */
 [data-theme='dark'] {
-  --color-ink:       8 7 6;        /* #080706 Canvas Base */
-  --color-ink-2:     15 13 12;     /* #0f0d0c Surface Secondary */
-  --color-ink-3:     10 7 6;       /* #0A0706 Premium black-brown canvas background */
+  --color-ink:       9 6 5;        /* #090605 Near-black canvas */
+  --color-ink-2:     31 17 13;     /* #1f110d Raised dark-brown surface */
+  --color-ink-3:     48 27 20;     /* #301b14 Chestnut surface */
 
   --color-bone:      247 245 242;  /* #f7f5f2 Primary Text */
-  --color-bone-dim:  139 144 152;  /* #8b9098 Muted Text */
+  --color-bone-dim:  202 181 169;  /* #cab5a9 Muted Text */
 
-  --color-line:      110 115 123;  /* #6e737b Subtle Border/Divider */
-  --color-line-solid: 58 61 68;
+  --color-line:      102 70 58;    /* #66463a Subtle Border/Divider */
+  --color-line-solid: 130 91 74;
 
-  --color-sienna:    215 178 157;  /* #d7b29d Accent */
-  --color-sienna-dim: 122 67 48;   /* #7a4330 Accent Strong */
+  --color-sienna:    239 173 128;  /* #efad80 Warm Accent */
+  --color-sienna-dim: 174 86 53;   /* #ae5635 Accent Strong */
 
-  --surface-canvas:   #0A0706;
+  --surface-canvas:   #090605;
+  --surface-card-mist: #1f110d;
+  --surface-section-fog: #301b14;
+  --surface-accent-blush: #43231a;
+  --surface-elevated-white: #291611;
 
-  --shadow-subtle: none;
-  --shadow-subtle-2: none;
-  --shadow-subtle-3: none;
-  --shadow-artifact: none;
-  --clay-shadow-lg: none;
-  --neo-shadow-raised: none;
-  --neo-shadow-raised-lg: none;
-  
-  --shadow-soft: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 24px 60px rgba(0, 0, 0, 0.35);
+  /* Shared component variables used by profile, cardio, and modal views. */
+  --bg: #090605;
+  --card: #1f110d;
+  --border: #4e2b20;
+  --text: #fff3eb;
+  --muted: #d1b2a1;
+  --scrollbar-track: #090605;
+  --scrollbar-thumb: #4e2b20;
+  --scrollbar-hover: #6e3c2a;
+
+  --shadow-subtle: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 10px 24px rgba(2, 4, 10, 0.26);
+  --shadow-subtle-2: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 18px 40px rgba(2, 4, 10, 0.35);
+  --shadow-subtle-3: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 24px 48px rgba(2, 4, 10, 0.42);
+  --shadow-artifact: 0 1px 0 rgba(255, 255, 255, 0.07) inset, 0 12px 28px rgba(2, 4, 10, 0.32);
+  --clay-shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 5px 14px rgba(0, 0, 0, 0.22);
+  --clay-shadow-md: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 10px 24px rgba(0, 0, 0, 0.3);
+  --clay-shadow-lg: var(--shadow-subtle-2);
+  --clay-shadow-btn: 0 1px 0 rgba(255, 239, 226, 0.24) inset, 0 8px 20px rgba(137, 58, 33, 0.34);
+  --neo-shadow-raised: var(--shadow-artifact);
+  --neo-shadow-raised-sm: var(--clay-shadow-sm);
+  --neo-shadow-raised-lg: var(--shadow-subtle-3);
+  --neo-shadow-inset: inset 3px 3px 7px rgba(0, 0, 0, 0.36), inset -2px -2px 5px rgba(255, 255, 255, 0.045);
+  --neo-shadow-inset-sm: inset 2px 2px 5px rgba(0, 0, 0, 0.28), inset -1px -1px 3px rgba(255, 255, 255, 0.04);
+  --shadow-soft: 0 1px 0 rgba(255, 255, 255, 0.1) inset, 0 22px 50px rgba(2, 4, 10, 0.45), 0 0 0 1px rgba(239, 173, 128, 0.13);
 }
-

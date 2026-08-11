@@ -13,7 +13,7 @@ call npx cap sync android
 
 echo.
 echo [3/4] Configuring Java Runtime and Android SDK...
-set JAVA_HOME=C:\Program Files\Android\Android Studio\jbr
+set JAVA_HOME=C:\Program Files\Java\jdk-21
 set ANDROID_HOME=C:\Users\Tms\AppData\Local\Android\Sdk
 
 echo.
@@ -22,12 +22,11 @@ cd android
 call .\gradlew.bat assembleDebug
 cd ..
 
-copy /y android\app\build\outputs\apk\debug\app-debug.apk apparatus.apk
+copy /y android\app\build\outputs\apk\debug\app-debug.apk Apparatus.apk
 
 echo.
 echo ===================================================
 echo   Build Complete!
 echo   Your APK is located right here in your project root:
-echo   apparatus.apk
+echo   Apparatus.apk
 echo ===================================================
-pause

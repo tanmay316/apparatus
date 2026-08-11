@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, query, collection, where, limit, getDocs } from 'firebase/firestore';
 import { ChevronLeft, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus, Clock } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { db } from '@/lib/firebase';
@@ -104,11 +104,11 @@ export function ProfilePage() {
 
   // Theme support local properties mapping
   const themeStyles = theme === 'dark' ? {
-    '--bg': '#090b12',
-    '--card': '#121826',
-    '--border': 'rgba(255,255,255,0.06)',
+    '--bg': '#090605',
+    '--card': '#1f110d',
+    '--border': '#4e2b20',
     '--text': '#f5f1e8',
-    '--muted': '#8b92a5',
+    '--muted': '#d1b2a1',
     '--teal': '#d7b29d',
     '--amber': '#d9a441',
   } as React.CSSProperties : {
@@ -155,18 +155,47 @@ export function ProfilePage() {
         setIsOwnProfile(true);
       } else {
         try {
-          const usernameDoc = await getDoc(doc(db, 'usernames', username));
-          let uid = '';
+          // 1. Try to fetch from the usernames collection (handle case insensitivity by trying lowercase too)
+          let usernameDoc = await getDoc(doc(db, 'usernames', username));
+          if (!usernameDoc.exists()) {
+            usernameDoc = await getDoc(doc(db, 'usernames', username.toLowerCase()));
+          }
+          
+          let uid = username; // Default to assuming the param IS the uid
           if (usernameDoc.exists()) {
             uid = usernameDoc.data().uid;
-          } else {
-            uid = username;
           }
-          const profileDoc = await getDoc(doc(db, 'users', uid));
-          const statsDoc = await getDoc(doc(db, 'users', uid, 'stats', 'current'));
+          
+          let profileDoc = await getDoc(doc(db, 'users', uid));
+          
+          // 2. If we still don't have a profile, fallback to querying the users collection directly
+          if (!profileDoc.exists()) {
+            const fallbackQ = query(collection(db, 'users'), where('username', '==', username), limit(1));
+            const fallbackSnap = await getDocs(fallbackQ);
+            if (!fallbackSnap.empty) {
+              profileDoc = fallbackSnap.docs[0] as any;
+              uid = profileDoc.id;
+            } else {
+              const lowerQ = query(collection(db, 'users'), where('usernameLower', '==', username.toLowerCase()), limit(1));
+              const lowerSnap = await getDocs(lowerQ);
+              if (!lowerSnap.empty) {
+                profileDoc = lowerSnap.docs[0] as any;
+                uid = profileDoc.id;
+              }
+            }
+          }
+
           if (profileDoc.exists()) {
+            let statsData = null;
+            try {
+              const statsDoc = await getDoc(doc(db, 'users', uid, 'stats', 'current'));
+              if (statsDoc.exists()) statsData = statsDoc.data() as UserStats;
+            } catch (err) {
+              console.warn('Could not fetch stats, possibly due to privacy rules', err);
+            }
+            
             setViewProfile({ uid, ...profileDoc.data() } as UserProfile);
-            setViewStats(statsDoc.exists() ? statsDoc.data() as UserStats : null);
+            setViewStats(statsData);
           }
           setIsOwnProfile(false);
         } catch (e) {
@@ -1020,17 +1049,40 @@ function FollowButton({ myUid, targetUid }: { myUid: string; targetUid: string }
 // ─── Follow Counts ──────────────────────────────────────
 function FollowCountDisplay({ uid }: { uid: string }) {
   const [modalType, setModalType] = useState<'followers' | 'following' | null>(null);
+  const { user } = useAuthStore();
+  const isOwnProfile = user?.uid === uid;
 
   const { data: counts } = useQuery({
     queryKey: ['followCounts', uid],
     queryFn: () => getFollowCounts(uid),
   });
 
+  const { data: requests = [] } = useQuery({
+    queryKey: ['followRequests', uid],
+    queryFn: () => getFollowRequests(uid),
+    enabled: isOwnProfile,
+  });
+
+  const hasRequests = requests.length > 0;
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('modal') === 'followers' && isOwnProfile) {
+      setModalType('followers');
+    }
+  }, [isOwnProfile]);
+
   return (
     <div className="flex gap-6">
-      <button onClick={() => setModalType('followers')} className="hover:opacity-75 transition-opacity flex gap-1.5 items-baseline">
+      <button 
+        onClick={() => setModalType('followers')} 
+        className={`hover:opacity-75 transition-all flex gap-1.5 items-baseline relative ${hasRequests ? 'text-[var(--color-sienna-brown)]' : ''}`}
+      >
         <span className="font-bold font-mono text-[var(--text)] text-base">{counts?.followers || 0}</span>
         <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-mono">Followers</span>
+        {hasRequests && (
+          <span className="absolute -top-1 -right-2 w-2 h-2 rounded-full bg-[var(--color-sienna-brown)] animate-pulse drop-shadow-[0_0_8px_rgba(244,160,128,1)]" />
+        )}
       </button>
       <button onClick={() => setModalType('following')} className="hover:opacity-75 transition-opacity flex gap-1.5 items-baseline">
         <span className="font-bold font-mono text-[var(--text)] text-base">{counts?.following || 0}</span>
@@ -1099,11 +1151,11 @@ function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'f
   });
 
   const themeStyles = theme === 'dark' ? {
-    '--bg': '#0a0d14',
-    '--card': '#141720',
-    '--border': '#222736',
-    '--text': '#f3f4f6',
-    '--muted': '#8b92a5',
+    '--bg': '#090605',
+    '--card': '#1f110d',
+    '--border': '#4e2b20',
+    '--text': '#fff3eb',
+    '--muted': '#d1b2a1',
     '--teal': '#d7b29d',
     '--amber': '#d9a441',
   } as React.CSSProperties : {
@@ -1147,57 +1199,62 @@ function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'f
               No {type} yet.
             </div>
           ) : (
-            <div className="space-y-4 pb-4">
+            <div className="space-y-6 pb-4">
               {requestUsers.length > 0 && (
-                <div className="space-y-1">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted)] px-2 py-1">Follow Requests</h3>
-                  {requestUsers.map(u => (
-                    <div key={u.uid} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-[var(--card)] transition-colors group">
-                      <Link to={`/profile/${u.username}`} onClick={onClose}>
-                        <img
-                          src={u.photoURL || getAvatarUrl(u.displayName, theme)}
-                          alt={u.displayName}
-                          className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm group-hover:scale-105 transition-transform"
-                        />
-                      </Link>
-                      <div className="flex-1 min-w-0">
-                        <Link to={`/profile/${u.username}`} onClick={onClose} className="font-bold text-[15px] truncate text-[var(--text)] hover:underline block">{u.displayName}</Link>
-                        <div className="text-xs text-[var(--muted)] font-mono truncate mt-0.5">@{u.username}</div>
+                <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-sm">
+                  <div className="px-4 py-3 border-b border-[var(--border)] bg-[var(--bg)] flex items-center justify-between">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">Follow Requests</h3>
+                    <span className="bg-[var(--teal)]/10 text-[var(--teal)] text-[10px] font-bold px-2 py-0.5 rounded-full">{requestUsers.length}</span>
+                  </div>
+                  <div className="divide-y divide-[var(--border)]">
+                    {requestUsers.map(u => (
+                      <div key={u.uid} className="flex items-center gap-3 p-4 hover:bg-[var(--bg)] transition-colors">
+                        <Link to={`/profile/${u.username || u.uid}`} onClick={onClose}>
+                          <img
+                            src={u.photoURL || getAvatarUrl(u.displayName, theme)}
+                            alt={u.displayName}
+                            className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm"
+                          />
+                        </Link>
+                        <div className="flex-1 min-w-0">
+                          <Link to={`/profile/${u.username || u.uid}`} onClick={onClose} className="font-bold text-[14px] truncate text-[var(--text)] hover:underline block">{u.displayName}</Link>
+                          <div className="text-xs text-[var(--muted)] font-mono truncate">@{u.username}</div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => acceptMutation.mutate(u.uid)} disabled={acceptMutation.isPending} className="px-4 py-1.5 bg-[var(--teal)] text-white text-xs font-bold rounded-xl hover:opacity-90 transition-opacity">
+                            Confirm
+                          </button>
+                          <button onClick={() => declineMutation.mutate(u.uid)} disabled={declineMutation.isPending} className="px-4 py-1.5 bg-[var(--border)] text-[var(--text)] text-xs font-bold rounded-xl hover:bg-[var(--muted)]/20 transition-colors">
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex gap-1.5">
-                        <button onClick={() => acceptMutation.mutate(u.uid)} disabled={acceptMutation.isPending} className="p-2 bg-[var(--teal)]/10 text-[var(--teal)] hover:bg-[var(--teal)] hover:text-white rounded-lg transition-colors">
-                          <Check size={16} />
-                        </button>
-                        <button onClick={() => declineMutation.mutate(u.uid)} disabled={declineMutation.isPending} className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors">
-                          <X size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
 
               {users.length > 0 && (
-                <div className="space-y-1">
-                  {requestUsers.length > 0 && <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted)] px-2 py-1">All {type}</h3>}
+                <div className="space-y-2">
+                  {requestUsers.length > 0 && <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--muted)] px-2 py-1 mb-2">All {type}</h3>}
                   {users.map(u => (
-                    <div key={u.uid} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-[var(--card)] transition-colors group relative">
-                      <Link to={`/profile/${u.username}`} onClick={onClose} className="flex-1 flex items-center gap-4 min-w-0">
+                    <div key={u.uid} className="flex items-center justify-between p-2 rounded-2xl hover:bg-[var(--card)] transition-colors group">
+                      <Link to={`/profile/${u.username || u.uid}`} onClick={onClose} className="flex items-center gap-3 flex-1 min-w-0 pr-4">
                         <img
                           src={u.photoURL || getAvatarUrl(u.displayName, theme)}
                           alt={u.displayName}
-                          className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm group-hover:scale-105 transition-transform flex-shrink-0"
+                          className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm"
                         />
                         <div className="flex-1 min-w-0">
-                          <div className="font-bold text-[15px] truncate text-[var(--text)]">{u.displayName}</div>
-                          <div className="text-xs text-[var(--muted)] font-mono truncate mt-0.5">@{u.username}</div>
+                          <div className="font-bold text-[14px] truncate text-[var(--text)] group-hover:underline">{u.displayName}</div>
+                          <div className="text-xs text-[var(--muted)] font-mono truncate">@{u.username}</div>
                         </div>
                       </Link>
                       {isOwnList && type === 'followers' && (
                         <button 
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); removeMutation.mutate(u.uid); }}
                           disabled={removeMutation.isPending}
-                          className="px-3 py-1.5 text-xs font-mono rounded-lg bg-[var(--border)] text-[var(--muted)] hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                          className="px-4 py-1.5 text-xs font-bold rounded-xl bg-[var(--border)] text-[var(--text)] hover:bg-red-500 hover:text-white transition-colors whitespace-nowrap"
                         >
                           Remove
                         </button>

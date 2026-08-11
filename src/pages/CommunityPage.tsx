@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Plus, Swords, Shield, Target, CalendarDays, Zap, Users } from 'lucide-react';
@@ -19,6 +19,11 @@ export function CommunityPage() {
   
   const { user } = useAuthStore();
   const isDark = useUIStore(s => s.theme === 'dark');
+
+  useEffect(() => {
+    document.body.classList.toggle('community-create-open', showCreateMenu || createType !== null);
+    return () => document.body.classList.remove('community-create-open');
+  }, [showCreateMenu, createType]);
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1200px] mx-auto w-full pb-20">

@@ -48,7 +48,7 @@ export async function clearNotification(id: number) {
   }
 }
 
-export async function showNotification(id: number, title: string, body: string) {
+export async function showNotification(id: number, title: string, body: string, extraData?: any) {
   if (Capacitor.isNativePlatform()) {
     await LocalNotifications.schedule({
       notifications: [
@@ -56,6 +56,7 @@ export async function showNotification(id: number, title: string, body: string) 
           title,
           body,
           id,
+          extra: extraData,
           autoCancel: true,
         }
       ]

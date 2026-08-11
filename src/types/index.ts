@@ -187,7 +187,7 @@ export interface Comment {
 
 export interface Notification {
   id?: string;
-  type: 'follow' | 'unfollow' | 'like' | 'comment' | 'activity' | 'achievement' | 'reminder';
+  type: 'follow' | 'follow_request' | 'unfollow' | 'like' | 'comment' | 'activity' | 'achievement' | 'reminder';
   receiverId: string;
   senderId: string;
   senderName: string;

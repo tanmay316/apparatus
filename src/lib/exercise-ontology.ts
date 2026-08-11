@@ -222,6 +222,36 @@ export const EXERCISE_ONTOLOGY: ExerciseDefinition[] = [
     }
   },
   {
+    id: "crunch",
+    name: "Crunch",
+    aliases: ["crunches", "reverse crunch", "reverse crunches", "bicycle crunch", "sit up", "sit ups"],
+    pattern: "spinal_flexion",
+    muscles: {
+      primary: [{ muscle: "abs", weight: 1.0 }],
+      secondary: [{ muscle: "obliques", weight: 0.3 }]
+    }
+  },
+  {
+    id: "leg_raise",
+    name: "Leg Raise",
+    aliases: ["hanging leg raise", "lying leg raise", "leg raises", "knee raise", "knee raises", "captains chair"],
+    pattern: "hip_flexion",
+    muscles: {
+      primary: [{ muscle: "abs", weight: 1.0 }, { muscle: "hip_flexors", weight: 1.0 }],
+      secondary: []
+    }
+  },
+  {
+    id: "hollow_hold",
+    name: "Hollow Hold",
+    aliases: ["hollow body hold", "hollow rocks", "v up", "v ups"],
+    pattern: "anti_extension",
+    muscles: {
+      primary: [{ muscle: "abs", weight: 1.0 }],
+      secondary: [{ muscle: "hip_flexors", weight: 0.5 }]
+    }
+  },
+  {
     id: "dip",
     name: "Dip",
     aliases: ["tricep dip", "chest dip", "dips"],

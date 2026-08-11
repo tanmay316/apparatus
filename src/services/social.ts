@@ -81,7 +81,7 @@ export async function requestFollow(myUid: string, targetUid: string): Promise<v
   const senderSnap = await getDoc(doc(db, 'users', myUid));
   const sender = senderSnap.exists() ? senderSnap.data() : {};
   await notify(targetUid, {
-    type: 'follow',
+    type: 'follow_request',
     senderId: myUid,
     senderName: sender.displayName || 'An athlete',
     senderPhoto: sender.photoURL || '',
@@ -198,7 +198,7 @@ export async function getUsersByUids(uids: string[]): Promise<any[]> {
   for (const chunk of chunks) {
     const q = query(collection(db, 'users'), where(documentId(), 'in', chunk));
     const snap = await getDocs(q);
-    results.push(...snap.docs.filter(d => d.data().isPublic === true).map(d => ({ uid: d.id, ...d.data() })));
+    results.push(...snap.docs.map(d => ({ uid: d.id, ...d.data() })));
   }
   return results;
 }
@@ -216,18 +216,18 @@ export async function searchUsers(queryStr: string): Promise<any[]> {
   const byUid = new Map<string, any>();
   try {
     const [usernameSnap, displayNameSnap] = await Promise.all([
-      getDocs(query(collection(db, 'users'), where('isPublic', '==', true), where('usernameLower', '>=', normalizedQuery), where('usernameLower', '<=', end), limit(20))),
-      getDocs(query(collection(db, 'users'), where('isPublic', '==', true), where('displayNameLower', '>=', normalizedQuery), where('displayNameLower', '<=', end), limit(20))),
+      getDocs(query(collection(db, 'users'), where('usernameLower', '>=', normalizedQuery), where('usernameLower', '<=', end), limit(20))),
+      getDocs(query(collection(db, 'users'), where('displayNameLower', '>=', normalizedQuery), where('displayNameLower', '<=', end), limit(20))),
     ]);
     [...usernameSnap.docs, ...displayNameSnap.docs].forEach(d => byUid.set(d.id, { uid: d.id, ...d.data() }));
   } catch (error) {
-    console.warn('Indexed user search failed; using public-profile fallback.', error);
+    console.warn('Indexed user search failed; using fallback.', error);
   }
 
   // Older profiles may not have usernameLower/displayNameLower yet. Keep search
   // usable while those records are gradually backfilled.
   if (byUid.size < 20) {
-    const fallbackSnap = await getDocs(query(collection(db, 'users'), where('isPublic', '==', true), limit(100)));
+    const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(100)));
     fallbackSnap.docs.forEach(d => {
       const data = d.data();
       const username = String(data.username || '').toLowerCase();
@@ -404,14 +404,81 @@ export async function getNotifications(userId: string): Promise<AppNotification[
     where('receiverId', '==', userId)
   ));
   
-  const allNotes = snap.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification));
-  return allNotes
+  const now = Date.now() / 1000;
+  const ONE_WEEK = 7 * 24 * 60 * 60;
+  
+  const validNotes: AppNotification[] = [];
+  const batch = writeBatch(db);
+  let deletes = 0;
+  
+  snap.docs.forEach(d => {
+    const data = d.data();
+    const time = data.createdAt?.seconds || 0;
+    if (now - time > ONE_WEEK) {
+      batch.delete(d.ref);
+      deletes++;
+    } else {
+      validNotes.push({ id: d.id, ...data } as AppNotification);
+    }
+  });
+  
+  if (deletes > 0) {
+    try {
+      await batch.commit();
+    } catch (err) {
+      console.warn('Failed to cleanup old notifications:', err);
+    }
+  }
+
+  return validNotes
     .sort((a, b) => {
       const timeA = a.createdAt?.seconds || 0;
       const timeB = b.createdAt?.seconds || 0;
       return timeB - timeA;
     })
     .slice(0, 20);
+}
+
+export function subscribeToNotifications(
+  userId: string,
+  onUpdate: (notifications: AppNotification[]) => void,
+  onNew?: (notification: AppNotification) => void
+): () => void {
+  const q = query(collection(db, 'notifications'), where('receiverId', '==', userId));
+  return onSnapshot(q, (snap) => {
+    const validNotes: AppNotification[] = [];
+    const now = Date.now() / 1000;
+    const ONE_WEEK = 7 * 24 * 60 * 60;
+    
+    if (onNew) {
+      snap.docChanges().forEach(change => {
+        if (change.type === 'added') {
+          const data = change.doc.data();
+          const time = data.createdAt?.seconds || 0;
+          // Trigger onNew only if created in the last 15 seconds (to avoid firing on initial load for old notes)
+          if (now - time < 15) {
+            onNew({ id: change.doc.id, ...data } as AppNotification);
+          }
+        }
+      });
+    }
+
+    snap.docs.forEach(d => {
+      const data = d.data();
+      const time = data.createdAt?.seconds || 0;
+      if (now - time <= ONE_WEEK) {
+        validNotes.push({ id: d.id, ...data } as AppNotification);
+      }
+    });
+
+    validNotes.sort((a, b) => {
+      const timeA = a.createdAt?.seconds || 0;
+      const timeB = b.createdAt?.seconds || 0;
+      return timeB - timeA;
+    });
+
+    onUpdate(validNotes);
+  });
 }
 
 export async function markNotificationRead(notificationId: string): Promise<void> {

@@ -231,19 +231,19 @@ export function CalendarPage() {
     : 'bg-gradient-to-br from-[#ffeee6] to-[#fbf8e7] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] border border-white/60 text-[#17191c]';
 
   const nmCard = isDark
-    ? 'bg-[#1e2024] shadow-[8px_8px_20px_rgba(0,0,0,0.6),-8px_-8px_20px_rgba(255,255,255,0.03)] border-none text-bone'
+    ? 'bg-[#2b1711] shadow-[8px_8px_20px_rgba(0,0,0,0.6),-8px_-8px_20px_rgba(255,255,255,0.03)] border-none text-bone'
     : 'bg-[#fbf8e7] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] border border-white/60 text-[#17191c]';
 
   const nmBtn = isDark
-    ? 'bg-[#1e2024] shadow-[4px_4px_10px_rgba(0,0,0,0.4),-4px_-4px_10px_rgba(255,255,255,0.03)] border-none text-bone'
+    ? 'bg-[#2b1711] shadow-[4px_4px_10px_rgba(0,0,0,0.4),-4px_-4px_10px_rgba(255,255,255,0.03)] border-none text-bone'
     : 'bg-[#fbf8e7] shadow-[4px_4px_10px_rgba(0,0,0,0.06),-4px_-4px_10px_rgba(255,255,255,0.8)] border border-white/60 text-[#17191c]';
 
   const nmInset = isDark
-    ? 'bg-[#1e2024] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.6),inset_-3px_-3px_8px_rgba(255,255,255,0.03)] border-none'
+    ? 'bg-[#2b1711] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.6),inset_-3px_-3px_8px_rgba(255,255,255,0.03)] border-none'
     : 'bg-[#fbf8e7] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.05),inset_-3px_-3px_8px_rgba(255,255,255,1)] border border-white/60';
 
   const nmTag = isDark
-    ? 'bg-[#1e2024] shadow-[2px_2px_5px_rgba(0,0,0,0.4),-2px_-2px_5px_rgba(255,255,255,0.03)] border-none text-bone'
+    ? 'bg-[#2b1711] shadow-[2px_2px_5px_rgba(0,0,0,0.4),-2px_-2px_5px_rgba(255,255,255,0.03)] border-none text-bone'
     : 'bg-[#fbf8e7] shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)] border border-white/60 text-[#17191c]';
 
   return (
@@ -329,12 +329,12 @@ export function CalendarPage() {
                     key={i}
                     onClick={() => setSelectedDate(cell.dateStr)}
                     className={`aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-mono relative transition-all ${isSelected
-                        ? `${isDark ? 'bg-[#1e2024] shadow-[inset_4px_4px_10px_rgba(0,0,0,0.6),inset_-4px_-4px_10px_rgba(255,255,255,0.05)] text-sienna' : 'bg-[#fbf8e7] shadow-[inset_4px_4px_10px_rgba(0,0,0,0.05),inset_-4px_-4px_10px_rgba(255,255,255,1)] text-[#5d2a1a]'} font-bold border-none`
+                        ? `${isDark ? 'bg-[#2b1711] shadow-[inset_4px_4px_10px_rgba(0,0,0,0.6),inset_-4px_-4px_10px_rgba(255,255,255,0.05)] text-sienna' : 'bg-[#fbf8e7] shadow-[inset_4px_4px_10px_rgba(0,0,0,0.05),inset_-4px_-4px_10px_rgba(255,255,255,1)] text-[#5d2a1a]'} font-bold border-none`
                         : isToday
                           ? 'bg-amber/15 text-amber font-bold border border-amber/30'
                           : (hasWorkout || hasEvent)
-                            ? `${isDark ? 'text-bone bg-[#1e2024] shadow-[3px_3px_8px_rgba(0,0,0,0.5),-3px_-3px_8px_rgba(255,255,255,0.03)]' : 'text-[#17191c] bg-[#fbf8e7] shadow-[3px_3px_8px_rgba(0,0,0,0.06),-3px_-3px_8px_rgba(255,255,255,0.8)]'} border-none`
-                            : `${isDark ? 'text-bone-dim bg-[#1e2024] shadow-[3px_3px_8px_rgba(0,0,0,0.4),-3px_-3px_8px_rgba(255,255,255,0.02)] hover:text-bone' : 'text-[#777b86] bg-[#fbf8e7] shadow-[3px_3px_8px_rgba(0,0,0,0.04),-3px_-3px_8px_rgba(255,255,255,0.6)] hover:text-[#17191c]'} border-none`
+                            ? `${isDark ? 'text-bone bg-[#2b1711] shadow-[3px_3px_8px_rgba(0,0,0,0.5),-3px_-3px_8px_rgba(255,255,255,0.03)]' : 'text-[#17191c] bg-[#fbf8e7] shadow-[3px_3px_8px_rgba(0,0,0,0.06),-3px_-3px_8px_rgba(255,255,255,0.8)]'} border-none`
+                            : `${isDark ? 'text-bone-dim bg-[#2b1711] shadow-[3px_3px_8px_rgba(0,0,0,0.4),-3px_-3px_8px_rgba(255,255,255,0.02)] hover:text-bone' : 'text-[#777b86] bg-[#fbf8e7] shadow-[3px_3px_8px_rgba(0,0,0,0.04),-3px_-3px_8px_rgba(255,255,255,0.6)] hover:text-[#17191c]'} border-none`
                       }`}
                   >
                     {cell.day}

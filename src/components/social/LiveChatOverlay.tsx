@@ -25,11 +25,11 @@ export function LiveChatOverlay() {
   const startedAtMs = workoutStore.isActive ? workoutStore.startedAt : (cardioStore.isTracking ? cardioStore.startedAt : 0);
 
   const themeStyles = theme === 'dark' ? {
-    '--bg': '#0a0d14',
-    '--card': '#141720',
-    '--border': '#222736',
-    '--text': '#f3f4f6',
-    '--muted': '#8b92a5',
+    '--bg': '#090605',
+    '--card': '#1f110d',
+    '--border': '#4e2b20',
+    '--text': '#fff3eb',
+    '--muted': '#d1b2a1',
     '--teal': '#d7b29d',
     '--amber': '#d9a441',
   } as React.CSSProperties : {

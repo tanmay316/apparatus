@@ -526,7 +526,7 @@ export function CardioTracker() {
     const isDark = useUIStore.getState().theme === 'dark';
 
     return createPortal(
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-[var(--bg)] flex flex-col h-screen overflow-hidden">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="cardio-ready-screen fixed inset-0 z-[9999] bg-[var(--bg)] flex flex-col h-screen overflow-hidden">
         
         {/* Background Map */}
         <div className="absolute inset-0 z-0">
@@ -575,13 +575,13 @@ export function CardioTracker() {
         {/* Content Overlay */}
         <div className="relative z-10 flex-1 flex flex-col justify-end p-8 pb-[100px] pointer-events-none">
           <div className="pointer-events-auto text-center mb-8">
-            <h1 className="font-sans text-5xl font-black tracking-tight text-[var(--text)] drop-shadow-md mb-2">{typeLabel}</h1>
+            <h1 className="cardio-ready-title font-sans text-5xl font-black tracking-tight text-[var(--text)] drop-shadow-md mb-2">{typeLabel}</h1>
             <p className="text-sm font-semibold text-[var(--muted)] tracking-widest uppercase bg-[var(--bg)]/50 backdrop-blur-sm px-4 py-1.5 rounded-full inline-block">Tap to begin</p>
           </div>
           
           <button
             onClick={handleStartTracking}
-            className={`w-24 h-24 rounded-full flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-[0_10px_40px_rgba(0,0,0,0.3)] mx-auto pointer-events-auto ${
+            className={`cardio-ready-start w-24 h-24 rounded-full flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-[0_10px_40px_rgba(0,0,0,0.3)] mx-auto pointer-events-auto ${
               isDark ? 'bg-white text-black' : 'bg-black text-white'
             }`}
           >
@@ -678,7 +678,7 @@ export function CardioTracker() {
         <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-auto">
           <motion.div 
             animate={{ height: isExpanded ? 440 : 180 }}
-            className={`
+            className={`cardio-live-panel
               ${isDarkMap 
                 ? 'bg-black/40 text-white border-t border-white/20 shadow-[0_-10px_40px_rgba(0,0,0,0.5),inset_0_2px_4px_rgba(255,255,255,0.2),inset_0_0_20px_rgba(255,255,255,0.1)]' 
                 : 'bg-white/50 text-black border-t border-white/60 shadow-[0_-10px_40px_rgba(0,0,0,0.1),inset_0_2px_6px_rgba(255,255,255,0.9),inset_0_0_20px_rgba(255,255,255,0.5)]'} 
@@ -775,7 +775,7 @@ export function CardioTracker() {
               </div>
 
               {(store.activityType === 'walk' || store.activityType === 'run') && (
-                <div className="card p-5 mt-4 bg-white/5 backdrop-blur border-white/10 flex items-center justify-between pointer-events-auto">
+                <div className="cardio-steps-card card p-5 mt-4 bg-white/5 backdrop-blur border-white/10 flex items-center justify-between pointer-events-auto">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-sienna/20 flex items-center justify-center text-sienna">
                       <Footprints size={20} />

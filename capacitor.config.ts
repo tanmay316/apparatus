@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.tms.apparatus',
-  appName: 'apparatus',
+  appName: 'Apparatus',
   webDir: 'dist',
   plugins: {
     CapacitorUpdater: {

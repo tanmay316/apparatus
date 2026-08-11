@@ -71,7 +71,7 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="relative p-4 mb-3 rounded-[16px] bg-[#fbe1d1]/40 backdrop-blur-xl border border-white/40 shadow-lg text-[#5d2a1a]"
+      className="today-focus-card relative p-4 mb-3 rounded-[16px] bg-[#fbe1d1]/40 backdrop-blur-xl border border-white/40 shadow-lg text-[#5d2a1a]"
     >
       <div className="relative flex items-center justify-between gap-3">
         {/* Info */}

@@ -7,7 +7,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
-import { getNotifications, markNotificationRead, markAllNotificationsRead, searchUsers } from '@/services/social';
+import { getNotifications, markNotificationRead, markAllNotificationsRead, searchUsers, subscribeToNotifications } from '@/services/social';
+import { showNotification } from '@/utils/notifications';
 import { COMPACT_LIBRARY } from '@/services/library';
 import { getSamplePlans } from '@/services/plans';
 
@@ -87,12 +88,34 @@ export function Topbar() {
   const hasSearchQuery = searchQuery.trim().length >= 1;
   const hasSearchResults = matchingExercises.length > 0 || matchingPlans.length > 0 || matchingAthletes.length > 0;
 
-  // ─── Notifications Query ──────────────────────────────────
+  // ─── Notifications Listener ─────────────────────────────────
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications', profile?.uid],
     queryFn: () => getNotifications(profile!.uid),
     enabled: !!profile,
+    staleTime: Infinity, // Handled by listener
   });
+
+  useEffect(() => {
+    if (!profile?.uid) return;
+    const unsub = subscribeToNotifications(
+      profile.uid,
+      (notes) => {
+        queryClient.setQueryData(['notifications', profile.uid], notes);
+      },
+      (newNote) => {
+        if (!newNote.read) {
+          showNotification(
+            Math.floor(Math.random() * 100000),
+            'Apparatus',
+            newNote.message,
+            { type: newNote.type, senderId: newNote.senderId, targetId: newNote.targetId }
+          );
+        }
+      }
+    );
+    return () => unsub();
+  }, [profile?.uid, queryClient]);
 
   const readMutation = useMutation({
     mutationFn: (notificationId: string) => markNotificationRead(notificationId),
@@ -107,7 +130,9 @@ export function Topbar() {
   const handleNotificationClick = async (notification: any) => {
     if (notification.id && !notification.read) await readMutation.mutateAsync(notification.id);
     setNotificationsOpen(false);
-    if (notification.type === 'follow' || notification.type === 'unfollow') {
+    if (notification.type === 'follow_request') {
+      navigate(`/profile/${profile?.username}?modal=followers`);
+    } else if (notification.type === 'follow' || notification.type === 'unfollow') {
       navigate(`/profile/${notification.targetId || notification.senderId}`);
     } else if (notification.targetId) {
       navigate(`/feed?activity=${notification.targetId}`);
@@ -183,29 +208,30 @@ export function Topbar() {
                 </div>
               ) : (
                 <>
-                  {/* Exercises */}
-                  {matchingExercises.length > 0 && (
+                  {/* Athletes */}
+                  {matchingAthletes.length > 0 && (
                     <div className="p-3">
                       <div className="flex items-center gap-1.5 font-mono text-[10px] text-bone tracking-wider uppercase mb-2">
-                        <Dumbbell size={12} /> Exercises ({matchingExercises.length})
+                        <User size={12} /> Athletes ({matchingAthletes.length})
                       </div>
                       <div className="space-y-1">
-                        {matchingExercises.map((ex, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => {
-                              setSearchFocused(false);
-                              const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.youtubeSearch || (ex.name + ' form tutorial'))}`;
-                              if (Capacitor.isNativePlatform()) { Browser.open({ url, presentationStyle: 'popover' }); } else { window.open(url, '_blank'); }
-                            }}
-                            className="flex items-center justify-between p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group w-full text-left"
+                        {matchingAthletes.map((athlete: any) => (
+                          <Link
+                            key={athlete.uid}
+                            to={`/profile/${athlete.username || athlete.uid}`}
+                            onClick={() => setSearchFocused(false)}
+                            className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group"
                           >
-                            <div>
-                              <div className="text-xs text-bone font-medium group-hover:text-bone transition-colors">{ex.name}</div>
-                              <div className="text-[10px] font-mono text-bone-dim">{ex.muscleGroup} · {ex.equipment}</div>
+                            <img
+                              src={athlete.photoURL || getAvatarUrl(athlete.displayName, theme)}
+                              alt={athlete.displayName}
+                              className="w-7 h-7 rounded-full object-cover border border-line"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="text-xs text-bone font-medium truncate group-hover:text-bone transition-colors">{athlete.displayName}</div>
+                              <div className="text-[10px] font-mono text-bone-dim truncate">@{athlete.username || 'athlete'}</div>
                             </div>
-                            <ExternalLink size={12} className="text-bone-dim/50 group-hover:text-bone" />
-                          </button>
+                          </Link>
                         ))}
                       </div>
                     </div>
@@ -236,30 +262,29 @@ export function Topbar() {
                     </div>
                   )}
 
-                  {/* Athletes */}
-                  {matchingAthletes.length > 0 && (
+                  {/* Exercises */}
+                  {matchingExercises.length > 0 && (
                     <div className="p-3">
                       <div className="flex items-center gap-1.5 font-mono text-[10px] text-bone tracking-wider uppercase mb-2">
-                        <User size={12} /> Athletes ({matchingAthletes.length})
+                        <Dumbbell size={12} /> Exercises ({matchingExercises.length})
                       </div>
                       <div className="space-y-1">
-                        {matchingAthletes.map((athlete: any) => (
-                          <Link
-                            key={athlete.uid}
-                            to={`/profile/${athlete.username || athlete.uid}`}
-                            onClick={() => setSearchFocused(false)}
-                            className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group"
+                        {matchingExercises.map((ex, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setSearchFocused(false);
+                              const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.youtubeSearch || (ex.name + ' form tutorial'))}`;
+                              if (Capacitor.isNativePlatform()) { Browser.open({ url, presentationStyle: 'popover' }); } else { window.open(url, '_blank'); }
+                            }}
+                            className="flex items-center justify-between p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group w-full text-left"
                           >
-                            <img
-                              src={athlete.photoURL || getAvatarUrl(athlete.displayName, theme)}
-                              alt={athlete.displayName}
-                              className="w-7 h-7 rounded-full object-cover border border-line"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs text-bone font-medium truncate group-hover:text-bone transition-colors">{athlete.displayName}</div>
-                              <div className="text-[10px] font-mono text-bone-dim truncate">@{athlete.username || 'athlete'}</div>
+                            <div>
+                              <div className="text-xs text-bone font-medium group-hover:text-bone transition-colors">{ex.name}</div>
+                              <div className="text-[10px] font-mono text-bone-dim">{ex.muscleGroup} · {ex.equipment}</div>
                             </div>
-                          </Link>
+                            <ExternalLink size={12} className="text-bone-dim/50 group-hover:text-bone" />
+                          </button>
                         ))}
                       </div>
                     </div>
@@ -370,9 +395,47 @@ export function Topbar() {
 
           {hasSearchQuery && (
             <div className="mt-2 rounded-xl border border-white/[0.08] bg-ink-2 p-2 max-h-72 overflow-y-auto space-y-3">
+              {matchingAthletes.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-mono text-bone uppercase mb-1 px-1.5">Athletes</div>
+                  {matchingAthletes.map((athlete: any) => (
+                    <Link
+                      key={athlete.uid}
+                      to={`/profile/${athlete.username || athlete.uid}`}
+                      onClick={() => setMobileSearchOpen(false)}
+                      className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-bone/[0.05] transition-colors group"
+                    >
+                      <img
+                        src={athlete.photoURL || getAvatarUrl(athlete.displayName, theme)}
+                        alt={athlete.displayName}
+                        className="w-7 h-7 rounded-full object-cover border border-line"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs text-bone font-medium truncate group-hover:text-bone transition-colors">{athlete.displayName}</div>
+                        <div className="text-[10px] font-mono text-bone-dim truncate">@{athlete.username || 'athlete'}</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {matchingPlans.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-mono text-bone uppercase mb-1 px-1.5">Plans</div>
+                  {matchingPlans.map(plan => (
+                    <Link
+                      key={plan.id}
+                      to={`/plans/${plan.id}`}
+                      onClick={() => setMobileSearchOpen(false)}
+                      className="block p-1.5 text-xs text-bone hover:text-bone font-mono truncate px-2"
+                    >
+                      {plan.title}
+                    </Link>
+                  ))}
+                </div>
+              )}
               {matchingExercises.length > 0 && (
                 <div>
-                  <div className="text-[10px] font-mono text-bone uppercase mb-1">Exercises</div>
+                  <div className="text-[10px] font-mono text-bone uppercase mb-1 px-1.5">Exercises</div>
                   {matchingExercises.map((ex, idx) => (
                     <button
                       key={idx}
@@ -380,40 +443,10 @@ export function Topbar() {
                         const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(ex.youtubeSearch || (ex.name + ' form tutorial'))}`;
                         if (Capacitor.isNativePlatform()) { Browser.open({ url, presentationStyle: 'popover' }); } else { window.open(url, '_blank'); }
                       }}
-                      className="block p-1.5 text-xs text-bone hover:text-bone font-mono truncate w-full text-left"
+                      className="block p-1.5 px-2 text-xs text-bone hover:text-bone font-mono truncate w-full text-left"
                     >
-                      {ex.name} ({ex.muscleGroup})
+                      {ex.name} <span className="text-[10px] text-bone-dim ml-1">({ex.muscleGroup})</span>
                     </button>
-                  ))}
-                </div>
-              )}
-              {matchingPlans.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-mono text-bone uppercase mb-1">Plans</div>
-                  {matchingPlans.map(plan => (
-                    <Link
-                      key={plan.id}
-                      to={`/plans/${plan.id}`}
-                      onClick={() => setMobileSearchOpen(false)}
-                      className="block p-1.5 text-xs text-bone hover:text-bone font-mono truncate"
-                    >
-                      {plan.title}
-                    </Link>
-                  ))}
-                </div>
-              )}
-              {matchingAthletes.length > 0 && (
-                <div>
-                  <div className="text-[10px] font-mono text-bone uppercase mb-1">Athletes</div>
-                  {matchingAthletes.map((athlete: any) => (
-                    <Link
-                      key={athlete.uid}
-                      to={`/profile/${athlete.username || athlete.uid}`}
-                      onClick={() => setMobileSearchOpen(false)}
-                      className="block p-1.5 text-xs text-bone hover:text-sienna font-mono truncate"
-                    >
-                      @{athlete.username || athlete.displayName}
-                    </Link>
                   ))}
                 </div>
               )}

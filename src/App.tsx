@@ -126,6 +126,18 @@ function PreferencesSync() {
       CapacitorUpdater.notifyAppReady().catch(() => {});
     }
 
+    // Handle local notification clicks
+    if (Capacitor.isNativePlatform()) {
+      import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+        LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
+          const data = action.notification.extra;
+          if (data?.type === 'follow_request') {
+            window.location.href = `/?redirect_modal=followers`; 
+          }
+        });
+      }).catch(() => {});
+    }
+
     // Hardware back button for Android
     const backListener = CapacitorApp.addListener('backButton', ({ canGoBack }) => {
       // If there is an active hash (e.g. #ai-chat modal), pop it

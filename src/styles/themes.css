@@ -41,3 +41,13 @@
   background-color: rgb(var(--color-ink-2));
   color: rgb(var(--color-bone));
 }
+
+/* Dark-mode atmosphere is intentionally scoped here so the light palette stays
+   exactly as authored. The cool charcoal base keeps warm sienna accents vivid. */
+[data-theme='dark'] body {
+  background:
+    radial-gradient(circle at 12% -10%, rgba(239, 173, 128, 0.16), transparent 34rem),
+    radial-gradient(circle at 100% 18%, rgba(130, 72, 47, 0.17), transparent 30rem),
+    #090605;
+  color: rgb(var(--color-bone));
+}

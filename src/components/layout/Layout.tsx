@@ -1,4 +1,4 @@
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -8,11 +8,24 @@ import FloatingAIBot from '../nutrition/FloatingAIBot';
 import { FeatureAnnouncementModal } from '../ui/FeatureAnnouncementModal';
 import { Video, Bot } from 'lucide-react';
 
+import { useAuthStore } from '@/stores/auth-store';
+import { useEffect } from 'react';
+
 export function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { profile } = useAuthStore();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('redirect_modal') === 'followers' && profile?.username) {
+      window.history.replaceState({}, '', window.location.pathname); // clear query string
+      navigate(`/profile/${profile.username}?modal=followers`);
+    }
+  }, [profile, navigate]);
 
   return (
-    <div className="min-h-screen bg-ink-3 text-bone relative selection:bg-bone selection:text-ink transition-colors duration-300 overflow-x-hidden">
+    <div className="app-shell min-h-screen bg-ink-3 text-bone relative selection:bg-bone selection:text-ink transition-colors duration-300 overflow-x-hidden">
       {/* Soft Ambient Mesh Gradient Mixture (Matching Reference Image 1) */}
       <div className="ambient-glow-1 fixed top-[-100px] left-[-100px] w-[650px] h-[650px] rounded-full bg-gradient-to-br from-[#dbeafe] via-[#e0e7ff] to-transparent blur-[80px] md:blur-[120px] pointer-events-none -z-10 opacity-50 md:opacity-70 will-change-transform" />
       <div className="ambient-glow-2 fixed top-[-50px] right-[-100px] w-[700px] h-[700px] rounded-full bg-gradient-to-br from-[#fde8dc] via-[#fbe1d1] to-transparent blur-[90px] md:blur-[140px] pointer-events-none -z-10 opacity-50 md:opacity-75 will-change-transform" />
@@ -47,4 +60,3 @@ export function Layout() {
     </div>
   );
 }
-

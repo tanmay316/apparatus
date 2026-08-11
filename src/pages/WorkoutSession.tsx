@@ -160,6 +160,19 @@ export function WorkoutSession() {
     }
   }, [store.isActive, store.startedAt, store.isPaused, store.totalPausedMs, sessionFinished, store.dayTitle]);
 
+  // Instantly update foreground notification when paused state changes
+  useEffect(() => {
+    if (store.isActive && store.startedAt && !sessionFinished) {
+      updateWorkoutForegroundService(
+        'gym', 
+        store.isPaused ? 'Workout Paused' : `${store.dayTitle || 'Workout'} Live`, 
+        `${formatStopwatch(elapsedSec)} • ${lastExerciseRef.current} • ${Math.round(displayCaloriesRef.current)} kcal`, 
+        store.isPaused
+      );
+    }
+  }, [store.isPaused]);
+
+
   const hasLoggedSets = Object.values(store.logs).some(ex => ex.sets.some(s => s.completed));
   const hasLoggedSetsRef = useRef(hasLoggedSets);
   useEffect(() => {
@@ -279,11 +292,7 @@ export function WorkoutSession() {
             else st.pauseTimer();
           },
           () => {
-            // End tracking
-            const st = useWorkoutStore.getState();
-            st.cancelWorkout();
-            stopWorkoutForegroundService();
-            navigate('/plans', { replace: true });
+            window.dispatchEvent(new Event('foregroundStopClicked'));
           }
         );
       });
@@ -294,6 +303,14 @@ export function WorkoutSession() {
       );
     });
   }, [store.isActive, sessionFinished, store.startedAt, store.planId, store.dayId, user]);
+
+  useEffect(() => {
+    const handleForegroundStop = () => {
+      handleFinish();
+    };
+    window.addEventListener('foregroundStopClicked', handleForegroundStop);
+    return () => window.removeEventListener('foregroundStopClicked', handleForegroundStop);
+  });
 
   // Unthrottled foreground service update removed to prevent Android IPC lag
 
@@ -333,16 +350,26 @@ export function WorkoutSession() {
     if (!user || !store.isActive || isSaving) return;
     setIsSaving(true);
     
-    // Play celebration sound
-    playSuccessChime();
-
-    const exLogs = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed));
-    const allExercises = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown];
-    const totalVol = calculateWorkoutVolume(allExercises, exLogs, userWeight || 70);
-    const finalDurationMin = Math.max(1, Math.round(elapsedSec / 60));
-    const calories = displayCalories;
-
     try {
+      const exLogs = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed));
+      
+      if (exLogs.length === 0) {
+        // If they click finish/stop with no sets logged, just silently cancel the workout and remove the notification
+        store.cancelWorkout();
+        stopWorkoutForegroundService();
+        navigate('/plans', { replace: true });
+        setIsSaving(false);
+        return;
+      }
+      
+      // Play celebration sound
+      playSuccessChime();
+
+      const allExercises = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown];
+      const totalVol = calculateWorkoutVolume(allExercises, exLogs, userWeight || 70);
+      const finalDurationMin = Math.max(1, Math.round(elapsedSec / 60));
+      const calories = displayCalories;
+
       if (currentDay && store.planId) {
         try {
           await savePlanDay(store.planId, {
@@ -460,6 +487,7 @@ export function WorkoutSession() {
       // Celebration and Notifications
       clearNotification(1001);
       showNotification(1002, 'Workout Complete', `You completed your session in ${formatStopwatch(elapsedSec)}.`);
+      stopWorkoutForegroundService();
       if (user) {
         endActiveSession(user.uid).catch(console.error);
       }
@@ -498,6 +526,7 @@ export function WorkoutSession() {
       // share dialogs use the snapshots above and must not keep the stopwatch alive.
       setSessionFinished(true);
       store.finishWorkout();
+      stopWorkoutForegroundService();
     } catch (error) {
       console.error('Failed to save workout error details:', error);
       showToast('Failed to save workout', 'error');
@@ -505,6 +534,8 @@ export function WorkoutSession() {
       setIsSaving(false);
     }
   };
+
+
 
   const [celebrationData, setCelebrationData] = useState<{ heading: string, sub: string, xpBreakdown: { label: string, val: number }[], totalXp: number } | null>(null);
   const [shareData, setShareData] = useState<ShareCardData | null>(null);
