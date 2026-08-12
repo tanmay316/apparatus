@@ -71,7 +71,7 @@ interface Props {
   hideMap?: boolean;
   noGlow?: boolean;
   isCapturing?: boolean;
-  currentLocation?: { lat: number, lng: number } | null;
+  currentLocation?: { lat: number, lng: number, heading?: number } | null;
   cardioType?: 'walk' | 'run' | 'cycle';
   hideMarkers?: boolean;
   mapPaddingBottomRight?: [number, number];
@@ -81,12 +81,23 @@ interface Props {
   visualHeadingRef?: React.MutableRefObject<number | null>;
 }
 
-/** Keeps the map centered on the last route point when live tracking or when recenterTrigger changes */
-function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive }: { route: RoutePoint[], recenterTrigger?: number, currentLocation?: { lat: number, lng: number } | null, isLive?: boolean }) {
+function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive, mapRotationMode }: { route: RoutePoint[], recenterTrigger?: number, currentLocation?: { lat: number, lng: number } | null, isLive?: boolean, mapRotationMode?: boolean }) {
   const map = useMap();
   const lastLen = useRef(0);
   const lastRecenter = useRef(recenterTrigger);
   const initialized = useRef(false);
+  const isFollowing = useRef(true);
+
+  // Disable following when user drags the map
+  useEffect(() => {
+    const handleDrag = () => {
+      isFollowing.current = false;
+    };
+    map.on('dragstart', handleDrag);
+    return () => {
+      map.off('dragstart', handleDrag);
+    };
+  }, [map]);
 
   useEffect(() => {
     let shouldCenter = false;
@@ -94,22 +105,25 @@ function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive }: { ro
     // Center if recenterTrigger is updated (user explicitly clicked recenter)
     if (recenterTrigger !== lastRecenter.current) {
       shouldCenter = true;
+      isFollowing.current = true; // Re-enable following
     }
     
-    // Automatically flag for centering if we get new points, but we will filter it by distance
-    if (route.length > lastLen.current && route.length > 0) {
+    // Automatically flag for centering if we get new points, but only if we are following
+    if (route.length > lastLen.current && route.length > 0 && isFollowing.current) {
       shouldCenter = true;
     }
 
-    // Decoupled Camera Controller
-    // Instead of re-centering every single route point (which fights the compass), we only smoothly re-center if the user has moved significantly, or if live tracking just started.
     if (shouldCenter && currentLocation) {
       const currentCenter = map.getCenter();
       const dist = currentCenter.distanceTo([currentLocation.lat, currentLocation.lng]);
       
-      // If we moved more than 12 meters from center OR explicit recenter was triggered, smooth pan to follow
-      if (dist > 12 || recenterTrigger !== lastRecenter.current) {
-        map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: !isLive });
+      // If map is rotating, we MUST stay perfectly centered and disable animation to prevent swinging
+      if (mapRotationMode) {
+        map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: false });
+      } 
+      // Otherwise, only pan if we moved more than 12 meters from center (smooth follow)
+      else if (dist > 12 || recenterTrigger !== lastRecenter.current) {
+        map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: true });
       }
     } else if (currentLocation && !initialized.current) {
       // First time getting location
@@ -119,7 +133,7 @@ function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive }: { ro
 
     lastLen.current = route.length;
     lastRecenter.current = recenterTrigger;
-  }, [route, map, recenterTrigger, currentLocation]);
+  }, [route, map, recenterTrigger, currentLocation, mapRotationMode]);
 
   return null;
 }
@@ -244,18 +258,20 @@ export function RouteMap({
           
         // Icon/Cone Rotation
         const coneEl = mapContainerRef.current.querySelector('.compass-cone') as HTMLElement;
+        const validHeading = vHead !== null ? vHead : currentLocation?.heading;
+        
         if (coneEl) {
-          coneEl.style.opacity = '1';
-          coneEl.style.transform = mapRotationMode
-            ? `translate(-50%, -50%) rotate(0deg)`
-            : `translate(-50%, -50%) rotate(${vHead}deg)`;
+          if (validHeading != null) {
+            coneEl.style.opacity = '1';
+            coneEl.style.transform = `translate(-50%, -50%) rotate(${validHeading}deg)`;
+          } else {
+            coneEl.style.opacity = '0';
+          }
         }
         
         const markerEl = mapContainerRef.current.querySelector('.compass-marker') as HTMLElement;
         if (markerEl) {
-          markerEl.style.transform = mapRotationMode
-            ? `rotate(0deg)`
-            : `rotate(${vHead}deg)`;
+          markerEl.style.transform = `rotate(${validHeading ?? 0}deg)`;
         }
       }
       rafId = requestAnimationFrame(animate);
@@ -307,18 +323,28 @@ export function RouteMap({
 
   const liveIcon = useMemo(() => getCurrentIcon(cardioType), [cardioType]);
 
+  const isFullScreen = height === '100%';
+  
+  // To cover the screen at any angle, the container must be large enough to contain the screen's diagonal.
+  // 150vmax is sufficient.
+  // We offset it so its absolute center is exactly at the midpoint of the visible area above the bottom sheet.
+  // The bottom sheet is ~180px tall. So the midpoint is at Y = (100vh - 180px) / 2 = 50vh - 90px.
+  const mapWidth = isFullScreen ? '150vmax' : '100%';
+  const mapHeight = isFullScreen ? '150vmax' : '100%';
+  const mapLeft = isFullScreen ? 'calc(50vw - 75vmax)' : '0';
+  const mapTop = isFullScreen ? 'calc(50vh - 90px - 75vmax)' : '0';
+
   return (
-    <div style={{ height, width: '100%', overflow: 'hidden' }} className="relative">
+    <div className={`w-full ${height !== '100%' ? 'rounded-2xl' : ''} overflow-hidden shadow-sm relative ${isLive ? 'ring-2 ring-[var(--border)]' : ''}`} style={{ height }}>
       <div ref={mapContainerRef} className="compass-map-container" style={{
         position: 'absolute',
-        top: mapRotationMode ? '-25%' : '0',
-        left: mapRotationMode ? '-25%' : '0',
-        right: mapRotationMode ? '-25%' : '0',
-        bottom: mapRotationMode ? '-25%' : '0',
-        transition: 'none',
+        width: mapWidth,
+        height: mapHeight,
+        left: mapLeft,
+        top: mapTop,
+        transition: 'transform 0.5s ease-out',
         willChange: 'transform',
-        backfaceVisibility: 'hidden',
-        overflow: 'visible',
+        transformOrigin: 'center center',
       }}>
         <MapContainer
           center={center}
@@ -391,7 +417,7 @@ export function RouteMap({
             <Marker position={positions[positions.length - 1]} icon={endIcon} />
           )}
 
-          {(isLive || currentLocation) && !hideMarkers && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} currentLocation={currentLocation} isLive={isLive} />}
+          {(isLive || currentLocation) && !hideMarkers && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} currentLocation={currentLocation} isLive={isLive} mapRotationMode={mapRotationMode} />}
           {!isLive && positions.length > 1 && <FitBounds positions={positions} recenterTrigger={recenterTrigger} paddingBottomRight={mapPaddingBottomRight} paddingTopLeft={mapPaddingTopLeft} />}
         </MapContainer>
       </div>

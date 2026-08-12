@@ -59,8 +59,7 @@ function estimateTiltCompensatedHeading(alpha: number | null, beta: number | nul
   }
 
   const headingDegrees = compassHeading * (180 / Math.PI);
-  // Web API alpha is counter-clockwise, so we invert the final angle for a standard clockwise heading
-  return 360 - headingDegrees;
+  return headingDegrees;
 }
 
 export function useCompassHeading() {

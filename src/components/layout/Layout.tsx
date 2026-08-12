@@ -31,13 +31,12 @@ export function Layout() {
       <div className="ambient-glow-3 fixed bottom-[-20%] left-[20%] w-[90vw] h-[90vw] max-w-[600px] max-h-[600px] rounded-full bg-[radial-gradient(circle_at_center,_#f3e8ff80_0%,_#e0e7ff30_50%,_transparent_70%)] pointer-events-none -z-10 opacity-40 md:opacity-60 will-change-transform" />
 
       <Sidebar />
-      <Topbar />
+      {!location.pathname.startsWith('/cardio') && <Topbar />}
       <ReminderManager />
       <FloatingAIBot />
-      <BottomNav />
+      {!location.pathname.startsWith('/cardio') && <BottomNav />}
 
-
-      <main className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-28 relative">
+      <main className={location.pathname.startsWith('/cardio') ? "h-full w-full" : "max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-28 relative"}>
         <Outlet />
       </main>
     </div>

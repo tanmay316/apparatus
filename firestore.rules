@@ -370,6 +370,12 @@ service cloud.firestore {
         && request.resource.data.userId == resource.data.userId;
       allow delete: if resource == null || isOwner(resource.data.userId);
     }
+    
+    // ─── Video Resolver Cache ───────────────────────────────────
+    match /exerciseVideoMappings/{mappingId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
 
     // ─── Catch-All ──────────────────────────────────────────────
     // Deny access to any collection not explicitly defined above.

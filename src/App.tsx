@@ -106,7 +106,7 @@ function PreferencesSync() {
       import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
         StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
         StatusBar.setStyle({ style: theme === 'dark' ? Style.Dark : Style.Light }).catch(() => {});
-        StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#18181B' : '#FFFFFF' }).catch(() => {});
+        StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#090605' : '#FFFFFF' }).catch(() => {});
       }).catch(() => {});
     }
   }, [theme, language]);

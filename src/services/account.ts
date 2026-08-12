@@ -9,22 +9,56 @@ import {
   writeBatch,
   setDoc,
   serverTimestamp,
+  increment,
+  updateDoc,
+  limit,
 } from 'firebase/firestore';
 import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { db, storage, ADMIN_EMAIL } from '@/lib/firebase';
 
-async function deleteRefs(refs: ReturnType<typeof doc>[], onProgress?: (msg: string, pct: number) => void, basePct = 50, pctRange = 50) {
+// ─── Helpers ──────────────────────────────────────────────────
+
+/** Delete an array of doc refs in small batches with per-doc retry fallback */
+async function safeDeleteRefs(
+  refs: ReturnType<typeof doc>[],
+  onProgress?: (msg: string, pct: number) => void,
+  basePct = 0,
+  pctRange = 100,
+  label = 'Deleting'
+) {
   if (refs.length === 0) return;
-  for (let index = 0; index < refs.length; index += 450) {
-    const batch = writeBatch(db);
-    refs.slice(index, index + 450).forEach(reference => batch.delete(reference));
-    await batch.commit();
+  const BATCH_SIZE = 100; // small enough to never time out
+  for (let i = 0; i < refs.length; i += BATCH_SIZE) {
+    const chunk = refs.slice(i, i + BATCH_SIZE);
+    try {
+      const batch = writeBatch(db);
+      chunk.forEach(r => batch.delete(r));
+      await batch.commit();
+    } catch {
+      // If batch fails, fall back to individual deletes (slower but reliable)
+      for (const r of chunk) {
+        try { await deleteDoc(r); } catch { /* skip already-deleted docs */ }
+      }
+    }
     if (onProgress) {
-      const p = basePct + Math.round((Math.min(index + 450, refs.length) / refs.length) * pctRange);
-      onProgress(`Deleting batch ${Math.ceil(index / 450) + 1}...`, p);
+      const done = Math.min(i + BATCH_SIZE, refs.length);
+      const pct = basePct + Math.round((done / refs.length) * pctRange);
+      onProgress(`${label} (${done}/${refs.length})...`, Math.min(pct, basePct + pctRange));
     }
   }
 }
+
+/** Safely fetch a query, returning empty array on permission errors */
+async function safeFetch(q: ReturnType<typeof query>) {
+  try { return (await getDocs(q)).docs; } catch { return []; }
+}
+
+/** Safely fetch a collection */
+async function safeCollFetch(path: string) {
+  try { return (await getDocs(collection(db, path))).docs; } catch { return []; }
+}
+
+// ─── Plan data ────────────────────────────────────────────────
 
 async function getUserPlanData(uid: string) {
   const plansSnap = await getDocs(query(collection(db, 'plans'), where('ownerId', '==', uid)));
@@ -38,6 +72,8 @@ async function getUserPlanData(uid: string) {
   }
   return { plans, refs };
 }
+
+// ─── Export ───────────────────────────────────────────────────
 
 export async function exportAccountData(uid: string) {
   const [profileSnap, statsSnap, plansData, workoutsSnap, measurementsSnap, skillsSnap, activitiesSnap, followingSnap, followersSnap, notificationsSnap] = await Promise.all([
@@ -75,113 +111,248 @@ export function downloadJson(data: unknown, filename: string) {
   anchor.href = url;
   anchor.download = filename;
   anchor.click();
-  // Delay revoke so the browser has time to start the download
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
-export async function deleteAccountData(uid: string, username?: string, onProgress?: (msg: string, pct: number) => void) {
-  onProgress?.('Fetching plans...', 5);
-  const plansData = await getUserPlanData(uid);
-  onProgress?.('Fetching workouts...', 10);
-  const workoutsSnap = await getDocs(query(collection(db, 'workouts'), where('userId', '==', uid)));
-  onProgress?.('Fetching measurements...', 15);
-  const measurementsSnap = await getDocs(collection(db, `users/${uid}/measurements`));
-  onProgress?.('Fetching skills...', 20);
-  const skillsSnap = await getDocs(collection(db, `users/${uid}/skills`));
-  onProgress?.('Fetching activities...', 25);
-  const activitiesSnap = await getDocs(query(collection(db, 'activities'), where('userId', '==', uid)));
-  onProgress?.('Fetching social graph...', 30);
-  const followingSnap = await getDocs(collection(db, `followers/${uid}/following`));
-  const followersSnap = await getDocs(collection(db, `followers/${uid}/followers`));
-  onProgress?.('Fetching notifications...', 35);
-  const notificationsSnap = await getDocs(query(collection(db, 'notifications'), where('receiverId', '==', uid)));
+// ─── Gather ALL user doc refs ─────────────────────────────────
+// This is used by both delete and reset so we only write the logic once.
 
-  const refs: ReturnType<typeof doc>[] = [
-    doc(db, 'users', uid),
-    doc(db, 'users', uid, 'stats', 'current'),
-  ];
-  refs.push(...plansData.refs);
-  refs.push(...workoutsSnap.docs.map(item => item.ref));
-  refs.push(...measurementsSnap.docs.map(item => item.ref));
-  refs.push(...skillsSnap.docs.map(item => item.ref));
-  refs.push(...activitiesSnap.docs.map(item => item.ref));
-  refs.push(...notificationsSnap.docs.map(item => item.ref));
-  refs.push(...followingSnap.docs.map(item => item.ref));
-  refs.push(...followersSnap.docs.map(item => item.ref));
-  if (username) refs.push(doc(db, 'usernames', username));
-
-  // Remove the mirrored relationship documents from the accounts this user follows.
-  onProgress?.('Compiling deletions...', 40);
-  const mirroredFollowingRefs = followingSnap.docs.map(item => doc(db, `followers/${item.id}/followers`, uid));
-  const mirroredFollowerRefs = followersSnap.docs.map(item => doc(db, `followers/${item.id}/following`, uid));
-  refs.push(...mirroredFollowingRefs, ...mirroredFollowerRefs);
-  
-  onProgress?.('Deleting data...', 50);
-  await deleteRefs(refs, onProgress, 50, 50);
+interface GatherResult {
+  refs: any[];
+  clanMembershipDocs: any[];
 }
 
-/** Remove all user-owned application data while keeping the Firebase account and handle. */
-export async function resetUserData(uid: string, onProgress?: (msg: string, pct: number) => void) {
-  onProgress?.('Fetching plans...', 5);
+async function gatherUserRefs(uid: string, onProgress?: (msg: string, pct: number) => void): Promise<GatherResult> {
+  const refs: any[] = [];
+
+  // Phase 1: Core data (0-10%)
+  onProgress?.('Fetching plans...', 2);
   const plansData = await getUserPlanData(uid);
-  onProgress?.('Fetching workouts...', 10);
-  const workoutsSnap = await getDocs(query(collection(db, 'workouts'), where('userId', '==', uid)));
-  onProgress?.('Fetching measurements...', 15);
-  const measurementsSnap = await getDocs(collection(db, `users/${uid}/measurements`));
-  onProgress?.('Fetching skills...', 20);
-  const skillsSnap = await getDocs(collection(db, `users/${uid}/skills`));
-  onProgress?.('Fetching activities...', 25);
-  const activitiesSnap = await getDocs(query(collection(db, 'activities'), where('userId', '==', uid)));
-  onProgress?.('Fetching social graph...', 30);
-  const followingSnap = await getDocs(collection(db, `followers/${uid}/following`));
-  const followersSnap = await getDocs(collection(db, `followers/${uid}/followers`));
-  onProgress?.('Fetching extra data...', 35);
-  const notificationsSnap = await getDocs(query(collection(db, 'notifications'), where('receiverId', '==', uid)));
-  const reportsSnap = await getDocs(query(collection(db, 'reports'), where('reporterId', '==', uid)));
-  const customExercisesSnap = await getDocs(query(collection(db, 'exerciseLibrary'), where('createdBy', '==', uid)));
+  refs.push(...plansData.refs);
 
-  const refs: ReturnType<typeof doc>[] = [
-    ...plansData.refs,
-    ...workoutsSnap.docs.map(item => item.ref),
-    ...measurementsSnap.docs.map(item => item.ref),
-    ...skillsSnap.docs.map(item => item.ref),
-    ...activitiesSnap.docs.map(item => item.ref),
-    ...notificationsSnap.docs.map(item => item.ref),
-    ...followingSnap.docs.map(item => item.ref),
-    ...followersSnap.docs.map(item => item.ref),
-    ...reportsSnap.docs.map(item => item.ref),
-    ...customExercisesSnap.docs.map(item => item.ref),
-  ];
-  
-  onProgress?.('Fetching activity interactions...', 40);
-  for (let i = 0; i < activitiesSnap.docs.length; i++) {
-    const activity = activitiesSnap.docs[i];
-    const likes = await getDocs(collection(db, `activities/${activity.id}/likes`));
-    const comments = await getDocs(collection(db, `activities/${activity.id}/comments`));
-    refs.push(...likes.docs.filter(item => item.id === uid).map(item => item.ref));
-    refs.push(...comments.docs.filter(item => item.data().userId === uid).map(item => item.ref));
-    if (onProgress && i % 5 === 0) onProgress(`Fetching activity interactions (${i + 1}/${activitiesSnap.docs.length})...`, 40 + Math.round((i / activitiesSnap.docs.length) * 10));
+  onProgress?.('Fetching workouts...', 4);
+  const workoutDocs = await safeFetch(query(collection(db, 'workouts'), where('userId', '==', uid)));
+  refs.push(...workoutDocs.map(d => d.ref));
+
+  onProgress?.('Fetching measurements & skills...', 6);
+  const [measurementDocs, skillDocs] = await Promise.all([
+    safeCollFetch(`users/${uid}/measurements`),
+    safeCollFetch(`users/${uid}/skills`),
+  ]);
+  refs.push(...measurementDocs.map(d => d.ref));
+  refs.push(...skillDocs.map(d => d.ref));
+
+  // Phase 2: Social & activities (10-20%)
+  onProgress?.('Fetching activities...', 10);
+  const activityDocs = await safeFetch(query(collection(db, 'activities'), where('userId', '==', uid)));
+  for (let i = 0; i < activityDocs.length; i++) {
+    const act = activityDocs[i];
+    refs.push(act.ref);
+    const [likesDocs, commentsDocs] = await Promise.all([
+      safeCollFetch(`activities/${act.id}/likes`),
+      safeCollFetch(`activities/${act.id}/comments`),
+    ]);
+    refs.push(...likesDocs.map(d => d.ref));
+    refs.push(...commentsDocs.map(d => d.ref));
+    if (onProgress && i % 3 === 0) {
+      onProgress(`Fetching activity data (${i + 1}/${activityDocs.length})...`, 10 + Math.round((i / activityDocs.length) * 5));
+    }
   }
-  
-  onProgress?.('Compiling deletions...', 50);
-  refs.push(...followingSnap.docs.map(item => doc(db, `followers/${item.id}/followers`, uid)));
-  refs.push(...followersSnap.docs.map(item => doc(db, `followers/${item.id}/following`, uid)));
-  
-  onProgress?.('Deleting data...', 50);
-  await deleteRefs(refs, onProgress, 50, 48);
 
-  onProgress?.('Resetting profile...', 99);
-  await setDoc(doc(db, 'users', uid, 'stats', 'current'), {
-    totalWorkouts: 0, totalCalories: 0, totalDurationMin: 0, totalVolume: 0,
-    currentStreak: 0, longestStreak: 0, lastWorkoutDate: null, xp: 0,
-    prCount: 0, bestHold: 0, badges: [],
-  });
+  // Phase 3: Cardio activities (15-18%)
+  onProgress?.('Fetching cardio activities...', 16);
+  const cardioDocs = await safeFetch(query(collection(db, 'cardioActivities'), where('userId', '==', uid)));
+  refs.push(...cardioDocs.map(d => d.ref));
+
+  // Phase 4: Social graph (18-22%)
+  onProgress?.('Fetching social graph...', 18);
+  const [followingDocs, followersDocs, requestsDocs] = await Promise.all([
+    safeCollFetch(`followers/${uid}/following`),
+    safeCollFetch(`followers/${uid}/followers`),
+    safeCollFetch(`followers/${uid}/requests`),
+  ]);
+  refs.push(...followingDocs.map(d => d.ref));
+  refs.push(...followersDocs.map(d => d.ref));
+  refs.push(...requestsDocs.map(d => d.ref));
+  // Mirror refs: remove this user from other people's follower/following lists
+  refs.push(...followingDocs.map(d => doc(db, `followers/${d.id}/followers`, uid)));
+  refs.push(...followersDocs.map(d => doc(db, `followers/${d.id}/following`, uid)));
+
+  // Phase 5: Notifications & reports (22-25%)
+  onProgress?.('Fetching notifications...', 22);
+  const [notifDocs, reportDocs, customExDocs, appNotifDocs] = await Promise.all([
+    safeFetch(query(collection(db, 'notifications'), where('receiverId', '==', uid))),
+    safeFetch(query(collection(db, 'reports'), where('reporterId', '==', uid))),
+    safeFetch(query(collection(db, 'exerciseLibrary'), where('createdBy', '==', uid))),
+    safeFetch(query(collection(db, 'app_notifications'), where('userId', '==', uid))),
+  ]);
+  refs.push(...notifDocs.map(d => d.ref));
+  refs.push(...reportDocs.map(d => d.ref));
+  refs.push(...customExDocs.map(d => d.ref));
+  refs.push(...appNotifDocs.map(d => d.ref));
+
+  // Phase 6: Clan memberships (25-28%)
+  onProgress?.('Fetching clan memberships...', 25);
+  const clanMembershipDocs = await safeFetch(query(collection(db, 'clan_memberships'), where('userId', '==', uid)));
+  refs.push(...clanMembershipDocs.map(d => d.ref));
+
+  // Phase 7: Challenge participations (28-30%)
+  onProgress?.('Fetching challenge participations...', 28);
+  const challengePartDocs = await safeFetch(query(collection(db, 'challenge_participants'), where('userId', '==', uid)));
+  refs.push(...challengePartDocs.map(d => d.ref));
+
+  // Phase 8: Event registrations & reviews (30-33%)
+  onProgress?.('Fetching event registrations...', 30);
+  const [eventRegDocs, eventReviewDocs] = await Promise.all([
+    safeFetch(query(collection(db, 'event_registrations'), where('userId', '==', uid))),
+    safeFetch(query(collection(db, 'event_reviews'), where('userId', '==', uid))),
+  ]);
+  refs.push(...eventRegDocs.map(d => d.ref));
+  refs.push(...eventReviewDocs.map(d => d.ref));
+
+  // Phase 9: Community memberships (33-35%)
+  onProgress?.('Fetching community memberships...', 33);
+  const communityMemberDocs = await safeFetch(query(collection(db, 'community_members'), where('userId', '==', uid)));
+  refs.push(...communityMemberDocs.map(d => d.ref));
+
+  // Phase 10: Simple event participations (35-36%)
+  onProgress?.('Fetching event participations...', 35);
+  const simpleEventPartDocs = await safeFetch(query(collection(db, 'simple_event_participants'), where('userId', '==', uid)));
+  refs.push(...simpleEventPartDocs.map(d => d.ref));
+
+  // Phase 11: Community posts by user (36-38%)
+  onProgress?.('Fetching community posts...', 36);
+  const communityPostDocs = await safeFetch(query(collection(db, 'community_posts'), where('userId', '==', uid)));
+  refs.push(...communityPostDocs.map(d => d.ref));
+
+  // Phase 12: Active sessions (38-39%)
+  onProgress?.('Fetching active sessions...', 38);
+  try {
+    const sessionDoc = await getDoc(doc(db, 'activeSessions', uid));
+    if (sessionDoc.exists()) {
+      const chatDocs = await safeCollFetch(`activeSessions/${uid}/chat`);
+      refs.push(...chatDocs.map(d => d.ref));
+      refs.push(sessionDoc.ref);
+    }
+  } catch { /* skip if no active session */ }
+
+  // Phase 13: User stats subcollection (39-40%)
+  onProgress?.('Fetching user stats...', 39);
+  refs.push(doc(db, 'users', uid, 'stats', 'current'));
+
+  onProgress?.(`Compiled ${refs.length} documents to delete`, 40);
+  return { refs, clanMembershipDocs };
+}
+
+// ─── Decrement community/clan member counts ───────────────────
+
+async function decrementMemberCounts(clanMembershipDocs: any[]) {
+  for (const d of clanMembershipDocs) {
+    const data = d.data();
+    if (data?.clanId) {
+      try {
+        await updateDoc(doc(db, 'clans_v2', data.clanId), { memberCount: increment(-1) });
+      } catch { /* clan may already be deleted */ }
+    }
+  }
+}
+
+// ─── Transfer Ownership to Admin ──────────────────────────────
+
+async function transferOwnershipToAdmin(uid: string) {
+  if (!ADMIN_EMAIL) return;
+
+  const adminQuery = await safeFetch(query(collection(db, 'users'), where('email', '==', ADMIN_EMAIL), limit(1)));
+  if (adminQuery.length === 0) return;
+
+  const adminDoc = adminQuery[0];
+  const adminId = adminDoc.id;
+  const adminData = adminDoc.data() as any;
+  const adminName = adminData?.displayName || 'Admin';
+  const adminPhoto = adminData?.photoURL || '';
+
+  const clansQuery = await safeFetch(query(collection(db, 'clans_v2'), where('leaderId', '==', uid)));
+  for (const clan of clansQuery) {
+    const clanBatch = writeBatch(db);
+    clanBatch.update(clan.ref, { leaderId: adminId, leaderName: adminName, updatedAt: serverTimestamp() });
+    const memberId = `${clan.id}_${adminId}`;
+    clanBatch.set(doc(db, 'clan_memberships', memberId), {
+      clanId: clan.id, userId: adminId, userName: adminName, userPhoto: adminPhoto,
+      role: 'leader', joinedAt: serverTimestamp(), status: 'active'
+    }, { merge: true });
+    try { await clanBatch.commit(); } catch {}
+  }
+
+  const challengesQuery = await safeFetch(query(collection(db, 'challenges_v2'), where('createdBy', '==', uid)));
+  for (const challenge of challengesQuery) {
+    try { await updateDoc(challenge.ref, { createdBy: adminId, creatorName: adminName, creatorPhoto: adminPhoto, updatedAt: serverTimestamp() }); } catch {}
+  }
+
+  const eventsQuery = await safeFetch(query(collection(db, 'simple_events'), where('createdBy', '==', uid)));
+  for (const event of eventsQuery) {
+    try { await updateDoc(event.ref, { createdBy: adminId, creatorName: adminName, creatorPhoto: adminPhoto, updatedAt: serverTimestamp() }); } catch {}
+  }
+}
+
+// ─── Delete Account ───────────────────────────────────────────
+
+export async function deleteAccountData(uid: string, username?: string, onProgress?: (msg: string, pct: number) => void) {
+  const gathered = await gatherUserRefs(uid, onProgress);
+  const { refs, clanMembershipDocs } = gathered;
+
+  // Also delete the user profile doc itself
+  refs.push(doc(db, 'users', uid));
+  if (username) refs.push(doc(db, 'usernames', username));
+
+  // Decrement member counts before deleting
+  onProgress?.('Updating clan memberships...', 41);
+  await decrementMemberCounts(clanMembershipDocs);
+
+  onProgress?.('Transferring ownership to admin...', 42);
+  await transferOwnershipToAdmin(uid);
+
+  // Delete everything
+  onProgress?.('Deleting data...', 43);
+  await safeDeleteRefs(refs, onProgress, 43, 58, 'Cleaning up');
+}
+
+// ─── Reset Account ────────────────────────────────────────────
+
+export async function resetUserData(uid: string, onProgress?: (msg: string, pct: number) => void) {
+  const gathered = await gatherUserRefs(uid, onProgress);
+  const { refs, clanMembershipDocs } = gathered;
+
+  // Decrement member counts before deleting
+  onProgress?.('Updating clan memberships...', 41);
+  await decrementMemberCounts(clanMembershipDocs);
+
+  onProgress?.('Transferring ownership to admin...', 42);
+  await transferOwnershipToAdmin(uid);
+
+  // Delete everything
+  onProgress?.('Deleting data...', 43);
+  await safeDeleteRefs(refs, onProgress, 43, 48, 'Cleaning up');
+
+  // Reset profile to defaults (keep account + username)
+  onProgress?.('Resetting profile...', 92);
+  try {
+    await setDoc(doc(db, 'users', uid, 'stats', 'current'), {
+      totalWorkouts: 0, totalCalories: 0, totalDurationMin: 0, totalVolume: 0,
+      currentStreak: 0, longestStreak: 0, lastWorkoutDate: null, xp: 0,
+      prCount: 0, bestHold: 0, badges: [],
+    });
+  } catch { /* stats doc may have been deleted above, create fresh */ }
+
   await setDoc(doc(db, 'users', uid), {
     bio: '', photoURL: '', height: null, weight: null, age: null, gender: '',
     fitnessGoal: '', experienceLevel: 'beginner', preferredWorkoutType: '',
     isPublic: true, activePlanId: null, updatedAt: serverTimestamp(),
   }, { merge: true });
+
+  onProgress?.('Reset complete!', 100);
 }
+
+// ─── Avatar ───────────────────────────────────────────────────
 
 export async function uploadAvatar(uid: string, file: File) {
   if (!file.type.startsWith('image/')) throw new Error('Choose an image file.');

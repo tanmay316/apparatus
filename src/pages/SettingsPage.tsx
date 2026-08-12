@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ImagePlus, Loader2, Save, Trash2, Crown, Eye, User, Globe, Ruler, MapPin, Download, Sun, Moon, Upload, Check, Scale, LogOut, Footprints } from 'lucide-react';
@@ -38,7 +38,7 @@ export function SettingsPage() {
   return <SettingsForm profile={profile} />;
 }
 
-function SettingsForm({ profile }: { profile: any }) { console.log('PROFILE DATA:', profile);
+function SettingsForm({ profile }: { profile: any }) {
   const { user, updateProfile, signOut } = useAuthStore();
   const { showToast, theme, setTheme, units, setUnits, language, setLanguage } = useUIStore();
   const navigate = useNavigate();
@@ -69,8 +69,16 @@ function SettingsForm({ profile }: { profile: any }) { console.log('PROFILE DATA
   const [exporting, setExporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [progressMsg, setProgressMsg] = useState('');
-  const [progressPct, setProgressPct] = useState(0);
+  
+  // Background-safe operation runner: stores the promise so navigating away won't cancel it
+  const deleteOpRef = useRef<Promise<void> | null>(null);
+  const resetOpRef = useRef<Promise<void> | null>(null);
+
+  const [deleteProgressMsg, setDeleteProgressMsg] = useState('');
+  const [deleteProgressPct, setDeleteProgressPct] = useState(0);
+  const [resetProgressMsg, setResetProgressMsg] = useState('');
+  const [resetProgressPct, setResetProgressPct] = useState(0);
+
   const cancelWorkout = useWorkoutStore(state => state.cancelWorkout);
 
   useEffect(() => {
@@ -119,54 +127,72 @@ function SettingsForm({ profile }: { profile: any }) { console.log('PROFILE DATA
 
   const handleDeleteAccount = async () => {
     if (!user || !profile) return;
+
+    // Require recent login before starting deletion to prevent auth/requires-recent-login errors at the end
+    const lastSignIn = new Date(user.metadata.lastSignInTime || 0).getTime();
+    if (Date.now() - lastSignIn > 5 * 60 * 1000) {
+      showToast('Security requirement: Please sign out and sign back in right before deleting your account.', 'error');
+      return;
+    }
+
     const confirmed = confirm('This permanently deletes your workouts, plans, measurements, social activity, profile, and login. This cannot be undone. Continue?');
     if (!confirmed) return;
     setDeleting(true);
-    setProgressMsg('Starting deletion...');
-    setProgressPct(0);
-    try {
-      await deleteAccountData(user.uid, profile.username, (msg, pct) => {
-        setProgressMsg(msg);
-        setProgressPct(pct);
-      });
-      await deleteAvatar(user.uid);
+    setDeleteProgressMsg('Starting deletion...');
+    setDeleteProgressPct(0);
+
+    const op = (async () => {
       try {
+        await deleteAccountData(user.uid, profile.username, (msg, pct) => {
+          setDeleteProgressMsg(msg);
+          setDeleteProgressPct(pct);
+        });
+        setDeleteProgressMsg('Removing avatar...');
+        setDeleteProgressPct(95);
+        try { await deleteAvatar(user.uid); } catch (e) { console.warn('Avatar delete failed', e); }
+        setDeleteProgressMsg('Removing login...');
+        setDeleteProgressPct(98);
         await deleteUser(user);
+        setDeleteProgressMsg('Done!');
+        setDeleteProgressPct(100);
+        showToast('Account deleted');
+        navigate('/auth');
       } catch (error: any) {
-        if (error?.code !== 'auth/requires-recent-login') throw error;
-        await useAuthStore.getState().reauthenticate();
-        await deleteUser(user);
+        showToast(error?.message || 'Account deletion failed. Please sign in again and retry.', 'error');
+      } finally {
+        setDeleting(false);
       }
-      showToast('Account deleted');
-      navigate('/auth');
-    } catch (error: any) {
-      showToast(error?.message || 'Account deletion failed. Please sign in again and retry.', 'error');
-    } finally {
-      setDeleting(false);
-    }
+    })();
+    deleteOpRef.current = op;
+    await op;
   };
 
   const handleResetData = async () => {
     if (!user || !profile) return;
-    const confirmed = confirm('Reset all your workouts, plans, measurements, skills, social activity, followers, notifications, custom exercises, and profile details? Your login account and username will remain. This cannot be undone.');
+    const confirmed = confirm('Reset ALL your data: workouts, plans, measurements, skills, social activity, followers, notifications, clan memberships, event registrations, challenge participations, cardio activities, custom exercises, and profile details? Your login account and username will remain. This cannot be undone.');
     if (!confirmed) return;
     setResetting(true);
-    setProgressMsg('Starting data reset...');
-    setProgressPct(0);
-    try {
-      await resetUserData(user.uid, (msg, pct) => {
-        setProgressMsg(msg);
-        setProgressPct(pct);
-      });
-      try { await deleteAvatar(user.uid); } catch (avatarError) { console.warn('Avatar cleanup skipped:', avatarError); }
-      cancelWorkout();
-      await useAuthStore.getState().refreshProfile();
-      showToast('All personal data has been reset');
-    } catch (error: any) {
-      showToast(error?.message || 'Data reset failed. Please retry.', 'error');
-    } finally {
-      setResetting(false);
-    }
+    setResetProgressMsg('Starting data reset...');
+    setResetProgressPct(0);
+
+    const op = (async () => {
+      try {
+        await resetUserData(user.uid, (msg, pct) => {
+          setResetProgressMsg(msg);
+          setResetProgressPct(pct);
+        });
+        try { await deleteAvatar(user.uid); } catch (avatarError) { console.warn('Avatar cleanup skipped:', avatarError); }
+        cancelWorkout();
+        await useAuthStore.getState().refreshProfile();
+        showToast('All personal data has been reset');
+      } catch (error: any) {
+        showToast(error?.message || 'Data reset failed. Please retry.', 'error');
+      } finally {
+        setResetting(false);
+      }
+    })();
+    resetOpRef.current = op;
+    await op;
   };
 
   const handleLogout = async () => {
@@ -517,7 +543,7 @@ function SettingsForm({ profile }: { profile: any }) { console.log('PROFILE DATA
             <LogOut size={18} className="text-amber" />
             <h3 className="font-display text-base uppercase tracking-wide text-amber">Account Access</h3>
           </div>
-          <p className="text-sm text-bone-dim leading-relaxed">Sign out of your current session on this s device.</p>
+          <p className="text-sm text-bone-dim leading-relaxed">Sign out of your current session on this device.</p>
           <button type="button" onClick={handleLogout} className="btn-secondary border-amber/40 text-amber hover:bg-amber/10 inline-flex items-center gap-2">
             <LogOut size={14} /> Sign Out
           </button>
@@ -528,35 +554,56 @@ function SettingsForm({ profile }: { profile: any }) { console.log('PROFILE DATA
             <Trash2 size={18} className="text-danger" />
             <h3 className="font-display text-base uppercase tracking-wide text-danger">Danger Zone</h3>
           </div>
-          <p className="text-sm text-bone-dim leading-relaxed">Delete your Firebase profile and all data permanently. Google may ask you to sign in again before the account credential can be removed.</p>
-          <button type="button" onClick={() => handleDeleteAccount()} disabled={deleting || resetting} className="btn-danger inline-flex items-center gap-2">
-            {deleting ? <><Loader2 size={14} className="animate-spin" /> Deleting Account...</> : <><Trash2 size={14} /> Delete everything permanently</>}
-          </button>
-          
-          <div className="pt-4 border-t border-danger/20 mt-4">
-            <h4 className="font-display text-sm tracking-wide text-danger mb-2">Soft Reset</h4>
-            <p className="text-sm text-bone-dim leading-relaxed mb-4">Wipe all your workouts, plans, and history but keep your user account and username active.</p>
-            <button type="button" onClick={() => handleResetData()} disabled={deleting || resetting} className="btn-secondary text-danger border-danger/30 hover:bg-danger/10 inline-flex items-center gap-2">
-              {resetting ? <><Loader2 size={14} className="animate-spin" /> Resetting Data...</> : 'Reset all data'}
-            </button>
-          </div>
 
-          {(deleting || resetting) && (
-            <div className="mt-4 p-4 bg-ink rounded border border-line/30 animate-in fade-in zoom-in-95 duration-200">
+          {/* Delete Account Section */}
+          <p className="text-sm text-bone-dim leading-relaxed">Delete your Firebase profile and all data permanently. Google may ask you to sign in again before the account credential can be removed.</p>
+          {deleting ? (
+            <div className="p-4 bg-ink rounded border border-danger/30 animate-in fade-in zoom-in-95 duration-200">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-bone font-medium">{progressMsg}</span>
-                <span className="text-sm text-sienna font-mono">{progressPct}%</span>
+                <span className="text-sm text-bone font-medium">{deleteProgressMsg}</span>
+                <span className="text-sm text-danger font-mono">{deleteProgressPct}%</span>
               </div>
-              <div className="h-1.5 w-full bg-ink-2 rounded-full overflow-hidden">
+              <div className="h-2 w-full bg-ink-2 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-sienna transition-all duration-300 ease-out rounded-full" 
-                  style={{ width: `${progressPct}%` }}
+                  className="h-full bg-danger transition-all duration-300 ease-out rounded-full" 
+                  style={{ width: `${deleteProgressPct}%` }}
                 />
               </div>
+              <p className="text-[10px] text-bone-dim mt-2">Do not close the app. You can navigate away — the operation will continue in the background.</p>
             </div>
+          ) : (
+            <button type="button" onClick={() => handleDeleteAccount()} disabled={resetting} className="btn-danger inline-flex items-center gap-2">
+              <Trash2 size={14} /> Delete everything permanently
+            </button>
           )}
+          
+          {/* Reset Data Section */}
+          <div className="pt-4 border-t border-danger/20 mt-4">
+            <h4 className="font-display text-sm tracking-wide text-danger mb-2">Soft Reset</h4>
+            <p className="text-sm text-bone-dim leading-relaxed mb-4">Wipe all your workouts, plans, history, clan memberships, event registrations, cardio data, and social activity. Your login account and username will remain.</p>
+            {resetting ? (
+              <div className="p-4 bg-ink rounded border border-sienna/30 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm text-bone font-medium">{resetProgressMsg}</span>
+                  <span className="text-sm text-sienna font-mono">{resetProgressPct}%</span>
+                </div>
+                <div className="h-2 w-full bg-ink-2 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-sienna transition-all duration-300 ease-out rounded-full" 
+                    style={{ width: `${resetProgressPct}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-bone-dim mt-2">Do not close the app. You can navigate away — the operation will continue in the background.</p>
+              </div>
+            ) : (
+              <button type="button" onClick={() => handleResetData()} disabled={deleting} className="btn-secondary text-danger border-danger/30 hover:bg-danger/10 inline-flex items-center gap-2">
+                Reset all data
+              </button>
+            )}
+          </div>
         </motion.div>
       </div>
     </motion.div>
   );
 }
+

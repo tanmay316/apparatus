@@ -52,6 +52,7 @@ let gapRecoveryFixes = 0;
 let warmupConsecutiveFixes = 0;
 let consecutiveHighSpeedFixes = 0;
 let lastWarmupGoodPoint: RoutePoint | null = null;
+let stepsAtLastMovement = 0;
 
 function resetTrackingSegmentState() {
   lastRawGpsPoint = null;
@@ -65,6 +66,7 @@ function resetTrackingSegmentState() {
   warmupConsecutiveFixes = 0;
   consecutiveHighSpeedFixes = 0;
   lastWarmupGoodPoint = null;
+  stepsAtLastMovement = 0;
 }
 
 function pushSpeed(raw: number): number {
@@ -208,9 +210,13 @@ function handleGpsPosition(pos: GeolocationPosition) {
   
   // Prevent wild map jumps during warmup by only updating the visual marker for reasonably accurate points,
   // unless we have no location at all (in which case we need an initial map center).
-  if (!storeState.currentLocation || (Number.isFinite(accuracy) && accuracy <= 65)) {
+  if (!storeState.currentLocation || (Number.isFinite(accuracy) && accuracy <= 65) || Capacitor.isNativePlatform() === false) {
     useCardioStore.setState({ 
-      currentLocation: { lat: pos.coords.latitude, lng: pos.coords.longitude }
+      currentLocation: { 
+        lat: pos.coords.latitude, 
+        lng: pos.coords.longitude,
+        heading: pos.coords.heading != null && !Number.isNaN(pos.coords.heading) ? pos.coords.heading : undefined
+      }
     });
   }
 
@@ -338,7 +344,7 @@ interface CardioState {
   elevationGainM: number;
   gpsStatus: GpsStatus;
   gpsAccuracy: number;
-  currentLocation: { lat: number, lng: number } | null;
+  currentLocation: { lat: number, lng: number, heading?: number } | null;
   lastGpsTimestamp: number;
 
   // Actions
@@ -472,12 +478,15 @@ export const useCardioStore = create<CardioState>()(
         }
         
         if (gpsStatus === 'warming_up') {
-           if (accuracy && accuracy <= 30) {
+           const isNative = Capacitor.isNativePlatform();
+           const targetAccuracy = isNative ? 30 : 250; 
+           
+           if (accuracy && accuracy <= targetAccuracy) {
              const distSinceLastWarmup = lastWarmupGoodPoint ? haversineKm(lastWarmupGoodPoint.lat, lastWarmupGoodPoint.lng, rawPt.lat, rawPt.lng) * 1000 : 0;
-             if (!lastWarmupGoodPoint || distSinceLastWarmup < 50) { // No impossible jumps
+             if (!lastWarmupGoodPoint || distSinceLastWarmup < (isNative ? 50 : 300)) { // No impossible jumps
                warmupConsecutiveFixes++;
                lastWarmupGoodPoint = rawPt;
-               if (warmupConsecutiveFixes >= 3) {
+               if (warmupConsecutiveFixes >= (isNative ? 3 : 1)) {
                  gpsStatus = 'active';
                }
              } else {
@@ -607,22 +616,44 @@ export const useCardioStore = create<CardioState>()(
            }
         }
 
-        const smoothedSpeed = pushSpeed(currentSpeed);
-        const displaySpeed = Math.round(smoothedSpeed * 10) / 10;
-
-        if (addedDistance > 0) lastMovementPoint = rawPt;
-
-        // ── Phase 2F: Auto-Pause State Machine ──
-        
-        const speedForPause = speedConfidence > 0 ? currentSpeed : 0;
         const stationaryRadiusM = Math.max(4, Math.min((accuracy || 12) * 0.5, 12));
         const displacementFromMovementM = lastMovementPoint
           ? haversineKm(lastMovementPoint.lat, lastMovementPoint.lng, rawPt.lat, rawPt.lng) * 1000
           : 0;
+        const timeSinceLastMovement = lastMovementPoint ? now - lastMovementPoint.ts : 0;
+        
+        // Pedometer validation
+        const stepsSinceMovement = pedoState.sessionSteps - stepsAtLastMovement;
+        const isCadenceHighEnoughToOverride = timeSinceLastMovement > 0 && 
+            (stepsSinceMovement / (timeSinceLastMovement / 1000)) >= 0.33; // >= ~20 steps per minute
+
+        // Anti-Drift: Force speed to 0 if we haven't actually displaced far enough in 15s
+        // Exception: If we are actively walking on a treadmill or lost GPS (high cadence), keep speed alive if pedometer is active.
+        if (timeSinceLastMovement > 15_000 && displacementFromMovementM < stationaryRadiusM && !isCadenceHighEnoughToOverride) {
+          currentSpeed = 0;
+        }
+
+        const smoothedSpeed = pushSpeed(currentSpeed);
+        const displaySpeed = Math.round(smoothedSpeed * 10) / 10;
+
+        if (addedDistance > 0) {
+          lastMovementPoint = rawPt;
+          stepsAtLastMovement = pedoState.sessionSteps;
+        }
+
+        // ── Phase 2F: Auto-Pause State Machine ──
+        
+        const speedForPause = speedConfidence > 0 ? currentSpeed : 0;
           
         const isStationary = speedForPause < AUTO_PAUSE_SPEED_THRESHOLD && displacementFromMovementM < stationaryRadiusM;
-        // Pedometer validation: If we are detecting recent steps, we are definitely NOT stationary
-        const isActuallyStationary = isStationary && (!hasRecentSteps || state.activityType === 'cycle');
+        // Pedometer validation: If we are detecting recent steps, we are normally NOT stationary
+        let isActuallyStationary = isStationary && (!hasRecentSteps || state.activityType === 'cycle');
+        
+        // Override pedometer if we strictly haven't moved far enough in 15s (kills false steps from hand shaking)
+        // BUT if cadence is high (treadmill or lost GPS), we are NOT stationary.
+        if (timeSinceLastMovement > 15_000 && displacementFromMovementM < stationaryRadiusM && !isCadenceHighEnoughToOverride) {
+          isActuallyStationary = true;
+        }
 
         if (isActuallyStationary) {
           if (autoPauseStatus === 'MOVING') {

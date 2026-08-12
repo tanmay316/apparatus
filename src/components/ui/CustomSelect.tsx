@@ -14,6 +14,7 @@ interface CustomSelectProps {
   className?: string;
   placeholder?: string;
   disabled?: boolean;
+  placement?: 'top' | 'bottom';
 }
 
 export function CustomSelect({
@@ -23,6 +24,7 @@ export function CustomSelect({
   className = '',
   placeholder = 'Select...',
   disabled = false,
+  placement = 'bottom',
 }: CustomSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -62,11 +64,11 @@ export function CustomSelect({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -10, scale: 0.98 }}
+            initial={{ opacity: 0, y: placement === 'top' ? 10 : -10, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -10, scale: 0.98 }}
+            exit={{ opacity: 0, y: placement === 'top' ? 10 : -10, scale: 0.98 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="absolute z-[9999] w-full mt-2 rounded-2xl overflow-hidden bg-ink-2/95 backdrop-blur-xl border border-line/30 shadow-2xl origin-top"
+            className={`absolute z-[9999] w-full ${placement === 'top' ? 'bottom-full mb-2 origin-bottom' : 'mt-2 origin-top'} rounded-2xl overflow-hidden bg-ink-2/95 backdrop-blur-xl border border-line/30 shadow-2xl`}
           >
             <div className="max-h-[250px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1">
               {options.map((opt) => {

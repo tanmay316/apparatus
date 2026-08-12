@@ -32,80 +32,53 @@ async function openInAppBrowser(url: string) {
 }
 
 function ExerciseMedia({ exercise }: { exercise: Exercise }) {
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
-
-  // Extract a YouTube video ID if the exercise already has a direct YT link
-  const youtubeId = (() => {
-    const value = exercise.yt || '';
-    const match = value.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/i);
-    return match?.[1] || null;
-  })();
-  
-  const [resolvedYoutubeId, setResolvedYoutubeId] = useState<string | null>(youtubeId);
-
-  const searchQuery = `${exercise.name} correct form short`;
-  const formUrl = exercise.yt?.startsWith('http')
-    ? exercise.yt
-    : `https://www.youtube.com/results?search_query=${encodeURIComponent(`${exercise.name} correct form`)}`;
+  const [resolvedYoutubeId, setResolvedYoutubeId] = useState<string | null>(null);
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-
-    // If the exercise has a direct YouTube link, use its thumbnail immediately
-    if (youtubeId) {
-      setThumbnailUrl(`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`);
-      setResolvedYoutubeId(youtubeId);
-      setLoading(false);
-      return () => { cancelled = true; };
-    }
-
-    // Search YouTube for the exercise via a public Invidious instance to get
-    // the first relevant video thumbnail. This avoids showing wrong/unrelated images.
     setLoading(true);
 
-    const INVIDIOUS_INSTANCES = [
-      'https://vid.puffyan.us',
-      'https://invidious.fdn.fr',
-      'https://y.com.sb',
-    ];
+    import('@/lib/video-resolver').then(({ resolveExerciseVideo }) => {
+      resolveExerciseVideo(exercise.name, exercise.yt).then(vidId => {
+        if (cancelled) return;
+        if (vidId) {
+          setResolvedYoutubeId(vidId);
 
-    const tryFetch = async () => {
-      for (const instance of INVIDIOUS_INSTANCES) {
-        try {
-          const res = await fetch(
-            `${instance}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video&sort_by=relevance`,
-            { signal: AbortSignal.timeout(5000) }
-          );
-          if (!res.ok) continue;
-          const results = await res.json();
-          const firstVideo = results?.[0];
-          if (firstVideo?.videoId) {
-            if (!cancelled) setResolvedYoutubeId(firstVideo.videoId);
-            return `https://i.ytimg.com/vi/${firstVideo.videoId}/hqdefault.jpg`;
-          }
-        } catch {
-          continue; // Try next instance
+          // Test if thumbnail actually loads (sometimes YT videos are deleted)
+          const thumb = `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`;
+          const img = new Image();
+          img.onload = () => {
+            if (!cancelled) {
+              setThumbnailUrl(thumb);
+              setLoading(false);
+            }
+          };
+          img.onerror = () => {
+            if (!cancelled) {
+              setThumbnailUrl(null);
+              setLoading(false);
+            }
+          };
+          img.src = thumb;
+        } else {
+          setThumbnailUrl(null);
+          setLoading(false);
         }
-      }
-      return null;
-    };
-
-    tryFetch().then(url => {
-      if (cancelled) return;
-      setThumbnailUrl(url);
-    }).catch(() => {
-      if (!cancelled) setThumbnailUrl(null);
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
+      });
     });
 
     return () => { cancelled = true; };
-  }, [exercise.name, exercise.yt, youtubeId, searchQuery]);
+  }, [exercise.name, exercise.yt]);
+
+  const formUrl = resolvedYoutubeId
+    ? `https://www.youtube.com/watch?v=${resolvedYoutubeId}`
+    : `https://www.youtube.com/results?search_query=${encodeURIComponent(`${exercise.name} proper form technique`)}`;
 
   const handleDemoClick = (e: React.MouseEvent) => {
-    e.preventDefault();
+    e.stopPropagation();
     if (resolvedYoutubeId) {
       setIsPlaying(true);
     } else {
@@ -127,40 +100,56 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
         </div>
       ) : thumbnailUrl ? (
         <div className="relative cursor-pointer group" onClick={handleDemoClick}>
-          <img 
-            src={thumbnailUrl} 
-            alt={`${exercise.name} correct form`} 
-            className="w-full object-cover" 
+          <img
+            src={thumbnailUrl}
+            alt={`${exercise.name} correct form`}
+            className="w-full object-cover"
             style={{ aspectRatio: '16/9' }}
-            loading="lazy" 
-            referrerPolicy="no-referrer" 
+            loading="lazy"
+            referrerPolicy="no-referrer"
           />
           {/* Play overlay */}
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="w-14 h-14 rounded-full bg-red-600 flex items-center justify-center shadow-lg">
+            <div className="w-14 h-14 rounded-full bg-sienna flex items-center justify-center shadow-lg">
               <Play size={24} className="text-white ml-1" fill="white" />
             </div>
           </div>
         </div>
       ) : (
-        <div className="flex items-center justify-center gap-3 px-5 text-center text-xs text-bone-dim" style={{ aspectRatio: '16/9' }}>
-          {loading ? <><LoaderCircle size={18} className="animate-spin text-sienna" /> Finding exercise reference…</> : <>No video reference available for this movement yet.</>}
+        <div
+          className="relative cursor-pointer group bg-gradient-to-br from-ink-2 to-ink flex flex-col items-center justify-center"
+          style={{ aspectRatio: '16/9' }}
+          onClick={handleDemoClick}
+        >
+          {loading ? (
+            <div className="flex flex-col items-center gap-3">
+              <LoaderCircle size={24} className="animate-spin text-sienna" />
+              <span className="text-xs font-mono text-bone-dim uppercase tracking-wider">Finding demo...</span>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-14 h-14 rounded-full bg-sienna/20 border border-sienna/50 flex items-center justify-center shadow-lg group-hover:bg-sienna/40 group-hover:scale-110 transition-all duration-300">
+                <Play size={24} className="text-sienna ml-1" fill="currentColor" />
+              </div>
+              <span className="text-xs font-mono text-bone-dim uppercase tracking-wider group-hover:text-bone transition-colors">Find demonstration</span>
+            </div>
+          )}
         </div>
       )}
-      <div className="flex items-center justify-between gap-3 border-t border-line/60 px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-t border-line/60 px-4 py-3 bg-ink-2">
         <div>
           <div className="text-[10px] font-mono uppercase tracking-widest text-sienna">Technique reference</div>
           <div className="mt-1 text-xs text-bone-dim">
-            {isPlaying ? 'Playing video' : thumbnailUrl ? 'Tap image or button to watch' : 'Open the exercise demo'}
+            {isPlaying ? 'Playing video' : thumbnailUrl ? 'Ready to watch' : 'Find technique demo'}
           </div>
         </div>
         {isPlaying ? (
-          <button onClick={(e) => { e.preventDefault(); openInAppBrowser(formUrl); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/10">
+          <button onClick={(e) => { e.preventDefault(); openInAppBrowser(formUrl); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/10 transition-colors">
             <ExternalLink size={12} /> More Videos
           </button>
         ) : (
-          <button onClick={handleDemoClick} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/10">
-            <Play size={12} /> Watch
+          <button onClick={handleDemoClick} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 bg-sienna/10 px-4 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/20 transition-colors">
+            <Play size={12} fill="currentColor" /> {thumbnailUrl ? 'Watch' : 'Search YouTube'}
           </button>
         )}
       </div>
@@ -184,12 +173,12 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
 
   // Timer Modes: 'rest' | 'stopwatch' | 'countdown'
   const [timerMode, setTimerMode] = useState<'rest' | 'stopwatch' | 'countdown'>('rest');
-  
+
   // Timer States
   const [restDuration, setRestDuration] = useState(90);
   const [restTimeLeft, setRestTimeLeft] = useState(90);
   const [isRestRunning, setIsRestRunning] = useState(false);
-  
+
   const [stopwatchElapsed, setStopwatchElapsed] = useState(0);
   const [isStopwatchRunning, setIsStopwatchRunning] = useState(false);
 
@@ -274,7 +263,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
     // Automatically complete sets that have values populated
     log.sets.forEach((set: any, idx: number) => {
       const hasValue = (log.mode === 'reps' && ((set.reps && set.reps > 0) || (set.weight && set.weight > 0))) ||
-                       (log.mode === 'hold' && (set.seconds && set.seconds > 0));
+        (log.mode === 'hold' && (set.seconds && set.seconds > 0));
       if (hasValue && !set.completed) {
         store.markSetComplete(exercise.name, idx, true);
       }
@@ -298,7 +287,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 pb-0 sm:pb-4">
       <div className="absolute inset-0 bg-ink/80 backdrop-blur-sm" onClick={onClose} />
-      
+
       <motion.div
         initial={{ y: '100%', opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -364,9 +353,9 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
               </div>
               <div>
                 <label className="text-xs font-mono text-bone-dim block mb-1">Target Muscle Group (Optional)</label>
-                <CustomSelect 
-                  className="w-full" 
-                  value={editMuscleGroup} 
+                <CustomSelect
+                  className="w-full"
+                  value={editMuscleGroup}
                   onChange={setEditMuscleGroup}
                   options={[
                     { value: '', label: 'Auto-detect' },
@@ -418,11 +407,11 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                   {log.sets.map((set: any, idx: number) => (
                     <div key={idx} className={`grid grid-cols-[auto_1fr_auto] items-center gap-4 p-2 rounded border ${set.completed ? 'bg-amber/10 border-amber/30' : 'bg-ink border-line'}`}>
                       <div className="w-8 text-center font-mono text-sm text-bone-dim font-bold">#{idx + 1}</div>
-                      
+
                       <div className="grid grid-cols-2 gap-3">
                         {log.mode === 'reps' ? (
                           <>
-                            <input 
+                            <input
                               type="number"
                               placeholder="reps"
                               className="input-field text-center font-mono text-base bg-ink-2"
@@ -430,7 +419,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                               onChange={(e) => store.updateSet(exercise.name, log.mode, idx, { reps: parseInt(e.target.value) || 0 })}
                               disabled={set.completed || isReadOnly}
                             />
-                            <input 
+                            <input
                               type="number"
                               placeholder="+kg"
                               className="input-field text-center font-mono text-base bg-ink-2"
@@ -440,7 +429,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                             />
                           </>
                         ) : (
-                          <input 
+                          <input
                             type="number"
                             placeholder="seconds"
                             className="input-field col-span-2 text-center font-mono text-base bg-ink-2"
@@ -451,7 +440,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                         )}
                       </div>
 
-                      <button 
+                      <button
                         onClick={() => {
                           if (isReadOnly) return;
                           store.markSetComplete(exercise.name, idx, !set.completed);
@@ -486,7 +475,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
               {/* Notes */}
               <div>
                 <div className="text-xs font-mono text-bone-dim mb-2 uppercase">Notes</div>
-                <textarea 
+                <textarea
                   className="input-field w-full h-20 text-sm"
                   placeholder={isReadOnly ? "No notes logged." : "e.g. left shoulder felt tight, form breaking down on last set..."}
                   value={log.notes}
@@ -511,8 +500,8 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                   <div className="space-y-4 text-center">
                     <div className="flex flex-wrap justify-center gap-2">
                       {[30, 45, 60, 75, 90, 120].map(s => (
-                        <button 
-                          key={s} 
+                        <button
+                          key={s}
                           onClick={() => {
                             setRestDuration(s);
                             setRestTimeLeft(s);
@@ -524,11 +513,11 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                         </button>
                       ))}
                     </div>
-                    
+
                     {/* Custom Rest Input */}
                     <div className="flex justify-center items-center gap-2 text-xs font-mono text-bone-dim">
                       <span>Custom:</span>
-                      <input 
+                      <input
                         type="number"
                         min="1"
                         className="input-field w-16 py-1 text-center bg-ink-2"
@@ -579,8 +568,8 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                   <div className="space-y-4 text-center">
                     <div className="flex flex-wrap justify-center gap-2">
                       {[60, 180, 300, 600].map(s => (
-                        <button 
-                          key={s} 
+                        <button
+                          key={s}
                           onClick={() => {
                             setCountdownDuration(s);
                             setCountdownTimeLeft(s);
@@ -596,7 +585,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                     {/* Custom Countdown Input */}
                     <div className="flex justify-center items-center gap-2 text-xs font-mono text-bone-dim">
                       <span>Custom:</span>
-                      <input 
+                      <input
                         type="number"
                         min="1"
                         className="input-field w-16 py-1 text-center bg-ink-2"

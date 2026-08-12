@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, Plus, X, Video, Share2 } from 'lucide-react';
+import { ArrowLeft, Clock, Plus, X, Share2, TrendingUp, ChevronRight, Check, Flame, Dumbbell, Weight, ChevronDown, Activity, User } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { useUserWeight } from '@/hooks/use-user-weight';
@@ -26,6 +26,7 @@ import { playSuccessChime } from '@/utils/audio';
 import { calculateBodyweightReps } from '@/lib/muscle-map';
 import { compareExerciseProgress } from '@/lib/progressive-overload';
 import { updateUserChallengeProgress } from '@/services/community';
+import { ExerciseIllustration } from '@/components/ui/ExerciseIllustration';
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -597,27 +598,27 @@ export function WorkoutSession() {
     showToast('Exercise added to workout');
   };
 
-  const renderSection = (title: string, tagLabel: string, tagColor: string, exercises: Exercise[], sectionKey: 'warmup' | 'skillWork' | 'strength' | 'cooldown') => {
+  const renderSection = (title: string, tagLabel: string, tagColor: string, exercises: Exercise[], sectionKey: 'warmup' | 'skillWork' | 'strength' | 'cooldown', IconComponent: any = Dumbbell) => {
     return (
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
+      <div className="mb-10 relative px-1">
+        <div className="flex items-center justify-between mb-4 px-1">
           <div className="flex items-center gap-2">
-            <div className={`px-2 py-0.5 text-[10px] font-mono rounded font-bold uppercase tracking-wider ${tagColor}`}>
-              {tagLabel}
-            </div>
-            <h4 className="font-display text-lg">{title}</h4>
+            <IconComponent className={tagColor.split(' ')[1] || "text-bone"} size={18} />
+            <h4 className="font-display text-lg text-bone uppercase tracking-wide flex items-center gap-2">
+               {tagLabel} <span className="text-bone-dim font-mono text-sm normal-case">{title}</span>
+            </h4>
           </div>
           <button
             onClick={() => setAddSection(sectionKey)}
-            className="text-[10px] text-sienna font-mono border border-sienna/30 px-1.5 py-0.5 rounded bg-sienna/5 flex items-center gap-1 hover:bg-sienna/15 transition-all"
+            className="text-[10px] text-bone border border-line/80 px-3 py-1.5 rounded-full flex items-center gap-1.5 hover:bg-ink-2 transition-all shadow-sm font-medium"
           >
-            <Plus size={10} /> Add
+            <Plus size={12} /> Add
           </button>
         </div>
 
         <div className="space-y-3">
           {exercises.length === 0 ? (
-            <div className="text-xs text-bone-dim py-4 px-4 border border-dashed border-line rounded">
+            <div className="text-xs text-bone-dim py-6 px-4 border border-dashed border-line/60 rounded-2xl text-center bg-ink-2/30">
               No exercises added.
             </div>
           ) : (
@@ -626,50 +627,69 @@ export function WorkoutSession() {
               const histLog = completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === e.name);
               const previousWorkout = workoutHistory.find((workout: any) => workout.dayId === dayId && workout.date !== completedWorkoutForDay?.date && workout.exercises?.some((ex: any) => ex.name === e.name));
               const previousLog = previousWorkout?.exercises?.find((ex: any) => ex.name === e.name);
-              const comparison = (log || histLog) && previousLog ? compareExerciseProgress((log || histLog) as any, previousLog) : null;
-              const historyLabel = histLog
-                ? `Logged ${histLog.sets?.filter((s: any) => s.completed !== false).length || 0} sets${histLog.sets?.[0]?.weight ? ` @ ${histLog.sets[0].weight} kg` : ''}`
-                : previousLog
-                  ? `Last: ${previousLog.sets?.filter((s: any) => s.completed !== false).length || 0} sets${previousLog.sets?.[0]?.weight ? ` @ ${previousLog.sets[0].weight} kg` : ''}`
-                  : 'No history yet';
+              
               const isDone = (!store.isActive && hasCompletedToday)
                 ? !!(histLog && histLog.sets?.some((s: any) => s.completed))
                 : !!(log && log.sets.some((s: any) => s.completed));
+                
+              const numCompletedSets = (!store.isActive && hasCompletedToday)
+                ? histLog?.sets?.filter((s: any) => s.completed !== false).length || 0
+                : log?.sets?.filter((s: any) => s.completed).length || 0;
 
               return (
-                <div
+                <motion.div
                   key={idx}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.05 }}
                   onClick={() => setActiveExercise({ name: e.name, mode: exMode(e.sets), index: idx, section: sectionKey })}
-                  className="card-hover p-4 flex items-center justify-between cursor-pointer group"
+                  className="bg-ink-2 border border-line/60 rounded-[24px] p-3.5 pr-5 flex items-center gap-4 shadow-sm cursor-pointer hover:bg-ink-2/80 transition-all"
                 >
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (!store.isActive && hasCompletedToday) return;
-                        const isCurrentlyDone = log && log.sets.some((s: any) => s.completed);
-                        log?.sets.forEach((_: any, setIdx: number) => {
-                          store.markSetComplete(e.name, setIdx, !isCurrentlyDone);
-                        });
-                        setLastExercise(e.name);
-                        showToast(`All sets marked ${!isCurrentlyDone ? 'complete' : 'incomplete'}`);
-                      }}
-                      className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-none transition-colors ${isDone ? 'bg-sienna border-sienna text-bone font-bold' : 'border-line text-transparent hover:border-sienna'}`}
-                    >
-                      {isDone ? '✓' : ''}
-                    </button>
-                    <div>
-                      <h5 className={`font-semibold ${isDone ? 'text-sienna' : ''}`}>{e.name}</h5>
-                      <div className="text-xs text-bone-dim font-mono mt-0.5">
-                        {e.sets} {e.tempo ? `· tempo ${e.tempo}` : ''} {e.rest ? `· rest ${e.rest}` : ''}
-                      </div>
-                      <div className={`text-[10px] mt-1 ${comparison?.progressed ? 'text-sienna' : 'text-bone-dim'}`}>
-                        {comparison?.progressed ? 'Progressive overload detected · ' : ''}{historyLabel}
-                      </div>
+                  <button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!store.isActive && hasCompletedToday) return;
+                      const isCurrentlyDone = log && log.sets.some((s: any) => s.completed);
+                      log?.sets.forEach((_: any, setIdx: number) => {
+                        store.markSetComplete(e.name, setIdx, !isCurrentlyDone);
+                      });
+                      setLastExercise(e.name);
+                      showToast(`All sets marked ${!isCurrentlyDone ? 'complete' : 'incomplete'}`);
+                    }}
+                    className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-none transition-all shadow-sm ${
+                      isDone 
+                        ? 'bg-sienna border-sienna text-bone shadow-[0_0_10px_rgba(200,90,70,0.3)]' 
+                        : 'bg-transparent border-line/80 text-transparent hover:border-sienna/50'
+                    }`}
+                  >
+                    <Check size={14} strokeWidth={3} className={isDone ? "opacity-100" : "opacity-0"} />
+                  </button>
+
+                  <ExerciseIllustration 
+                    name={e.name} 
+                    muscleGroup={(e as any).muscleGroup} 
+                    size={56} 
+                    className="border border-line/40 shadow-sm"
+                  />
+
+                  <div className="flex-1 min-w-0">
+                    <h5 className={`font-display text-base tracking-wide truncate transition-colors ${isDone ? 'text-bone' : 'text-bone'}`}>
+                      {e.name}
+                    </h5>
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                      <span className="bg-ink px-1.5 py-0.5 rounded border border-line/40 text-[10px] font-mono text-bone shadow-sm">{e.sets}</span>
+                      {e.tempo && <span className="bg-ink px-1.5 py-0.5 rounded border border-line/40 text-[10px] font-mono text-bone-dim shadow-sm">tempo {e.tempo}</span>}
+                      {e.rest && <span className="bg-ink px-1.5 py-0.5 rounded border border-line/40 text-[10px] font-mono text-bone-dim shadow-sm">rest {e.rest}</span>}
+                    </div>
+                    <div className={`text-[10px] font-mono mt-2 ${isDone ? 'text-green-500' : 'text-bone-dim/50'}`}>
+                      {isDone ? `Logged ${numCompletedSets} sets` : 'No history yet'}
                     </div>
                   </div>
-                  <div className="text-bone-dim group-hover:text-sienna transition-colors">›</div>
-                </div>
+
+                  <div className="w-7 h-7 rounded-full bg-ink border border-line/40 flex items-center justify-center text-bone-dim shrink-0 shadow-sm">
+                    <ChevronRight size={14} />
+                  </div>
+                </motion.div>
               );
             })
           )}
@@ -679,29 +699,29 @@ export function WorkoutSession() {
   };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pb-32">
-      <div className="flex justify-between items-center mb-6">
-        <Link to="/" className="inline-flex items-center gap-2 text-sm text-bone-dim hover:text-bone transition-colors">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pb-32 bg-ink min-h-screen">
+      <div className="flex justify-between items-center mb-6 px-4 pt-4">
+        <button onClick={handleCancel} className="inline-flex items-center gap-2 text-sm font-medium text-bone-dim hover:text-bone transition-colors">
           <ArrowLeft size={16} /> Quit
-        </Link>
-        <div className="flex items-center gap-2 font-mono text-sienna">
+        </button>
+        <div className="flex items-center gap-2 font-mono text-sienna font-bold">
           {store.isActive && !store.startedAt && (
-            <button onClick={() => store.startTimer()} className="btn-primary py-1 px-3 mr-2 text-[10px] tracking-wider uppercase">Start</button>
+            <button onClick={() => store.startTimer()} className="bg-sienna/10 text-sienna py-1 px-3 mr-2 text-[10px] tracking-wider uppercase rounded-full">Start</button>
           )}
           <Clock size={16} />
           {formatStopwatch(elapsedSec)}
         </div>
       </div>
 
-      <div className="mb-8 pb-6 border-b border-line">
-        <div className="flex justify-between items-center mb-1">
-          <div className="font-mono text-amber text-[11px] tracking-widest uppercase">
-            DAY {currentDay.dayNumber.toString().padStart(2, '0')} / 07 · ~{currentDay.time}
+      <div className="mb-8 pb-8 border-b border-line/60 px-4">
+        <div className="flex justify-between items-center mb-3">
+          <div className="font-mono text-sienna text-[10px] tracking-widest uppercase font-bold">
+            DAY {currentDay.dayNumber.toString().padStart(2, '0')} / 07
           </div>
           {(!store.isActive && hasCompletedToday) && todayCompletedWorkouts.length > 0 && (
-            <div className="relative z-10 w-[140px]">
+            <div className="relative z-10 w-[110px]">
               <CustomSelect
-                className="w-full text-xs font-mono"
+                className="w-full text-[10px] font-mono border-line/50 bg-ink-2 shadow-sm rounded-full py-1.5"
                 value={selectedWorkoutIndex.toString()}
                 onChange={(val) => setSelectedWorkoutIndex(Number(val))}
                 options={todayCompletedWorkouts.map((w: any, idx: number) => {
@@ -710,10 +730,6 @@ export function WorkoutSession() {
                     if (typeof w.startedAt.toMillis === 'function') ms = w.startedAt.toMillis();
                     else if (w.startedAt.seconds) ms = w.startedAt.seconds * 1000;
                     else if (typeof w.startedAt === 'number') ms = w.startedAt;
-                  } else if (w.createdAt) {
-                    if (typeof w.createdAt.toMillis === 'function') ms = w.createdAt.toMillis();
-                    else if (w.createdAt.seconds) ms = w.createdAt.seconds * 1000;
-                    else if (typeof w.createdAt === 'number') ms = w.createdAt;
                   }
                   return { value: idx.toString(), label: new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
                 })}
@@ -721,69 +737,86 @@ export function WorkoutSession() {
             </div>
           )}
         </div>
-        <h1 className="font-display text-3xl mb-2">{currentDay.title}</h1>
-        <div className="text-sm text-bone-dim font-mono">
-          SKILL: <span className="text-bone">{currentDay.skill || 'None'}</span> • PROGRESS: <span className="text-sienna">{activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length}/{activeExercises.length}</span>
+        <h1 className="font-display text-4xl mb-4 text-bone font-bold">{currentDay.title}</h1>
+        <div className="text-[11px] text-bone-dim font-mono uppercase tracking-wider flex items-center flex-wrap gap-2">
+          <span>SKILL: <span className="text-bone font-bold">{currentDay.skill || 'None'}</span></span>
+          <span className="opacity-40">•</span>
+          <span>PROGRESS: <span className="text-bone font-bold">{activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length} / {activeExercises.length}</span></span>
         </div>
-        <div className="w-full h-1.5 bg-line/20 rounded-full overflow-hidden mt-3 max-w-sm">
+        
+        <div className="w-full h-1.5 bg-line/40 rounded-full overflow-hidden mt-4 max-w-sm shadow-inner">
           <motion.div
-            className="h-full bg-sienna rounded-full"
+            className="h-full bg-sienna rounded-full shadow-[0_0_8px_rgba(200,90,70,0.8)]"
             initial={{ width: 0 }}
             animate={{ width: `${activeExercises.length ? Math.round((activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length / activeExercises.length) * 100) : 0}%` }}
             transition={{ duration: 0.3, ease: 'easeOut' }}
           />
         </div>
 
-        {/* Dynamic metrics strip */}
-        <div className="flex sm:grid sm:grid-cols-3 gap-3 mt-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="bg-ink-2 border border-line p-4 rounded-lg min-w-[140px] shrink-0">
-            <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">DURATION (TODAY)</div>
-            <div className="text-xl font-bold font-mono mt-1 text-bone">{Math.round(elapsedSec / 60)} min</div>
+        {/* Dynamic metrics strip - Redesigned Cards */}
+        <div className="flex gap-3 mt-8 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden w-full max-w-md">
+          <div className="bg-ink-2 border border-line/60 p-4 rounded-3xl flex-1 min-w-[100px] text-center shadow-sm flex flex-col items-center justify-center">
+            <Clock className="text-sienna mb-2 opacity-80" size={18} />
+            <div className="text-[9px] font-mono text-bone-dim uppercase tracking-widest mb-1 font-bold">DURATION</div>
+            <div className="text-2xl font-display font-bold text-bone">{Math.round(elapsedSec / 60)}</div>
+            <div className="text-[10px] text-bone-dim mt-0.5">min</div>
           </div>
-          <div className="bg-ink-2 border border-line p-4 rounded-lg min-w-[160px] shrink-0">
-            <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">MAX LIFT</div>
-            <div className="text-xl font-bold font-mono mt-1 text-bone">{maxWeightDisplay}</div>
+          <div className="bg-ink-2 border border-line/60 p-4 rounded-3xl flex-1 min-w-[100px] text-center shadow-sm flex flex-col items-center justify-center">
+            <Weight className="text-sienna mb-2 opacity-80" size={18} />
+            <div className="text-[9px] font-mono text-bone-dim uppercase tracking-widest mb-1 font-bold">MAX LIFT</div>
+            <div className="text-2xl font-display font-bold text-bone">{maxWeight > 0 ? maxWeight : 0}</div>
+            <div className="text-[10px] text-bone-dim mt-0.5">{displayWeightUnit}</div>
           </div>
-          <div className="bg-ink-2 border border-line p-4 rounded-lg min-w-[140px] shrink-0">
-            <div className="text-[10px] font-mono text-bone-dim uppercase tracking-wider">EST. CALORIES</div>
-            <div className="text-xl font-bold font-mono mt-1 text-bone">{displayCalories} kcal</div>
+          <div className="bg-ink-2 border border-line/60 p-4 rounded-3xl flex-1 min-w-[100px] text-center shadow-sm flex flex-col items-center justify-center">
+            <Flame className="text-sienna mb-2 opacity-80" size={18} />
+            <div className="text-[9px] font-mono text-bone-dim uppercase tracking-widest mb-1 font-bold">CALORIES</div>
+            <div className="text-2xl font-display font-bold text-bone">~{displayCalories}</div>
+            <div className="text-[10px] text-bone-dim mt-0.5">kcal</div>
           </div>
         </div>
       </div>
 
-      {renderSection(currentDay.time, 'WARM-UP', 'bg-bone text-ink', store.isActive ? store.warmup : displayWarmup, 'warmup')}
-      {renderSection('~15 min', `SKILL — ${currentDay.skill || 'NONE'}`, 'bg-amber/20 text-amber border border-amber/30', store.isActive ? store.skillWork : displaySkillWork, 'skillWork')}
-      {renderSection('Main sets', 'STRENGTH', 'bg-sienna/10 text-sienna border border-sienna/20', store.isActive ? store.strength : displayStrength, 'strength')}
-      {renderSection('5-10 min', 'COOLDOWN', 'bg-bone text-ink', store.isActive ? store.cooldown : displayCooldown, 'cooldown')}
+      <div className="px-3">
+        {renderSection(currentDay.time, 'WARM-UP', 'text-bone', store.isActive ? store.warmup : displayWarmup, 'warmup', Activity)}
+        {renderSection('~15 min', `SKILL — ${currentDay.skill || 'NONE'}`, 'text-amber', store.isActive ? store.skillWork : displaySkillWork, 'skillWork', Dumbbell)}
+        {renderSection('Main sets', 'STRENGTH', 'text-sienna', store.isActive ? store.strength : displayStrength, 'strength', Weight)}
+        {renderSection('5-10 min', 'COOLDOWN', 'text-bone', store.isActive ? store.cooldown : displayCooldown, 'cooldown', Activity)}
+      </div>
 
-      <div className="mt-12 flex flex-col items-center justify-center gap-3 pb-20">
-        <div className="flex items-center gap-3 bg-ink-2 p-2 px-4 rounded border border-line z-10 w-full max-w-[300px]">
-          <span className="text-xs font-mono text-bone-dim uppercase">Workout Privacy:</span>
-          <CustomSelect
-            className="flex-1 text-xs font-mono"
-            value={privacy}
-            onChange={(val) => setPrivacy(val as any)}
-            options={[
-              { value: 'followers', label: 'Followers only' },
-              { value: 'public', label: 'Public' },
-              { value: 'private', label: 'Private' }
-            ]}
-          />
+      <div className="fixed bottom-0 left-0 w-full p-4 bg-gradient-to-t from-ink via-ink/95 to-transparent pb-6 pt-12 z-40 flex items-center justify-center pointer-events-none">
+        <div className="flex items-center gap-2 w-full max-w-md pointer-events-auto">
+          <div className="flex items-center justify-center bg-ink-2 px-3 h-14 rounded-[20px] border border-line/60 shadow-lg shrink-0">
+            <User size={16} className="text-bone-dim mr-1" />
+            <CustomSelect
+              className="w-[100px] text-[11px] font-mono !bg-transparent border-0 font-bold tracking-wider text-bone"
+              value={privacy}
+              onChange={(val) => setPrivacy(val as any)}
+              placement="top"
+              options={[
+                { value: 'followers', label: 'Followers' },
+                { value: 'public', label: 'Public' },
+                { value: 'private', label: 'Private' }
+              ]}
+            />
+          </div>
+          <button
+            onClick={() => {
+              if (store.isActive && !store.startedAt) {
+                store.startTimer();
+              } else if (!store.isActive && hasCompletedToday) {
+                setSessionFinished(false);
+                store.startWorkout(plan, currentDay);
+              } else {
+                handleFinish();
+              }
+            }}
+            disabled={sessionFinished || isSaving}
+            className={`h-14 flex-1 text-sm font-display tracking-widest uppercase rounded-[20px] shadow-xl transition-all duration-300 flex items-center justify-center gap-2 ${sessionFinished || isSaving ? 'bg-ink-2 border border-line text-bone-dim cursor-not-allowed opacity-50' : 'bg-sienna text-bone hover:bg-sienna/90 hover:scale-[1.02] shadow-[0_4px_20px_rgba(200,90,70,0.3)]'}`}
+          >
+            {(!store.isActive && hasCompletedToday) && !sessionFinished && !isSaving && <Activity size={18} />}
+            {isSaving ? 'Saving...' : sessionFinished ? 'Session Saved' : (!store.isActive && hasCompletedToday) ? 'Log Again' : (store.isActive && !store.startedAt) ? 'Start Workout' : 'Finish Workout'}
+          </button>
         </div>
-        <button
-          onClick={() => {
-            if (!store.isActive && hasCompletedToday) {
-              setSessionFinished(false);
-              store.startWorkout(plan, currentDay);
-            } else {
-              handleFinish();
-            }
-          }}
-          disabled={sessionFinished || isSaving}
-          className={`py-3.5 px-8 text-base w-full max-w-md font-bold tracking-wider rounded-lg transition-all ${sessionFinished || isSaving ? 'bg-line text-bone-dim cursor-not-allowed opacity-50' : 'bg-sienna text-bone hover:bg-sienna/90'}`}
-        >
-          {isSaving ? 'Saving...' : sessionFinished ? '✓ Saved' : (!store.isActive && hasCompletedToday) ? 'Log Again' : 'Finish Workout'}
-        </button>
       </div>
 
       {activeExercise && (store[activeExercise.section][activeExercise.index] || (!store.isActive && hasCompletedToday)) && (

@@ -496,30 +496,41 @@ export function CardioTracker() {
   // ─── Select Screen ───
   if (screen === 'select') {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-24">
-        <div className="mb-8">
-          <div className="font-mono text-amber text-xs tracking-widest mb-1">ACTIVITY</div>
-          <h1 className="font-display text-2xl">Start Activity</h1>
-          <p className="text-sm text-bone-dim mt-1">Choose your activity type to begin tracking</p>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-24 max-w-3xl mx-auto px-4 pt-6 md:pt-10">
+        <div className="mb-10 flex items-center gap-5">
+          <button 
+            onClick={() => navigate('/')}
+            className="w-11 h-11 shrink-0 flex items-center justify-center rounded-full bg-[var(--card)]/80 backdrop-blur-md border border-[var(--border)] text-[var(--text)] hover:bg-[var(--border)] transition-all shadow-sm active:scale-95"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <div className="font-mono text-amber-500 dark:text-amber-400 text-[10px] tracking-widest mb-1.5 font-bold uppercase">Activity Tracker</div>
+            <h1 className="font-display text-3xl md:text-4xl text-[var(--text)] leading-none tracking-tight">Start Tracking</h1>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-3 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5 mb-12">
           {ACTIVITY_OPTIONS.map((opt) => (
             <motion.button
               key={opt.type}
-              whileHover={{ scale: 1.01 }}
+              whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => handleStartActivity(opt.type)}
-              className="flex items-center gap-4 p-4 rounded-2xl bg-white dark:bg-white/5 border border-line hover:border-sienna/40 transition-colors text-left group shadow-sm"
+              className="flex flex-col gap-4 p-6 rounded-[2rem] bg-white/50 dark:bg-white/5 backdrop-blur-xl border border-[var(--border)] hover:border-sienna/50 hover:bg-white/80 dark:hover:bg-white/10 transition-all text-left group shadow-lg shadow-black/5"
             >
-              <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${opt.color} flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform shadow-md`}>
-                {opt.icon}
+              <div className="flex items-center justify-between w-full">
+                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${opt.color} flex items-center justify-center text-white shrink-0 group-hover:scale-110 group-hover:-rotate-3 transition-all duration-300 shadow-md`}>
+                  {opt.icon}
+                </div>
+                <div className="w-8 h-8 rounded-full bg-[var(--border)]/50 flex items-center justify-center text-[var(--text)] group-hover:bg-[var(--text)] group-hover:text-[var(--bg)] transition-colors">
+                  <ChevronRight size={16} />
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-[17px] text-[var(--text)] tracking-tight">{opt.label}</h3>
-                <p className="text-[13px] text-bone-dim">{opt.description}</p>
+              <div className="flex-1 min-w-0 mt-2">
+                <h3 className="font-bold text-[19px] text-[var(--text)] tracking-tight mb-1">{opt.label}</h3>
+                <p className="text-[13px] text-bone-dim leading-relaxed">{opt.description}</p>
               </div>
-              <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500 transition-colors" />
             </motion.button>
           ))}
         </div>
@@ -563,9 +574,7 @@ export function CardioTracker() {
         
         {/* Background Map */}
         <div className="absolute inset-0 z-0">
-          {store.gpsStatus === 'active' && (
-            <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive={false} height="100%" theme={mapLayer} cardioType={store.activityType as any} />
-          )}
+          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive={false} height="100%" theme={mapLayer} cardioType={store.activityType as any} />
           <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg)] via-transparent to-transparent z-[1]" />
         </div>
 
