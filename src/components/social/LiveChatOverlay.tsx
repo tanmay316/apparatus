@@ -7,6 +7,7 @@ import { useCardioStore } from '@/stores/cardio-store';
 import { sendLiveMessage } from '@/services/social';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, MessageCircle } from 'lucide-react';
+import { showNotification } from '@/utils/notifications';
 import { createPortal } from 'react-dom';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
@@ -61,12 +62,9 @@ export function LiveChatOverlay() {
       snap.docChanges().forEach(change => {
         if (change.type === 'added') {
           const data = { id: change.doc.id, ...change.doc.data() } as any;
-          // Don't show our own messages in the overlay
           if (data.senderUid !== user.uid) {
             setMessages(prev => [...prev, data]);
-            import('@/utils/notifications').then(({ showNotification }) => {
-              showNotification(Math.floor(Math.random() * 100000), `Message from ${data.senderName}`, data.text).catch(() => {});
-            });
+            showNotification(Math.floor(Math.random() * 100000), `Message from ${data.senderName}`, data.text).catch(() => {});
           }
         }
       });

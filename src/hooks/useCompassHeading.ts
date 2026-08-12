@@ -1,20 +1,94 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+
+export type CompassConfidence = 'high' | 'medium' | 'low' | 'calibrating' | 'unavailable';
+export type HeadingSource = 'none' | 'ios' | 'absolute' | 'relative';
+
+const MAX_ACCEPTED_ANGULAR_VELOCITY = 1080;
+const NOISE_VELOCITY_HIGH = 360;
+const NOISE_VELOCITY_MED = 180;
+const VISUAL_DEADBAND = 0.5;
+const DISCOVERY_WINDOW_MS = 500;
+const REACT_UPDATE_INTERVAL_MS = 200;
+
+function normalize(deg: number) {
+  return ((deg % 360) + 360) % 360;
+}
+
+function angleDelta(target: number, current: number) {
+  return ((target - current + 540) % 360) - 180;
+}
+
+function sourcePriority(source: HeadingSource): number {
+  switch (source) {
+    case 'ios': return 3;
+    case 'absolute': return 2;
+    case 'relative': return 1;
+    default: return 0;
+  }
+}
+
+// Estimate heading from DeviceOrientation Euler angles.
+// Requires device/browser-specific validation.
+function estimateTiltCompensatedHeading(alpha: number | null, beta: number | null, gamma: number | null): number | null {
+  if (alpha === null || beta === null || gamma === null) return null;
+
+  const degToRad = Math.PI / 180;
+  const _x = beta * degToRad; // pitch
+  const _y = gamma * degToRad; // roll
+  const _z = alpha * degToRad; // yaw
+
+  const cX = Math.cos(_x);
+  const cY = Math.cos(_y);
+  const cZ = Math.cos(_z);
+  const sX = Math.sin(_x);
+  const sY = Math.sin(_y);
+  const sZ = Math.sin(_z);
+
+  // Vector components
+  const Vx = -cZ * sY - sZ * sX * cY;
+  const Vy = -sZ * sY + cZ * sX * cY;
+
+  // Mathematically robust quadrant-preserving arctangent
+  let compassHeading = Math.atan2(Vx, Vy);
+  
+  if (compassHeading < 0) {
+    compassHeading += 2 * Math.PI;
+  }
+
+  return compassHeading * (180 / Math.PI);
+}
 
 export function useCompassHeading() {
   const [heading, setHeading] = useState<number | null>(null);
+  const [accuracy, setAccuracy] = useState<number | null>(null);
+  const [confidence, setConfidence] = useState<CompassConfidence>('calibrating');
+  const [source, setSource] = useState<HeadingSource>('none');
+  const [angularVelocity, setAngularVelocity] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [permissionGranted, setPermissionGranted] = useState<boolean>(true);
 
-  // Request permission for iOS 13+
+  const targetHeadingRef = useRef<number | null>(null);
+  const visualHeadingRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  
+  const sourceRef = useRef<HeadingSource>('none');
+  const initTimeRef = useRef<number | null>(null);
+  
+  const readingsCountRef = useRef<number>(0);
+  const lastRawHeadingRef = useRef<number | null>(null);
+  const lastRawTimestampRef = useRef<number | null>(null);
+
+  // Request absolute permission
   const requestPermission = useCallback(async () => {
     if (typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
       try {
-        const permissionState = await (DeviceOrientationEvent as any).requestPermission();
+        // We explicitly pass true to request absolute orientation / magnetometer access on iOS
+        const permissionState = await (DeviceOrientationEvent as any).requestPermission(true);
         if (permissionState === 'granted') {
           setPermissionGranted(true);
           return true;
         } else {
-          setError('Permission to access device orientation was denied.');
+          setError('Permission to access absolute device orientation was denied.');
           setPermissionGranted(false);
           return false;
         }
@@ -24,38 +98,131 @@ export function useCompassHeading() {
         return false;
       }
     } else {
-      // Non-iOS 13+ devices don't need this explicit request
       setPermissionGranted(true);
       return true;
     }
   }, []);
 
+  // Sensor Event Loop
   useEffect(() => {
     if (!permissionGranted) return;
+    
+    // Start discovery timer immediately on mount/permission granted
+    initTimeRef.current = performance.now();
 
     const handleOrientation = (event: DeviceOrientationEvent) => {
-      let compassHeading = null;
+      const now = performance.now();
       
-      // iOS gives webkitCompassHeading
-      if ((event as any).webkitCompassHeading) {
-        compassHeading = (event as any).webkitCompassHeading;
-      } 
-      // Android / standard uses absolute alpha
-      else if (event.absolute && event.alpha !== null) {
-        // Absolute alpha is 0 when pointing North, but it grows counter-clockwise.
-        // So heading is 360 - alpha.
-        compassHeading = 360 - event.alpha;
-      } else if (event.alpha !== null) {
-        // Fallback to relative alpha if absolute is missing
-        compassHeading = 360 - event.alpha;
+      let rawHeading: number | null = null;
+      let currentAccuracy: number | null = null;
+      let isSourceAbsolute = false;
+      let eventSource: HeadingSource = 'relative';
+
+      // Identify event source
+      if ((event as any).webkitCompassHeading !== undefined) {
+        eventSource = 'ios';
+      } else if (event.type === 'deviceorientationabsolute' && event.alpha !== null) {
+        eventSource = 'absolute';
+      } else if (event.type === 'deviceorientation' && event.alpha !== null && (event as any).absolute === true) {
+        eventSource = 'absolute';
+      } else if (event.type === 'deviceorientation' && event.alpha !== null) {
+        eventSource = 'relative';
       }
 
-      if (compassHeading !== null) {
-        setHeading(compassHeading);
+      // 1. Source Discovery & Lock
+      const timeSinceInit = now - initTimeRef.current!;
+      if (timeSinceInit < DISCOVERY_WINDOW_MS) {
+        // During first 500ms, upgrade source lock if we find a better one
+        if (sourcePriority(eventSource) > sourcePriority(sourceRef.current)) {
+          sourceRef.current = eventSource;
+        }
+      } else if (sourceRef.current === 'none') {
+        // Fallback if 500ms passed and we got nothing better
+        sourceRef.current = 'relative';
+      }
+
+      // Reject events that are lower priority than our locked source
+      if (sourcePriority(eventSource) < sourcePriority(sourceRef.current)) {
+        return; 
+      }
+
+      // 2. Math & Orientation
+      if (eventSource === 'ios') {
+        // iOS preferred source (already tilt compensated relative to device top)
+        rawHeading = (event as any).webkitCompassHeading;
+        currentAccuracy = (event as any).webkitCompassAccuracy;
+        isSourceAbsolute = true;
+      } else if (eventSource === 'absolute' || eventSource === 'relative') {
+        const tiltHeading = estimateTiltCompensatedHeading(event.alpha, event.beta, event.gamma);
+        if (tiltHeading !== null) {
+          const screenAngle = window.screen?.orientation?.angle || 0;
+          rawHeading = normalize(360 - tiltHeading + screenAngle);
+          isSourceAbsolute = (eventSource === 'absolute');
+        }
+      }
+
+      if (rawHeading !== null) {
+        // 3. Continuous Target Tracking & Angular Velocity
+        let currentAngularVelocity = 0;
+        
+        if (lastRawHeadingRef.current !== null && lastRawTimestampRef.current !== null) {
+          const rawDelta = angleDelta(rawHeading, lastRawHeadingRef.current);
+          const dt = (now - lastRawTimestampRef.current) / 1000;
+          if (dt > 0) {
+            currentAngularVelocity = Math.abs(rawDelta) / dt;
+          }
+        }
+        
+        if (targetHeadingRef.current === null || visualHeadingRef.current === null) {
+          targetHeadingRef.current = rawHeading;
+          visualHeadingRef.current = rawHeading;
+        } else {
+          // Reject physically impossible jumps as magnetic interference
+          if (currentAngularVelocity < MAX_ACCEPTED_ANGULAR_VELOCITY) {
+            const delta = angleDelta(rawHeading, targetHeadingRef.current);
+            targetHeadingRef.current = normalize(targetHeadingRef.current + delta);
+          }
+        }
+        
+        // 4. Advanced Confidence System
+        readingsCountRef.current += 1;
+        
+        let currentConfidence: CompassConfidence = 'low';
+        
+        if (readingsCountRef.current < 20) {
+          currentConfidence = 'calibrating';
+        } else {
+          if (isSourceAbsolute) {
+            if (currentAccuracy !== null) {
+              if (currentAccuracy <= 15) currentConfidence = 'high';
+              else if (currentAccuracy <= 30) currentConfidence = 'medium';
+              else currentConfidence = 'low';
+            } else {
+              // Stability check for Android based on raw velocity
+              if (currentAngularVelocity > NOISE_VELOCITY_HIGH) {
+                currentConfidence = 'low'; // High interference / noisy
+              } else if (currentAngularVelocity > NOISE_VELOCITY_MED) {
+                currentConfidence = 'medium';
+              } else {
+                currentConfidence = 'high';
+              }
+            }
+          } else {
+            currentConfidence = 'unavailable'; // Relative fallback cannot provide true North
+          }
+        }
+
+        // Always update raw refs for accurate velocity on next tick
+        lastRawHeadingRef.current = rawHeading;
+        lastRawTimestampRef.current = now;
+        
+        setAccuracy(currentAccuracy);
+        setConfidence(currentConfidence);
+        setSource(sourceRef.current);
+        setAngularVelocity(currentAngularVelocity);
       }
     };
 
-    // Try absolute first, fallback to regular
     window.addEventListener('deviceorientationabsolute', handleOrientation as EventListener);
     window.addEventListener('deviceorientation', handleOrientation as EventListener);
 
@@ -65,5 +232,47 @@ export function useCompassHeading() {
     };
   }, [permissionGranted]);
 
-  return { heading, error, requestPermission };
+  // Visual Animation Loop (requestAnimationFrame) - ONLY updates visualHeadingRef for DOM controller to consume
+  useEffect(() => {
+    if (!permissionGranted) return;
+
+    let lastReactUpdate = 0;
+
+    const animate = (time: number) => {
+      const target = targetHeadingRef.current;
+      const current = visualHeadingRef.current;
+
+      if (target !== null && current !== null) {
+        const delta = angleDelta(target, current);
+        const absDelta = Math.abs(delta);
+
+        // Deadband filter
+        if (absDelta > VISUAL_DEADBAND) {
+          // Adaptive Smoothing
+          let alpha = 0.7; // default fast
+          if (absDelta < 2) alpha = 0.12;       // heavy
+          else if (absDelta < 8) alpha = 0.25;  // normal
+          else if (absDelta < 25) alpha = 0.45; // light
+
+          visualHeadingRef.current = normalize(current + delta * alpha);
+        }
+
+        // Throttle React State updates for UI text purposes only
+        if (time - lastReactUpdate > REACT_UPDATE_INTERVAL_MS) {
+          setHeading(visualHeadingRef.current);
+          lastReactUpdate = time;
+        }
+      }
+
+      rafRef.current = requestAnimationFrame(animate);
+    };
+
+    rafRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [permissionGranted]);
+
+  return { heading, accuracy, confidence, source, angularVelocity, requestPermission, visualHeadingRef };
 }

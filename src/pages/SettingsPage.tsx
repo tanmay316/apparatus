@@ -41,7 +41,6 @@ export function SettingsPage() {
 function SettingsForm({ profile }: { profile: any }) { console.log('PROFILE DATA:', profile);
   const { user, updateProfile, signOut } = useAuthStore();
   const { showToast, theme, setTheme, units, setUnits, language, setLanguage } = useUIStore();
-  const { backgroundEnabled, toggleBackground, isSupported: pedometerSupported } = usePedometerStore();
   const navigate = useNavigate();
 
   const [displayName, setDisplayName] = useState(profile.displayName || '');
@@ -473,39 +472,20 @@ function SettingsForm({ profile }: { profile: any }) { console.log('PROFILE DATA
               />
             </div>
           </div>
-          {pedometerSupported && (
-            <div className="space-y-4 border-t border-line/20 pt-4 mt-4">
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  id="pedometerEnabled"
-                  className="mt-1 accent-sienna cursor-pointer"
-                  checked={backgroundEnabled}
-                  onChange={() => toggleBackground()}
-                />
-                <div>
-                  <label htmlFor="pedometerEnabled" className="font-bold text-sm text-bone cursor-pointer select-none flex items-center gap-2">
-                    <Footprints size={14} /> Background Step Tracking
-                  </label>
-                  <p className="text-xs text-bone-dim leading-relaxed">
-                    Track your daily steps passively in the background. Note: this relies on device sensors and may require permissions.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="label w-32 shrink-0">Daily Step Goal</label>
-                <input
-                  type="number"
-                  className="input-field bg-ink-2 max-w-[150px]"
-                  value={stepGoal}
-                  onChange={(e) => setLocalStepGoal(e.target.value)}
-                  onBlur={() => handleSaveField({ stepGoal: parseInt(stepGoal) || 10000 })}
-                  min="1000"
-                  step="500"
-                />
-              </div>
+          <div className="space-y-4 border-t border-line/20 pt-4 mt-4">
+            <div className="flex items-center gap-3">
+              <label className="label w-32 shrink-0">Daily Step Goal</label>
+              <input
+                type="number"
+                className="input-field bg-ink-2 max-w-[150px]"
+                value={stepGoal}
+                onChange={(e) => setLocalStepGoal(e.target.value)}
+                onBlur={() => handleSaveField({ stepGoal: parseInt(stepGoal) || 10000 })}
+                min="1000"
+                step="500"
+              />
             </div>
-          )}
+          </div>
           <p className="text-xs text-bone-dim mt-4">Theme, units, and language are saved locally and apply immediately. Profile measurements remain stored in metric for consistent analytics.</p>
         </motion.div>
 

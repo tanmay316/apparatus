@@ -5,11 +5,13 @@ import { useAuthStore } from '@/stores/auth-store';
 import { Layout } from '@/components/layout/Layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Toast } from '@/components/ui/Toast';
+import { requestNotificationPermission, scheduleDailyReminders } from '@/utils/notifications';
 import { UpdateNotifier } from '@/components/ui/UpdateNotifier';
 import { useUIStore } from '@/stores/ui-store';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { OTAUpdater } from '@/components/ui/OTAUpdater';
 
@@ -85,6 +87,7 @@ function PublicOnly({ children }: { children: React.ReactNode }) {
 
 function PreferencesSync() {
   const { theme, setTheme, language } = useUIStore();
+  const { user } = useAuthStore();
 
   useEffect(() => {
     const key = 'forced-light-theme-reset-v2';
@@ -117,26 +120,28 @@ function PreferencesSync() {
     // Hide Splash Screen immediately once React mounts to prevent double-loading screens
     SplashScreen.hide().catch(() => {});
 
-    // Schedule background daily reminders (will request permission if needed)
-    import('@/utils/notifications').then(({ scheduleDailyReminders }) => {
-      scheduleDailyReminders().catch(() => {});
+    requestNotificationPermission().then(granted => {
+      if (granted && user) {
+        scheduleDailyReminders();
+      }
     });
-
+    
     // Notify Capgo that the app is ready so it doesn't rollback updates
     if (CapacitorApp) {
       CapacitorUpdater.notifyAppReady().catch(() => {});
     }
 
-    // Handle local notification clicks
     if (Capacitor.isNativePlatform()) {
-      import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+      try {
         LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
           const data = action.notification.extra;
           if (data?.type === 'follow_request') {
             window.location.href = `/?redirect_modal=followers`; 
           }
         });
-      }).catch(() => {});
+      } catch (err) {
+        // Safe fail
+      }
     }
 
     // Hardware back button for Android

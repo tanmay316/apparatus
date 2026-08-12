@@ -16,13 +16,10 @@ const getCardioSvg = (type?: 'walk' | 'run' | 'cycle') => {
   return `<svg xmlns="http://www.w3.org/2000/svg" height="28" viewBox="0 -960 960 960" width="28" fill="#8b5cf6" stroke="white" stroke-width="40" stroke-linejoin="round"><path d="M436-364 371-72q-3 14-14.5 23T330-40q-20 0-32-15t-8-34l102-515-72 28v96q0 17-11.5 28.5T280-440q-17 0-28.5-11.5T240-480v-122q0-12 6.5-21.5T264-638l178-76q14-6 29.5-7t29.5 4q14 5 26.5 14t20.5 23l40 64q13 20 30.5 38t39.5 31q14 8 31 14.5t34 9.5q16 3 26.5 14.5T760-480q0 17-12 28t-29 9q-56-8-100.5-35T541-543l-25 123 72 68q6 6 9 13.5t3 15.5v243q0 17-11.5 28.5T560-40q-17 0-28.5-11.5T520-80v-220l-84-64Zm47.5-399.5Q460-787 460-820t23.5-56.5Q507-900 540-900t56.5 23.5Q620-853 620-820t-23.5 56.5Q573-740 540-740t-56.5-23.5Z"/></svg>`;
 };
 
-// currentIcon dynamically generated based on type and heading
-const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle', heading?: number | null, mapRotationMode?: boolean) => {
-  const coneRotation = heading || 0;
-  const iconRotation = mapRotationMode ? (heading || 0) : 0;
-
-  const coneHtml = heading !== null && heading !== undefined ? `
-    <svg width="120" height="120" viewBox="0 0 120 120" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(${coneRotation}deg); pointer-events: none; z-index: 1;">
+// currentIcon dynamically generated based on type
+const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle') => {
+  const coneHtml = `
+    <svg class="compass-cone" width="120" height="120" viewBox="0 0 120 120" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(0deg); pointer-events: none; z-index: 1; opacity: 0;">
       <defs>
         <linearGradient id="coneGrad" x1="0%" y1="100%" x2="0%" y2="0%">
           <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.4" />
@@ -31,13 +28,13 @@ const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle', heading?: number | null
       </defs>
       <path d="M60,60 L25,0 A60,60 0 0,1 95,0 Z" fill="url(#coneGrad)" />
     </svg>
-  ` : '';
+  `;
 
   return new L.DivIcon({
     html: `
       <div class="relative w-full h-full flex items-center justify-center">
         ${coneHtml}
-        <div style="transform: rotate(${iconRotation}deg); transition: transform 0.3s ease-out; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
+        <div class="compass-marker" style="transform: rotate(0deg); display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
           <div class="gps-pulse-ring" style="z-index: 2;"></div>
           <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; position: relative; z-index: 3; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
             ${getCardioSvg(type)}
@@ -53,13 +50,13 @@ const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle', heading?: number | null
 
 // All available map themes with tile URLs
 export const MAP_THEMES = {
-  street:    { label: 'Street',    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', bg: '#f5f5f5' },
-  dark:      { label: 'Dark',      url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', bg: '#121212' },
-  light:     { label: 'Light',     url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', bg: '#f5f5f5' },
-  google:    { label: 'Google',    url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', bg: '#f5f5f5' },
+  street: { label: 'Street', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', bg: '#f5f5f5' },
+  dark: { label: 'Dark', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', bg: '#121212' },
+  light: { label: 'Light', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', bg: '#f5f5f5' },
+  google: { label: 'Google', url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', bg: '#f5f5f5' },
   satellite: { label: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', bg: '#0a0a0a' },
-  terrain:   { label: 'Terrain',   url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', bg: '#e8e4d8' },
-  toner:     { label: 'Toner',     url: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', bg: '#ffffff' },
+  terrain: { label: 'Terrain', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', bg: '#e8e4d8' },
+  toner: { label: 'Toner', url: 'https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', bg: '#ffffff' },
 } as const;
 
 export type MapThemeKey = keyof typeof MAP_THEMES;
@@ -81,10 +78,11 @@ interface Props {
   mapPaddingTopLeft?: [number, number];
   heading?: number | null;
   mapRotationMode?: boolean;
+  visualHeadingRef?: React.MutableRefObject<number | null>;
 }
 
 /** Keeps the map centered on the last route point when live tracking or when recenterTrigger changes */
-function MapAutoCenter({ route, recenterTrigger, currentLocation }: { route: RoutePoint[], recenterTrigger?: number, currentLocation?: { lat: number, lng: number } | null }) {
+function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive }: { route: RoutePoint[], recenterTrigger?: number, currentLocation?: { lat: number, lng: number } | null, isLive?: boolean }) {
   const map = useMap();
   const lastLen = useRef(0);
   const lastRecenter = useRef(recenterTrigger);
@@ -92,28 +90,33 @@ function MapAutoCenter({ route, recenterTrigger, currentLocation }: { route: Rou
 
   useEffect(() => {
     let shouldCenter = false;
-    
-    // Center if new points arrive
-    if (route.length > lastLen.current && route.length > 0) {
-      shouldCenter = true;
-    }
-    
-    // Center if recenterTrigger is updated
+
+    // Center if recenterTrigger is updated (user explicitly clicked recenter)
     if (recenterTrigger !== lastRecenter.current) {
       shouldCenter = true;
     }
+    
+    // Automatically flag for centering if we get new points, but we will filter it by distance
+    if (route.length > lastLen.current && route.length > 0) {
+      shouldCenter = true;
+    }
 
-    if (shouldCenter && route.length > 0) {
-      const last = route[route.length - 1];
-      map.setView([last.lat, last.lng], 16.5, { animate: true });
-    } else if (shouldCenter && currentLocation) {
-      map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: true });
+    // Decoupled Camera Controller
+    // Instead of re-centering every single route point (which fights the compass), we only smoothly re-center if the user has moved significantly, or if live tracking just started.
+    if (shouldCenter && currentLocation) {
+      const currentCenter = map.getCenter();
+      const dist = currentCenter.distanceTo([currentLocation.lat, currentLocation.lng]);
+      
+      // If we moved more than 12 meters from center OR explicit recenter was triggered, smooth pan to follow
+      if (dist > 12 || recenterTrigger !== lastRecenter.current) {
+        map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: !isLive });
+      }
     } else if (currentLocation && !initialized.current) {
       // First time getting location
-      map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: true });
+      map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: false });
       initialized.current = true;
     }
-    
+
     lastLen.current = route.length;
     lastRecenter.current = recenterTrigger;
   }, [route, map, recenterTrigger, currentLocation]);
@@ -129,25 +132,25 @@ function FitBounds({ positions, recenterTrigger, paddingBottomRight, paddingTopL
 
   useEffect(() => {
     let shouldFit = false;
-    
+
     if (positions.length > 1 && !fitted.current) {
       shouldFit = true;
       fitted.current = true;
     }
-    
+
     if (recenterTrigger !== lastRecenter.current) {
       shouldFit = true;
     }
 
     if (shouldFit && positions.length > 1) {
       const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
-      map.fitBounds(bounds, { 
+      map.fitBounds(bounds, {
         paddingBottomRight: paddingBottomRight || [40, 40],
         paddingTopLeft: paddingTopLeft || [40, 40],
-        maxZoom: 17 
+        maxZoom: 17
       });
     }
-    
+
     lastRecenter.current = recenterTrigger;
   }, [positions, map, recenterTrigger]);
 
@@ -168,19 +171,19 @@ function InjectGradient() {
         linearGradient.setAttribute("y1", "0%");
         linearGradient.setAttribute("x2", "100%");
         linearGradient.setAttribute("y2", "0%");
-        
+
         const stop1 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
         stop1.setAttribute("offset", "0%");
         stop1.setAttribute("stop-color", "#fbbf24");
-        
+
         const stop2 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
         stop2.setAttribute("offset", "50%");
         stop2.setAttribute("stop-color", "#f43f5e");
-        
+
         const stop3 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
         stop3.setAttribute("offset", "100%");
         stop3.setAttribute("stop-color", "#a855f7");
-        
+
         linearGradient.appendChild(stop1);
         linearGradient.appendChild(stop2);
         linearGradient.appendChild(stop3);
@@ -191,7 +194,7 @@ function InjectGradient() {
 
     inject();
     map.on('layeradd', inject);
-    
+
     // Also use fallback timeouts just in case layeradd fires before React renders Polyline
     const timer = setTimeout(inject, 100);
     const timer2 = setTimeout(inject, 500);
@@ -205,7 +208,62 @@ function InjectGradient() {
   return null;
 }
 
-export function RouteMap({ route, isLive = false, height = '300px', theme = 'street', highlightColor = 'url(#route-gradient)', recenterTrigger, hideMap = false, noGlow = false, isCapturing = false, currentLocation, cardioType, hideMarkers, mapPaddingBottomRight, mapPaddingTopLeft, heading, mapRotationMode = false }: Props) {
+export function RouteMap({
+  route,
+  isLive = false,
+  height = "300px",
+  theme = 'dark',
+  highlightColor,
+  recenterTrigger,
+  hideMap = false,
+  noGlow = false,
+  isCapturing = false,
+  currentLocation,
+  cardioType = 'walk',
+  hideMarkers = false,
+  mapPaddingBottomRight,
+  mapPaddingTopLeft,
+  heading,
+  mapRotationMode = false,
+  visualHeadingRef
+}: Props) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  // Compass Visual Controller (RAF loop)
+  useEffect(() => {
+    if (!visualHeadingRef) return;
+    
+    let rafId: number;
+    const animate = () => {
+      const vHead = visualHeadingRef.current;
+      if (vHead !== null && mapContainerRef.current) {
+        // Map Container Rotation
+        mapContainerRef.current.style.transform = mapRotationMode 
+          ? `translateZ(0) rotate(${-vHead}deg)` 
+          : `translateZ(0)`;
+          
+        // Icon/Cone Rotation
+        const coneEl = mapContainerRef.current.querySelector('.compass-cone') as HTMLElement;
+        if (coneEl) {
+          coneEl.style.opacity = '1';
+          coneEl.style.transform = mapRotationMode
+            ? `translate(-50%, -50%) rotate(0deg)`
+            : `translate(-50%, -50%) rotate(${vHead}deg)`;
+        }
+        
+        const markerEl = mapContainerRef.current.querySelector('.compass-marker') as HTMLElement;
+        if (markerEl) {
+          markerEl.style.transform = mapRotationMode
+            ? `rotate(0deg)`
+            : `rotate(${vHead}deg)`;
+        }
+      }
+      rafId = requestAnimationFrame(animate);
+    };
+    rafId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(rafId);
+  }, [mapRotationMode, visualHeadingRef]);
+
   const positions: [number, number][] = useMemo(() => {
     const pts = route.map(p => [p.lat, p.lng] as [number, number]);
     if (isLive && currentLocation) {
@@ -217,11 +275,11 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
   const center: [number, number] = currentLocation
     ? [currentLocation.lat, currentLocation.lng]
     : positions.length > 0
-    ? positions[positions.length - 1]
-    : [20.5937, 78.9629]; // Default: India center
+      ? positions[positions.length - 1]
+      : [20.5937, 78.9629]; // Default: India center
 
   const zoom = (positions.length > 0 || currentLocation) ? 16.5 : 5;
-  
+
   const themeData = MAP_THEMES[theme] || MAP_THEMES.street;
   const isDarkMap = theme === 'dark' || theme === 'satellite';
 
@@ -229,7 +287,7 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
   const startColor = isGradient ? '#fbbf24' : highlightColor || '#fbbf24';
   const endColor = isGradient ? '#a855f7' : highlightColor || '#a855f7';
 
-  const strokeColor = isGradient ? 'url(#route-gradient)' : highlightColor;
+  const strokeColor = isGradient ? 'url(#route-gradient)' : (highlightColor || (isLive ? '#8b5cf6' : '#a855f7'));
 
   const startIcon = useMemo(() => new L.DivIcon({
     html: `<div style="width: 16px; height: 16px; background: ${startColor}; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
@@ -247,19 +305,20 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
     iconAnchor: [14, 14]
   }), [endColor, cardioType]);
 
-  const liveIcon = useMemo(() => getCurrentIcon(cardioType, heading, mapRotationMode), [cardioType, heading, mapRotationMode]);
+  const liveIcon = useMemo(() => getCurrentIcon(cardioType), [cardioType]);
 
   return (
     <div style={{ height, width: '100%', overflow: 'hidden' }} className="relative">
-      <div style={{
+      <div ref={mapContainerRef} className="compass-map-container" style={{
         position: 'absolute',
         top: mapRotationMode ? '-25%' : '0',
         left: mapRotationMode ? '-25%' : '0',
-        width: mapRotationMode ? '150%' : '100%',
-        height: mapRotationMode ? '150%' : '100%',
-        transform: mapRotationMode && heading !== null && heading !== undefined ? `rotate(${-heading}deg)` : 'none',
-        transformOrigin: 'center center',
-        transition: 'transform 0.3s ease-out, width 0.3s, height 0.3s, top 0.3s, left 0.3s'
+        right: mapRotationMode ? '-25%' : '0',
+        bottom: mapRotationMode ? '-25%' : '0',
+        transition: 'none',
+        willChange: 'transform',
+        backfaceVisibility: 'hidden',
+        overflow: 'visible',
       }}>
         <MapContainer
           center={center}
@@ -269,72 +328,72 @@ export function RouteMap({ route, isLive = false, height = '300px', theme = 'str
           attributionControl={false}
         >
           <InjectGradient />
-        {!hideMap && <TileLayer url={themeData.url} crossOrigin="anonymous" />}
+          {!hideMap && <TileLayer url={themeData.url} crossOrigin="anonymous" />}
 
-        {positions.length > 1 && (
-          <>
-            {isDarkMap && !hideMap && (
-              <>
-                {/* Outer Glow effect for dark maps */}
-                <Polyline
-                  positions={positions}
-                  pathOptions={{
-                    color: strokeColor,
-                    weight: 20,
-                    opacity: 0.2,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                  }}
-                />
-                {/* Inner Glow effect for dark maps */}
-                <Polyline
-                  positions={positions}
-                  pathOptions={{
-                    color: strokeColor,
-                    weight: 10,
-                    opacity: 0.4,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                  }}
-                />
-              </>
-            )}
-            {/* Core line */}
-            <Polyline
-              positions={positions}
-              pathOptions={{
-                color: strokeColor,
-                weight: 5,
-                opacity: 1,
-                lineCap: 'round',
-                lineJoin: 'round',
-              }}
-            />
-          </>
-        )}
+          {positions.length > 1 && (
+            <>
+              {isDarkMap && !hideMap && (
+                <>
+                  {/* Outer Glow effect for dark maps */}
+                  <Polyline
+                    positions={positions}
+                    pathOptions={{
+                      color: strokeColor,
+                      weight: 20,
+                      opacity: 0.2,
+                      lineCap: 'round',
+                      lineJoin: 'round',
+                    }}
+                  />
+                  {/* Inner Glow effect for dark maps */}
+                  <Polyline
+                    positions={positions}
+                    pathOptions={{
+                      color: strokeColor,
+                      weight: 10,
+                      opacity: 0.4,
+                      lineCap: 'round',
+                      lineJoin: 'round',
+                    }}
+                  />
+                </>
+              )}
+              {/* Core line */}
+              <Polyline
+                positions={positions}
+                pathOptions={{
+                  color: strokeColor,
+                  weight: 5,
+                  opacity: 1,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+            </>
+          )}
 
-        {/* Start marker */}
-        {!hideMarkers && positions.length > 0 && (
-          <Marker position={positions[0]} icon={startIcon} />
-        )}
+          {/* Start marker */}
+          {!hideMarkers && positions.length > 0 && (
+            <Marker position={positions[0]} icon={startIcon} />
+          )}
 
-        {/* Current position marker */}
-        {!hideMarkers && (isLive || currentLocation) && (
-          currentLocation ? (
-            <Marker position={[currentLocation.lat, currentLocation.lng]} icon={liveIcon} />
-          ) : positions.length > 0 ? (
-            <Marker position={positions[positions.length - 1]} icon={liveIcon} />
-          ) : null
-        )}
+          {/* Current position marker */}
+          {!hideMarkers && (isLive || currentLocation) && (
+            currentLocation ? (
+              <Marker position={[currentLocation.lat, currentLocation.lng]} icon={liveIcon} />
+            ) : positions.length > 0 ? (
+              <Marker position={positions[positions.length - 1]} icon={liveIcon} />
+            ) : null
+          )}
 
-        {/* End marker (only in static mode) */}
-        {!hideMarkers && !isLive && positions.length > 1 && (
-          <Marker position={positions[positions.length - 1]} icon={endIcon} />
-        )}
+          {/* End marker (only in static mode) */}
+          {!hideMarkers && !isLive && positions.length > 1 && (
+            <Marker position={positions[positions.length - 1]} icon={endIcon} />
+          )}
 
-        {(isLive || currentLocation) && !hideMarkers && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} currentLocation={currentLocation} />}
-        {!isLive && positions.length > 1 && <FitBounds positions={positions} recenterTrigger={recenterTrigger} paddingBottomRight={mapPaddingBottomRight} paddingTopLeft={mapPaddingTopLeft} />}
-      </MapContainer>
+          {(isLive || currentLocation) && !hideMarkers && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} currentLocation={currentLocation} isLive={isLive} />}
+          {!isLive && positions.length > 1 && <FitBounds positions={positions} recenterTrigger={recenterTrigger} paddingBottomRight={mapPaddingBottomRight} paddingTopLeft={mapPaddingTopLeft} />}
+        </MapContainer>
       </div>
     </div>
   );

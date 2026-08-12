@@ -458,7 +458,10 @@ export interface CardioActivity {
   date: string;
   startedAt: Timestamp;
   finishedAt: Timestamp | null;
-  durationSec: number;
+  durationSec: number; // legacy, kept for backwards compatibility
+  movingDurationSec?: number;
+  elapsedDurationSec?: number;
+  pausedDurationSec?: number;
   distanceKm: number;
   avgSpeedKmh: number;
   maxSpeedKmh: number;
@@ -469,6 +472,7 @@ export interface CardioActivity {
   visibility: 'public' | 'followers' | 'private';
   notes: string;
   steps?: number;
+  stepSource?: 'native' | 'motion_estimate' | 'gps_estimate' | 'none';
 }
 
 // ─── Clan System (V2) ────────────────────────────────────────

@@ -1,7 +1,11 @@
 import { Capacitor } from '@capacitor/core';
 import { CapacitorPedometer as NativePedometer } from '@capgo/capacitor-pedometer';
 
+import type { PluginListenerHandle } from '@capacitor/core';
+
 export type StepUpdateCallback = (steps: number, isNative: boolean) => void;
+
+export type PedometerAvailability = 'native' | 'motion' | 'unavailable';
 
 class PedometerService {
   private isNative: boolean;
@@ -9,9 +13,23 @@ class PedometerService {
   private webSteps: number = 0;
   private callback: StepUpdateCallback | null = null;
   private motionListener: ((e: DeviceMotionEvent) => void) | null = null;
+  private nativeListener: PluginListenerHandle | null = null;
 
   constructor() {
     this.isNative = Capacitor.isNativePlatform();
+  }
+
+  /**
+   * Check if pedometer is available
+   */
+  async isAvailable(): Promise<PedometerAvailability> {
+    if (!this.isNative) return 'motion'; // Web fallback is technically a motion estimate
+    try {
+      const res = await NativePedometer.isAvailable();
+      return res.stepCounting ? 'native' : 'unavailable';
+    } catch {
+      return 'unavailable';
+    }
   }
 
   /**
@@ -44,24 +62,46 @@ class PedometerService {
   /**
    * Start tracking steps
    */
-  async start(onStepUpdate: StepUpdateCallback): Promise<void> {
-    if (this.isTracking) return;
+  async start(onStepUpdate: StepUpdateCallback): Promise<boolean> {
+    if (this.isTracking) {
+      await this.stop();
+    }
+    
+    const availability = await this.isAvailable();
+    if (availability === 'unavailable') return false;
+
+    const granted = await this.requestPermission();
+    if (!granted) return false;
+
     this.callback = onStepUpdate;
 
     if (this.isNative) {
       try {
-        await NativePedometer.startMeasurementUpdates();
         this.isTracking = true;
         // Native pedometer usually resets daily or we must keep track of diffs
         // We'll listen for step events if supported
-        (NativePedometer as any).addListener('measurement', (data: any) => {
-          if (this.callback) this.callback(data.numberOfSteps || 1, true);
+        this.nativeListener = await (NativePedometer as any).addListener('measurement', (data: any) => {
+          if (!this.isTracking) return;
+          const steps = data?.numberOfSteps;
+          if (typeof steps === 'number' && Number.isFinite(steps) && steps >= 0) {
+            if (this.callback) this.callback(steps, true);
+          }
         });
+        
+        await NativePedometer.startMeasurementUpdates();
+        return true;
       } catch (err) {
         console.error('Failed to start native pedometer:', err);
+        this.isTracking = false;
+        if (this.nativeListener) {
+           this.nativeListener.remove().catch(console.error);
+           this.nativeListener = null;
+        }
+        return false;
       }
     } else {
       this.startWebPedometer();
+      return true;
     }
   }
 
@@ -75,13 +115,18 @@ class PedometerService {
     if (this.isNative) {
       try {
         await NativePedometer.stopMeasurementUpdates();
-        (NativePedometer as any).removeAllListeners();
+        if (this.nativeListener) {
+          await this.nativeListener.remove();
+          this.nativeListener = null;
+        }
       } catch (err) {
         console.error('Failed to stop native pedometer:', err);
       }
     } else {
       this.stopWebPedometer();
     }
+    this.callback = null;
+    this.webSteps = 0;
   }
 
   /**

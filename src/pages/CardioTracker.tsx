@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers, RotateCcw, ChevronRight, ChevronUp, ChevronDown, LocateFixed, Compass } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers, RotateCcw, ChevronRight, ChevronUp, ChevronDown, LocateFixed, Compass, Loader2 } from 'lucide-react';
 import { useCompassHeading } from '@/hooks/useCompassHeading';
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
@@ -53,16 +53,17 @@ function formatPace(distKm: number, durationSec: number): string {
 function getLiveSteps(
   type: CardioActivityType | null, 
   distKm: number, 
-  pedStore: { isSessionActive: boolean, sessionSteps: number }
+  pedStore: { isSessionActive: boolean, sessionSteps: number, stepSource: string }
 ): number | undefined {
   if (type !== 'walk' && type !== 'run') return undefined;
-  // Estimate steps based on average stride length (1m for run, 0.762m for walk)
-  const estSteps = Math.round(distKm * 1000 / (type === 'run' ? 1.0 : 0.762));
   
-  // If native pedometer works, use it, but fallback to distance if pedometer is heavily undercounting (e.g. background PWA suspension)
-  if (pedStore.isSessionActive && pedStore.sessionSteps > estSteps * 0.2) {
+  // If native pedometer works, use it
+  if (pedStore.isSessionActive && (pedStore.stepSource === 'native' || pedStore.stepSource === 'motion_estimate') && pedStore.sessionSteps > 0) {
     return pedStore.sessionSteps;
   }
+  
+  // Fallback to distance
+  const estSteps = Math.round(distKm * 1000 / (type === 'run' ? 1.0 : 0.762));
   return estSteps;
 }
 
@@ -145,7 +146,7 @@ export function CardioTracker() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [recenterTrigger, setRecenterTrigger] = useState(0);
 
-  const { heading, requestPermission } = useCompassHeading();
+  const { heading, requestPermission, visualHeadingRef } = useCompassHeading();
   const [mapRotationMode, setMapRotationMode] = useState(false);
 
   const toggleMapRotation = async () => {
@@ -234,7 +235,10 @@ export function CardioTracker() {
 
     if (user && dist > 0.01) {
       const durationMin = durationSec / 60;
-      const avgSpeedKmh = durationSec > 0 ? (dist / durationSec) * 3600 : 0;
+      const movingDurationSec = elapsedSec;
+      const elapsedDurationSec = Math.max(0, Math.floor((Date.now() - startedAt!) / 1000));
+      const pausedDurationSec = Math.floor(store.totalPausedMs / 1000);
+      const avgSpeedKmh = movingDurationSec > 0 ? (dist / movingDurationSec) * 3600 : 0;
       const calories = calculateCardioCalories(type, dist, durationMin, userWeight || 70, avgSpeedKmh);
 
       await saveCardioActivity(user.uid, {
@@ -245,7 +249,10 @@ export function CardioTracker() {
         date: localDateKey(new Date(startedAt || Date.now())),
         startedAt: startedAt ? Timestamp.fromMillis(startedAt) : Timestamp.now(),
         finishedAt: Timestamp.now(),
-        durationSec,
+        durationSec: movingDurationSec, // Legacy
+        movingDurationSec,
+        elapsedDurationSec,
+        pausedDurationSec,
         distanceKm: dist,
         avgSpeedKmh: Math.round(avgSpeedKmh * 10) / 10,
         maxSpeedKmh: Math.round(maxSpeed * 10) / 10,
@@ -256,6 +263,7 @@ export function CardioTracker() {
         visibility: 'followers',
         notes: 'Auto-saved session',
         steps: getLiveSteps(type, dist, usePedometerStore.getState()),
+        stepSource: usePedometerStore.getState().stepSource,
       }).catch(console.error);
     }
   };
@@ -339,8 +347,8 @@ export function CardioTracker() {
     // Clear the ongoing notification
     clearNotification(1001);
     
-    if (store.activityType === 'walk') {
-      pedometerStore.stopSession();
+    if (store.activityType === 'walk' || store.activityType === 'run') {
+      await pedometerStore.stopSession();
     }
 
     store.stopTracking();
@@ -350,11 +358,13 @@ export function CardioTracker() {
       endActiveSession(user.uid).catch(console.error);
     }
 
-    const durationSec = elapsedSec;
-    const durationMin = durationSec / 60;
+    const movingDurationSec = elapsedSec;
+    const elapsedDurationSec = Math.max(0, Math.floor((Date.now() - store.startedAt!) / 1000));
+    const pausedDurationSec = Math.floor(store.totalPausedMs / 1000);
+    const durationMin = movingDurationSec / 60;
     const dist = store.distanceKm;
-    const avgSpeed = durationSec > 0 ? (dist / durationSec) * 3600 : 0;
-    const pace = formatPace(dist, durationSec);
+    const avgSpeed = movingDurationSec > 0 ? (dist / movingDurationSec) * 3600 : 0;
+    const pace = formatPace(dist, movingDurationSec);
     const calories = calculateCardioCalories(
       store.activityType!,
       dist,
@@ -363,16 +373,22 @@ export function CardioTracker() {
       avgSpeed
     );
 
+    const steps = getLiveSteps(store.activityType!, dist, pedometerStore);
+
     const data: Partial<CardioActivity> = {
       type: store.activityType!,
-      durationSec,
-      distanceKm: Math.round(dist * 1000) / 1000,
+      distanceKm: dist,
+      durationSec: movingDurationSec,
+      movingDurationSec,
+      elapsedDurationSec,
+      pausedDurationSec,
+      avgPace: pace,
       avgSpeedKmh: Math.round(avgSpeed * 10) / 10,
       maxSpeedKmh: Math.round(store.maxSpeedKmh * 10) / 10,
-      avgPace: `${pace} /km`,
       calories,
       elevationGainM: Math.round(store.elevationGainM),
       route: store.routePoints,
+      steps,
     };
 
     setSummaryData(data);
@@ -390,7 +406,10 @@ export function CardioTracker() {
           date: localDateKey(new Date()),
           startedAt: store.startedAt ? Timestamp.fromMillis(store.startedAt) : Timestamp.now(),
           finishedAt: Timestamp.now(),
-          durationSec: durationSec,
+          durationSec: movingDurationSec,
+          movingDurationSec,
+          elapsedDurationSec,
+          pausedDurationSec,
           distanceKm: dist,
           avgSpeedKmh: Math.round(avgSpeed * 10) / 10,
           maxSpeedKmh: Math.round(store.maxSpeedKmh * 10) / 10,
@@ -400,7 +419,8 @@ export function CardioTracker() {
           route: store.routePoints,
           visibility: 'followers',
           notes: '',
-          steps: getLiveSteps(store.activityType, dist, usePedometerStore.getState()),
+          steps: steps,
+          stepSource: usePedometerStore.getState().stepSource,
         });
 
         // Post to activity feed
@@ -562,10 +582,12 @@ export function CardioTracker() {
             <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)]/80 backdrop-blur-md shadow-sm border border-[var(--border)] pointer-events-auto">
               {store.gpsStatus === 'error' || store.gpsStatus === 'denied' ? (
                 <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-[var(--text)]">{store.gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}</span></>
+              ) : store.gpsStatus === 'waiting' || store.gpsStatus === 'warming_up' ? (
+                <><Loader2 size={14} className="animate-spin text-amber-500" /><span className="text-xs font-bold text-[var(--text)]">{store.gpsStatus === 'warming_up' ? 'Warming Up' : 'Waiting for GPS'}</span></>
+              ) : store.gpsStatus === 'degraded' ? (
+                <><Navigation size={14} className="text-amber-500" /><span className="text-xs font-bold text-[var(--text)]">Poor Signal</span></>
               ) : store.gpsStatus === 'active' ? (
                 <><Navigation size={14} className="text-emerald-500" /><span className="text-xs font-bold text-[var(--text)]">GPS Active</span></>
-              ) : store.gpsStatus === 'waiting' ? (
-                <><Navigation size={14} className="text-yellow-500 animate-pulse" /><span className="text-xs font-bold text-[var(--text)]">Locating...</span></>
               ) : (
                 <><Navigation size={14} className="text-gray-400" /><span className="text-xs font-bold text-[var(--text)]">GPS Ready</span></>
               )}
@@ -621,7 +643,7 @@ export function CardioTracker() {
         
         {/* Full Screen Map Background */}
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} cardioType={store.activityType as any} heading={heading} mapRotationMode={mapRotationMode} />
+          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} cardioType={store.activityType as any} heading={heading} mapRotationMode={mapRotationMode} visualHeadingRef={visualHeadingRef} />
         </div>
 
         {/* Top Header */}
@@ -655,8 +677,10 @@ export function CardioTracker() {
                   {/* GPS accuracy quality dot */}
                   <div className={`w-2 h-2 rounded-full ${store.gpsAccuracy > 0 && store.gpsAccuracy <= 10 ? 'bg-emerald-400' : store.gpsAccuracy <= 30 ? 'bg-yellow-400' : store.gpsAccuracy <= 80 ? 'bg-orange-400' : 'bg-red-400'}`} title={`±${Math.round(store.gpsAccuracy)}m`} />
                 </>
-              ) : store.gpsStatus === 'waiting' ? (
-                <><Navigation size={14} className="text-yellow-500 animate-pulse" /><span className="text-xs font-bold text-bone">Locating...</span></>
+              ) : store.gpsStatus === 'waiting' || store.gpsStatus === 'warming_up' ? (
+                <><Loader2 size={14} className="animate-spin text-amber-500" /><span className="text-xs font-bold text-bone">{store.gpsStatus === 'warming_up' ? 'Warming Up' : 'Waiting for GPS'}</span></>
+              ) : store.gpsStatus === 'degraded' ? (
+                <><Navigation size={14} className="text-amber-500" /><span className="text-xs font-bold text-bone">Poor Signal</span></>
               ) : (
                 <><Navigation size={14} className="text-bone-dim" /><span className="text-xs font-bold text-bone">GPS Ready</span></>
               )}
