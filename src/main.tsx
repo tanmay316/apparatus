@@ -6,9 +6,18 @@ import { logError } from '@/services/logger';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { defineCustomElements } from '@ionic/pwa-elements/loader';
 import './index.css';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 
 // Initialize Firebase auth listener
 useAuthStore.getState().init();
+
+// Initialize Social Login
+SocialLogin.initialize({
+  google: {
+    webClientId: '716398124057-hhg54cto4lnft33chuh0gmb5ofkp4qki.apps.googleusercontent.com',
+    mode: 'online',
+  },
+}).catch(console.error);
 
 // Notify Capgo that the bundle loaded successfully so it doesn't rollback
 CapacitorUpdater.notifyAppReady();

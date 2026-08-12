@@ -174,10 +174,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       if (Capacitor.isNativePlatform()) {
         try {
-          const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
-          GoogleAuth.initialize();
-          const googleUser = await GoogleAuth.signIn();
-          const credential = GoogleAuthProvider.credential(googleUser.authentication.idToken);
+          const { SocialLogin } = await import('@capgo/capacitor-social-login');
+          const result = await SocialLogin.login({
+            provider: 'google',
+            options: {
+              scopes: ['email', 'profile'],
+            },
+          });
+          const idToken = result.result?.idToken;
+          if (!idToken) throw new Error('Google Sign-In did not return an ID token');
+          
+          const credential = GoogleAuthProvider.credential(idToken);
           await signInWithCredential(auth, credential);
           set({ loading: false });
           return;
@@ -212,9 +219,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       if (Capacitor.isNativePlatform()) {
         try {
-          const { GoogleAuth } = await import('@codetrix-studio/capacitor-google-auth');
-          GoogleAuth.initialize();
-          await GoogleAuth.signOut();
+          const { SocialLogin } = await import('@capgo/capacitor-social-login');
+          await SocialLogin.logout({ provider: 'google' });
         } catch (e) {
           console.error('Failed to sign out of native GoogleAuth:', e);
         }
