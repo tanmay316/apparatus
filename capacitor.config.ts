@@ -9,7 +9,6 @@ const config: CapacitorConfig = {
       autoUpdate: true,
       appId: 'com.tms.apparatus'
     },
-
     SplashScreen: {
       launchAutoHide: false,
       showSpinner: false,

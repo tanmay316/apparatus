@@ -16,6 +16,7 @@ interface AuthState {
 
   init: () => void;
   signInWithGoogle: () => Promise<void>;
+  reauthenticate: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
@@ -177,11 +178,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           const { SocialLogin } = await import('@capgo/capacitor-social-login');
           const result = await SocialLogin.login({
             provider: 'google',
-            options: {
-              scopes: ['email', 'profile'],
-            },
+            options: {},
           });
-          const idToken = result.result?.idToken;
+          const idToken = (result.result as any).idToken;
           if (!idToken) throw new Error('Google Sign-In did not return an ID token');
           
           const credential = GoogleAuthProvider.credential(idToken);
@@ -212,6 +211,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ loading: false });
         throw error;
       }
+    }
+  },
+
+  reauthenticate: async () => {
+    const { user } = get();
+    if (!user) throw new Error("No authenticated user");
+    
+    try {
+      if (Capacitor.isNativePlatform()) {
+        const { SocialLogin } = await import('@capgo/capacitor-social-login');
+        const result = await SocialLogin.login({
+          provider: 'google',
+          options: {},
+        });
+        const idToken = (result.result as any).idToken;
+        if (!idToken) throw new Error('Google Sign-In did not return an ID token');
+        const credential = GoogleAuthProvider.credential(idToken);
+        const { reauthenticateWithCredential } = await import('firebase/auth');
+        await reauthenticateWithCredential(user, credential);
+        return;
+      }
+      const { reauthenticateWithPopup, GoogleAuthProvider: GAP } = await import('firebase/auth');
+      await reauthenticateWithPopup(user, new GAP());
+    } catch (error: any) {
+      console.error('Reauthentication failed:', error);
+      throw error;
     }
   },
 

@@ -76,7 +76,8 @@ service cloud.firestore {
     match /usernames/{username} {
       allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
     }
 
     // ─── Workout Plans ──────────────────────────────────────────
@@ -85,7 +86,7 @@ service cloud.firestore {
       allow create: if isOwner(request.resource.data.ownerId);
       allow update: if isAdmin() || (isOwner(resource.data.ownerId)
         && request.resource.data.ownerId == resource.data.ownerId);
-      allow delete: if isAdmin() || isOwner(resource.data.ownerId);
+      allow delete: if isAdmin() || resource == null || isOwner(resource.data.ownerId);
 
       match /days/{dayId} {
         allow read: if canReadPlan(planId);
@@ -121,7 +122,7 @@ service cloud.firestore {
         && request.resource.data.visibility in ['public', 'followers', 'private'];
       allow update: if isOwner(resource.data.userId)
         && request.resource.data.userId == resource.data.userId;
-      allow delete: if isOwner(resource.data.userId);
+      allow delete: if resource == null || isOwner(resource.data.userId);
 
       match /exercises/{exerciseLogId} {
         allow read: if canReadWorkout(workoutId);
@@ -162,7 +163,7 @@ service cloud.firestore {
           && request.resource.data.userId == resource.data.userId)
         || (isAuthenticated() && canReadActivity(activityId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount']));
-      allow delete: if isOwner(resource.data.userId);
+      allow delete: if resource == null || isOwner(resource.data.userId);
 
       match /likes/{userId} {
         allow read: if canReadActivity(activityId);
@@ -341,7 +342,8 @@ service cloud.firestore {
     match /community_post_comments/{commentId} {
       allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.userId) || isAdmin();
+      allow update: if isOwner(resource.data.userId) || isAdmin();
+      allow delete: if resource == null || isOwner(resource.data.userId) || isAdmin();
     }
 
     match /app_notifications/{notifId} {
@@ -366,7 +368,7 @@ service cloud.firestore {
         && request.resource.data.visibility in ['public', 'followers', 'private'];
       allow update: if isOwner(resource.data.userId)
         && request.resource.data.userId == resource.data.userId;
-      allow delete: if isOwner(resource.data.userId);
+      allow delete: if resource == null || isOwner(resource.data.userId);
     }
 
     // ─── Catch-All ──────────────────────────────────────────────

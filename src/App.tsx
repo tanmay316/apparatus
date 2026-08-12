@@ -6,7 +6,7 @@ import { Layout } from '@/components/layout/Layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Toast } from '@/components/ui/Toast';
 import { requestNotificationPermission, scheduleDailyReminders } from '@/utils/notifications';
-import { UpdateNotifier } from '@/components/ui/UpdateNotifier';
+import { UpdatePopup } from '@/components/ui/UpdatePopup';
 import { useUIStore } from '@/stores/ui-store';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
@@ -202,6 +202,7 @@ export function App() {
           </Routes>
         </Suspense>
         <Toast />
+        <UpdatePopup />
       </BrowserRouter>
     </QueryClientProvider>
   );

@@ -13,11 +13,16 @@ import {
 import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '@/lib/firebase';
 
-async function deleteRefs(refs: ReturnType<typeof doc>[]) {
+async function deleteRefs(refs: ReturnType<typeof doc>[], onProgress?: (msg: string, pct: number) => void, basePct = 50, pctRange = 50) {
+  if (refs.length === 0) return;
   for (let index = 0; index < refs.length; index += 450) {
     const batch = writeBatch(db);
     refs.slice(index, index + 450).forEach(reference => batch.delete(reference));
     await batch.commit();
+    if (onProgress) {
+      const p = basePct + Math.round((Math.min(index + 450, refs.length) / refs.length) * pctRange);
+      onProgress(`Deleting batch ${Math.ceil(index / 450) + 1}...`, p);
+    }
   }
 }
 
@@ -74,17 +79,22 @@ export function downloadJson(data: unknown, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
-export async function deleteAccountData(uid: string, username?: string) {
-  const [plansData, workoutsSnap, measurementsSnap, skillsSnap, activitiesSnap, followingSnap, followersSnap, notificationsSnap] = await Promise.all([
-    getUserPlanData(uid),
-    getDocs(query(collection(db, 'workouts'), where('userId', '==', uid))),
-    getDocs(collection(db, `users/${uid}/measurements`)),
-    getDocs(collection(db, `users/${uid}/skills`)),
-    getDocs(query(collection(db, 'activities'), where('userId', '==', uid))),
-    getDocs(collection(db, `followers/${uid}/following`)),
-    getDocs(collection(db, `followers/${uid}/followers`)),
-    getDocs(query(collection(db, 'notifications'), where('receiverId', '==', uid))),
-  ]);
+export async function deleteAccountData(uid: string, username?: string, onProgress?: (msg: string, pct: number) => void) {
+  onProgress?.('Fetching plans...', 5);
+  const plansData = await getUserPlanData(uid);
+  onProgress?.('Fetching workouts...', 10);
+  const workoutsSnap = await getDocs(query(collection(db, 'workouts'), where('userId', '==', uid)));
+  onProgress?.('Fetching measurements...', 15);
+  const measurementsSnap = await getDocs(collection(db, `users/${uid}/measurements`));
+  onProgress?.('Fetching skills...', 20);
+  const skillsSnap = await getDocs(collection(db, `users/${uid}/skills`));
+  onProgress?.('Fetching activities...', 25);
+  const activitiesSnap = await getDocs(query(collection(db, 'activities'), where('userId', '==', uid)));
+  onProgress?.('Fetching social graph...', 30);
+  const followingSnap = await getDocs(collection(db, `followers/${uid}/following`));
+  const followersSnap = await getDocs(collection(db, `followers/${uid}/followers`));
+  onProgress?.('Fetching notifications...', 35);
+  const notificationsSnap = await getDocs(query(collection(db, 'notifications'), where('receiverId', '==', uid)));
 
   const refs: ReturnType<typeof doc>[] = [
     doc(db, 'users', uid),
@@ -101,26 +111,34 @@ export async function deleteAccountData(uid: string, username?: string) {
   if (username) refs.push(doc(db, 'usernames', username));
 
   // Remove the mirrored relationship documents from the accounts this user follows.
+  onProgress?.('Compiling deletions...', 40);
   const mirroredFollowingRefs = followingSnap.docs.map(item => doc(db, `followers/${item.id}/followers`, uid));
   const mirroredFollowerRefs = followersSnap.docs.map(item => doc(db, `followers/${item.id}/following`, uid));
   refs.push(...mirroredFollowingRefs, ...mirroredFollowerRefs);
-  await deleteRefs(refs);
+  
+  onProgress?.('Deleting data...', 50);
+  await deleteRefs(refs, onProgress, 50, 50);
 }
 
 /** Remove all user-owned application data while keeping the Firebase account and handle. */
-export async function resetUserData(uid: string) {
-  const [plansData, workoutsSnap, measurementsSnap, skillsSnap, activitiesSnap, followingSnap, followersSnap, notificationsSnap, reportsSnap, customExercisesSnap] = await Promise.all([
-    getUserPlanData(uid),
-    getDocs(query(collection(db, 'workouts'), where('userId', '==', uid))),
-    getDocs(collection(db, `users/${uid}/measurements`)),
-    getDocs(collection(db, `users/${uid}/skills`)),
-    getDocs(query(collection(db, 'activities'), where('userId', '==', uid))),
-    getDocs(collection(db, `followers/${uid}/following`)),
-    getDocs(collection(db, `followers/${uid}/followers`)),
-    getDocs(query(collection(db, 'notifications'), where('receiverId', '==', uid))),
-    getDocs(query(collection(db, 'reports'), where('reporterId', '==', uid))),
-    getDocs(query(collection(db, 'exerciseLibrary'), where('createdBy', '==', uid))),
-  ]);
+export async function resetUserData(uid: string, onProgress?: (msg: string, pct: number) => void) {
+  onProgress?.('Fetching plans...', 5);
+  const plansData = await getUserPlanData(uid);
+  onProgress?.('Fetching workouts...', 10);
+  const workoutsSnap = await getDocs(query(collection(db, 'workouts'), where('userId', '==', uid)));
+  onProgress?.('Fetching measurements...', 15);
+  const measurementsSnap = await getDocs(collection(db, `users/${uid}/measurements`));
+  onProgress?.('Fetching skills...', 20);
+  const skillsSnap = await getDocs(collection(db, `users/${uid}/skills`));
+  onProgress?.('Fetching activities...', 25);
+  const activitiesSnap = await getDocs(query(collection(db, 'activities'), where('userId', '==', uid)));
+  onProgress?.('Fetching social graph...', 30);
+  const followingSnap = await getDocs(collection(db, `followers/${uid}/following`));
+  const followersSnap = await getDocs(collection(db, `followers/${uid}/followers`));
+  onProgress?.('Fetching extra data...', 35);
+  const notificationsSnap = await getDocs(query(collection(db, 'notifications'), where('receiverId', '==', uid)));
+  const reportsSnap = await getDocs(query(collection(db, 'reports'), where('reporterId', '==', uid)));
+  const customExercisesSnap = await getDocs(query(collection(db, 'exerciseLibrary'), where('createdBy', '==', uid)));
 
   const refs: ReturnType<typeof doc>[] = [
     ...plansData.refs,
@@ -134,18 +152,25 @@ export async function resetUserData(uid: string) {
     ...reportsSnap.docs.map(item => item.ref),
     ...customExercisesSnap.docs.map(item => item.ref),
   ];
-  for (const activity of activitiesSnap.docs) {
-    const [likes, comments] = await Promise.all([
-      getDocs(collection(db, `activities/${activity.id}/likes`)),
-      getDocs(collection(db, `activities/${activity.id}/comments`)),
-    ]);
+  
+  onProgress?.('Fetching activity interactions...', 40);
+  for (let i = 0; i < activitiesSnap.docs.length; i++) {
+    const activity = activitiesSnap.docs[i];
+    const likes = await getDocs(collection(db, `activities/${activity.id}/likes`));
+    const comments = await getDocs(collection(db, `activities/${activity.id}/comments`));
     refs.push(...likes.docs.filter(item => item.id === uid).map(item => item.ref));
     refs.push(...comments.docs.filter(item => item.data().userId === uid).map(item => item.ref));
+    if (onProgress && i % 5 === 0) onProgress(`Fetching activity interactions (${i + 1}/${activitiesSnap.docs.length})...`, 40 + Math.round((i / activitiesSnap.docs.length) * 10));
   }
+  
+  onProgress?.('Compiling deletions...', 50);
   refs.push(...followingSnap.docs.map(item => doc(db, `followers/${item.id}/followers`, uid)));
   refs.push(...followersSnap.docs.map(item => doc(db, `followers/${item.id}/following`, uid)));
-  await deleteRefs(refs);
+  
+  onProgress?.('Deleting data...', 50);
+  await deleteRefs(refs, onProgress, 50, 48);
 
+  onProgress?.('Resetting profile...', 99);
   await setDoc(doc(db, 'users', uid, 'stats', 'current'), {
     totalWorkouts: 0, totalCalories: 0, totalDurationMin: 0, totalVolume: 0,
     currentStreak: 0, longestStreak: 0, lastWorkoutDate: null, xp: 0,

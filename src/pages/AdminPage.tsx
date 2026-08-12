@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Activity, Ban, CheckCircle2, Database, Flag, Gauge, Search, ShieldAlert, Users, XCircle, Trash2, Terminal } from 'lucide-react';
-import { collection, doc, getDocs, writeBatch } from 'firebase/firestore';
+import { Activity, Ban, CheckCircle2, Database, Flag, Gauge, Search, ShieldAlert, Users, XCircle, Trash2, Terminal, Bell } from 'lucide-react';
+import { collection, doc, getDocs, writeBatch, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { db } from '@/lib/firebase';
@@ -16,7 +16,7 @@ import { getPendingCommunities, approveCommunity, rejectCommunity, getPendingEve
 import { getAvatarUrl } from '@/lib/avatar';
 import AdminNutritionSettings from '../components/admin/AdminNutritionSettings';
 
-type AdminTab = 'overview' | 'users' | 'reports' | 'logs' | 'seed' | 'communities' | 'events';
+type AdminTab = 'overview' | 'users' | 'reports' | 'logs' | 'seed' | 'communities' | 'events' | 'updates';
 
 function Metric({ label, value, detail, icon: Icon, color = 'text-sienna' }: { label: string; value: number; detail: string; icon: typeof Users; color?: string }) {
   return <div className="card p-4"><div className="flex items-start justify-between"><div className="font-mono text-[10px] text-bone-dim tracking-wider">{label}</div><Icon size={17} className={color} /></div><div className="font-display text-3xl mt-3">{value.toLocaleString()}</div><div className="text-[11px] text-bone-dim mt-1">{detail}</div></div>;
@@ -31,6 +31,11 @@ export function AdminPage() {
   const [seeding, setSeeding] = useState(false);
   const [seedingLib, setSeedingLib] = useState(false);
   const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
+  
+  const [updateTitle, setUpdateTitle] = useState('');
+  const [updateContent, setUpdateContent] = useState('');
+  const [updateId, setUpdateId] = useState('');
+  const [isPushingUpdate, setIsPushingUpdate] = useState(false);
 
   const overview = useQuery({ queryKey: ['adminOverview'], queryFn: getAdminOverview, enabled: !!profile?.isAdmin });
   const users = useQuery({ queryKey: ['adminUsers'], queryFn: getAdminUsers, enabled: !!profile?.isAdmin });
@@ -168,6 +173,7 @@ export function AdminPage() {
     { id: 'communities', label: 'Communities', icon: Users },
     { id: 'events', label: 'Events', icon: Activity },
     { id: 'logs', label: 'System Logs', icon: Terminal },
+    { id: 'updates', label: 'App Updates', icon: Bell },
     { id: 'seed', label: 'Database', icon: Database },
   ];
 
@@ -259,6 +265,89 @@ export function AdminPage() {
           No system logs or exceptions recorded. The app is running smoothly!
         </div>
       )}
+    </section>}
+    
+    {tab === 'updates' && <section className="card p-6 border-sienna/30">
+      <div className="mb-6">
+        <h2 className="font-display text-xl flex items-center gap-2"><Bell size={20} className="text-sienna" /> Push App Update Popup</h2>
+        <p className="text-sm text-bone-dim mt-1">Publish a release note popup that all users will see on their next app launch. They will only see it once per Update ID.</p>
+      </div>
+      
+      <div className="space-y-4 max-w-lg">
+        <div>
+          <label className="block text-xs font-mono text-bone-dim mb-1">UPDATE ID (E.G. v2.1.0)</label>
+          <input 
+            type="text" 
+            value={updateId} 
+            onChange={e => setUpdateId(e.target.value)} 
+            placeholder="v2.1.0"
+            className="w-full bg-ink-2 border border-line rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sienna"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-mono text-bone-dim mb-1">TITLE</label>
+          <input 
+            type="text" 
+            value={updateTitle} 
+            onChange={e => setUpdateTitle(e.target.value)} 
+            placeholder="New Update Available!"
+            className="w-full bg-ink-2 border border-line rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sienna"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-mono text-bone-dim mb-1">CONTENT (SUPPORTS MULTILINE)</label>
+          <textarea 
+            value={updateContent} 
+            onChange={e => setUpdateContent(e.target.value)} 
+            placeholder="We fixed bugs and improved performance..."
+            rows={5}
+            className="w-full bg-ink-2 border border-line rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sienna resize-y"
+          />
+        </div>
+        <div className="flex gap-2 mt-2">
+          <button 
+            onClick={async () => {
+              if (!updateId || !updateTitle || !updateContent) return showToast('Fill all fields', 'error');
+              setIsPushingUpdate(true);
+              try {
+                await setDoc(doc(db, 'admin_settings', 'updates'), {
+                  latestUpdateId: updateId,
+                  title: updateTitle,
+                  content: updateContent,
+                  timestamp: new Date().toISOString()
+                });
+                showToast('Update popup pushed to all users!');
+                setUpdateId(''); setUpdateTitle(''); setUpdateContent('');
+              } catch (err: any) {
+                showToast(err?.message || 'Failed to push update', 'error');
+              } finally {
+                setIsPushingUpdate(false);
+              }
+            }}
+            disabled={isPushingUpdate}
+            className="btn-primary flex-1 py-3"
+          >
+            {isPushingUpdate ? 'Pushing...' : 'Push Update Popup'}
+          </button>
+          
+          <button 
+            onClick={async () => {
+              if (!confirm('This will instantly delete the active update popup and stop showing it to users. Continue?')) return;
+              try {
+                await deleteDoc(doc(db, 'admin_settings', 'updates'));
+                showToast('Active popup retracted successfully!');
+              } catch (err: any) {
+                showToast(err?.message || 'Failed to retract update', 'error');
+              }
+            }}
+            disabled={isPushingUpdate}
+            className="btn-secondary border-danger/30 text-danger hover:bg-danger/10 py-3 px-4 shrink-0"
+            title="Retract currently active popup"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
+      </div>
     </section>}
   </motion.div>;
 }

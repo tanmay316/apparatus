@@ -611,7 +611,7 @@ export function CardioTracker() {
         <div className="relative z-10 flex-1 flex flex-col justify-end p-8 pb-[100px] pointer-events-none">
           <div className="pointer-events-auto text-center mb-8">
             <h1 className="cardio-ready-title font-sans text-5xl font-black tracking-tight text-[var(--text)] drop-shadow-md mb-2">{typeLabel}</h1>
-            <p className="text-sm font-semibold text-[var(--muted)] tracking-widest uppercase bg-[var(--bg)]/50 backdrop-blur-sm px-4 py-1.5 rounded-full inline-block">Tap to begin</p>
+            <p className="text-sm font-semibold text-bone-dim tracking-widest uppercase bg-ink/80 px-4 py-1.5 rounded-full inline-block">Tap to begin</p>
           </div>
           
           <button
@@ -705,14 +705,14 @@ export function CardioTracker() {
         <div className="absolute right-4 bottom-[200px] z-10 pointer-events-auto flex flex-col gap-3 transition-all" style={{ transform: isExpanded ? 'translateY(-240px)' : 'translateY(0)' }}>
           <button
             onClick={toggleMapRotation}
-            className={`w-12 h-12 flex items-center justify-center rounded-full bg-ink/90 shadow-lg border border-line active:scale-95 transition-transform backdrop-blur-md ${mapRotationMode ? 'text-emerald-500' : 'text-bone'}`}
+            className={`w-12 h-12 flex items-center justify-center rounded-full bg-ink/90 backdrop-blur-md shadow-lg border border-line active:scale-95 transition-transform ${mapRotationMode ? 'text-emerald-500' : 'text-bone'}`}
             title="Toggle Map Rotation"
           >
             <Compass size={22} className={mapRotationMode ? 'animate-pulse' : ''} />
           </button>
           <button
             onClick={() => setRecenterTrigger(t => t + 1)}
-            className="w-12 h-12 flex items-center justify-center rounded-full bg-ink/90 text-blue-500 shadow-lg border border-line active:scale-95 transition-transform backdrop-blur-md"
+            className="w-12 h-12 flex items-center justify-center rounded-full bg-ink/90 backdrop-blur-md text-blue-500 shadow-lg border border-line active:scale-95 transition-transform"
           >
             <LocateFixed size={22} />
           </button>
@@ -722,12 +722,11 @@ export function CardioTracker() {
         <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-auto">
           <motion.div 
             animate={{ height: isExpanded ? 440 : 180 }}
-            className={`cardio-live-panel
+            className={`cardio-live-panel relative
               ${isDarkMap 
-                ? 'bg-black/40 text-white border-t border-white/20 shadow-[0_-10px_40px_rgba(0,0,0,0.5),inset_0_2px_4px_rgba(255,255,255,0.2),inset_0_0_20px_rgba(255,255,255,0.1)]' 
-                : 'bg-white/50 text-black border-t border-white/60 shadow-[0_-10px_40px_rgba(0,0,0,0.1),inset_0_2px_6px_rgba(255,255,255,0.9),inset_0_0_20px_rgba(255,255,255,0.5)]'} 
-              backdrop-blur-[80px] backdrop-saturate-[200%]
-              rounded-t-[24px] 
+                ? 'bg-black/80 text-white border-t border-white/20' 
+                : 'bg-white/90 text-black border-t border-black/10'} 
+              rounded-t-[24px] backdrop-blur-xl
               flex flex-col overflow-hidden
             `}
           >
@@ -790,7 +789,7 @@ export function CardioTracker() {
               <div className="flex items-center justify-center gap-6 mt-4">
                 <button
                   onClick={store.isPaused ? handleResume : handlePause}
-                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-xl backdrop-blur-2xl ${isDarkMap ? 'bg-[#1a1a1a]/30 hover:bg-[#1a1a1a]/50 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'bg-white/40 hover:bg-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(255,255,255,0.4)]'}`}
+                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-xl backdrop-blur-xl ${isDarkMap ? 'bg-[#1a1a1a]/30 hover:bg-[#1a1a1a]/50 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'bg-white/40 hover:bg-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(255,255,255,0.4)]'}`}
                 >
                   {store.isPaused ? <Play size={28} fill="currentColor" className="ml-1" /> : <Pause size={28} fill="currentColor" />}
                 </button>
@@ -811,7 +810,7 @@ export function CardioTracker() {
                       setScreen('select');
                     }
                   }}
-                  className={`w-16 h-16 flex items-center justify-center rounded-full transition-all active:scale-95 shadow-xl backdrop-blur-2xl ${isDarkMap ? 'bg-[#1a1a1a]/30 hover:bg-[#1a1a1a]/50 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'bg-white/40 hover:bg-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(255,255,255,0.4)]'}`}
+                  className={`w-16 h-16 flex items-center justify-center rounded-full transition-all active:scale-95 shadow-xl backdrop-blur-xl ${isDarkMap ? 'bg-[#1a1a1a]/30 hover:bg-[#1a1a1a]/50 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'bg-white/40 hover:bg-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(255,255,255,0.4)]'}`}
                   title="Discard"
                 >
                   <RotateCcw size={28} />
@@ -819,7 +818,7 @@ export function CardioTracker() {
               </div>
 
               {(store.activityType === 'walk' || store.activityType === 'run') && (
-                <div className="cardio-steps-card card p-5 mt-4 bg-white/5 backdrop-blur border-white/10 flex items-center justify-between pointer-events-auto">
+                <div className="cardio-steps-card card p-5 mt-4 bg-ink/40 backdrop-blur-md border-white/10 flex items-center justify-between pointer-events-auto">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-sienna/20 flex items-center justify-center text-sienna">
                       <Footprints size={20} />
