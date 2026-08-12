@@ -1,7 +1,7 @@
 {
   "name": "apparatus",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "deploy": "npm run build && firebase deploy --only hosting",
-    "ota:upload": "npm run build && npx @capgo/cli upload -k 5bdb3e7d-afa9-4b84-8be0-9efb8902f057"
+    "ota:upload": "npm run build && npx @capgo/cli bundle upload -a 5bdb3e7d-afa9-4b84-8be0-9efb8902f057"
   },
   "dependencies": {
     "@capacitor-community/native-audio": "^8.0.0",

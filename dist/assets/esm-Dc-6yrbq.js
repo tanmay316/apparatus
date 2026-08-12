@@ -1,2 +1,0 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/web-CusvtkyE.js","assets/index-CHoeSY5R.js","assets/rolldown-runtime-CNC7AqOf.js","assets/vendor-motion-BH4b_M8o.js","assets/vendor-react-CJEPykbp.js","assets/vendor-firebase-BAjPa3Mi.js","assets/index-C4555HlP.css"])))=>i.map(i=>d[i]);
-import{pt as e,rt as t}from"./index-CHoeSY5R.js";var n=e(`GoogleAuth`,{web:()=>t(()=>import(`./web-CusvtkyE.js`).then(e=>new e.GoogleAuthWeb),__vite__mapDeps([0,1,2,3,4,5,6]))});export{n as GoogleAuth};

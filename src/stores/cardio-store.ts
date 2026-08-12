@@ -203,17 +203,21 @@ const checkPermissionsNative = async () => {
 
 /** Central GPS point handler — applies smart accuracy check and feeds to store */
 function handleGpsPosition(pos: GeolocationPosition) {
-  useCardioStore.setState({ 
-    currentLocation: { lat: pos.coords.latitude, lng: pos.coords.longitude }
-  });
   const storeState = useCardioStore.getState();
-  
   const accuracy = pos.coords.accuracy;
+  
+  // Prevent wild map jumps during warmup by only updating the visual marker for reasonably accurate points,
+  // unless we have no location at all (in which case we need an initial map center).
+  if (!storeState.currentLocation || (Number.isFinite(accuracy) && accuracy <= 65)) {
+    useCardioStore.setState({ 
+      currentLocation: { lat: pos.coords.latitude, lng: pos.coords.longitude }
+    });
+  }
+
   // ── GPS Warmup: discard early inaccurate points ──────────
   // When GPS first starts, the first few readings can be wildly off.
   // Wait until we get a reading with accuracy < 80m before recording.
-  // Keep rendering the latest location, but do not use unusable fixes for
-  // distance. The store turns normal accuracy into a confidence score.
+  // The store turns normal accuracy into a confidence score.
   if (!Number.isFinite(accuracy) || accuracy > 150) return;
 
   // We no longer filter by 2 meters here. The raw stream must reach the Speed/Distance engines.

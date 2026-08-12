@@ -27,28 +27,31 @@ function sourcePriority(source: HeadingSource): number {
   }
 }
 
-// Estimate heading from DeviceOrientation Euler angles.
-// Requires device/browser-specific validation.
 function estimateTiltCompensatedHeading(alpha: number | null, beta: number | null, gamma: number | null): number | null {
   if (alpha === null || beta === null || gamma === null) return null;
 
   const degToRad = Math.PI / 180;
-  const _x = beta * degToRad; // pitch
-  const _y = gamma * degToRad; // roll
-  const _z = alpha * degToRad; // yaw
+  const _alpha = alpha * degToRad;
+  const _beta = beta * degToRad;
+  const _gamma = gamma * degToRad;
 
-  const cX = Math.cos(_x);
-  const cY = Math.cos(_y);
-  const cZ = Math.cos(_z);
-  const sX = Math.sin(_x);
-  const sY = Math.sin(_y);
-  const sZ = Math.sin(_z);
+  const cA = Math.cos(_alpha);
+  const sA = Math.sin(_alpha);
+  const cB = Math.cos(_beta);
+  const sB = Math.sin(_beta);
+  const cG = Math.cos(_gamma);
+  const sG = Math.sin(_gamma);
 
-  // Vector components
-  const Vx = -cZ * sY - sZ * sX * cY;
-  const Vy = -sZ * sY + cZ * sX * cY;
+  // Hybrid forward vector projection (Y-axis when flat, -Z-axis when vertical)
+  // X, Y are components in the un-yawed Earth frame (after roll and pitch)
+  const X = -sB * sG;
+  const Y = cB * cB + sB * sB * cG;
 
-  // Mathematically robust quadrant-preserving arctangent
+  // Apply yaw (alpha) to get East and North components
+  const Vx = cA * X - sA * Y; // East
+  const Vy = sA * X + cA * Y; // North
+
+  // Calculate clockwise compass heading from North
   let compassHeading = Math.atan2(Vx, Vy);
   
   if (compassHeading < 0) {
@@ -149,14 +152,16 @@ export function useCompassHeading() {
       // 2. Math & Orientation
       if (eventSource === 'ios') {
         // iOS preferred source (already tilt compensated relative to device top)
-        rawHeading = (event as any).webkitCompassHeading;
+        const iosHeading = (event as any).webkitCompassHeading;
+        const screenAngle = window.screen?.orientation?.angle || 0;
+        rawHeading = normalize(iosHeading + screenAngle);
         currentAccuracy = (event as any).webkitCompassAccuracy;
         isSourceAbsolute = true;
       } else if (eventSource === 'absolute' || eventSource === 'relative') {
         const tiltHeading = estimateTiltCompensatedHeading(event.alpha, event.beta, event.gamma);
         if (tiltHeading !== null) {
           const screenAngle = window.screen?.orientation?.angle || 0;
-          rawHeading = normalize(360 - tiltHeading + screenAngle);
+          rawHeading = normalize(tiltHeading + screenAngle);
           isSourceAbsolute = (eventSource === 'absolute');
         }
       }
