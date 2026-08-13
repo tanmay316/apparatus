@@ -58,8 +58,9 @@ public final class WorkoutLocationService extends Service implements LocationLis
     private void startTracking() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
                 && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
+        // Do not mix network fixes into a fitness route. Their lower precision
+        // creates diagonal shortcuts and can overwrite a better GPS sequence.
         try { locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this); } catch (Exception ignored) {}
-        try { locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 0f, this); } catch (Exception ignored) {}
     }
 
     private void stopTracking() {

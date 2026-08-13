@@ -76,7 +76,7 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
             >
               <Link
                 to={`/workout/${activePlan.id}/day/${day.id}`}
-                className={`weekly-plan-card relative w-[82vw] sm:w-[260px] min-h-[264px] h-auto p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] shadow-[6px_6px_14px_rgba(0,0,0,0.05),-6px_-6px_14px_rgba(255,255,255,0.8)] ${
+                className={`weekly-plan-card relative w-[82vw] sm:w-[260px] h-[350px] sm:h-[380px] min-h-0 p-5 rounded-[24px] flex flex-col justify-between transition-all duration-300 group border border-[#ececec] shadow-[6px_6px_14px_rgba(0,0,0,0.05),-6px_-6px_14px_rgba(255,255,255,0.8)] ${
                   isToday
                     ? 'bg-gradient-to-br from-[#fdfbfb] to-[#f4ebe6]'
                     : 'bg-gradient-to-br from-[#fdfbfb] to-[#f5f5f5]'

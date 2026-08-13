@@ -10,7 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification, cancelRemainingTodayReminders, scheduleInactivityReminders } from '@/utils/notifications';
 import { requestForegroundPermissions, startWorkoutForegroundService, updateWorkoutForegroundService, stopWorkoutForegroundService, setupForegroundServiceListeners } from '@/utils/foreground-service';
 import { useUIStore } from '@/stores/ui-store';
-import { useCardioStore, startGpsWatch, stopGpsWatch } from '@/stores/cardio-store';
+import { useCardioStore, startGpsWatch, finishTracking } from '@/stores/cardio-store';
 import { usePedometerStore } from '@/stores/pedometer-store';
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { saveCardioActivity, getUserCardioActivities } from '@/services/cardio';
@@ -218,15 +218,17 @@ export function CardioTracker() {
 
   const handleBackgroundSave = async () => {
     if (!store.isTracking || !store.activityType) return;
-    const durationSec = elapsedSec;
-    const dist = store.distanceKm;
-    const type = store.activityType;
-    const startedAt = store.startedAt;
-    const route = store.routePoints;
-    const elevation = store.elevationGainM;
-    const maxSpeed = store.maxSpeedKmh;
-
-    store.stopTracking();
+    const finalStore = await finishTracking();
+    const startedAt = finalStore.startedAt;
+    const durationSec = startedAt
+      ? Math.max(0, Math.floor((Date.now() - startedAt - finalStore.totalPausedMs) / 1000))
+      : elapsedSec;
+    const dist = finalStore.distanceKm;
+    const type = finalStore.activityType;
+    if (!type) return;
+    const route = finalStore.routePoints;
+    const elevation = finalStore.elevationGainM;
+    const maxSpeed = finalStore.maxSpeedKmh;
     stopWorkoutForegroundService();
 
     if (user) {
@@ -235,9 +237,9 @@ export function CardioTracker() {
 
     if (user && dist > 0.01) {
       const durationMin = durationSec / 60;
-      const movingDurationSec = elapsedSec;
+       const movingDurationSec = durationSec;
       const elapsedDurationSec = Math.max(0, Math.floor((Date.now() - startedAt!) / 1000));
-      const pausedDurationSec = Math.floor(store.totalPausedMs / 1000);
+       const pausedDurationSec = Math.floor(finalStore.totalPausedMs / 1000);
       const avgSpeedKmh = movingDurationSec > 0 ? (dist / movingDurationSec) * 3600 : 0;
       const calories = calculateCardioCalories(type, dist, durationMin, userWeight || 70, avgSpeedKmh);
 
@@ -255,7 +257,7 @@ export function CardioTracker() {
         pausedDurationSec,
         distanceKm: dist,
         avgSpeedKmh: Math.round(avgSpeedKmh * 10) / 10,
-        maxSpeedKmh: Math.round(maxSpeed * 10) / 10,
+       maxSpeedKmh: Math.round(Math.max(maxSpeed, avgSpeedKmh) * 10) / 10,
         avgPace: formatPace(dist, durationSec),
         calories,
         elevationGainM: Math.round(elevation),
@@ -297,6 +299,17 @@ export function CardioTracker() {
         const st = useCardioStore.getState();
         if (st.isPaused) st.resumeTracking();
         else st.pauseTracking();
+        const next = useCardioStore.getState();
+        const label = next.activityType === 'walk' ? 'Walking' : next.activityType === 'run' ? 'Running' : 'Cycling';
+        const elapsed = next.startedAt
+          ? Math.max(0, Math.floor((Date.now() - next.startedAt - next.totalPausedMs) / 1000))
+          : 0;
+        updateWorkoutForegroundService(
+          'cardio',
+          `${label} Live`,
+          `${formatDuration(elapsed)} • ${next.distanceKm.toFixed(2)} km`,
+          next.isPaused
+        );
       },
       () => {
         // In a true headless setup we would save here, but for now just stop tracking.
@@ -351,32 +364,34 @@ export function CardioTracker() {
       await pedometerStore.stopSession();
     }
 
-    store.stopTracking();
+    const finalStore = await finishTracking();
     stopWorkoutForegroundService();
 
     if (user) {
       endActiveSession(user.uid).catch(console.error);
     }
 
-    const movingDurationSec = elapsedSec;
-    const elapsedDurationSec = Math.max(0, Math.floor((Date.now() - store.startedAt!) / 1000));
-    const pausedDurationSec = Math.floor(store.totalPausedMs / 1000);
+    const movingDurationSec = finalStore.startedAt
+      ? Math.max(0, Math.floor((Date.now() - finalStore.startedAt - finalStore.totalPausedMs) / 1000))
+      : elapsedSec;
+    const elapsedDurationSec = Math.max(0, Math.floor((Date.now() - (finalStore.startedAt || Date.now())) / 1000));
+    const pausedDurationSec = Math.floor(finalStore.totalPausedMs / 1000);
     const durationMin = movingDurationSec / 60;
-    const dist = store.distanceKm;
+    const dist = finalStore.distanceKm;
     const avgSpeed = movingDurationSec > 0 ? (dist / movingDurationSec) * 3600 : 0;
     const pace = formatPace(dist, movingDurationSec);
     const calories = calculateCardioCalories(
-      store.activityType!,
+      finalStore.activityType!,
       dist,
       durationMin,
       userWeight || 70,
       avgSpeed
     );
 
-    const steps = getLiveSteps(store.activityType!, dist, pedometerStore);
+    const steps = getLiveSteps(finalStore.activityType!, dist, pedometerStore);
 
     const data: Partial<CardioActivity> = {
-      type: store.activityType!,
+      type: finalStore.activityType!,
       distanceKm: dist,
       durationSec: movingDurationSec,
       movingDurationSec,
@@ -384,10 +399,10 @@ export function CardioTracker() {
       pausedDurationSec,
       avgPace: pace,
       avgSpeedKmh: Math.round(avgSpeed * 10) / 10,
-      maxSpeedKmh: Math.round(store.maxSpeedKmh * 10) / 10,
+      maxSpeedKmh: Math.round(Math.max(finalStore.maxSpeedKmh, avgSpeed) * 10) / 10,
       calories,
-      elevationGainM: Math.round(store.elevationGainM),
-      route: store.routePoints,
+      elevationGainM: Math.round(finalStore.elevationGainM),
+      route: finalStore.routePoints,
       steps,
     };
 

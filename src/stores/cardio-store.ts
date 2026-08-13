@@ -175,6 +175,41 @@ function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number,
 let watchIdRef: string | number | null = null;
 let nativeLocationListener: PluginListenerHandle | null = null;
 
+/**
+ * Replays the native service's durable journal into the store. Android can
+ * suspend the WebView while the screen is locked, so listener events are only
+ * a live UI convenience; the journal is the authoritative record.
+ */
+export const replayNativeLocationBuffer = async (fromTimestamp?: number) => {
+  if (!Capacitor.isNativePlatform()) return;
+
+  const state = useCardioStore.getState();
+  const timestamp = fromTimestamp ?? state.startedAt ?? state.lastGpsTimestamp;
+  try {
+    const buffered = await NativeWorkoutLocation.getLocationsAfter({ timestamp });
+    buffered.points
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .forEach(handleNativeLocation);
+  } catch (error) {
+    // The live listener remains useful if a device/vendor blocks database access.
+    console.warn('[CardioStore] Failed to replay native location buffer:', error);
+  }
+};
+
+/** Flush native points before stopping so a locked-screen route is not lost. */
+export const finishTracking = async () => {
+  const beforeFinish = useCardioStore.getState();
+  if (beforeFinish.isTracking) {
+    // Read the entire session rather than only points newer than the last JS
+    // callback. addPoint de-duplicates timestamps, and this recovers callbacks
+    // the WebView missed while Android kept the foreground service alive.
+    await replayNativeLocationBuffer(beforeFinish.startedAt ?? 0);
+  }
+  const finalState = useCardioStore.getState();
+  finalState.stopTracking();
+  return useCardioStore.getState();
+};
+
 function handleNativeLocation(point: NativeWorkoutPoint) {
   handleGpsPosition({
     coords: {
@@ -274,8 +309,7 @@ export const startGpsWatch = async (newSession = false) => {
       nativeLocationListener = await NativeWorkoutLocation.addListener('location', handleNativeLocation);
       await NativeWorkoutLocation.start({ reset: newSession });
       watchIdRef = 'native-workout-location';
-      const buffered = await NativeWorkoutLocation.getLocationsAfter({ timestamp: useCardioStore.getState().lastGpsTimestamp });
-      buffered.points.forEach(handleNativeLocation);
+      await replayNativeLocationBuffer(useCardioStore.getState().lastGpsTimestamp);
     } catch (e) {
       console.warn('[CardioStore] Failed native GPS:', e);
       useCardioStore.setState({ gpsStatus: 'error' });
@@ -549,11 +583,10 @@ export const useCardioStore = create<CardioState>()(
           if (nativeSpeedKmh !== null) {
             const nativeAccel = lastTrustedSpeedKmh == null ? 0 : Math.abs(nativeSpeedKmh - lastTrustedSpeedKmh) / dtSec;
             
-            const nativeZeroLooksSuspicious = 
-              nativeSpeedKmh === 0 && 
-              derivedSpeedKmh > 2 && 
-              state.activityType !== 'cycle' && 
-              (hasRecentSteps || (lastTrustedSpeedKmh !== null && lastTrustedSpeedKmh > 2));
+          const nativeZeroLooksSuspicious = 
+            nativeSpeedKmh === 0 && 
+            derivedSpeedKmh > 2 && 
+            (confidence >= 0.3 || hasRecentSteps || (lastTrustedSpeedKmh !== null && lastTrustedSpeedKmh > 2));
 
             if (nativeZeroLooksSuspicious) {
                // Fallback: Native speed is zero but derived speed & history indicate movement
@@ -578,9 +611,10 @@ export const useCardioStore = create<CardioState>()(
           if (speedConfidence > 0) lastTrustedSpeedKmh = currentSpeed;
           
           // ── Spatial Downsampling & Quality Gate ──
-          let acceptDistance = speedConfidence > 0;
-          if (accelDerived > limits.maxAccel && rawDistance > 0.05) acceptDistance = false;
-          
+          // Distance must be decided from the GPS track, not from the selected
+          // display speed. Android sometimes reports speed=0 while a cyclist is
+          // moving, and that must not erase the route.
+          //
           // Phase 2C: Bounded Adaptive Threshold
           const BASE_THRESHOLD_M = 3;
           const ACCURACY_FACTOR = 0.35;
@@ -596,8 +630,15 @@ export const useCardioStore = create<CardioState>()(
           
           const distanceAnchor = lastAcceptedDistancePoint ?? prev;
           const distanceCandidate = haversineKm(distanceAnchor.lat, distanceAnchor.lng, rawPt.lat, rawPt.lng);
-          
-          if (acceptDistance && confidence >= 0.3 && distanceCandidate > MIN_DISTANCE_KM) {
+          const distanceDtSec = Math.max(0, (now - distanceAnchor.ts) / 1000);
+          const candidateSpeedKmh = distanceDtSec > 0 ? (distanceCandidate / distanceDtSec) * 3600 : 0;
+          const acceptDistance =
+            confidence >= 0.3 &&
+            distanceCandidate > MIN_DISTANCE_KM &&
+            distanceDtSec > 0 &&
+            candidateSpeedKmh <= limits.maxSpeed * 1.25;
+
+          if (acceptDistance) {
             addedDistance = distanceCandidate;
             lastAcceptedDistancePoint = rawPt;
           }
@@ -705,25 +746,23 @@ export const useCardioStore = create<CardioState>()(
           }
         }
 
-        // Only record the point if we accepted its distance, smoothing the polyline naturally
-        const routeSpacingM = Math.max(5, Math.min((accuracy || 12) * 0.4, 15));
+        // Keep map geometry independent from metric/speed acceptance. A valid
+        // point at a turn is useful to the route even if it is too close to the
+        // prior point to add distance.
+        const routeSpacingM = Math.max(3, Math.min((accuracy || 12) * 0.25, 8));
         const routeDistanceM = lastRoutePoint
           ? haversineKm(lastRoutePoint.lat, lastRoutePoint.lng, rawPt.lat, rawPt.lng) * 1000
           : Infinity;
-        const shouldAddRoutePoint = addedDistance > 0 && routeDistanceM >= routeSpacingM;
+        const shouldAddRoutePoint = confidence >= 0.3 && routeDistanceM >= routeSpacingM;
         if (shouldAddRoutePoint) lastRoutePoint = rawPt;
         const nextRoutePoints = shouldAddRoutePoint ? [...state.routePoints, rawPt] : state.routePoints;
 
-        if (speedConfidence >= 0.75 && currentSpeed > state.maxSpeedKmh) {
-           consecutiveHighSpeedFixes++;
-        } else {
-           consecutiveHighSpeedFixes = 0;
-        }
-        
-        let newMaxSpeed = state.maxSpeedKmh;
-        if (consecutiveHighSpeedFixes >= 2) {
-           newMaxSpeed = currentSpeed;
-        }
+        // `currentSpeed` has already passed the speed/acceleration plausibility
+        // checks above. Keeping a running maximum is correct; requiring two
+        // samples above the *current* maximum could leave max < average.
+        const newMaxSpeed = speedConfidence >= 0.75
+          ? Math.max(state.maxSpeedKmh, currentSpeed)
+          : state.maxSpeedKmh;
 
         set({
           routePoints: nextRoutePoints,

@@ -3,7 +3,6 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Dumbbell, Apple, TrendingUp, Users, Navigation, Zap, Footprints, Bike, X, ChevronRight, MapPin, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
-import { useWorkoutStore } from '@/stores/workout-store';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { isToday, isYesterday, format } from 'date-fns';
@@ -22,7 +21,6 @@ export function BottomNav() {
   const navigate = useNavigate();
   const [sheetOpen, setSheetOpen] = useState(false);
   const { user } = useAuthStore();
-  const workoutStore = useWorkoutStore();
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
 
   useEffect(() => {
@@ -170,24 +168,6 @@ export function BottomNav() {
               </h3>
 
               <div className="flex flex-col gap-3">
-                {/* Active Workout Quick Continue */}
-                {workoutStore.isActive && (
-                  <button
-                    onClick={() => handleActionClick('/workout/tracking')}
-                    className="w-full flex items-center justify-between p-4 rounded-2xl bg-[#17191c] dark:bg-white text-white dark:text-black hover:scale-[1.01] transition-transform active:scale-95 text-left mb-2 shadow-md"
-                  >
-                    <div>
-                      <h4 className="font-serif text-lg font-bold">Continue Workout</h4>
-                      <p className="text-sm font-sans text-gray-400 dark:text-gray-600">
-                        {workoutStore.planTitle} • {workoutStore.dayTitle}
-                      </p>
-                    </div>
-                    <div className="px-4 py-2 rounded-full bg-white/10 dark:bg-black/5 text-xs font-bold uppercase tracking-wider">
-                      Continue
-                    </div>
-                  </button>
-                )}
-
                 {/* Workout */}
                 <button
                   onClick={() => handleActionClick('/plans')}

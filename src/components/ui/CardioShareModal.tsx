@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Download, Check, Share2, LocateFixed } from 'lucide-react';
+import { X, Download, Check, Share2, LocateFixed, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { toCanvas } from 'html-to-image';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
@@ -97,7 +97,9 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const isAShape = layout.includes('a-shape');
   
   const showMapBackground = !isSolidBg && !isPolaroid && !isTransparent; // Only for map-* and a-shape layouts
-  const showPathBackground = layout.startsWith('path-') || layout === 'a-shape-transparent'; // For path-* layouts
+  // `map-path-only` is the fourth layout and is also a transparent route card.
+  // It must mount the map layer even though its name does not start with path-.
+  const showPathBackground = layout.startsWith('path-') || layout === 'map-path-only' || layout === 'a-shape-transparent';
   const hideMarkers = layout === 'map-path-only' || layout === 'path-only-nomarker';
 
   const hideMapTiles = isTransparent;
@@ -193,15 +195,21 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
     }
   };
 
-  const handleDragEnd = (e: any, { offset }: any) => {
-    const swipe = offset.x;
-    if (swipe < -50) {
-      // swipe left (next)
-      setLayoutIndex((prev) => (prev + 1) % LAYOUTS.length);
-    } else if (swipe > 50) {
-      // swipe right (prev)
-      setLayoutIndex((prev) => (prev - 1 + LAYOUTS.length) % LAYOUTS.length);
+  const goPrevious = () => setLayoutIndex((prev) => (prev - 1 + LAYOUTS.length) % LAYOUTS.length);
+  const goNext = () => setLayoutIndex((prev) => (prev + 1) % LAYOUTS.length);
+  const swipeStartX = useRef<number | null>(null);
+  const handleCardPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest('.leaflet-container')) return;
+    swipeStartX.current = event.clientX;
+  };
+  const handleCardPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (swipeStartX.current == null || (event.target as HTMLElement).closest('.leaflet-container')) {
+      swipeStartX.current = null;
+      return;
     }
+    const delta = event.clientX - swipeStartX.current;
+    swipeStartX.current = null;
+    if (Math.abs(delta) >= 55) delta < 0 ? goNext() : goPrevious();
   };
 
   return createPortal(
@@ -216,9 +224,11 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
           
           {/* The Card to capture */}
           <motion.div 
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            onDragEnd={handleDragEnd}
+            // Keep the map fully interactive. The former parent drag listener
+            // captured pinch/drag gestures before Leaflet could handle them.
+            drag={false}
+            onPointerDown={handleCardPointerDown}
+            onPointerUp={handleCardPointerUp}
             className={`w-full relative overflow-hidden rounded-[2rem] shadow-xl cursor-grab active:cursor-grabbing border-4 border-white/10`}
             style={{ 
               aspectRatio: isSolidBg ? '1 / 1' : '9 / 16',
@@ -235,14 +245,16 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
 
             <div
               ref={cardRef}
-              className={`w-full h-full relative overflow-hidden flex flex-col pointer-events-none rounded-[1.8rem] ${isTransparent ? 'bg-transparent' : 'bg-[#1f110d]'}`}
+              className={`w-full h-full relative overflow-hidden flex flex-col rounded-[1.8rem] ${isTransparent ? 'bg-transparent' : 'bg-[#1f110d]'}`}
             >
               {/* Background Map Layer */}
               {(showMapBackground || showPathBackground) && (
                 <div className="absolute inset-0 z-0">
                   {(data.route && data.route.length > 0) || data.currentLocation ? (
                     <div 
-                      className="w-full h-full"
+                      className="w-full h-full pointer-events-auto"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onWheel={(event) => event.stopPropagation()}
                       style={isAShape ? {
                         WebkitMaskImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M50 5 L15 95 L35 95 L50 50 L65 95 L85 95 Z' fill='black'/></svg>")`,
                         WebkitMaskSize: 'contain',
@@ -252,20 +264,26 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                       } : {}}
                     >
                       <RouteMap 
-                        route={data.route || []} 
-                        currentLocation={data.currentLocation}
-                        theme={selectedTheme} 
-                        height="100%" 
-                        highlightColor={lineColor}
-                        hideMap={hideMapTiles}
-                        noGlow={true}
-                        isCapturing={downloading}
-                        recenterTrigger={recenterTrigger}
-                        cardioType={data.type}
-                        hideMarkers={hideMarkers}
-                        mapPaddingBottomRight={showOverlayStats ? [40, 200] : showDistanceOnly ? [40, 100] : [40, 40]}
-                        mapPaddingTopLeft={isAShape ? [60, 40] : [40, 40]}
-                      />
+                          route={data.route || []}
+                          currentLocation={data.currentLocation}
+                          theme={selectedTheme}
+                          height="100%"
+                          // Leaflet's gradient definition is injected asynchronously.
+                          // Transparent exports must still show the original route,
+                          // so use a solid fallback for the gradient selection.
+                          highlightColor={isTransparent && pathColor === 'gradient' ? '#f43f5e' : lineColor}
+                          hideMap={hideMapTiles}
+                          noGlow={true}
+                          isCapturing={downloading}
+                          recenterTrigger={recenterTrigger}
+                          fitToContainer
+                          showZoomControls
+                          cardioType={data.type}
+                          hideMarkers={hideMarkers}
+                          hideStartMarker
+                          mapPaddingBottomRight={showOverlayStats ? [40, 200] : showDistanceOnly ? [40, 100] : [40, 40]}
+                          mapPaddingTopLeft={isAShape ? [60, 40] : [40, 40]}
+                        />
                     </div>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-white/30 font-medium">
@@ -293,7 +311,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
               )}
 
               {/* Content Foreground */}
-              <div className="relative z-10 w-full h-full flex flex-col justify-between p-6">
+              <div className="relative z-10 w-full h-full flex flex-col justify-between p-6 pointer-events-none">
                 
                 {/* Header Logo (Hidden for polaroid) */}
                 {!isPolaroid && !isAShape && (
@@ -422,7 +440,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                   <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none p-6 pb-12">
                     <div className="bg-[#fcfbf9] rounded-sm p-4 pb-10 shadow-[0_20px_40px_rgba(0,0,0,0.6)] w-full rotate-[1deg] border border-black/5">
                       <div className="w-full aspect-square bg-gray-200 rounded-sm overflow-hidden relative">
-                        <RouteMap route={data.route || []} theme="satellite" height="100%" hideMap={false} highlightColor="#f43f5e" cardioType={data.type as any} />
+                        <RouteMap route={data.route || []} theme="satellite" height="100%" fitToContainer showZoomControls hideStartMarker hideMap={false} highlightColor="#f43f5e" cardioType={data.type as any} />
                       </div>
                       <div className="mt-6 flex flex-col items-center gap-1 font-sans text-gray-800">
                         <div className="text-2xl font-black italic">{data.distanceKm.toFixed(2)} km {typeLabel}</div>
@@ -442,6 +460,25 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                 )}
               </div>
             </div>
+
+            {/* Explicit swipe affordances; map gestures remain available between
+                the controls and these buttons also work for mouse users. */}
+            <button
+              type="button"
+              aria-label="Previous card"
+              onClick={goPrevious}
+              className="absolute left-2 top-1/2 z-[210] -translate-y-1/2 rounded-full bg-black/45 p-2 text-white/80 shadow-md backdrop-blur-sm hover:bg-black/65 hover:text-white"
+            >
+              <ChevronLeft size={22} />
+            </button>
+            <button
+              type="button"
+              aria-label="Next card"
+              onClick={goNext}
+              className="absolute right-2 top-1/2 z-[210] -translate-y-1/2 rounded-full bg-black/45 p-2 text-white/80 shadow-md backdrop-blur-sm hover:bg-black/65 hover:text-white"
+            >
+              <ChevronRight size={22} />
+            </button>
           </motion.div>
 
           {/* Dots Indicator */}
@@ -482,28 +519,28 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
           {/* Color Pickers */}
           <div className="w-full max-w-[95vw] mx-auto bg-white/5 backdrop-blur-xl rounded-[24px] border border-white/10 overflow-hidden p-3 flex flex-col gap-3">
             {/* Path Color */}
-            <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
               <span className="text-xs font-bold text-white/60 uppercase tracking-wider w-16 shrink-0">Path</span>
-              <div className="flex overflow-x-auto gap-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="min-w-0 flex-1 flex overflow-x-auto gap-2 px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {PATH_COLORS.map(c => (
                   <button
                     key={c.id}
                     onClick={() => setPathColor(c.id)}
-                    className={`shrink-0 w-8 h-8 rounded-full ${c.bg} transition-all duration-300 border-2 ${pathColor === c.id ? 'border-white scale-110 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'border-transparent opacity-50 hover:opacity-100'}`}
+                    className={`shrink-0 w-8 h-8 rounded-full ${c.bg} transition-all duration-300 border-2 ${pathColor === c.id ? 'border-white ring-2 ring-white/30 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'border-transparent opacity-50 hover:opacity-100'}`}
                   />
                 ))}
               </div>
             </div>
             
             {/* Text Color */}
-            <div className="flex items-center gap-3">
+              <div className="flex min-w-0 items-center gap-3">
               <span className="text-xs font-bold text-white/60 uppercase tracking-wider w-16 shrink-0">Text</span>
-              <div className="flex overflow-x-auto gap-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="min-w-0 flex-1 flex overflow-x-auto gap-2 px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {TEXT_COLORS.map(c => (
                   <button
                     key={c.id}
                     onClick={() => setTextColor(c.id)}
-                    className={`shrink-0 w-8 h-8 rounded-full ${c.bg} transition-all duration-300 border-2 ${textColor === c.id ? 'border-white scale-110 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'border-transparent opacity-50 hover:opacity-100'}`}
+                    className={`shrink-0 w-8 h-8 rounded-full ${c.bg} transition-all duration-300 border-2 ${textColor === c.id ? 'border-white ring-2 ring-white/30 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'border-transparent opacity-50 hover:opacity-100'}`}
                   />
                 ))}
               </div>

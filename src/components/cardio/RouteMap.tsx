@@ -74,8 +74,13 @@ interface Props {
   currentLocation?: { lat: number, lng: number, heading?: number } | null;
   cardioType?: 'walk' | 'run' | 'cycle';
   hideMarkers?: boolean;
+  hideStartMarker?: boolean;
   mapPaddingBottomRight?: [number, number];
   mapPaddingTopLeft?: [number, number];
+  /** Use the visible parent bounds (share cards) instead of the live map's
+   * oversized 150vmax rotation canvas. */
+  fitToContainer?: boolean;
+  showZoomControls?: boolean;
   heading?: number | null;
   mapRotationMode?: boolean;
   visualHeadingRef?: React.MutableRefObject<number | null>;
@@ -158,15 +163,30 @@ function FitBounds({ positions, recenterTrigger, paddingBottomRight, paddingTopL
 
     if (shouldFit && positions.length > 1) {
       const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
-      map.fitBounds(bounds, {
+      // The share card can change aspect ratio while the modal is open. Ensure
+      // Leaflet measures the current card before fitting, then fit again on the
+      // next frame so the entire route is visible after pressing recenter.
+      map.invalidateSize({ animate: false });
+      const fit = () => map.fitBounds(bounds, {
         paddingBottomRight: paddingBottomRight || [40, 40],
         paddingTopLeft: paddingTopLeft || [40, 40],
         maxZoom: 17
       });
+      fit();
+      const frame = requestAnimationFrame(fit);
+      const timer = window.setTimeout(() => {
+        map.invalidateSize({ animate: false });
+        fit();
+      }, 180);
+      lastRecenter.current = recenterTrigger;
+      return () => {
+        cancelAnimationFrame(frame);
+        window.clearTimeout(timer);
+      };
     }
 
     lastRecenter.current = recenterTrigger;
-  }, [positions, map, recenterTrigger]);
+  }, [positions, map, recenterTrigger, paddingBottomRight, paddingTopLeft]);
 
   return null;
 }
@@ -222,6 +242,22 @@ function InjectGradient() {
   return null;
 }
 
+function ShareZoomControls() {
+  const map = useMap();
+  const stopGesture = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  return (
+    <div className="leaflet-top leaflet-left">
+      <div className="leaflet-control leaflet-bar !m-3 !overflow-hidden !rounded-xl !border !border-white/50 !bg-black/55 !shadow-lg !backdrop-blur-md">
+        <button type="button" aria-label="Zoom in" onPointerDown={stopGesture} onClick={(event) => { event.preventDefault(); event.stopPropagation(); map.zoomIn(); }} className="!flex !h-10 !w-10 !items-center !justify-center !border-0 !border-b !border-white/20 !bg-transparent !text-xl !font-medium !text-white hover:!bg-white/20 active:!bg-white/30">+</button>
+        <button type="button" aria-label="Zoom out" onPointerDown={stopGesture} onClick={(event) => { event.preventDefault(); event.stopPropagation(); map.zoomOut(); }} className="!flex !h-10 !w-10 !items-center !justify-center !border-0 !bg-transparent !text-xl !font-medium !text-white hover:!bg-white/20 active:!bg-white/30">−</button>
+      </div>
+    </div>
+  );
+}
+
 export function RouteMap({
   route,
   isLive = false,
@@ -235,8 +271,11 @@ export function RouteMap({
   currentLocation,
   cardioType = 'walk',
   hideMarkers = false,
+  hideStartMarker = false,
   mapPaddingBottomRight,
   mapPaddingTopLeft,
+  fitToContainer = false,
+  showZoomControls = false,
   heading,
   mapRotationMode = false,
   visualHeadingRef
@@ -323,7 +362,7 @@ export function RouteMap({
 
   const liveIcon = useMemo(() => getCurrentIcon(cardioType), [cardioType]);
 
-  const isFullScreen = height === '100%';
+  const isFullScreen = height === '100%' && !fitToContainer;
   
   // To cover the screen at any angle, the container must be large enough to contain the screen's diagonal.
   // 150vmax is sufficient.
@@ -335,7 +374,7 @@ export function RouteMap({
   const mapTop = isFullScreen ? 'calc(50vh - 90px - 75vmax)' : '0';
 
   return (
-    <div className={`w-full ${height !== '100%' ? 'rounded-2xl' : ''} overflow-hidden shadow-sm relative ${isLive ? 'ring-2 ring-[var(--border)]' : ''}`} style={{ height }}>
+    <div className={`w-full ${height !== '100%' ? 'rounded-2xl' : ''} overflow-hidden shadow-sm relative ${isLive ? 'ring-2 ring-[var(--border)]' : ''} ${hideMap ? '[&_.leaflet-container]:!bg-transparent [&_.leaflet-map-pane]:!bg-transparent [&_.leaflet-pane]:!bg-transparent' : ''}`} style={{ height, background: hideMap ? 'transparent' : themeData.bg }}>
       <div ref={mapContainerRef} className="compass-map-container" style={{
         position: 'absolute',
         width: mapWidth,
@@ -354,6 +393,7 @@ export function RouteMap({
           attributionControl={false}
         >
           <InjectGradient />
+          {showZoomControls && <ShareZoomControls />}
           {!hideMap && <TileLayer url={themeData.url} crossOrigin="anonymous" />}
 
           {positions.length > 1 && (
@@ -399,7 +439,7 @@ export function RouteMap({
           )}
 
           {/* Start marker */}
-          {!hideMarkers && positions.length > 0 && (
+          {!hideMarkers && !hideStartMarker && positions.length > 0 && (
             <Marker position={positions[0]} icon={startIcon} />
           )}
 
