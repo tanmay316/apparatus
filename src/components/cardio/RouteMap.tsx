@@ -281,6 +281,58 @@ export function RouteMap({
   visualHeadingRef
 }: Props) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const manualRotationRef = useRef(0);
+
+  const applyManualRotation = () => {
+    if (!mapRotationMode && mapContainerRef.current) {
+      mapContainerRef.current.style.transform = `translateZ(0) rotate(${manualRotationRef.current}deg)`;
+    }
+  };
+
+  // Two fingers rotate the map even when compass mode is off. Single-finger
+  // gestures remain available to Leaflet for normal panning.
+  useEffect(() => {
+    const element = mapContainerRef.current;
+    if (!element) return;
+    let startAngle: number | null = null;
+    let startRotation = 0;
+    const getAngle = (touches: TouchList) => Math.atan2(
+      touches[1].clientY - touches[0].clientY,
+      touches[1].clientX - touches[0].clientX
+    ) * (180 / Math.PI);
+    const onTouchStart = (event: TouchEvent) => {
+      if (!mapRotationMode && event.touches.length === 2) {
+        startAngle = getAngle(event.touches);
+        startRotation = manualRotationRef.current;
+      }
+    };
+    const onTouchMove = (event: TouchEvent) => {
+      if (!mapRotationMode && startAngle !== null && event.touches.length === 2) {
+        event.preventDefault();
+        manualRotationRef.current = startRotation + getAngle(event.touches) - startAngle;
+        applyManualRotation();
+      }
+    };
+    const onTouchEnd = (event: TouchEvent) => {
+      if (event.touches.length < 2) startAngle = null;
+    };
+    element.addEventListener('touchstart', onTouchStart, { passive: true });
+    element.addEventListener('touchmove', onTouchMove, { passive: false });
+    element.addEventListener('touchend', onTouchEnd, { passive: true });
+    element.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    return () => {
+      element.removeEventListener('touchstart', onTouchStart);
+      element.removeEventListener('touchmove', onTouchMove);
+      element.removeEventListener('touchend', onTouchEnd);
+      element.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [mapRotationMode]);
+
+  // Recenter resets manual rotation whether or not compass mode was enabled.
+  useEffect(() => {
+    manualRotationRef.current = 0;
+    applyManualRotation();
+  }, [recenterTrigger, mapRotationMode]);
 
   // Compass Visual Controller (RAF loop)
   useEffect(() => {
@@ -289,11 +341,11 @@ export function RouteMap({
     let rafId: number;
     const animate = () => {
       const vHead = visualHeadingRef.current;
-      if (vHead !== null && mapContainerRef.current) {
+      if (mapContainerRef.current) {
         // Map Container Rotation
-        mapContainerRef.current.style.transform = mapRotationMode 
-          ? `translateZ(0) rotate(${-vHead}deg)` 
-          : `translateZ(0)`;
+        mapContainerRef.current.style.transform = mapRotationMode && vHead !== null
+          ? `translateZ(0) rotate(${-vHead}deg)`
+          : `translateZ(0) rotate(${manualRotationRef.current}deg)`;
           
         // Icon/Cone Rotation
         const coneEl = mapContainerRef.current.querySelector('.compass-cone') as HTMLElement;
