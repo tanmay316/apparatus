@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Trophy, Target, Calendar } from 'lucide-react';
@@ -8,6 +9,11 @@ import { createCommunityChallenge } from '@/services/events';
 export function CreateChallengeModal({ communityId, onClose }: { communityId: string; onClose: () => void }) {
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    document.body.classList.add('community-create-open');
+    return () => document.body.classList.remove('community-create-open');
+  }, []);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -42,8 +48,8 @@ export function CreateChallengeModal({ communityId, onClose }: { communityId: st
     createMutation.mutate();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/80 backdrop-blur-sm sm:overflow-y-auto">
+  return createPortal(
+    <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/80 backdrop-blur-sm sm:overflow-y-auto">
       <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} className="bg-ink rounded-t-[32px] sm:rounded-[32px] p-5 sm:p-8 max-w-lg w-full sm:border border-t border-line shadow-2xl max-h-[90dvh] sm:max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-start mb-4 shrink-0">
           <div>
@@ -101,6 +107,7 @@ export function CreateChallengeModal({ communityId, onClose }: { communityId: st
           </div>
         </form>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

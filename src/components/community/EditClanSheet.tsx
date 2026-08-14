@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -7,6 +8,13 @@ import { useUIStore } from '@/stores/ui-store';
 import { ClanV2 } from '@/types';
 
 export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen: boolean, onClose: () => void }) {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('community-create-open');
+      return () => document.body.classList.remove('community-create-open');
+    }
+  }, [isOpen]);
+
   const [name, setName] = useState(clan.name);
   const [description, setDescription] = useState(clan.description);
   const [tags, setTags] = useState(clan.tags.join(', '));
@@ -34,10 +42,10 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
     onError: (err: any) => showToast(err?.message || 'Failed to update clan', 'error')
   });
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[400] flex flex-col justify-end">
+        <div className="fixed inset-0 z-[600] flex flex-col justify-end">
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
@@ -104,6 +112,7 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

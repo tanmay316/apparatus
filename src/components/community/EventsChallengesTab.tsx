@@ -1,13 +1,59 @@
-import { useQuery } from '@tanstack/react-query';
-import { getPublicChallenges, getPublicEvents } from '@/services/community';
-import { Target, CalendarDays, Users, Flame } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getPublicChallenges, getPublicEvents, deleteChallenge, deleteSimpleEvent } from '@/services/community';
+import { Target, CalendarDays, Users, Flame, Edit3, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { ChallengeDetailSheet } from './ChallengeDetailSheet';
+import { EditChallengeSheet } from './EditChallengeSheet';
+import { EditEventSheet } from './EditEventSheet';
+import { useAuthStore } from '@/stores/auth-store';
+import { useUIStore } from '@/stores/ui-store';
+import { ChallengeV2, SimpleEvent } from '@/types';
 
 export function EventsChallengesTab() {
   const [filter, setFilter] = useState<'all' | 'active' | 'upcoming'>('all');
   const [selectedChallengeId, setSelectedChallengeId] = useState<string | null>(null);
+  const [editingChallenge, setEditingChallenge] = useState<ChallengeV2 | null>(null);
+  const [editingEvent, setEditingEvent] = useState<SimpleEvent | null>(null);
+
+  const { user, profile } = useAuthStore();
+  const isAdmin = !!profile?.isAdmin;
+  const { showToast } = useUIStore();
+  const queryClient = useQueryClient();
+
+  const deleteChallengeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      if (confirm('Are you sure you want to delete this challenge?')) {
+        await deleteChallenge(id);
+        return true;
+      }
+      return false;
+    },
+    onSuccess: (didDelete) => {
+      if (didDelete) {
+        queryClient.invalidateQueries({ queryKey: ['publicChallenges'] });
+        queryClient.invalidateQueries({ queryKey: ['clanChallenges'] });
+        showToast('Challenge deleted');
+      }
+    }
+  });
+
+  const deleteEventMutation = useMutation({
+    mutationFn: async (id: string) => {
+      if (confirm('Are you sure you want to delete this event?')) {
+        await deleteSimpleEvent(id);
+        return true;
+      }
+      return false;
+    },
+    onSuccess: (didDelete) => {
+      if (didDelete) {
+        queryClient.invalidateQueries({ queryKey: ['publicEvents'] });
+        queryClient.invalidateQueries({ queryKey: ['clanEvents'] });
+        showToast('Event deleted');
+      }
+    }
+  });
 
   const { data: challenges = [], isLoading: loadingChallenges } = useQuery({
     queryKey: ['publicChallenges'],
@@ -47,8 +93,28 @@ export function EventsChallengesTab() {
             <Target size={120} />
           </div>
           <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 bg-sienna/20 text-sienna px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider mb-4">
-              <Flame size={14} /> Featured Challenge
+            <div className="flex items-center justify-between gap-4 mb-4">
+              <div className="inline-flex items-center gap-2 bg-sienna/20 text-sienna px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider">
+                <Flame size={14} /> Featured Challenge
+              </div>
+              {(isAdmin || user?.uid === challenges[0].createdBy) && (
+                <div className="flex items-center gap-2 z-20" onClick={e => e.stopPropagation()}>
+                  <button 
+                    onClick={() => setEditingChallenge(challenges[0])}
+                    className="p-1.5 rounded-lg bg-ink/60 hover:bg-ink text-bone-dim hover:text-bone transition-colors"
+                    title="Edit Challenge"
+                  >
+                    <Edit3 size={15} />
+                  </button>
+                  <button 
+                    onClick={() => deleteChallengeMutation.mutate(challenges[0].id!)}
+                    className="p-1.5 rounded-lg bg-ink/60 hover:bg-red-500/20 text-bone-dim hover:text-red-400 transition-colors"
+                    title="Delete Challenge"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              )}
             </div>
             <h2 className="font-display text-3xl text-bone mb-2">{challenges[0].title}</h2>
             <p className="text-bone-dim max-w-md mb-6">{challenges[0].description || `Join ${challenges[0].participantCount || 0} athletes in completing this challenge. Push your limits and climb the leaderboard.`}</p>
@@ -91,6 +157,24 @@ export function EventsChallengesTab() {
                       <span className="uppercase text-emerald-500">{c.status}</span>
                     </div>
                   </div>
+                  {(isAdmin || user?.uid === c.createdBy) && (
+                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                      <button 
+                        onClick={() => setEditingChallenge(c)}
+                        className="p-2 rounded-lg hover:bg-ink-3 text-bone-dim hover:text-bone transition-colors"
+                        title="Edit Challenge"
+                      >
+                        <Edit3 size={15} />
+                      </button>
+                      <button 
+                        onClick={() => deleteChallengeMutation.mutate(c.id!)}
+                        className="p-2 rounded-lg hover:bg-red-500/20 text-bone-dim hover:text-red-400 transition-colors"
+                        title="Delete Challenge"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -125,6 +209,24 @@ export function EventsChallengesTab() {
                       <span className="uppercase text-blue-500">{e.status}</span>
                     </div>
                   </div>
+                  {(isAdmin || user?.uid === e.createdBy) && (
+                    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                      <button 
+                        onClick={() => setEditingEvent(e)}
+                        className="p-2 rounded-lg hover:bg-ink-3 text-bone-dim hover:text-bone transition-colors"
+                        title="Edit Event"
+                      >
+                        <Edit3 size={15} />
+                      </button>
+                      <button 
+                        onClick={() => deleteEventMutation.mutate(e.id!)}
+                        className="p-2 rounded-lg hover:bg-red-500/20 text-bone-dim hover:text-red-400 transition-colors"
+                        title="Delete Event"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -141,6 +243,22 @@ export function EventsChallengesTab() {
           />
         )}
       </AnimatePresence>
+
+      {editingChallenge && (
+        <EditChallengeSheet 
+          challenge={editingChallenge} 
+          isOpen={!!editingChallenge} 
+          onClose={() => setEditingChallenge(null)} 
+        />
+      )}
+
+      {editingEvent && (
+        <EditEventSheet 
+          event={editingEvent} 
+          isOpen={!!editingEvent} 
+          onClose={() => setEditingEvent(null)} 
+        />
+      )}
     </div>
   );
 }

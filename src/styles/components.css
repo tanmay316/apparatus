@@ -888,7 +888,7 @@
     box-shadow: 0 10px 28px rgba(118, 49, 27, 0.5) !important;
   }
 
-  [data-theme='dark'] body.community-create-open .bottom-nav-shell {
+  body.community-create-open .bottom-nav-shell {
     display: none !important;
   }
 

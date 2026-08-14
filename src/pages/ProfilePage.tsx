@@ -57,6 +57,7 @@ export function ProfilePage() {
   const { username } = useParams<{ username: string }>();
   const { user: currentUser, profile: myProfile, stats: myStats, updateProfile } = useAuthStore();
   const { showToast, units, theme } = useUIStore();
+  const queryClient = useQueryClient();
 
   const [viewProfile, setViewProfile] = useState<UserProfile | null>(null);
   const [viewStats, setViewStats] = useState<UserStats | null>(null);
@@ -696,6 +697,9 @@ export function ProfilePage() {
                       <ActivityPostCard
                         key={activity.id}
                         activity={activity}
+                        onDelete={() => {
+                          queryClient.invalidateQueries({ queryKey: ['bookmarkedPosts'] });
+                        }}
                         onShare={(act) => {
                           const isCardio = act.type === 'walk' || act.type === 'run' || act.type === 'cycle' || ['walk', 'run', 'cycle'].includes((act.details as any)?.activityType);
                           if (isCardio) {
@@ -808,6 +812,9 @@ export function ProfilePage() {
                       <ActivityPostCard
                         key={workout.id}
                         activity={activityItem}
+                        onDelete={(deletedId) => {
+                          setPublicWorkouts(prev => prev.filter(w => w.id !== deletedId));
+                        }}
                         onShare={(act) => {
                           const isCardioOnShare = act.type === 'walk' || act.type === 'run' || act.type === 'cycle' || ['walk', 'run', 'cycle'].includes((act.details as any)?.activityType);
                           if (isCardioOnShare) {

@@ -36,7 +36,24 @@ export async function getActivityById(activityId: string): Promise<Activity | nu
 }
 
 export async function deleteActivity(activityId: string): Promise<void> {
-  await deleteDoc(doc(db, 'activities', activityId));
+  const activityRef = doc(db, 'activities', activityId);
+  try {
+    const snap = await getDoc(activityRef);
+    let linkedWorkoutId = activityId;
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data.workoutId) linkedWorkoutId = data.workoutId;
+    }
+    await deleteDoc(activityRef).catch(() => {});
+    await deleteDoc(doc(db, 'workouts', linkedWorkoutId)).catch(() => {});
+    await deleteDoc(doc(db, 'cardioActivities', linkedWorkoutId)).catch(() => {});
+  } catch {
+    // If fetching activity failed, still attempt direct delete by id
+    await deleteDoc(activityRef).catch(() => {});
+  }
+  // Also attempt deleting directly by activityId from workouts and cardioActivities
+  await deleteDoc(doc(db, 'workouts', activityId)).catch(() => {});
+  await deleteDoc(doc(db, 'cardioActivities', activityId)).catch(() => {});
 }
 
 // ─── Follow System ──────────────────────────────────────────────

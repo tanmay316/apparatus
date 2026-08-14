@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { X, TrendingUp, Users, Activity, Flame, Award, Calendar, BarChart2, UserCheck, UserX } from 'lucide-react';
@@ -5,6 +7,10 @@ import type { Community } from '@/types';
 import { getCommunityLiveStats, getLeaderAnalytics } from '@/services/events';
 
 export function LeaderAnalyticsModal({ community, onClose }: { community: Community; onClose: () => void }) {
+  useEffect(() => {
+    document.body.classList.add('community-create-open');
+    return () => document.body.classList.remove('community-create-open');
+  }, []);
   
   const { data: liveStats } = useQuery({
     queryKey: ['communityLiveStats', community.id],
@@ -18,8 +24,8 @@ export function LeaderAnalyticsModal({ community, onClose }: { community: Commun
     enabled: !!community.id,
   });
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/80 backdrop-blur-sm sm:overflow-y-auto">
+  return createPortal(
+    <div className="fixed inset-0 z-[600] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/80 backdrop-blur-sm sm:overflow-y-auto">
       <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} className="bg-ink rounded-t-[32px] sm:rounded-[32px] p-5 sm:p-8 max-w-3xl w-full sm:border border-t border-line shadow-2xl max-h-[90dvh] sm:max-h-[90vh] flex flex-col space-y-6">
         
         <div className="flex justify-between items-start shrink-0 border-b border-line pb-4">
@@ -135,6 +141,7 @@ export function LeaderAnalyticsModal({ community, onClose }: { community: Commun
           <button onClick={onClose} className="btn-secondary px-6 py-2">Close Dashboard</button>
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

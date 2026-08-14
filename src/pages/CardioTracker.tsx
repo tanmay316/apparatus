@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -7,7 +7,7 @@ import { useCompassHeading } from '@/hooks/useCompassHeading';
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQueryClient } from '@tanstack/react-query';
-import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification, cancelRemainingTodayReminders, scheduleInactivityReminders } from '@/utils/notifications';
+import { requestNotificationPermission, clearNotification, showNotification, cancelRemainingTodayReminders, scheduleInactivityReminders } from '@/utils/notifications';
 import { requestForegroundPermissions, startWorkoutForegroundService, updateWorkoutForegroundService, stopWorkoutForegroundService, setupForegroundServiceListeners } from '@/utils/foreground-service';
 import { useUIStore } from '@/stores/ui-store';
 import { useCardioStore, startGpsWatch, finishTracking } from '@/stores/cardio-store';
@@ -36,7 +36,7 @@ function formatDuration(sec: number): string {
 function formatPaceMs(paceMs: number): string {
   if (paceMs <= 0 || !isFinite(paceMs)) return '--:--';
   const secPerKm = paceMs / 1000;
-  if (secPerKm > 3600) return '>60:00'; // Cap display to > 60 min/km
+  if (secPerKm > 3600) return '>60:00';
   const paceMin = Math.floor(secPerKm / 60);
   const paceSec = Math.floor(secPerKm % 60);
   return `${paceMin}:${String(paceSec).padStart(2, '0')}`;
@@ -50,6 +50,21 @@ function formatPace(distKm: number, durationSec: number): string {
   return `${paceMin}:${String(paceSec).padStart(2, '0')}`;
 }
 
+function getCardioNotificationContent(st: ReturnType<typeof useCardioStore.getState>, elapsed: number) {
+  const typeLabel = st.activityType === 'walk' ? 'Walking' : st.activityType === 'run' ? 'Running' : 'Cycling';
+  const isPaused = st.isPaused || st.autoPauseStatus === 'PAUSED';
+  const title = isPaused 
+    ? (st.autoPauseStatus === 'PAUSED' ? `${typeLabel} • Auto-Paused` : `${typeLabel} • Paused`) 
+    : `Apparatus • ${typeLabel}`;
+  
+  const paceStr = st.activityType === 'cycle'
+    ? `${st.currentSpeedKmh.toFixed(1)} km/h`
+    : (st.currentPaceMs > 0 ? `${formatPaceMs(st.currentPaceMs)} /km` : `${formatPace(st.distanceKm, elapsed)} /km`);
+
+  const body = `${formatDuration(elapsed)}  •  ${st.distanceKm.toFixed(2)} km  •  ${paceStr}`;
+  return { title, body, isPaused };
+}
+
 function getLiveSteps(
   type: CardioActivityType | null, 
   distKm: number, 
@@ -57,12 +72,10 @@ function getLiveSteps(
 ): number | undefined {
   if (type !== 'walk' && type !== 'run') return undefined;
   
-  // If native pedometer works, use it
   if (pedStore.isSessionActive && (pedStore.stepSource === 'native' || pedStore.stepSource === 'motion_estimate') && pedStore.sessionSteps > 0) {
     return pedStore.sessionSteps;
   }
   
-  // Fallback to distance
   const estSteps = Math.round(distKm * 1000 / (type === 'run' ? 1.0 : 0.762));
   return estSteps;
 }
@@ -104,27 +117,26 @@ export function CardioTracker() {
     _setMapLayer(layer);
   };
 
+  // Keep a ref to handleStop for foreground service button listeners
+  const handleStopRef = useRef<() => Promise<void>>();
+
   // Update screen based on URL params and tracking state
   useEffect(() => {
     if (urlType) {
       if (store.isTracking) {
         if (store.activityType === urlType) {
-          // Returning to the same activity that's running — go straight to tracking
           setScreen('tracking');
           setSearchParams({}, { replace: true });
         } else {
-          // Different activity selected — show ready screen for new type
           setScreen('ready');
         }
       } else {
-        // Not tracking — show ready screen
         if (screen !== 'ready') {
           store.reset();
         }
         setScreen('ready');
       }
     } else {
-      // No urlType — if not tracking and not on summary, show select screen
       if (!store.isTracking && screen !== 'summary' && screen !== 'tracking') {
         setScreen('select');
       }
@@ -138,6 +150,7 @@ export function CardioTracker() {
       startGpsWatch();
     }
   }, [screen, store.isPaused]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [summaryData, setSummaryData] = useState<Partial<CardioActivity> | null>(null);
   const [showShare, setShowShare] = useState(false);
@@ -170,19 +183,17 @@ export function CardioTracker() {
     if (!store.isTracking || !store.startedAt) return;
     const interval = setInterval(() => {
       if (!store.isPaused && store.autoPauseStatus !== 'PAUSED') {
-        // Timer is frozen when paused. We only need total accumulated paused ms.
         const totalPause = store.totalPausedMs;
         const raw = Date.now() - store.startedAt! - totalPause;
         const currentSec = Math.max(0, Math.floor(raw / 1000));
         setElapsedSec(currentSec);
 
-        // Update Foreground Service (Throttle to every 5s to prevent massive Android OS lag)
-        if (currentSec % 5 === 0) {
+        // Update Foreground Service with live Strava-style stats every 3s
+        if (currentSec % 3 === 0) {
           const st = useCardioStore.getState();
-          const type = st.activityType;
-          if (type) {
-            const title = st.isPaused ? 'Workout Paused' : `${type === 'walk' ? 'Walking' : type === 'run' ? 'Running' : 'Cycling'} Live`;
-            updateWorkoutForegroundService('cardio', title, `${formatDuration(currentSec)} • ${st.distanceKm.toFixed(2)} km`, st.isPaused);
+          if (st.activityType) {
+            const { title, body, isPaused } = getCardioNotificationContent(st, currentSec);
+            updateWorkoutForegroundService('cardio', title, body, isPaused);
           }
         }
       }
@@ -190,11 +201,10 @@ export function CardioTracker() {
     return () => clearInterval(interval);
   }, [store.isTracking, store.startedAt, store.isPaused, store.autoPauseStatus, store.totalPausedMs, store.autoPausedAt]);
 
-  // Update live session periodically
+  // Update live session periodically for social feed
   useEffect(() => {
     if (!store.isTracking || !user || !store.activityType) return;
     const interval = setInterval(() => {
-      // Fetch latest state to avoid closure staleness and interval reset bugs
       const st = useCardioStore.getState();
       const currentElapsedSec = Math.floor((Date.now() - (st.startedAt || Date.now()) - st.totalPausedMs) / 1000);
       
@@ -214,8 +224,6 @@ export function CardioTracker() {
     return () => clearInterval(interval);
   }, [store.isTracking, user, store.activityType, userWeight, pedometerStore.isSessionActive]);
 
-  // GPS and WakeLock logic moved to global cardio-store.ts
-
   const handleBackgroundSave = async () => {
     if (!store.isTracking || !store.activityType) return;
     const finalStore = await finishTracking();
@@ -229,7 +237,7 @@ export function CardioTracker() {
     const route = finalStore.routePoints;
     const elevation = finalStore.elevationGainM;
     const maxSpeed = finalStore.maxSpeedKmh;
-    stopWorkoutForegroundService();
+    stopWorkoutForegroundService('cardio');
 
     if (user) {
       endActiveSession(user.uid).catch(console.error);
@@ -237,9 +245,9 @@ export function CardioTracker() {
 
     if (user && dist > 0.01) {
       const durationMin = durationSec / 60;
-       const movingDurationSec = durationSec;
+      const movingDurationSec = durationSec;
       const elapsedDurationSec = Math.max(0, Math.floor((Date.now() - startedAt!) / 1000));
-       const pausedDurationSec = Math.floor(finalStore.totalPausedMs / 1000);
+      const pausedDurationSec = Math.floor(finalStore.totalPausedMs / 1000);
       const avgSpeedKmh = movingDurationSec > 0 ? (dist / movingDurationSec) * 3600 : 0;
       const calories = calculateCardioCalories(type, dist, durationMin, userWeight || 70, avgSpeedKmh);
 
@@ -251,13 +259,13 @@ export function CardioTracker() {
         date: localDateKey(new Date(startedAt || Date.now())),
         startedAt: startedAt ? Timestamp.fromMillis(startedAt) : Timestamp.now(),
         finishedAt: Timestamp.now(),
-        durationSec: movingDurationSec, // Legacy
+        durationSec: movingDurationSec,
         movingDurationSec,
         elapsedDurationSec,
         pausedDurationSec,
         distanceKm: dist,
         avgSpeedKmh: Math.round(avgSpeedKmh * 10) / 10,
-       maxSpeedKmh: Math.round(Math.max(maxSpeed, avgSpeedKmh) * 10) / 10,
+        maxSpeedKmh: Math.round(Math.max(maxSpeed, avgSpeedKmh) * 10) / 10,
         avgPace: formatPace(dist, durationSec),
         calories,
         elevationGainM: Math.round(elevation),
@@ -278,44 +286,35 @@ export function CardioTracker() {
       await handleBackgroundSave();
       store.reset();
     }
-    
 
     if (type === 'walk' || type === 'run') {
       await pedometerStore.startSession();
     }
 
-    // Request permission and show ongoing notification
     await requestNotificationPermission();
     await requestForegroundPermissions();
-    showPersistentNotification(
-      1001,
-      `${type === 'walk' ? 'Walking' : type === 'run' ? 'Running' : 'Cycling'} Session Active`,
-      'Apparatus is tracking your cardio session.'
-    );
     
-    startWorkoutForegroundService('cardio', `${type === 'walk' ? 'Walking' : type === 'run' ? 'Running' : 'Cycling'} Live`, '0:00 • 0.00 km', false);
+    // Start ongoing Strava-style notification with PAUSE/RESUME and STOP buttons
+    const initialContent = getCardioNotificationContent(store, 0);
+    startWorkoutForegroundService('cardio', initialContent.title, initialContent.body, false);
+    
     setupForegroundServiceListeners(
       () => {
         const st = useCardioStore.getState();
-        if (st.isPaused) st.resumeTracking();
-        else st.pauseTracking();
+        if (st.isPaused) {
+          st.resumeTracking();
+        } else {
+          st.pauseTracking();
+        }
         const next = useCardioStore.getState();
-        const label = next.activityType === 'walk' ? 'Walking' : next.activityType === 'run' ? 'Running' : 'Cycling';
         const elapsed = next.startedAt
           ? Math.max(0, Math.floor((Date.now() - next.startedAt - next.totalPausedMs) / 1000))
           : 0;
-        updateWorkoutForegroundService(
-          'cardio',
-          `${label} Live`,
-          `${formatDuration(elapsed)} • ${next.distanceKm.toFixed(2)} km`,
-          next.isPaused
-        );
+        const { title, body, isPaused } = getCardioNotificationContent(next, elapsed);
+        updateWorkoutForegroundService('cardio', title, body, isPaused);
       },
       () => {
-        // In a true headless setup we would save here, but for now just stop tracking.
-        const st = useCardioStore.getState();
-        st.pauseTracking();
-        stopWorkoutForegroundService();
+        handleStopRef.current?.();
       }
     );
     
@@ -323,8 +322,6 @@ export function CardioTracker() {
     setScreen('tracking');
     setElapsedSec(0);
 
-    // Clear the URL param so a refresh stays in tracking
-    // Done here synchronously AFTER state updates so useEffect doesn't misfire
     setSearchParams({}, { replace: true });
 
     if (user) {
@@ -344,28 +341,32 @@ export function CardioTracker() {
       navigate('/plans');
       return;
     }
-    // Navigate to ready screen
     setSearchParams({ type });
   };
 
   const handlePause = () => {
     store.pauseTracking();
+    const st = useCardioStore.getState();
+    const elapsed = st.startedAt ? Math.max(0, Math.floor((Date.now() - st.startedAt - st.totalPausedMs) / 1000)) : elapsedSec;
+    const { title, body } = getCardioNotificationContent(st, elapsed);
+    updateWorkoutForegroundService('cardio', title, body, true);
   };
 
   const handleResume = () => {
     store.resumeTracking();
+    const st = useCardioStore.getState();
+    const elapsed = st.startedAt ? Math.max(0, Math.floor((Date.now() - st.startedAt - st.totalPausedMs) / 1000)) : elapsedSec;
+    const { title, body } = getCardioNotificationContent(st, elapsed);
+    updateWorkoutForegroundService('cardio', title, body, false);
   };
 
   const handleStop = async () => {
-    // Clear the ongoing notification
-    clearNotification(1001);
-    
     if (store.activityType === 'walk' || store.activityType === 'run') {
       await pedometerStore.stopSession();
     }
 
     const finalStore = await finishTracking();
-    stopWorkoutForegroundService();
+    stopWorkoutForegroundService('cardio');
 
     if (user) {
       endActiveSession(user.uid).catch(console.error);
@@ -491,6 +492,9 @@ export function CardioTracker() {
       }
     }
   };
+
+  // Assign the stop handler ref
+  handleStopRef.current = handleStop;
 
   const handleDone = () => {
     store.reset();
@@ -654,7 +658,6 @@ export function CardioTracker() {
 
   // ─── Tracking Screen ───
   if (screen === 'tracking') {
-    const isDark = useUIStore.getState().theme === 'dark';
     const isDarkMap = mapLayer === 'dark' || mapLayer === 'satellite' || mapLayer === 'toner';
     
     const avgSpeed = elapsedSec > 0 ? (store.distanceKm / (elapsedSec / 3600)).toFixed(1) : '0.0';

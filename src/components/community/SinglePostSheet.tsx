@@ -1,15 +1,26 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Heart, MessageSquare, CornerDownRight, Image as ImageIcon } from 'lucide-react';
+import { X, Heart, MessageSquare, CornerDownRight, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
+import { useUIStore } from '@/stores/ui-store';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPostComments, createPostComment, likeClanPost } from '@/services/community';
+import { getPostComments, createPostComment, likeClanPost, deleteClanPost } from '@/services/community';
 import { CommunityPost } from '@/types';
 
 export function SinglePostSheet({ post, isOpen, onClose }: { post: CommunityPost | null, isOpen: boolean, onClose: () => void }) {
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
+  const isAdmin = !!profile?.isAdmin;
+  const { showToast } = useUIStore();
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('community-create-open');
+      return () => document.body.classList.remove('community-create-open');
+    }
+  }, [isOpen]);
 
   const { data: comments = [] } = useQuery({
     queryKey: ['postComments', post?.id],
@@ -25,6 +36,25 @@ export function SinglePostSheet({ post, isOpen, onClose }: { post: CommunityPost
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clanPosts'] });
     }
+  });
+
+  const deletePostMutation = useMutation({
+    mutationFn: async () => {
+      if (!post) return;
+      if (confirm('Are you sure you want to delete this post?')) {
+        await deleteClanPost(post.id!);
+        return true;
+      }
+      return false;
+    },
+    onSuccess: (didDelete) => {
+      if (didDelete) {
+        queryClient.invalidateQueries({ queryKey: ['clanPosts'] });
+        showToast('Post deleted');
+        onClose();
+      }
+    },
+    onError: (err: any) => showToast(err?.message || 'Failed to delete post', 'error')
   });
 
   const commentMutation = useMutation({
@@ -44,10 +74,10 @@ export function SinglePostSheet({ post, isOpen, onClose }: { post: CommunityPost
     }
   });
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && post && (
-        <div className="fixed inset-0 z-[400] flex flex-col justify-end">
+        <div className="fixed inset-0 z-[600] flex flex-col justify-end">
           <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
@@ -63,7 +93,19 @@ export function SinglePostSheet({ post, isOpen, onClose }: { post: CommunityPost
             className="bg-bg w-full h-[90vh] rounded-t-[32px] relative z-10 flex flex-col shadow-2xl overflow-hidden border-t border-line/10"
           >
             <div className="flex items-center justify-between p-6 border-b border-line/10">
-              <h2 className="text-xl font-bold text-bone">Post</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-bone">Post</h2>
+                {(isAdmin || user?.uid === post.authorId) && (
+                  <button 
+                    onClick={() => deletePostMutation.mutate()} 
+                    disabled={deletePostMutation.isPending}
+                    className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors text-xs font-mono flex items-center gap-1"
+                    title="Delete Post"
+                  >
+                    <Trash2 size={13} /> Delete
+                  </button>
+                )}
+              </div>
               <button onClick={onClose} className="p-2 bg-ink-2 rounded-full text-bone hover:text-sienna transition-colors">
                 <X size={20} />
               </button>
@@ -149,6 +191,7 @@ export function SinglePostSheet({ post, isOpen, onClose }: { post: CommunityPost
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

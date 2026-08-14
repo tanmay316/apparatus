@@ -133,19 +133,24 @@ function attachVisibilityListener() {
       // Page going to background — record timestamp
       pageHiddenAt = Date.now();
     } else {
-      // Page coming back to foreground
+      // Page coming back to foreground. The Android foreground service owns
+      // collection while the WebView is suspended; never stop/restart it here.
+      // Restarting discarded the native listener and repeatedly put sessions
+      // back into GPS warm-up after screen lock.
       pageHiddenAt = null;
-
-      // A foreground service improves Android process priority, but location updates
-      // still originate from Capacitor's watch. Re-start the watch on foregrounding.
-      
       const state = useCardioStore.getState();
       if (state.isTracking && !state.isPaused) {
-        // Restart the GPS watch to ensure it's still alive.
-        if (watchIdRef !== null) {
-          stopGpsWatch().then(() => startGpsWatch());
+        if (Capacitor.isNativePlatform()) {
+          // Recover every point collected while the screen was off.
+          if (watchIdRef === 'native-workout-location') {
+            replayNativeLocationBuffer(state.lastGpsTimestamp);
+          } else {
+            startGpsWatch();
+          }
         } else {
-          startGpsWatch();
+          // Browser watches can be suspended, unlike the native service.
+          if (watchIdRef !== null) stopGpsWatch().then(() => startGpsWatch());
+          else startGpsWatch();
         }
       }
     }
@@ -205,6 +210,9 @@ export const finishTracking = async () => {
     // the WebView missed while Android kept the foreground service alive.
     await replayNativeLocationBuffer(beforeFinish.startedAt ?? 0);
   }
+  // Wait for the native stop command before returning. This removes the
+  // location-service notification immediately when a workout is saved.
+  await stopGpsWatch();
   const finalState = useCardioStore.getState();
   finalState.stopTracking();
   return useCardioStore.getState();
@@ -242,27 +250,48 @@ const checkPermissionsNative = async () => {
 function handleGpsPosition(pos: GeolocationPosition) {
   const storeState = useCardioStore.getState();
   const accuracy = pos.coords.accuracy;
+  const newLat = pos.coords.latitude;
+  const newLng = pos.coords.longitude;
+  const rawHeading = pos.coords.heading;
+  const hasValidHeading = rawHeading != null && !Number.isNaN(rawHeading);
   
-  // Prevent wild map jumps during warmup by only updating the visual marker for reasonably accurate points,
-  // unless we have no location at all (in which case we need an initial map center).
-  if (!storeState.currentLocation || (Number.isFinite(accuracy) && accuracy <= 65) || Capacitor.isNativePlatform() === false) {
+  // Prevent wild map jumps during warmup and while stationary by smoothing visual marker
+  if (!storeState.currentLocation) {
     useCardioStore.setState({ 
       currentLocation: { 
-        lat: pos.coords.latitude, 
-        lng: pos.coords.longitude,
-        heading: pos.coords.heading != null && !Number.isNaN(pos.coords.heading) ? pos.coords.heading : undefined
+        lat: newLat, 
+        lng: newLng,
+        heading: hasValidHeading ? rawHeading : undefined
+      }
+    });
+  } else if ((Number.isFinite(accuracy) && accuracy <= 75) || Capacitor.isNativePlatform() === false) {
+    const cur = storeState.currentLocation;
+    const distM = haversineKm(cur.lat, cur.lng, newLat, newLng) * 1000;
+    const isStationary = storeState.currentSpeedKmh < 1.0 && distM < 6;
+    
+    let lat = newLat;
+    let lng = newLng;
+    let heading = hasValidHeading ? rawHeading : cur.heading;
+
+    if (isStationary) {
+      // Apply low-pass dampening when stationary so icon settles gracefully without jumping
+      lat = cur.lat * 0.75 + newLat * 0.25;
+      lng = cur.lng * 0.75 + newLng * 0.25;
+      // Do not jitter heading when stationary
+      heading = cur.heading;
+    }
+
+    useCardioStore.setState({ 
+      currentLocation: { 
+        lat, 
+        lng,
+        heading
       }
     });
   }
 
   // ── GPS Warmup: discard early inaccurate points ──────────
-  // When GPS first starts, the first few readings can be wildly off.
-  // Wait until we get a reading with accuracy < 80m before recording.
-  // The store turns normal accuracy into a confidence score.
   if (!Number.isFinite(accuracy) || accuracy > 150) return;
-
-  // We no longer filter by 2 meters here. The raw stream must reach the Speed/Distance engines.
-  // We only reject absolutely invalid points during warmup.
 
   const pt = {
     lat: pos.coords.latitude,
@@ -283,6 +312,13 @@ export const startGpsWatch = async (newSession = false) => {
     if (newSession && Capacitor.isNativePlatform() && watchIdRef !== 'native-workout-location') {
       await stopGpsWatch();
     } else {
+      // Navigating back to the tracking screen does not necessarily trigger a
+      // visibility event. Pull the durable native journal here as well so the
+      // live distance catches up immediately instead of waiting for the next
+      // GPS callback.
+      if (Capacitor.isNativePlatform() && watchIdRef === 'native-workout-location' && useCardioStore.getState().isTracking) {
+        await replayNativeLocationBuffer(useCardioStore.getState().lastGpsTimestamp);
+      }
       return;
     }
   }
@@ -307,7 +343,10 @@ export const startGpsWatch = async (newSession = false) => {
         return;
       }
       nativeLocationListener = await NativeWorkoutLocation.addListener('location', handleNativeLocation);
-      await NativeWorkoutLocation.start({ reset: newSession });
+      await NativeWorkoutLocation.start({
+        reset: newSession,
+        activityType: useCardioStore.getState().activityType ?? undefined,
+      });
       watchIdRef = 'native-workout-location';
       await replayNativeLocationBuffer(useCardioStore.getState().lastGpsTimestamp);
     } catch (e) {
@@ -338,20 +377,21 @@ export const startGpsWatch = async (newSession = false) => {
 };
 
 export const stopGpsWatch = async () => {
-  if (watchIdRef !== null) {
-    if (Capacitor.isNativePlatform()) {
-      if (watchIdRef === 'native-workout-location') {
-        try { await NativeWorkoutLocation.stop(); } catch {}
-        await nativeLocationListener?.remove();
-        nativeLocationListener = null;
-      } else {
-        try { await Geolocation.clearWatch({ id: watchIdRef as string }); } catch {}
-      }
-    } else {
-      navigator.geolocation.clearWatch(watchIdRef as number);
+  if (Capacitor.isNativePlatform()) {
+    if (watchIdRef === 'native-workout-location') {
+      await nativeLocationListener?.remove();
+      nativeLocationListener = null;
+    } else if (watchIdRef !== null) {
+      try { await Geolocation.clearWatch({ id: watchIdRef as string }); } catch {}
     }
-    watchIdRef = null;
+    // The WebView can be recreated while the native service stays alive. Stop
+    // it even when this in-memory watcher ID was lost, so discard/save always
+    // removes the ongoing cardio notification.
+    try { await NativeWorkoutLocation.stop(); } catch {}
+  } else if (watchIdRef !== null) {
+    navigator.geolocation.clearWatch(watchIdRef as number);
   }
+  watchIdRef = null;
 };
 
 // ────────────────────────────────────────────────────────────
@@ -513,15 +553,19 @@ export const useCardioStore = create<CardioState>()(
         
         if (gpsStatus === 'warming_up') {
            const isNative = Capacitor.isNativePlatform();
-           const targetAccuracy = isNative ? 30 : 250; 
+           const targetAccuracy = isNative ? 75 : 250;
            
            if (accuracy && accuracy <= targetAccuracy) {
              const distSinceLastWarmup = lastWarmupGoodPoint ? haversineKm(lastWarmupGoodPoint.lat, lastWarmupGoodPoint.lng, rawPt.lat, rawPt.lng) * 1000 : 0;
              if (!lastWarmupGoodPoint || distSinceLastWarmup < (isNative ? 50 : 300)) { // No impossible jumps
                warmupConsecutiveFixes++;
                lastWarmupGoodPoint = rawPt;
-               if (warmupConsecutiveFixes >= (isNative ? 3 : 1)) {
+               if (warmupConsecutiveFixes >= (isNative ? 2 : 1)) {
                  gpsStatus = 'active';
+                 lastRawGpsPoint = rawPt;
+                 lastAcceptedDistancePoint = rawPt;
+                 lastMovementPoint = rawPt;
+                 lastTrustedSpeedKmh = 0;
                }
              } else {
                warmupConsecutiveFixes = 0; // Reset on jump
@@ -547,6 +591,9 @@ export const useCardioStore = create<CardioState>()(
         let currentSpeed = 0;
         let speedConfidence = 0;
 
+        const stepsSinceMovement = pedoState.sessionSteps - stepsAtLastMovement;
+        const isUserWalking = hasRecentSteps || stepsSinceMovement > 0;
+
         if (prev) {
           dtSec = (now - prev.ts) / 1000;
           if (dtSec < 0) return;
@@ -565,7 +612,6 @@ export const useCardioStore = create<CardioState>()(
             return;
           }
           if (gapRecoveryFixes < 2 && confidence < 0.55) {
-             // Still recovering, waiting for good fixes
              gapRecoveryFixes = 0;
              set({ gpsAccuracy: accuracy || 0, lastGpsTimestamp: now });
              return;
@@ -576,6 +622,8 @@ export const useCardioStore = create<CardioState>()(
              return;
           }
 
+          if (gpsStatus === 'degraded') gpsStatus = 'active';
+
           // ── Phase 2D: Deterministic Speed Selection Engine ──
           const derivedSpeedKmh = dtSec > 0 ? (rawDistance / dtSec) * 3600 : 0;
           const accelDerived = lastTrustedSpeedKmh == null ? 0 : Math.abs(derivedSpeedKmh - lastTrustedSpeedKmh) / dtSec;
@@ -583,47 +631,51 @@ export const useCardioStore = create<CardioState>()(
           if (nativeSpeedKmh !== null) {
             const nativeAccel = lastTrustedSpeedKmh == null ? 0 : Math.abs(nativeSpeedKmh - lastTrustedSpeedKmh) / dtSec;
             
-          const nativeZeroLooksSuspicious = 
-            nativeSpeedKmh === 0 && 
-            derivedSpeedKmh > 2 && 
-            (confidence >= 0.3 || hasRecentSteps || (lastTrustedSpeedKmh !== null && lastTrustedSpeedKmh > 2));
-
-            if (nativeZeroLooksSuspicious) {
-               // Fallback: Native speed is zero but derived speed & history indicate movement
-               if (derivedSpeedKmh <= limits.maxSpeed && accelDerived <= limits.maxAccel) {
-                 currentSpeed = derivedSpeedKmh;
-                 speedConfidence = 0.75;
-               }
+            if (nativeSpeedKmh === 0) {
+              // Native hardware GPS Doppler says speed is 0
+              if (isUserWalking && derivedSpeedKmh > 1 && derivedSpeedKmh <= limits.maxSpeed && accelDerived <= limits.maxAccel) {
+                // User is walking (steps corroborated by pedometer)
+                currentSpeed = derivedSpeedKmh;
+                speedConfidence = 0.75;
+              } else if (lastTrustedSpeedKmh !== null && lastTrustedSpeedKmh > 2 && dtSec < 3 && derivedSpeedKmh <= limits.maxSpeed && accelDerived <= limits.maxAccel) {
+                // Momentum continuation
+                currentSpeed = derivedSpeedKmh;
+                speedConfidence = 0.75;
+              } else {
+                // Truly stationary sitting/standing still — Doppler 0 is trusted
+                currentSpeed = 0;
+                speedConfidence = 0.95;
+              }
             } else if (nativeSpeedKmh <= limits.maxSpeed && nativeAccel <= limits.maxAccel) {
-               currentSpeed = nativeSpeedKmh;
-               speedConfidence = 0.95;
+              currentSpeed = nativeSpeedKmh;
+              speedConfidence = 0.95;
             } else if (derivedSpeedKmh <= limits.maxSpeed && accelDerived <= limits.maxAccel) {
-               currentSpeed = derivedSpeedKmh;
-               speedConfidence = 0.75;
+              currentSpeed = derivedSpeedKmh;
+              speedConfidence = 0.75;
             }
           } else {
             if (derivedSpeedKmh <= limits.maxSpeed && accelDerived <= limits.maxAccel) {
-               currentSpeed = derivedSpeedKmh;
-               speedConfidence = confidence >= 0.55 ? 0.75 : 0.25;
+              if (derivedSpeedKmh < 1.0 && !isUserWalking && (rawDistance * 1000) < 3) {
+                currentSpeed = 0;
+                speedConfidence = 0.75;
+              } else {
+                currentSpeed = derivedSpeedKmh;
+                speedConfidence = confidence >= 0.55 ? 0.75 : 0.25;
+              }
             }
           }
           
           if (speedConfidence > 0) lastTrustedSpeedKmh = currentSpeed;
           
           // ── Spatial Downsampling & Quality Gate ──
-          // Distance must be decided from the GPS track, not from the selected
-          // display speed. Android sometimes reports speed=0 while a cyclist is
-          // moving, and that must not erase the route.
-          //
-          // Phase 2C: Bounded Adaptive Threshold
           const BASE_THRESHOLD_M = 3;
           const ACCURACY_FACTOR = 0.35;
           const MAX_THRESHOLD_M = 8;
           let adaptiveThresholdM = Math.max(BASE_THRESHOLD_M, Math.min((accuracy || 12) * ACCURACY_FACTOR, MAX_THRESHOLD_M));
           
-          const distanceSuppressedByStationaryState = autoPauseStatus === 'CANDIDATE_STOP' && !hasRecentSteps;
+          const distanceSuppressedByStationaryState = autoPauseStatus === 'CANDIDATE_STOP' && !isUserWalking;
           if (distanceSuppressedByStationaryState) {
-             adaptiveThresholdM = Math.max(adaptiveThresholdM, 15); // Require stronger movement to break out
+             adaptiveThresholdM = Math.max(adaptiveThresholdM, 15);
           }
           
           const MIN_DISTANCE_KM = adaptiveThresholdM / 1000;
@@ -632,9 +684,16 @@ export const useCardioStore = create<CardioState>()(
           const distanceCandidate = haversineKm(distanceAnchor.lat, distanceAnchor.lng, rawPt.lat, rawPt.lng);
           const distanceDtSec = Math.max(0, (now - distanceAnchor.ts) / 1000);
           const candidateSpeedKmh = distanceDtSec > 0 ? (distanceCandidate / distanceDtSec) * 3600 : 0;
+          
+          const isStationaryDrift = !isUserWalking && (
+            (nativeSpeedKmh === 0 && currentSpeed < 1.0) ||
+            (currentSpeed < AUTO_PAUSE_SPEED_THRESHOLD && (distanceCandidate * 1000) < 8)
+          );
+
           const acceptDistance =
-            confidence >= 0.3 &&
-            distanceCandidate > MIN_DISTANCE_KM &&
+            !isStationaryDrift &&
+            confidence >= 0.25 &&
+            (isUserWalking ? (distanceCandidate * 1000 >= 1.5) : (distanceCandidate > MIN_DISTANCE_KM)) &&
             distanceDtSec > 0 &&
             candidateSpeedKmh <= limits.maxSpeed * 1.25;
 
@@ -663,36 +722,28 @@ export const useCardioStore = create<CardioState>()(
           : 0;
         const timeSinceLastMovement = lastMovementPoint ? now - lastMovementPoint.ts : 0;
         
-        // Pedometer validation
-        const stepsSinceMovement = pedoState.sessionSteps - stepsAtLastMovement;
         const isCadenceHighEnoughToOverride = timeSinceLastMovement > 0 && 
-            (stepsSinceMovement / (timeSinceLastMovement / 1000)) >= 0.33; // >= ~20 steps per minute
+            (stepsSinceMovement / (timeSinceLastMovement / 1000)) >= 0.33;
 
-        // Anti-Drift: Force speed to 0 if we haven't actually displaced far enough in 15s
-        // Exception: If we are actively walking on a treadmill or lost GPS (high cadence), keep speed alive if pedometer is active.
-        if (timeSinceLastMovement > 15_000 && displacementFromMovementM < stationaryRadiusM && !isCadenceHighEnoughToOverride) {
+        // Anti-Drift: Force speed to 0 if we haven't actually displaced and took no steps in 15s
+        if (timeSinceLastMovement > 15_000 && displacementFromMovementM < stationaryRadiusM && !isCadenceHighEnoughToOverride && !isUserWalking) {
           currentSpeed = 0;
         }
 
         const smoothedSpeed = pushSpeed(currentSpeed);
         const displaySpeed = Math.round(smoothedSpeed * 10) / 10;
 
-        if (addedDistance > 0) {
+        if (addedDistance > 0 || isUserWalking) {
           lastMovementPoint = rawPt;
           stepsAtLastMovement = pedoState.sessionSteps;
         }
 
         // ── Phase 2F: Auto-Pause State Machine ──
-        
         const speedForPause = speedConfidence > 0 ? currentSpeed : 0;
-          
         const isStationary = speedForPause < AUTO_PAUSE_SPEED_THRESHOLD && displacementFromMovementM < stationaryRadiusM;
-        // Pedometer validation: If we are detecting recent steps, we are normally NOT stationary
-        let isActuallyStationary = isStationary && (!hasRecentSteps || state.activityType === 'cycle');
+        let isActuallyStationary = isStationary && (!isUserWalking || state.activityType === 'cycle');
         
-        // Override pedometer if we strictly haven't moved far enough in 15s (kills false steps from hand shaking)
-        // BUT if cadence is high (treadmill or lost GPS), we are NOT stationary.
-        if (timeSinceLastMovement > 15_000 && displacementFromMovementM < stationaryRadiusM && !isCadenceHighEnoughToOverride) {
+        if (timeSinceLastMovement > 15_000 && displacementFromMovementM < stationaryRadiusM && !isCadenceHighEnoughToOverride && !isUserWalking) {
           isActuallyStationary = true;
         }
 
@@ -740,27 +791,21 @@ export const useCardioStore = create<CardioState>()(
         if (newPaceWindow.length > 0) {
           const sumDist = newPaceWindow.reduce((a, b) => a + b.dist, 0);
           const sumDt = newPaceWindow.reduce((a, b) => a + b.dt, 0);
-          // Require at least 30m of movement in the window to display a stable pace
           if (sumDist >= 0.03) {
             currentPaceMs = (sumDt * 1000) / sumDist;
           }
         }
 
-        // Keep map geometry independent from metric/speed acceptance. A valid
-        // point at a turn is useful to the route even if it is too close to the
-        // prior point to add distance.
         const routeSpacingM = Math.max(3, Math.min((accuracy || 12) * 0.25, 8));
         const routeDistanceM = lastRoutePoint
           ? haversineKm(lastRoutePoint.lat, lastRoutePoint.lng, rawPt.lat, rawPt.lng) * 1000
           : Infinity;
-        const shouldAddRoutePoint = confidence >= 0.3 && routeDistanceM >= routeSpacingM;
+        const shouldAddRoutePoint = confidence >= 0.3 && routeDistanceM >= routeSpacingM && (addedDistance > 0 || isUserWalking || displacementFromMovementM > 10);
         if (shouldAddRoutePoint) lastRoutePoint = rawPt;
         const nextRoutePoints = shouldAddRoutePoint ? [...state.routePoints, rawPt] : state.routePoints;
 
-        // `currentSpeed` has already passed the speed/acceleration plausibility
-        // checks above. Keeping a running maximum is correct; requiring two
-        // samples above the *current* maximum could leave max < average.
-        const newMaxSpeed = speedConfidence >= 0.75
+        const shouldUpdateMaxSpeed = speedConfidence >= 0.75 && currentSpeed >= 1.0 && (isUserWalking || (nativeSpeedKmh !== null && nativeSpeedKmh > 1.0) || displacementFromMovementM > stationaryRadiusM);
+        const newMaxSpeed = shouldUpdateMaxSpeed
           ? Math.max(state.maxSpeedKmh, currentSpeed)
           : state.maxSpeedKmh;
 

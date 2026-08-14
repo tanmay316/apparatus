@@ -11,7 +11,7 @@ export interface NativeWorkoutPoint {
 }
 
 interface WorkoutLocationPlugin {
-  start(options: { reset: boolean }): Promise<void>;
+  start(options: { reset: boolean; activityType?: 'walk' | 'run' | 'cycle' }): Promise<void>;
   stop(): Promise<void>;
   getLocationsAfter(options: { timestamp: number }): Promise<{ points: NativeWorkoutPoint[] }>;
   addListener(eventName: 'location', listenerFunc: (point: NativeWorkoutPoint) => void): Promise<PluginListenerHandle>;

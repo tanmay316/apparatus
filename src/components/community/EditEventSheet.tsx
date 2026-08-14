@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,6 +9,13 @@ import { SimpleEvent } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
 export function EditEventSheet({ event, isOpen, onClose }: { event: SimpleEvent, isOpen: boolean, onClose: () => void }) {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('community-create-open');
+      return () => document.body.classList.remove('community-create-open');
+    }
+  }, [isOpen]);
+
   const [title, setTitle] = useState(event.title);
   const [description, setDescription] = useState(event.description || '');
   const [locationName, setLocationName] = useState(event.location?.name || '');
@@ -37,10 +45,10 @@ export function EditEventSheet({ event, isOpen, onClose }: { event: SimpleEvent,
     onError: (err: any) => showToast(err?.message || 'Failed to update event', 'error')
   });
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[400] flex flex-col justify-end">
+        <div className="fixed inset-0 z-[600] flex flex-col justify-end">
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
@@ -123,6 +131,7 @@ export function EditEventSheet({ event, isOpen, onClose }: { event: SimpleEvent,
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Plus, Swords, Shield, Target, CalendarDays, Zap, Users } from 'lucide-react';
@@ -10,7 +11,6 @@ import { ClansTab } from '@/components/community/ClansTab';
 import { CreateClanSheet } from '@/components/community/CreateClanSheet';
 import { CreateChallengeSheet } from '@/components/community/CreateChallengeSheet';
 import { CreateEventSheet } from '@/components/community/CreateEventSheet';
-// import { CreateMenu } from '@/components/community/CreateMenu';
 
 export function CommunityPage() {
   const [activeTab, setActiveTab] = useState<'events' | 'clans'>('events');
@@ -82,60 +82,63 @@ export function CommunityPage() {
         )}
       </div>
 
-      <AnimatePresence>
-        {showCreateMenu && (
-          <div className="fixed inset-0 z-[300] flex flex-col justify-end">
-            <motion.div 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              onClick={() => setShowCreateMenu(false)}
-              className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
-            />
-            <motion.div 
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-              className="relative bg-ink border-t border-line rounded-t-[32px] p-6 pb-safe overflow-hidden"
-            >
-              <div className="w-12 h-1.5 bg-line rounded-full mx-auto mb-8" />
-              
-              <h2 className="font-display text-2xl text-bone mb-6">Create New</h2>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <button 
-                  onClick={() => { setShowCreateMenu(false); setCreateType('clan'); }}
-                  className="card p-6 flex flex-col items-center text-center hover:border-sienna/50 transition-colors group"
-                >
-                  <div className="w-16 h-16 rounded-full bg-sienna/20 text-sienna flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                    <Shield size={28} />
-                  </div>
-                  <h3 className="font-display text-lg text-bone mb-2">Clan</h3>
-                  <p className="text-sm text-bone-dim">Build your community and grow together.</p>
-                </button>
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showCreateMenu && (
+            <div className="fixed inset-0 z-[600] flex flex-col justify-end">
+              <motion.div 
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setShowCreateMenu(false)}
+                className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
+                className="relative bg-ink border-t border-line rounded-t-[32px] p-6 pb-safe overflow-hidden"
+              >
+                <div className="w-12 h-1.5 bg-line rounded-full mx-auto mb-8" />
                 
-                <button 
-                  onClick={() => { setShowCreateMenu(false); setCreateType('challenge'); }}
-                  className="card p-6 flex flex-col items-center text-center hover:border-emerald-500/50 transition-colors group"
-                >
-                  <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                    <Target size={28} />
-                  </div>
-                  <h3 className="font-display text-lg text-bone mb-2">Challenge</h3>
-                  <p className="text-sm text-bone-dim">Create a fitness goal for everyone to hit.</p>
-                </button>
+                <h2 className="font-display text-2xl text-bone mb-6">Create New</h2>
                 
-                <button 
-                  onClick={() => { setShowCreateMenu(false); setCreateType('event'); }}
-                  className="card p-6 flex flex-col items-center text-center hover:border-blue-500/50 transition-colors group"
-                >
-                  <div className="w-16 h-16 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                    <CalendarDays size={28} />
-                  </div>
-                  <h3 className="font-display text-lg text-bone mb-2">Event</h3>
-                  <p className="text-sm text-bone-dim">Organize a real-world or virtual meetup.</p>
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <button 
+                    onClick={() => { setShowCreateMenu(false); setCreateType('clan'); }}
+                    className="card p-6 flex flex-col items-center text-center hover:border-sienna/50 transition-colors group"
+                  >
+                    <div className="w-16 h-16 rounded-full bg-sienna/20 text-sienna flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Shield size={28} />
+                    </div>
+                    <h3 className="font-display text-lg text-bone mb-2">Clan</h3>
+                    <p className="text-sm text-bone-dim">Build your community and grow together.</p>
+                  </button>
+                  
+                  <button 
+                    onClick={() => { setShowCreateMenu(false); setCreateType('challenge'); }}
+                    className="card p-6 flex flex-col items-center text-center hover:border-emerald-500/50 transition-colors group"
+                  >
+                    <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Target size={28} />
+                    </div>
+                    <h3 className="font-display text-lg text-bone mb-2">Challenge</h3>
+                    <p className="text-sm text-bone-dim">Create a fitness goal for everyone to hit.</p>
+                  </button>
+                  
+                  <button 
+                    onClick={() => { setShowCreateMenu(false); setCreateType('event'); }}
+                    className="card p-6 flex flex-col items-center text-center hover:border-blue-500/50 transition-colors group"
+                  >
+                    <div className="w-16 h-16 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <CalendarDays size={28} />
+                    </div>
+                    <h3 className="font-display text-lg text-bone mb-2">Event</h3>
+                    <p className="text-sm text-bone-dim">Organize a real-world or virtual meetup.</p>
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       <AnimatePresence>
         {createType === 'clan' && <CreateClanSheet onClose={() => setCreateType(null)} />}

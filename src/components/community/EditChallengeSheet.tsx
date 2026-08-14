@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -8,6 +9,13 @@ import { ChallengeV2 } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 
 export function EditChallengeSheet({ challenge, isOpen, onClose }: { challenge: ChallengeV2, isOpen: boolean, onClose: () => void }) {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('community-create-open');
+      return () => document.body.classList.remove('community-create-open');
+    }
+  }, [isOpen]);
+
   const [title, setTitle] = useState(challenge.title);
   const [description, setDescription] = useState(challenge.description || '');
   const [target, setTarget] = useState(challenge.target.toString());
@@ -39,10 +47,10 @@ export function EditChallengeSheet({ challenge, isOpen, onClose }: { challenge: 
     onError: (err: any) => showToast(err?.message || 'Failed to update challenge', 'error')
   });
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[400] flex flex-col justify-end">
+        <div className="fixed inset-0 z-[600] flex flex-col justify-end">
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
@@ -134,6 +142,7 @@ export function EditChallengeSheet({ challenge, isOpen, onClose }: { challenge: 
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

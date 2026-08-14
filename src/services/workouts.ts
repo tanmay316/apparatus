@@ -1,4 +1,4 @@
-import { collection, doc, setDoc, getDoc, runTransaction, Timestamp, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, runTransaction, Timestamp, query, where, getDocs, orderBy, limit, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Workout, UserStats } from '@/types';
 import { summarizeProgressiveOverload } from '@/lib/progressive-overload';
@@ -218,4 +218,8 @@ export const getPublicWorkoutsForUser = async (userId: string, viewerId?: string
   }
   
   return visible.sort((a, b) => b.date.localeCompare(a.date)).slice(0, limitCount);
+};
+
+export const deleteWorkout = async (workoutId: string): Promise<void> => {
+  await deleteDoc(doc(db, 'workouts', workoutId));
 };

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { X, Camera, Shield } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
@@ -12,6 +13,11 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    document.body.classList.add('community-create-open');
+    return () => document.body.classList.remove('community-create-open');
+  }, []);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -51,8 +57,8 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
     createMutation.mutate();
   };
 
-  return (
-    <div className="fixed inset-0 z-[300] flex flex-col justify-end">
+  return createPortal(
+    <div className="fixed inset-0 z-[600] flex flex-col justify-end">
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
@@ -141,6 +147,7 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
           </button>
         </form>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

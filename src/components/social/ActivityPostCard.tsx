@@ -30,13 +30,15 @@ function timeAgo(seconds?: number): string {
 interface ActivityPostCardProps {
   activity: Activity;
   onShare?: (activity: Activity) => void;
+  onDelete?: (activityId: string) => void;
 }
 
-export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
+export function ActivityPostCard({ activity, onShare, onDelete }: ActivityPostCardProps) {
   const { user, profile } = useAuthStore();
   const { showToast, units, theme, hiddenPosts, hidePost, unhidePost } = useUIStore();
   const queryClient = useQueryClient();
 
+  const [isDeleted, setIsDeleted] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showAllExercises, setShowAllExercises] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -117,11 +119,20 @@ export function ActivityPostCard({ activity, onShare }: ActivityPostCardProps) {
   const deleteMutation = useMutation({
     mutationFn: () => deleteActivity(activity.id!),
     onSuccess: () => {
+      setIsDeleted(true);
       showToast('Post deleted', 'success');
+      if (activity.id) onDelete?.(activity.id);
       queryClient.invalidateQueries({ queryKey: ['feed'] });
+      queryClient.invalidateQueries({ queryKey: ['userWorkouts'] });
+      queryClient.invalidateQueries({ queryKey: ['bookmarkedPosts'] });
+      queryClient.invalidateQueries({ queryKey: ['workouts'] });
     },
     onError: () => showToast('Could not delete post', 'error'),
   });
+
+  if (isDeleted) {
+    return null;
+  }
 
   // Map exercise name to muscle group
   const getExerciseMuscleGroup = (name: string) => {

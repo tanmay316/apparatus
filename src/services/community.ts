@@ -144,8 +144,16 @@ export async function updateClanMemberRole(clanId: string, userId: string, newRo
 export async function transferLeadership(clanId: string, currentLeaderId: string, newLeaderId: string, newLeaderName: string): Promise<void> {
   const batch = writeBatch(db);
   
-  // Demote current leader
-  batch.update(doc(db, 'clan_memberships', `${clanId}_${currentLeaderId}`), { role: 'co_leader' });
+  // Demote current leader if exists
+  if (currentLeaderId && currentLeaderId !== newLeaderId) {
+    const currentLeaderRef = doc(db, 'clan_memberships', `${clanId}_${currentLeaderId}`);
+    try {
+      const snap = await getDoc(currentLeaderRef);
+      if (snap.exists()) {
+        batch.update(currentLeaderRef, { role: 'co_leader' });
+      }
+    } catch { /* ignore */ }
+  }
   
   // Promote new leader
   batch.update(doc(db, 'clan_memberships', `${clanId}_${newLeaderId}`), { role: 'leader' });
@@ -454,4 +462,12 @@ export async function getPostComments(postId: string, limitCount = 50): Promise<
   );
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as PostComment));
+}
+
+export async function deleteClanPost(postId: string): Promise<void> {
+  const batch = writeBatch(db);
+  batch.delete(doc(db, 'community_posts', postId));
+  const commentsSnap = await getDocs(query(collection(db, 'community_post_comments'), where('postId', '==', postId)));
+  commentsSnap.docs.forEach(d => batch.delete(d.ref));
+  await batch.commit();
 }

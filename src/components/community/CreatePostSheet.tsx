@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Image as ImageIcon, Send } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
@@ -11,6 +12,13 @@ export function CreatePostSheet({ clanId, isOpen, onClose }: { clanId: string, i
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
   
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('community-create-open');
+      return () => document.body.classList.remove('community-create-open');
+    }
+  }, [isOpen]);
+
   const [postText, setPostText] = useState('');
   const [postImage, setPostImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,10 +93,10 @@ export function CreatePostSheet({ clanId, isOpen, onClose }: { clanId: string, i
     onError: (err: any) => showToast(err?.message || 'Failed to create post', 'error')
   });
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[400] flex flex-col justify-end">
+        <div className="fixed inset-0 z-[600] flex flex-col justify-end">
           <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
@@ -157,6 +165,7 @@ export function CreatePostSheet({ clanId, isOpen, onClose }: { clanId: string, i
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

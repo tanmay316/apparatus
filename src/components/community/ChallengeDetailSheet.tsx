@@ -1,18 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Target, Users, TrendingUp } from 'lucide-react';
+import { X, Target, Users, TrendingUp, Edit3, Trash2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { joinChallenge, leaveChallenge, getChallengeLeaderboard } from '@/services/community';
+import { joinChallenge, leaveChallenge, getChallengeLeaderboard, deleteChallenge } from '@/services/community';
 import { ChallengeV2 } from '@/types';
 import { useUIStore } from '@/stores/ui-store';
+import { EditChallengeSheet } from './EditChallengeSheet';
 
 export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: string; onClose: () => void }) {
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
+  const isAdmin = !!profile?.isAdmin;
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
+  const [editingChallenge, setEditingChallenge] = useState<ChallengeV2 | null>(null);
+
+  useEffect(() => {
+    document.body.classList.add('community-create-open');
+    return () => document.body.classList.remove('community-create-open');
+  }, []);
 
   const { data: challenge, isLoading: loadingChallenge } = useQuery({
     queryKey: ['challenge', challengeId],
@@ -56,12 +65,31 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
     }
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (confirm('Are you sure you want to delete this challenge?')) {
+        await deleteChallenge(challengeId);
+        return true;
+      }
+      return false;
+    },
+    onSuccess: (didDelete) => {
+      if (didDelete) {
+        queryClient.invalidateQueries({ queryKey: ['publicChallenges'] });
+        queryClient.invalidateQueries({ queryKey: ['clanChallenges'] });
+        showToast('Challenge deleted');
+        onClose();
+      }
+    }
+  });
+
   if (!challenge) return null;
 
-  return (
-    <div className="fixed inset-0 z-[70] flex flex-col justify-end">
+  return createPortal(
+    <div className="fixed inset-0 z-[600] flex flex-col justify-end">
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose}
         className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
       />
       <motion.div 
@@ -81,8 +109,26 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
         </div>
 
         <div className="px-6 relative -mt-16 shrink-0 pb-6 border-b border-line">
-          <div className="inline-flex text-[10px] font-mono uppercase bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded backdrop-blur-sm mb-2 border border-emerald-500/30">
-            {challenge.status}
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <div className="inline-flex text-[10px] font-mono uppercase bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded backdrop-blur-sm border border-emerald-500/30">
+              {challenge.status}
+            </div>
+            {(isAdmin || user?.uid === challenge.createdBy) && (
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setEditingChallenge(challenge)} 
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-ink-2 text-bone text-xs font-mono hover:bg-ink-3 transition-colors"
+                >
+                  <Edit3 size={13} /> Edit
+                </button>
+                <button 
+                  onClick={() => deleteMutation.mutate()} 
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-red-500/20 text-red-400 text-xs font-mono hover:bg-red-500/30 transition-colors"
+                >
+                  <Trash2 size={13} /> Delete
+                </button>
+              </div>
+            )}
           </div>
           <h1 className="font-display text-4xl text-bone mb-1">{challenge.title}</h1>
           <p className="text-bone-dim text-sm mb-4">{challenge.description}</p>
@@ -150,6 +196,14 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
           </div>
         </div>
       </motion.div>
-    </div>
+      {editingChallenge && (
+        <EditChallengeSheet 
+          challenge={editingChallenge} 
+          isOpen={!!editingChallenge} 
+          onClose={() => setEditingChallenge(null)} 
+        />
+      )}
+    </div>,
+    document.body
   );
 }

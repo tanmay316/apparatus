@@ -3,6 +3,11 @@ import { ForegroundService, ServiceType } from '@capawesome-team/capacitor-andro
 
 export type ForegroundServiceType = 'cardio' | 'gym';
 
+// The Capawesome wrapper manages only one Android service. Cardio has a
+// dedicated native location service, so this wrapper is intentionally gym-only.
+const GYM_NOTIFICATION_ID = 102;
+let latestForegroundServiceType: ForegroundServiceType | null = null;
+
 export async function requestForegroundPermissions() {
   if (!Capacitor.isNativePlatform()) return true;
   try {
@@ -20,13 +25,14 @@ export async function requestForegroundPermissions() {
 
 export async function startWorkoutForegroundService(type: ForegroundServiceType, title: string, body: string, isPaused: boolean) {
   if (!Capacitor.isNativePlatform()) return;
+  latestForegroundServiceType = type;
   try {
     await ForegroundService.startForegroundService({
-      id: 102,
+      id: GYM_NOTIFICATION_ID,
       title,
       body,
       smallIcon: 'ic_notification',
-      serviceType: undefined,
+      serviceType: type === 'cardio' ? ServiceType.Location : undefined,
       buttons: [
         { id: 1, title: isPaused ? 'RESUME' : 'PAUSE' },
         { id: 2, title: 'STOP' },
@@ -40,9 +46,10 @@ export async function startWorkoutForegroundService(type: ForegroundServiceType,
 
 export async function updateWorkoutForegroundService(type: ForegroundServiceType, title: string, body: string, isPaused: boolean) {
   if (!Capacitor.isNativePlatform()) return;
+  latestForegroundServiceType = type;
   try {
     await ForegroundService.updateForegroundService({
-      id: 102,
+      id: GYM_NOTIFICATION_ID,
       title,
       body,
       smallIcon: 'ic_notification',
@@ -57,10 +64,11 @@ export async function updateWorkoutForegroundService(type: ForegroundServiceType
   }
 }
 
-export async function stopWorkoutForegroundService() {
+export async function stopWorkoutForegroundService(type: ForegroundServiceType = 'gym') {
   if (!Capacitor.isNativePlatform()) return;
   try {
     await ForegroundService.stopForegroundService();
+    latestForegroundServiceType = null;
   } catch (err) {
     console.warn('[ForegroundService] Failed to stop:', err);
   }

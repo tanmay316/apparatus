@@ -71,7 +71,8 @@ function ClanPostItem({ post, onClick }: { post: CommunityPost, onClick: () => v
 export function ClanPage() {
   const { id: clanId } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
+  const isAdmin = !!profile?.isAdmin;
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'posts' | 'about' | 'members' | 'challenges' | 'events'>('posts');
@@ -115,9 +116,9 @@ export function ClanPage() {
   });
 
   const myMembership = members.find(m => m.userId === user?.uid);
-  const isLeader = myMembership?.role === 'leader';
+  const isLeader = myMembership?.role === 'leader' || isAdmin;
   const isCoLeader = myMembership?.role === 'co_leader';
-  const isMember = !!myMembership;
+  const isMember = !!myMembership || isAdmin;
 
   const joinMutation = useMutation({
     mutationFn: async () => {
@@ -195,7 +196,8 @@ export function ClanPage() {
     if (!isLeader) return;
     try {
       if (newRole === 'leader') {
-        await transferLeadership(clanId!, user!.uid, memberId, memberName);
+        const currentLeaderId = clan?.leaderId || user?.uid || '';
+        await transferLeadership(clanId!, currentLeaderId, memberId, memberName);
         showToast(`Transferred leadership to ${memberName}`);
       } else {
         await updateClanMemberRole(clanId!, memberId, newRole);

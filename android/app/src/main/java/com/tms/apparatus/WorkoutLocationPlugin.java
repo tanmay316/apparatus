@@ -39,6 +39,7 @@ public class WorkoutLocationPlugin extends Plugin {
     @PluginMethod public void start(PluginCall call) {
         Intent intent = new Intent(getContext(), WorkoutLocationService.class).setAction(WorkoutLocationService.ACTION_START);
         intent.putExtra("reset", call.getBoolean("reset", false));
+        intent.putExtra("activityType", call.getString("activityType", "walk"));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getContext().startForegroundService(intent);
         else getContext().startService(intent);
         call.resolve();
