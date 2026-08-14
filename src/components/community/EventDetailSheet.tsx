@@ -85,14 +85,18 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
   const { data: userClans = [] } = useQuery({
     queryKey: ['userClans', user?.uid],
     queryFn: () => (user ? getUserClans(user.uid) : []),
-    enabled: !!user
+    enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const isClanOnly = event?.visibility === 'clan_only';
   const { data: isClanMemberDirect } = useQuery({
     queryKey: ['isMemberOfClan', event?.clanId, user?.uid],
     queryFn: () => (event?.clanId && user ? isUserClanMember(event.clanId, user.uid) : true),
-    enabled: !!(event?.clanId && user && isClanOnly)
+    enabled: !!(event?.clanId && user && isClanOnly),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const isClanMember = !isClanOnly || (isClanMemberDirect ?? userClans.some(c => c.id === event?.clanId)) || isAdmin;

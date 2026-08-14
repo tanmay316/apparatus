@@ -88,14 +88,18 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
   const { data: userClans = [] } = useQuery({
     queryKey: ['userClans', user?.uid],
     queryFn: () => (user ? getUserClans(user.uid) : []),
-    enabled: !!user
+    enabled: !!user,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const isClanOnly = challenge?.visibility === 'clan_only';
   const { data: isClanMemberDirect } = useQuery({
     queryKey: ['isMemberOfClan', challenge?.clanId, user?.uid],
     queryFn: () => (challenge?.clanId && user ? isUserClanMember(challenge.clanId, user.uid) : true),
-    enabled: !!(challenge?.clanId && user && isClanOnly)
+    enabled: !!(challenge?.clanId && user && isClanOnly),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const isClanMember = !isClanOnly || (isClanMemberDirect ?? userClans.some(c => c.id === challenge?.clanId)) || isAdmin;

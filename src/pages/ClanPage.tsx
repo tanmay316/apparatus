@@ -131,8 +131,14 @@ export function ClanPage() {
       await joinClan(user.uid, user.displayName || 'Unknown', user.photoURL || '', clanId!);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clanMembers', clanId] });
-      queryClient.invalidateQueries({ queryKey: ['clan', clanId] });
+      queryClient.invalidateQueries({ queryKey: ['clanMembers'] });
+      queryClient.invalidateQueries({ queryKey: ['clan'] });
+      queryClient.invalidateQueries({ queryKey: ['userClans'] });
+      queryClient.invalidateQueries({ queryKey: ['isMemberOfClan'] });
+      queryClient.invalidateQueries({ queryKey: ['clanChallenges'] });
+      queryClient.invalidateQueries({ queryKey: ['clanEvents'] });
+      queryClient.invalidateQueries({ queryKey: ['allChallenges'] });
+      queryClient.invalidateQueries({ queryKey: ['communityEvents'] });
       showToast('Joined clan!');
     }
   });
@@ -144,8 +150,14 @@ export function ClanPage() {
       await leaveClan(user.uid, clanId!);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clanMembers', clanId] });
-      queryClient.invalidateQueries({ queryKey: ['clan', clanId] });
+      queryClient.invalidateQueries({ queryKey: ['clanMembers'] });
+      queryClient.invalidateQueries({ queryKey: ['clan'] });
+      queryClient.invalidateQueries({ queryKey: ['userClans'] });
+      queryClient.invalidateQueries({ queryKey: ['isMemberOfClan'] });
+      queryClient.invalidateQueries({ queryKey: ['clanChallenges'] });
+      queryClient.invalidateQueries({ queryKey: ['clanEvents'] });
+      queryClient.invalidateQueries({ queryKey: ['allChallenges'] });
+      queryClient.invalidateQueries({ queryKey: ['communityEvents'] });
       showToast('Left clan');
       navigate('/community');
     },

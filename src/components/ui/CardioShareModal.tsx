@@ -263,9 +263,9 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                 isTransparent 
                   ? 'bg-transparent' 
                   : isSunset
-                  ? 'bg-gradient-to-b from-[#180a22] via-[#24101e] to-[#090605]'
+                  ? 'bg-gradient-to-b from-[#1c0b29] via-[#35102a] to-[#0d0402]'
                   : isCyber
-                  ? 'bg-[#050508]'
+                  ? 'bg-[#03060f]'
                   : 'bg-[#090605]'
               }`}
             >
@@ -288,7 +288,11 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                         currentLocation={data.currentLocation}
                         theme={selectedTheme}
                         height="100%"
-                        highlightColor={isTransparent && pathColor === 'gradient' ? '#f43f5e' : lineColor}
+                        highlightColor={
+                          isCyber ? '#00f5d4' :
+                          isSunset ? '#fb923c' :
+                          isTransparent && pathColor === 'gradient' ? '#f43f5e' : lineColor
+                        }
                         hideMap={hideMapTiles}
                         noGlow={false}
                         isCapturing={downloading}
@@ -298,7 +302,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                         cardioType={data.type}
                         hideMarkers={isTransparent || isAShape}
                         hideStartMarker
-                        mapPaddingBottomRight={layout === 'map-hero' ? [30, 80] : [40, 180]}
+                        mapPaddingBottomRight={layout === 'map-hero' ? [20, 40] : [40, 180]}
                         mapPaddingTopLeft={isAShape ? [60, 40] : [40, 40]}
                       />
                     </div>
@@ -308,11 +312,25 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                     </div>
                   )}
 
-                  {/* Gradient Vignettes for Readability */}
+                  {/* Gradient Vignettes / Atmospheric Overlays */}
                   {!isTransparent && !isPolaroid && (
                     <>
-                      <div className="absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-[#090605]/90 via-[#090605]/50 to-transparent z-[1000]" />
-                      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#090605]/70 to-transparent z-[1000]" />
+                      {isSunset ? (
+                        <>
+                          <div className="absolute inset-0 bg-gradient-to-t from-[#150502]/90 via-[#3d0f28]/40 to-[#190729]/50 mix-blend-color z-[1000] pointer-events-none" />
+                          <div className="absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-[#120401]/95 via-[#230919]/60 to-transparent z-[1000] pointer-events-none" />
+                        </>
+                      ) : isCyber ? (
+                        <>
+                          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_#00f5d415,_transparent_70%)] z-[1000] pointer-events-none" />
+                          <div className="absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-[#02050c]/95 via-[#02050c]/60 to-transparent z-[1000] pointer-events-none" />
+                        </>
+                      ) : (
+                        <>
+                          <div className="absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-[#090605]/90 via-[#090605]/50 to-transparent z-[1000] pointer-events-none" />
+                          <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#090605]/70 to-transparent z-[1000] pointer-events-none" />
+                        </>
+                      )}
                     </>
                   )}
                 </div>
@@ -333,11 +351,23 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                 {/* Header Brand Bar */}
                 {!isPolaroid && (
                   <div className="flex items-center justify-between w-full">
-                    <span className="font-sans tracking-[0.3em] text-[15px] font-black text-white drop-shadow-md">
-                      APPARATUS
-                    </span>
+                    {isCyber ? (
+                      <span className="font-mono tracking-[0.25em] text-[13px] font-black text-cyan-400 drop-shadow-[0_0_8px_rgba(6,182,212,0.8)]">
+                        // APPARATUS_SYS
+                      </span>
+                    ) : (
+                      <span className={`font-sans tracking-[0.3em] text-[15px] font-black drop-shadow-md ${isSunset ? 'text-amber-200' : 'text-white'}`}>
+                        APPARATUS
+                      </span>
+                    )}
 
-                    <span className={`text-[11px] font-mono font-bold tracking-wider px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/10 uppercase ${currentTextColorCls}`}>
+                    <span className={`text-[11px] font-mono font-bold tracking-wider px-2.5 py-1 rounded-full backdrop-blur-md uppercase ${
+                      isCyber
+                        ? 'bg-cyan-950/60 border border-cyan-400/40 text-cyan-300 drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]'
+                        : isSunset
+                        ? 'bg-amber-950/60 border border-amber-500/30 text-amber-300'
+                        : `bg-black/40 border border-white/10 ${currentTextColorCls}`
+                    }`}>
                       {typeLabel}
                     </span>
                   </div>
@@ -358,20 +388,42 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                   </div>
                 )}
 
-                {/* Hero Distance & Metrics Overlay (Non-Polaroid) */}
-                {!isPolaroid && layout !== 'path-minimal' && (
-                  <div className="flex flex-col gap-3 mb-1 w-full">
+                {/* Map Hero Layout (Floating Capsule Bottom Bar) */}
+                {layout === 'map-hero' && (
+                  <div className="mt-auto w-full">
+                    <div className="bg-black/80 backdrop-blur-2xl border border-white/20 rounded-3xl p-4 shadow-[0_20px_40px_rgba(0,0,0,0.7)] flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-mono font-bold text-white/60 uppercase">Distance</span>
+                        <span className="font-mono text-3xl font-black text-white">{data.distanceKm.toFixed(2)} <span className="text-xs font-bold text-amber-400">km</span></span>
+                      </div>
+                      <div className="h-8 w-px bg-white/15" />
+                      <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-mono font-bold text-white/60 uppercase">Time</span>
+                        <span className="font-mono text-xl font-bold text-white">{formatDuration(data.durationSec)}</span>
+                      </div>
+                      <div className="h-8 w-px bg-white/15" />
+                      <div className="flex flex-col items-end">
+                        <span className="text-[10px] font-mono font-bold text-white/60 uppercase">Pace</span>
+                        <span className="font-mono text-xl font-bold text-white">{data.avgPace.replace(' /km', '')}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Pro Glass / Sunset / Cyber Overlay (Non-Polaroid, Non-MapHero) */}
+                {!isPolaroid && layout !== 'path-minimal' && layout !== 'map-hero' && (
+                  <div className={`flex flex-col gap-3 mb-1 w-full ${layout === 'pro-glass' ? 'bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-3xl p-4 shadow-xl' : ''}`}>
                     {/* Distance Hero */}
                     <div className="flex items-end justify-between">
                       <div>
-                        <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-white/70 mb-0.5">
+                        <div className={`text-[10px] font-mono font-bold uppercase tracking-widest mb-0.5 ${isCyber ? 'text-cyan-400' : isSunset ? 'text-amber-300' : 'text-white/70'}`}>
                           Total Distance
                         </div>
                         <div className="flex items-baseline gap-1.5">
-                          <span className="font-mono text-5xl sm:text-6xl font-black tracking-tight text-white drop-shadow-md">
+                          <span className={`font-mono text-5xl sm:text-6xl font-black tracking-tight drop-shadow-md ${isCyber ? 'text-cyan-300 drop-shadow-[0_0_12px_rgba(6,182,212,0.8)]' : isSunset ? 'text-amber-200' : 'text-white'}`}>
                             {data.distanceKm.toFixed(2)}
                           </span>
-                          <span className="font-mono text-lg font-bold text-white/80 uppercase">
+                          <span className={`font-mono text-lg font-bold uppercase ${isCyber ? 'text-cyan-400' : isSunset ? 'text-amber-300' : 'text-white/80'}`}>
                             km
                           </span>
                         </div>
@@ -387,7 +439,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                       </div>
                     </div>
 
-                    {/* Pro Metric Typography Grid (No bounding boxes / cards / horizontal line) */}
+                    {/* Pro Metric Typography Grid */}
                     <div className="grid grid-cols-3 gap-y-3 gap-x-2 pt-1">
                       <div className="flex flex-col">
                         <div className="text-[10px] font-mono font-bold text-white/60 uppercase tracking-wider mb-0.5">Time</div>
@@ -400,8 +452,8 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                       </div>
 
                       <div className="flex flex-col">
-                        <div className={`text-[10px] font-mono font-bold uppercase tracking-wider mb-0.5 ${currentTextColorCls}`}>Calories</div>
-                        <div className={`font-mono text-xl sm:text-2xl font-black tracking-tight drop-shadow-sm ${currentTextColorCls}`}>{data.calories}</div>
+                        <div className={`text-[10px] font-mono font-bold uppercase tracking-wider mb-0.5 ${isCyber ? 'text-cyan-400' : isSunset ? 'text-amber-400' : currentTextColorCls}`}>Calories</div>
+                        <div className={`font-mono text-xl sm:text-2xl font-black tracking-tight drop-shadow-sm ${isCyber ? 'text-cyan-300' : isSunset ? 'text-amber-300' : currentTextColorCls}`}>{data.calories}</div>
                       </div>
 
                       {data.avgSpeedKmh !== undefined && (
@@ -462,10 +514,10 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
           </motion.div>
         </div>
 
-        {/* Customization Toolbar */}
-        <div className="w-full max-w-[400px] shrink-0 mx-auto px-2 mt-3 flex flex-col gap-2.5 pb-4">
-          {/* Tab Selector */}
-          <div className="flex items-center justify-around bg-[#1a100d]/90 backdrop-blur-xl rounded-2xl p-1 border border-[#42241b]">
+        {/* Customization Controls Deck */}
+        <div className="w-full max-w-[390px] shrink-0 mx-auto mt-2 flex flex-col gap-2">
+          {/* Tabs */}
+          <div className="flex bg-[#1a100d] p-1 rounded-2xl border border-[#42241b]">
             <button
               onClick={() => setActiveTab('layout')}
               className={`flex-1 py-1.5 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeTab === 'layout' ? 'bg-sienna text-white shadow-sm' : 'text-white/60 hover:text-white'}`}
@@ -525,31 +577,40 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
             </div>
           )}
 
-          {/* Tab Content: Color Pickers */}
+          {/* Tab Content: Color Pickers (With ample padding to prevent cutting off circle borders) */}
           {activeTab === 'colors' && (
-            <div className="flex flex-col gap-2 bg-[#1a100d]/90 backdrop-blur-xl rounded-2xl p-3 border border-[#42241b]">
+            <div className="flex flex-col gap-2.5 bg-[#1a100d]/90 backdrop-blur-xl rounded-2xl p-3.5 border border-[#42241b]">
               <div className="flex items-center gap-3">
                 <span className="text-[11px] font-mono font-bold text-white/60 uppercase w-12 shrink-0">Trail</span>
-                <div className="flex-1 flex overflow-x-auto gap-2 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex-1 flex items-center overflow-x-auto gap-3 py-2 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {PATH_COLORS.map(c => (
                     <button
                       key={c.id}
                       onClick={() => setPathColor(c.id)}
-                      className={`shrink-0 w-7 h-7 rounded-full ${c.bg} transition-all border-2 ${pathColor === c.id ? 'border-white ring-2 ring-white/40 scale-110 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                      className={`shrink-0 w-8 h-8 rounded-full ${c.bg} transition-all border-2 ${
+                        pathColor === c.id 
+                          ? 'border-white ring-2 ring-sienna scale-105 shadow-md' 
+                          : 'border-transparent opacity-60 hover:opacity-100 hover:scale-105'
+                      }`}
                       title={c.label}
                     />
                   ))}
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 pt-2 border-t border-[#42241b]">
+              <div className="flex items-center gap-3 pt-2.5 border-t border-[#42241b]">
                 <span className="text-[11px] font-mono font-bold text-white/60 uppercase w-12 shrink-0">Text</span>
-                <div className="flex-1 flex overflow-x-auto gap-2 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex-1 flex items-center overflow-x-auto gap-3 py-2 px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {TEXT_COLORS.map(c => (
                     <button
                       key={c.id}
                       onClick={() => setTextColor(c.id)}
-                      className={`shrink-0 w-7 h-7 rounded-full ${c.bg} transition-all border-2 ${textColor === c.id ? 'border-white ring-2 ring-white/40 scale-110 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                      className={`shrink-0 w-8 h-8 rounded-full ${c.bg} transition-all border-2 ${
+                        textColor === c.id 
+                          ? 'border-white ring-2 ring-sienna scale-105 shadow-md' 
+                          : 'border-transparent opacity-60 hover:opacity-100 hover:scale-105'
+                      }`}
+                      title={c.id}
                     />
                   ))}
                 </div>

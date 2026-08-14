@@ -85,9 +85,16 @@ public final class WorkoutLocationService extends Service implements LocationLis
     private void startTracking() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
                 && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
-        // Do not mix network fixes into a fitness route. Their lower precision
-        // creates diagonal shortcuts and can overwrite a better GPS sequence.
-        try { locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this); } catch (Exception ignored) {}
+        try { 
+            if (locationManager != null) {
+                if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                    locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this);
+                }
+                if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                    locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 2f, this);
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     private void stopTracking() {
@@ -95,28 +102,38 @@ public final class WorkoutLocationService extends Service implements LocationLis
         if (locationManager != null) locationManager.removeUpdates(this);
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         stopForeground(STOP_FOREGROUND_REMOVE);
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) {
+            nm.cancel(NOTIFICATION_ID);
+        }
         stopSelf();
     }
 
     @Override public void onTaskRemoved(Intent rootIntent) {
-        // The workout must continue if the user backgrounds or swipes away the
-        // WebView. START_STICKY restarts the foreground service if Android later
-        // recreates the process.
         super.onTaskRemoved(rootIntent);
     }
 
     @Override public void onDestroy() {
         if (locationManager != null) locationManager.removeUpdates(this);
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) {
+            nm.cancel(NOTIFICATION_ID);
+        }
         super.onDestroy();
     }
 
     @Override public void onLocationChanged(Location location) {
         if (location == null) return;
+        if (location.hasAccuracy() && location.getAccuracy() > MAX_ACCEPTED_ACCURACY_M) return;
         try {
             JSONObject point = toJson(location);
             database.append(point);
             updateLiveStats(location);
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.notify(NOTIFICATION_ID, buildNotification());
+            }
             Intent update = new Intent(ACTION_LOCATION).setPackage(getPackageName());
             update.putExtra("point", point.toString());
             sendBroadcast(update);

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
@@ -179,11 +179,26 @@ function PreferencesSync() {
   return null;
 }
 
+function ActiveSessionRestorer() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const cardio = useCardioStore.getState();
+    if (cardio.isTracking && location.pathname === '/') {
+      navigate('/cardio', { replace: true });
+    }
+  }, [navigate, location.pathname]);
+
+  return null;
+}
+
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <PreferencesSync />
       <BrowserRouter>
+        <ActiveSessionRestorer />
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/auth" element={<PublicOnly><AuthPage /></PublicOnly>} />

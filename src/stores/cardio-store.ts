@@ -530,50 +530,31 @@ export const useCardioStore = create<CardioState>()(
 
         const accuracy = (point as any).accuracy as number | undefined;
         const now = point.ts;
-        if (now <= state.lastGpsTimestamp) return;
+        if (now <= state.lastGpsTimestamp && state.routePoints.length > 0) return;
 
         const rawPt: RoutePoint = { lat: point.lat, lng: point.lng, ts: now };
         if (point.alt !== undefined) rawPt.alt = point.alt;
         if (point.speed !== undefined) rawPt.speed = point.speed;
 
-        let { gpsStatus, gpsAccuracy, lastGpsTimestamp, autoPauseStatus, autoPausedAt, totalPausedMs } = state;
+        let { gpsStatus, autoPauseStatus, autoPausedAt, totalPausedMs } = state;
         const limits = getSpeedLimits(state.activityType);
         
-        const pedoState = usePedometerStore.getState();
-        const stepsSinceMovement = Math.max(0, pedoState.sessionSteps - stepsAtLastMovement);
-        const hasRecentSteps = (
-          pedoState.isSessionActive && 
-          pedoState.lastStepAt !== null && 
-          now - pedoState.lastStepAt < 4000 &&
-          stepsSinceMovement >= 3
-        );
-        const isUserWalking = hasRecentSteps || stepsSinceMovement >= 3;
-        
-        // ── Phase 2B: GPS Warmup Logic ──
+        // ── Phase 1: GPS Warmup Logic ──
         if (gpsStatus === 'waiting' || gpsStatus === 'off') {
            gpsStatus = 'warming_up';
         }
         
         if (gpsStatus === 'warming_up') {
-           const isNative = Capacitor.isNativePlatform();
-           const targetAccuracy = isNative ? 75 : 250;
-           
+           const targetAccuracy = Capacitor.isNativePlatform() ? 65 : 200;
            if (accuracy && accuracy <= targetAccuracy) {
-             const distSinceLastWarmup = lastWarmupGoodPoint ? haversineKm(lastWarmupGoodPoint.lat, lastWarmupGoodPoint.lng, rawPt.lat, rawPt.lng) * 1000 : 0;
-             if (!lastWarmupGoodPoint || distSinceLastWarmup < (isNative ? 50 : 300)) {
-               warmupConsecutiveFixes++;
-               lastWarmupGoodPoint = rawPt;
-               if (warmupConsecutiveFixes >= (isNative ? 2 : 1)) {
-                 gpsStatus = 'active';
-                 lastRawGpsPoint = rawPt;
-                 lastAcceptedDistancePoint = rawPt;
-                 lastMovementPoint = rawPt;
-                 lastStationaryAnchor = rawPt;
-                 consecutiveMovingCount = 0;
-                 lastTrustedSpeedKmh = 0;
-               }
-             } else {
-               warmupConsecutiveFixes = 0;
+             warmupConsecutiveFixes++;
+             if (warmupConsecutiveFixes >= 2) {
+               gpsStatus = 'active';
+               lastRawGpsPoint = rawPt;
+               lastAcceptedDistancePoint = rawPt;
+               lastRoutePoint = rawPt;
+               lastMovementPoint = rawPt;
+               lastMovementTs = now;
              }
            } else {
              warmupConsecutiveFixes = 0;
@@ -585,12 +566,6 @@ export const useCardioStore = create<CardioState>()(
         const prev = lastRawGpsPoint;
         lastRawGpsPoint = rawPt;
         gpsFixCount += 1;
-        const confidence = accuracyConfidence(accuracy);
-        if (confidence >= 0.55) goodFixCount += 1;
-        
-        if (!lastStationaryAnchor) {
-          lastStationaryAnchor = rawPt;
-        }
 
         let addedDistance = 0;
         let addedElevation = 0;
@@ -598,196 +573,80 @@ export const useCardioStore = create<CardioState>()(
 
         const nativeSpeedKmh = point.speed != null && point.speed >= 0 ? point.speed * 3.6 : null;
         let currentSpeed = 0;
-        let speedConfidence = 0;
-
-        const distFromAnchorM = haversineKm(lastStationaryAnchor.lat, lastStationaryAnchor.lng, rawPt.lat, rawPt.lng) * 1000;
-        const stationaryRadiusM = Math.max(12, Math.min((accuracy || 15) * 0.75, 25));
-        const isHardwareStationary = nativeSpeedKmh !== null && nativeSpeedKmh < 0.8;
-        const isStationaryAtRest = distFromAnchorM < stationaryRadiusM && (isHardwareStationary || !isUserWalking || state.activityType === 'cycle');
 
         if (prev) {
-          dtSec = (now - prev.ts) / 1000;
-          if (dtSec < 0) return;
+          dtSec = Math.max(0.1, (now - prev.ts) / 1000);
+          const rawDistanceKm = haversineKm(prev.lat, prev.lng, rawPt.lat, rawPt.lng);
+          const derivedSpeedKmh = (rawDistanceKm / dtSec) * 3600;
 
-          const rawDistance = haversineKm(prev.lat, prev.lng, rawPt.lat, rawPt.lng);
-          const isGpsGap = dtSec > 20;
-
-          // ── Phase 2C: Gap Recovery ──
-          if (isGpsGap) {
-            gpsStatus = 'degraded';
-            lastAcceptedDistancePoint = rawPt;
-            lastMovementPoint = rawPt;
-            lastStationaryAnchor = rawPt;
-            consecutiveMovingCount = 0;
-            gapRecoveryFixes = 0;
-            resetSpeedEngine();
-            set({ currentSpeedKmh: 0, gpsAccuracy: accuracy || 0, lastGpsTimestamp: now, gpsStatus });
-            return;
-          }
-          if (gapRecoveryFixes < 2 && confidence < 0.55) {
-             gapRecoveryFixes = 0;
-             set({ gpsAccuracy: accuracy || 0, lastGpsTimestamp: now });
-             return;
-          } else if (gapRecoveryFixes < 2) {
-             gapRecoveryFixes += 1;
-             lastAcceptedDistancePoint = rawPt;
-             set({ gpsAccuracy: accuracy || 0, lastGpsTimestamp: now });
-             return;
-          }
-
-          if (gpsStatus === 'degraded') gpsStatus = 'active';
-
-          // ── Phase 2D: Speed Selection Engine ──
-          const derivedSpeedKmh = dtSec > 0 ? (rawDistance / dtSec) * 3600 : 0;
-          const accelDerived = lastTrustedSpeedKmh == null ? 0 : Math.abs(derivedSpeedKmh - lastTrustedSpeedKmh) / dtSec;
-          
-          if (isStationaryAtRest) {
-            // Truly sitting or standing still inside rest bubble: force 0
-            currentSpeed = 0;
-            speedConfidence = 0.95;
-            consecutiveMovingCount = 0;
-          } else if (nativeSpeedKmh !== null) {
-            const nativeAccel = lastTrustedSpeedKmh == null ? 0 : Math.abs(nativeSpeedKmh - lastTrustedSpeedKmh) / dtSec;
-            
-            if (nativeSpeedKmh === 0) {
-              if (isUserWalking && derivedSpeedKmh > 1.2 && derivedSpeedKmh <= limits.maxSpeed && accelDerived <= limits.maxAccel) {
-                currentSpeed = derivedSpeedKmh;
-                speedConfidence = 0.75;
-              } else {
-                currentSpeed = 0;
-                speedConfidence = 0.95;
-              }
-            } else if (nativeSpeedKmh <= limits.maxSpeed && nativeAccel <= limits.maxAccel) {
-              currentSpeed = nativeSpeedKmh;
-              speedConfidence = 0.95;
-            } else if (derivedSpeedKmh <= limits.maxSpeed && accelDerived <= limits.maxAccel) {
+          // ── Speed Calculation ──
+          if (nativeSpeedKmh !== null && nativeSpeedKmh > 0 && nativeSpeedKmh <= limits.maxSpeed) {
+            currentSpeed = nativeSpeedKmh;
+          } else if (derivedSpeedKmh <= limits.maxSpeed) {
+            // If very slow jitter (< 0.5 km/h over < 2m), treat as stationary jitter
+            if (derivedSpeedKmh < 0.6 && (rawDistanceKm * 1000) < 2) {
+              currentSpeed = 0;
+            } else {
               currentSpeed = derivedSpeedKmh;
-              speedConfidence = 0.75;
-            }
-          } else {
-            if (derivedSpeedKmh <= limits.maxSpeed && accelDerived <= limits.maxAccel) {
-              if (derivedSpeedKmh < 1.2 && !isUserWalking && (rawDistance * 1000) < 5) {
-                currentSpeed = 0;
-                speedConfidence = 0.75;
-              } else {
-                currentSpeed = derivedSpeedKmh;
-                speedConfidence = confidence >= 0.55 ? 0.75 : 0.25;
-              }
             }
           }
-          
-          if (speedConfidence > 0) lastTrustedSpeedKmh = currentSpeed;
-          
-          // ── Spatial Downsampling & Quality Gate ──
-          const BASE_THRESHOLD_M = 4;
-          const ACCURACY_FACTOR = 0.35;
-          const MAX_THRESHOLD_M = 10;
-          let adaptiveThresholdM = Math.max(BASE_THRESHOLD_M, Math.min((accuracy || 12) * ACCURACY_FACTOR, MAX_THRESHOLD_M));
-          
-          const distanceSuppressedByStationaryState = autoPauseStatus === 'CANDIDATE_STOP' || isStationaryAtRest;
-          if (distanceSuppressedByStationaryState) {
-             adaptiveThresholdM = Math.max(adaptiveThresholdM, 20);
-          }
-          
-          const MIN_DISTANCE_KM = adaptiveThresholdM / 1000;
+
+          // ── Distance Filtering & Quality Gate ──
           const distanceAnchor = lastAcceptedDistancePoint ?? prev;
-          const distanceCandidate = haversineKm(distanceAnchor.lat, distanceAnchor.lng, rawPt.lat, rawPt.lng);
-          const distanceDtSec = Math.max(0, (now - distanceAnchor.ts) / 1000);
-          const candidateSpeedKmh = distanceDtSec > 0 ? (distanceCandidate / distanceDtSec) * 3600 : 0;
-          
-          const isStationaryDrift = isStationaryAtRest || (
-            (nativeSpeedKmh === 0 && currentSpeed < 1.0) ||
-            (currentSpeed < AUTO_PAUSE_SPEED_THRESHOLD && (distanceCandidate * 1000) < 10)
-          );
+          const distanceCandidateKm = haversineKm(distanceAnchor.lat, distanceAnchor.lng, rawPt.lat, rawPt.lng);
+          const distanceCandidateM = distanceCandidateKm * 1000;
+          const anchorDtSec = Math.max(0.1, (now - distanceAnchor.ts) / 1000);
+          const candidateSpeedKmh = (distanceCandidateKm / anchorDtSec) * 3600;
 
-          if (!isStationaryDrift && currentSpeed >= 1.0) {
-            consecutiveMovingCount++;
-          } else {
-            consecutiveMovingCount = 0;
-          }
+          // Distance acceptance: accuracy within reasonable limits (< 60m), speed realistic
+          const isAccurate = !accuracy || accuracy <= 60;
+          const isReasonableSpeed = candidateSpeedKmh <= limits.maxSpeed * 1.35;
+          const hasMovedThreshold = distanceCandidateM >= 2.5;
 
-          const acceptDistance =
-            !isStationaryDrift &&
-            consecutiveMovingCount >= 2 &&
-            confidence >= 0.25 &&
-            (distanceCandidate > MIN_DISTANCE_KM) &&
-            distanceDtSec > 0 &&
-            candidateSpeedKmh <= limits.maxSpeed * 1.25;
-
-          if (acceptDistance) {
-            addedDistance = distanceCandidate;
+          if (isAccurate && isReasonableSpeed && hasMovedThreshold) {
+            addedDistance = distanceCandidateKm;
             lastAcceptedDistancePoint = rawPt;
-            lastStationaryAnchor = rawPt;
+            lastMovementTs = now;
+            lastMovementPoint = rawPt;
           }
 
           if (rawPt.alt !== undefined && distanceAnchor.alt !== undefined) {
             const diff = rawPt.alt - distanceAnchor.alt;
-            if (diff > 2 && acceptDistance) addedElevation = diff;
+            if (diff > 1.5 && diff < 80 && addedDistance > 0) addedElevation = diff;
           }
         } else {
-           lastAcceptedDistancePoint = rawPt;
-           lastRoutePoint = rawPt;
-           lastMovementPoint = rawPt;
-           lastStationaryAnchor = rawPt;
-           consecutiveMovingCount = 0;
-           if (nativeSpeedKmh !== null && !isStationaryAtRest) {
-              currentSpeed = nativeSpeedKmh;
-              lastTrustedSpeedKmh = currentSpeed;
-           }
+          lastAcceptedDistancePoint = rawPt;
+          lastRoutePoint = rawPt;
+          lastMovementPoint = rawPt;
+          lastMovementTs = now;
+          if (nativeSpeedKmh !== null) currentSpeed = nativeSpeedKmh;
         }
 
-        const displacementFromMovementM = lastMovementPoint
-          ? haversineKm(lastMovementPoint.lat, lastMovementPoint.lng, rawPt.lat, rawPt.lng) * 1000
-          : 0;
-        const timeSinceLastMovement = lastMovementPoint ? now - lastMovementPoint.ts : 0;
-        const isCadenceHighEnoughToOverride = timeSinceLastMovement > 0 && 
-            (stepsSinceMovement / (timeSinceLastMovement / 1000)) >= 0.5;
-
-        // Anti-Drift: Force speed to 0 if stationary or resting
-        if (isStationaryAtRest || (timeSinceLastMovement > 10_000 && displacementFromMovementM < stationaryRadiusM && !isCadenceHighEnoughToOverride && !isUserWalking)) {
-          currentSpeed = 0;
-        }
-
-        const smoothedSpeed = isStationaryAtRest ? 0 : pushSpeed(currentSpeed);
+        const smoothedSpeed = pushSpeed(currentSpeed);
         const displaySpeed = Math.round(smoothedSpeed * 10) / 10;
 
-        if (addedDistance > 0 || (isUserWalking && currentSpeed >= 1.0)) {
-          lastMovementPoint = rawPt;
-          stepsAtLastMovement = pedoState.sessionSteps;
-        }
+        // ── Auto-Pause State Machine (10s tolerance) ──
+        const isStationaryNow = currentSpeed < 0.6 && addedDistance === 0;
 
-        // ── Phase 2F: Auto-Pause State Machine ──
-        const isActuallyStationary = isStationaryAtRest || (currentSpeed < AUTO_PAUSE_SPEED_THRESHOLD && (!isUserWalking || state.activityType === 'cycle'));
-
-        if (isActuallyStationary) {
+        if (isStationaryNow) {
           if (autoPauseStatus === 'MOVING') {
             autoPauseStatus = 'CANDIDATE_STOP';
             lastMovementTs = now;
           } else if (autoPauseStatus === 'CANDIDATE_STOP') {
-            if (now - lastMovementTs > AUTO_PAUSE_DELAY_MS) {
+            // Require 10 seconds of true zero movement before entering PAUSED state
+            if (now - lastMovementTs > 10_000) {
               autoPauseStatus = 'PAUSED';
               autoPausedAt = now;
             }
           }
         } else {
+          // Immediately unpause when movement resumes
           if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
             totalPausedMs += (now - autoPausedAt);
           }
           autoPauseStatus = 'MOVING';
           autoPausedAt = null;
           lastMovementTs = now;
-        }
-
-        if (autoPauseStatus === 'PAUSED') {
-          set({
-            currentSpeedKmh: 0,
-            gpsAccuracy: accuracy || 0,
-            autoPauseStatus,
-            autoPausedAt,
-            totalPausedMs,
-            lastGpsTimestamp: now,
-          });
-          return;
         }
 
         // ── Pace Engine (Rolling 30s window) ───────────────
@@ -803,32 +662,33 @@ export const useCardioStore = create<CardioState>()(
         if (newPaceWindow.length > 0) {
           const sumDist = newPaceWindow.reduce((a, b) => a + b.dist, 0);
           const sumDt = newPaceWindow.reduce((a, b) => a + b.dt, 0);
-          if (sumDist >= 0.03) {
+          if (sumDist >= 0.02) {
             currentPaceMs = (sumDt * 1000) / sumDist;
           }
         }
 
-        const routeSpacingM = Math.max(3, Math.min((accuracy || 12) * 0.25, 8));
-        const routeDistanceM = lastRoutePoint
+        // Route Point addition: preserve full route with smooth spacing (~2.5m)
+        const routeDistM = lastRoutePoint
           ? haversineKm(lastRoutePoint.lat, lastRoutePoint.lng, rawPt.lat, rawPt.lng) * 1000
           : Infinity;
-        const shouldAddRoutePoint = !isStationaryAtRest && confidence >= 0.3 && routeDistanceM >= routeSpacingM && (addedDistance > 0 || isUserWalking);
+        const shouldAddRoutePoint = routeDistM >= 2.5 || addedDistance > 0 || state.routePoints.length === 0;
         if (shouldAddRoutePoint) lastRoutePoint = rawPt;
         const nextRoutePoints = shouldAddRoutePoint ? [...state.routePoints, rawPt] : state.routePoints;
 
-        // Max speed protection: ONLY update if genuine sustained movement >= 1.8 km/h and consecutive moving fixes >= 3
-        const shouldUpdateMaxSpeed = !isStationaryAtRest && consecutiveMovingCount >= 3 && currentSpeed >= 1.8 && (distFromAnchorM >= 15 || isUserWalking);
-        const newMaxSpeed = shouldUpdateMaxSpeed
+        // Max Speed: only register if realistic and sustained
+        const newMaxSpeed = currentSpeed >= 1.5 && currentSpeed <= limits.maxSpeed
           ? Math.max(state.maxSpeedKmh, currentSpeed)
           : state.maxSpeedKmh;
 
         set({
           routePoints: nextRoutePoints,
+          currentLocation: rawPt,
           distanceKm: state.distanceKm + addedDistance,
-          currentSpeedKmh: displaySpeed,
+          currentSpeedKmh: autoPauseStatus === 'PAUSED' ? 0 : displaySpeed,
           maxSpeedKmh: newMaxSpeed,
           elevationGainM: state.elevationGainM + addedElevation,
           gpsAccuracy: accuracy || 0,
+          gpsStatus: 'active',
           autoPauseStatus,
           autoPausedAt,
           totalPausedMs,

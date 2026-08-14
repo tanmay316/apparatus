@@ -18,7 +18,7 @@ import {
   setupForegroundServiceListeners 
 } from '@/utils/foreground-service';
 import { useUIStore } from '@/stores/ui-store';
-import { useCardioStore, startGpsWatch, finishTracking } from '@/stores/cardio-store';
+import { useCardioStore, startGpsWatch, stopGpsWatch, finishTracking } from '@/stores/cardio-store';
 import { usePedometerStore } from '@/stores/pedometer-store';
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { saveCardioActivity, getUserCardioActivities } from '@/services/cardio';
@@ -556,6 +556,20 @@ export function CardioTracker() {
     }
   };
 
+  const handleDiscard = async () => {
+    if (window.confirm('Are you sure you want to discard this cardio session?')) {
+      if (user) endActiveSession(user.uid).catch(console.error);
+      stopWorkoutForegroundService('cardio');
+      await stopGpsWatch();
+      if (store.activityType === 'walk' || store.activityType === 'run') {
+        await pedometerStore.stopSession();
+      }
+      store.reset();
+      setSearchParams({});
+      setScreen('select');
+    }
+  };
+
   // Assign the stop handler ref
   handleStopRef.current = handleStop;
 
@@ -1062,14 +1076,7 @@ export function CardioTracker() {
                 </button>
 
                 <button
-                  onClick={() => {
-                    if (window.confirm('Are you sure you want to discard this cardio session?')) {
-                      if (user) endActiveSession(user.uid).catch(console.error);
-                      store.reset();
-                      setSearchParams({});
-                      setScreen('select');
-                    }
-                  }}
+                  onClick={handleDiscard}
                   className="w-12 h-12 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-red-500 hover:border-red-500/50 shadow-sm active:scale-95 transition-all"
                   title="Discard"
                 >
@@ -1177,14 +1184,7 @@ export function CardioTracker() {
 
                   {/* Discard */}
                   <button
-                    onClick={() => {
-                      if (window.confirm('Are you sure you want to discard this cardio session?')) {
-                        if (user) endActiveSession(user.uid).catch(console.error);
-                        store.reset();
-                        setSearchParams({});
-                        setScreen('select');
-                      }
-                    }}
+                    onClick={handleDiscard}
                     className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-red-500 hover:border-red-500/50 shadow-md active:scale-95 transition-all"
                     title="Discard Session"
                   >

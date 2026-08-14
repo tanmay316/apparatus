@@ -19,7 +19,7 @@ const getCardioSvg = (type?: 'walk' | 'run' | 'cycle') => {
 // currentIcon dynamically generated based on type
 const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle') => {
   const coneHtml = `
-    <svg class="compass-cone" width="120" height="120" viewBox="0 0 120 120" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(0deg); pointer-events: none; z-index: 1; opacity: 0;">
+    <svg class="compass-cone" width="120" height="120" viewBox="0 0 120 120" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(0deg); pointer-events: none; z-index: 1; opacity: 0; transition: transform 0.12s cubic-bezier(0.2, 0, 0.2, 1), opacity 0.3s ease;">
       <defs>
         <linearGradient id="coneGrad" x1="0%" y1="100%" x2="0%" y2="0%">
           <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.4" />
@@ -34,7 +34,7 @@ const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle') => {
     html: `
       <div class="relative w-full h-full flex items-center justify-center">
         ${coneHtml}
-        <div class="compass-marker" style="transform: rotate(0deg); display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
+        <div class="compass-marker" style="transform: rotate(0deg); display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; transition: transform 0.12s cubic-bezier(0.2, 0, 0.2, 1);">
           <div class="gps-pulse-ring" style="z-index: 2;"></div>
           <div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; position: relative; z-index: 3; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
             ${getCardioSvg(type)}
