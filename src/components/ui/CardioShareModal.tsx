@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Download, Check, Share2, LocateFixed, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Download, Check, Share2, LocateFixed, ChevronLeft, ChevronRight, Sparkles, Layers, Palette, Layout as LayoutIcon, Smartphone, Square as SquareIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { toCanvas } from 'html-to-image';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
@@ -36,18 +36,26 @@ function formatDuration(sec: number): string {
 }
 
 type ShareLayout = 
-  | 'map-stats' | 'map-distance' | 'map-only' | 'map-path-only'
-  | 'path-stats' | 'path-distance' | 'path-only' | 'path-only-nomarker'
-  | 'stats-only'
-  | 'polaroid-transparent'
-  | 'a-shape' | 'a-shape-transparent';
+  | 'pro-glass' 
+  | 'sunset-glow'
+  | 'cyber-neon'
+  | 'map-hero'
+  | 'path-minimal'
+  | 'stats-pro'
+  | 'polaroid-vintage'
+  | 'a-shape-stencil'
+  | 'transparent-sticker';
 
-const LAYOUTS: ShareLayout[] = [
-  'map-stats', 'map-distance', 'map-only', 'map-path-only',
-  'path-stats', 'path-distance', 'path-only', 'path-only-nomarker',
-  'stats-only', 
-  'polaroid-transparent',
-  'a-shape', 'a-shape-transparent'
+const LAYOUT_OPTIONS: { id: ShareLayout; label: string; icon: string }[] = [
+  { id: 'pro-glass', label: 'Pro Glass', icon: '⚡' },
+  { id: 'sunset-glow', label: 'Sunset Dusk', icon: '🌅' },
+  { id: 'cyber-neon', label: 'Cyber Neon', icon: '👾' },
+  { id: 'map-hero', label: 'Map Hero', icon: '🗺️' },
+  { id: 'path-minimal', label: 'Pure Path', icon: '✨' },
+  { id: 'stats-pro', label: 'Telemetry', icon: '📊' },
+  { id: 'polaroid-vintage', label: 'Polaroid', icon: '📸' },
+  { id: 'a-shape-stencil', label: 'A-Stencil', icon: '🅰️' },
+  { id: 'transparent-sticker', label: 'Sticker', icon: '🪄' },
 ];
 
 const AVAILABLE_THEMES = Object.keys(MAP_THEMES) as MapThemeKey[];
@@ -56,8 +64,10 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const cardRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [didCopy, setDidCopy] = useState(false);
-  const [layoutIndex, setLayoutIndex] = useState(0);
-  const [selectedTheme, setSelectedTheme] = useState<MapThemeKey>(mapTheme === 'dark' ? 'dark' : mapTheme as MapThemeKey);
+  const [layout, setLayout] = useState<ShareLayout>('pro-glass');
+  const [aspectRatio, setAspectRatio] = useState<'9/16' | '1/1'>('9/16');
+  const [selectedTheme, setSelectedTheme] = useState<MapThemeKey>(mapTheme === 'dark' ? 'dark' : (mapTheme as MapThemeKey));
+  const [activeTab, setActiveTab] = useState<'layout' | 'theme' | 'colors'>('layout');
   
   const [recenterTrigger, setRecenterTrigger] = useState(0);
   const [pathColor, setPathColor] = useState('gradient');
@@ -67,53 +77,47 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const displayDate = format(new Date(data.date), 'EEEE, MMM d, yyyy');
   
   const PATH_COLORS = [
-    { id: 'gradient', bg: 'bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7]' },
-    { id: '#f97316', bg: 'bg-orange-500' },
-    { id: '#3b82f6', bg: 'bg-blue-500' },
-    { id: '#10b981', bg: 'bg-emerald-500' },
-    { id: '#a855f7', bg: 'bg-purple-500' },
-    { id: '#f43f5e', bg: 'bg-rose-500' },
+    { id: 'gradient', bg: 'bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7]', label: 'Aurora' },
+    { id: '#f97316', bg: 'bg-orange-500', label: 'Orange' },
+    { id: '#06b6d4', bg: 'bg-cyan-500', label: 'Cyan' },
+    { id: '#10b981', bg: 'bg-emerald-500', label: 'Emerald' },
+    { id: '#a855f7', bg: 'bg-purple-500', label: 'Purple' },
+    { id: '#f43f5e', bg: 'bg-rose-500', label: 'Rose' },
+    { id: '#ffffff', bg: 'bg-white', label: 'White' },
   ];
 
   const TEXT_COLORS = [
-    { id: 'orange', cls: 'text-orange-500', bg: 'bg-orange-500' },
+    { id: 'orange', cls: 'text-amber-500', bg: 'bg-amber-500' },
     { id: 'gradient', cls: 'bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-transparent bg-clip-text', bg: 'bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7]' },
-    { id: 'blue', cls: 'text-blue-500', bg: 'bg-blue-500' },
-    { id: 'emerald', cls: 'text-emerald-500', bg: 'bg-emerald-500' },
-    { id: 'purple', cls: 'text-purple-500', bg: 'bg-purple-500' },
-    { id: 'rose', cls: 'text-rose-500', bg: 'bg-rose-500' },
+    { id: 'cyan', cls: 'text-cyan-400', bg: 'bg-cyan-400' },
+    { id: 'emerald', cls: 'text-emerald-400', bg: 'bg-emerald-400' },
+    { id: 'purple', cls: 'text-purple-400', bg: 'bg-purple-400' },
+    { id: 'rose', cls: 'text-rose-400', bg: 'bg-rose-400' },
     { id: 'white', cls: 'text-white', bg: 'bg-white' },
   ];
 
   const lineColor = pathColor === 'gradient' ? 'url(#route-gradient)' : pathColor;
   const currentTextColorCls = TEXT_COLORS.find(t => t.id === textColor)?.cls || TEXT_COLORS[0].cls;
 
-  const safeLayoutIndex = layoutIndex >= LAYOUTS.length ? 0 : layoutIndex;
-  const layout = LAYOUTS[safeLayoutIndex];
-  
-  const isPolaroid = layout === 'polaroid-transparent';
-  const isTransparent = layout.includes('path-') || isPolaroid || layout === 'a-shape-transparent';
-  const isSolidBg = layout === 'stats-only';
-  const isAShape = layout.includes('a-shape');
-  
-  const showMapBackground = !isSolidBg && !isPolaroid && !isTransparent; // Only for map-* and a-shape layouts
-  // `map-path-only` is the fourth layout and is also a transparent route card.
-  // It must mount the map layer even though its name does not start with path-.
-  const showPathBackground = layout.startsWith('path-') || layout === 'map-path-only' || layout === 'a-shape-transparent';
-  const hideMarkers = layout === 'map-path-only' || layout === 'path-only-nomarker';
+  const isPolaroid = layout === 'polaroid-vintage';
+  const isTransparent = layout === 'transparent-sticker' || layout === 'path-minimal';
+  const isSolidBg = layout === 'stats-pro';
+  const isAShape = layout === 'a-shape-stencil';
+  const isCyber = layout === 'cyber-neon';
+  const isSunset = layout === 'sunset-glow';
 
+  const showMapBackground = !isSolidBg && !isPolaroid && !isTransparent;
+  const showPathBackground = isTransparent || isAShape;
   const hideMapTiles = isTransparent;
-  const showOverlayStats = layout === 'map-stats' || layout === 'path-stats';
-  const showDistanceOnly = layout === 'map-distance' || layout === 'path-distance';
 
   const getCanvas = async () => {
     if (!cardRef.current) return null;
     const canvas = await toCanvas(cardRef.current, {
       pixelRatio: 2,
-      backgroundColor: isTransparent ? undefined : '#1f110d',
+      backgroundColor: isTransparent ? undefined : '#090605',
     });
     
-    // Apply clipping to match the 1.8rem border-radius of the card
+    // Apply clipping to match the border-radius of the card
     const ctx = canvas.getContext('2d');
     if (ctx) {
       ctx.globalCompositeOperation = 'destination-in';
@@ -122,9 +126,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
       clipCanvas.height = canvas.height;
       const clipCtx = clipCanvas.getContext('2d');
       if (clipCtx) {
-        // 1.8rem is roughly 28.8px at default base size. 
-        // We multiply by scale=2 -> approx 58px.
-        const radius = 58; 
+        const radius = 64; 
         clipCtx.beginPath();
         clipCtx.moveTo(radius, 0);
         clipCtx.lineTo(canvas.width - radius, 0);
@@ -147,7 +149,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const handleDownload = async () => {
     try {
       setDownloading(true);
-      await new Promise(r => setTimeout(r, 50));
+      await new Promise(r => setTimeout(r, 60));
       const canvas = await getCanvas();
       if (!canvas) return;
       
@@ -160,7 +162,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
       document.body.removeChild(link);
       
       setDidCopy(true);
-      setTimeout(() => setDidCopy(false), 2000);
+      setTimeout(() => setDidCopy(false), 2200);
     } catch (err) {
       console.error('Failed to generate image:', err);
     } finally {
@@ -171,7 +173,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const handleShare = async () => {
     try {
       setDownloading(true);
-      await new Promise(r => setTimeout(r, 50));
+      await new Promise(r => setTimeout(r, 60));
       const canvas = await getCanvas();
       if (!canvas) return;
 
@@ -185,7 +187,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
             files: [file],
           });
         } else {
-          alert('Sharing is not supported on this device. Please use Save instead.');
+          handleDownload();
         }
       });
     } catch (err) {
@@ -195,21 +197,16 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
     }
   };
 
-  const goPrevious = () => setLayoutIndex((prev) => (prev - 1 + LAYOUTS.length) % LAYOUTS.length);
-  const goNext = () => setLayoutIndex((prev) => (prev + 1) % LAYOUTS.length);
-  const swipeStartX = useRef<number | null>(null);
-  const handleCardPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest('.leaflet-container')) return;
-    swipeStartX.current = event.clientX;
+  const goPrevious = () => {
+    const idx = LAYOUT_OPTIONS.findIndex(l => l.id === layout);
+    const prev = (idx - 1 + LAYOUT_OPTIONS.length) % LAYOUT_OPTIONS.length;
+    setLayout(LAYOUT_OPTIONS[prev].id);
   };
-  const handleCardPointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (swipeStartX.current == null || (event.target as HTMLElement).closest('.leaflet-container')) {
-      swipeStartX.current = null;
-      return;
-    }
-    const delta = event.clientX - swipeStartX.current;
-    swipeStartX.current = null;
-    if (Math.abs(delta) >= 55) delta < 0 ? goNext() : goPrevious();
+
+  const goNext = () => {
+    const idx = LAYOUT_OPTIONS.findIndex(l => l.id === layout);
+    const next = (idx + 1) % LAYOUT_OPTIONS.length;
+    setLayout(LAYOUT_OPTIONS[next].id);
   };
 
   return createPortal(
@@ -218,34 +215,59 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[999] flex flex-col items-center bg-black/90 backdrop-blur-md touch-none overflow-y-auto px-4"
+        className="fixed inset-0 z-[9999] flex flex-col items-center bg-[#090605]/95 backdrop-blur-2xl touch-none overflow-y-auto px-4 py-3 select-none"
       >
-        <div className="relative w-full max-w-[400px] shrink-0 mx-auto mt-2 sm:mt-4">
-          
-          {/* The Card to capture */}
-          <motion.div 
-            // Keep the map fully interactive. The former parent drag listener
-            // captured pinch/drag gestures before Leaflet could handle them.
-            drag={false}
-            onPointerDown={handleCardPointerDown}
-            onPointerUp={handleCardPointerUp}
-            className={`w-full relative overflow-hidden rounded-[2rem] shadow-xl cursor-grab active:cursor-grabbing border-4 border-white/10`}
-            style={{ 
-              aspectRatio: isSolidBg ? '1 / 1' : '9 / 16',
-              backgroundImage: isTransparent ? `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h12v12H0V0zm12 12h12v12H12V12zM0 12h12v12H0V12zm12-12h12v12H12V0z' fill='%23222' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E")` : 'none'
-            }}
-          >
-            {/* Close Button (Overlay on UI, not captured in image) */}
+        {/* Top Navbar */}
+        <div className="w-full max-w-[420px] flex items-center justify-between px-2 pt-2 pb-1 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_10px_#f59e0b] animate-pulse" />
+            <span className="font-mono text-sm font-extrabold text-white tracking-widest uppercase drop-shadow-sm">
+              Share Workout
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Aspect Ratio Switcher */}
             <button
-              onClick={onClose}
-              className="absolute top-4 right-4 w-10 h-10 flex items-center justify-center text-white/70 hover:text-white rounded-full bg-black/40 backdrop-blur-md z-[200]"
+              onClick={() => setAspectRatio(prev => prev === '9/16' ? '1/1' : '9/16')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/10 text-white font-mono text-[11px] transition-all"
+              title="Toggle Aspect Ratio"
             >
-              <X size={20} />
+              {aspectRatio === '9/16' ? <Smartphone size={13} /> : <SquareIcon size={13} />}
+              <span>{aspectRatio}</span>
             </button>
 
+            {/* Close Button */}
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center text-white/70 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Card Preview Area */}
+        <div className="relative w-full max-w-[390px] shrink-0 mx-auto mt-1 flex flex-col items-center">
+          <motion.div 
+            className="w-full relative overflow-hidden rounded-[2.2rem] shadow-[0_20px_60px_rgba(0,0,0,0.8)] border border-white/15"
+            style={{ 
+              aspectRatio: aspectRatio === '1/1' ? '1 / 1' : '9 / 16',
+              backgroundImage: isTransparent ? `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0h12v12H0V0zm12 12h12v12H12V12zM0 12h12v12H0V12zm12-12h12v12H12V0z' fill='%23333' fill-opacity='0.4' fill-rule='evenodd'/%3E%3C/svg%3E")` : 'none'
+            }}
+          >
+            {/* The Actual Capture Target */}
             <div
               ref={cardRef}
-              className={`w-full h-full relative overflow-hidden flex flex-col rounded-[1.8rem] ${isTransparent ? 'bg-transparent' : 'bg-[#1f110d]'}`}
+              className={`w-full h-full relative overflow-hidden flex flex-col rounded-[2.2rem] ${
+                isTransparent 
+                  ? 'bg-transparent' 
+                  : isSunset
+                  ? 'bg-gradient-to-b from-[#180a22] via-[#24101e] to-[#090605]'
+                  : isCyber
+                  ? 'bg-[#050508]'
+                  : 'bg-[#090605]'
+              }`}
             >
               {/* Background Map Layer */}
               {(showMapBackground || showPathBackground) && (
@@ -253,340 +275,313 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                   {(data.route && data.route.length > 0) || data.currentLocation ? (
                     <div 
                       className="w-full h-full pointer-events-auto"
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onWheel={(event) => event.stopPropagation()}
                       style={isAShape ? {
                         WebkitMaskImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M50 5 L15 95 L35 95 L50 50 L65 95 L85 95 Z' fill='black'/></svg>")`,
                         WebkitMaskSize: 'contain',
                         WebkitMaskRepeat: 'no-repeat',
                         WebkitMaskPosition: 'center',
-                        transform: 'scale(1.1)' // Scale up slightly to fit better
+                        transform: 'scale(1.08)'
                       } : {}}
                     >
                       <RouteMap 
-                          route={data.route || []}
-                          currentLocation={data.currentLocation}
-                          theme={selectedTheme}
-                          height="100%"
-                          // Leaflet's gradient definition is injected asynchronously.
-                          // Transparent exports must still show the original route,
-                          // so use a solid fallback for the gradient selection.
-                          highlightColor={isTransparent && pathColor === 'gradient' ? '#f43f5e' : lineColor}
-                          hideMap={hideMapTiles}
-                          noGlow={true}
-                          isCapturing={downloading}
-                          recenterTrigger={recenterTrigger}
-                          fitToContainer
-                          showZoomControls
-                          cardioType={data.type}
-                          hideMarkers={hideMarkers}
-                          hideStartMarker
-                          mapPaddingBottomRight={showOverlayStats ? [40, 200] : showDistanceOnly ? [40, 100] : [40, 40]}
-                          mapPaddingTopLeft={isAShape ? [60, 40] : [40, 40]}
-                        />
+                        route={data.route || []}
+                        currentLocation={data.currentLocation}
+                        theme={selectedTheme}
+                        height="100%"
+                        highlightColor={isTransparent && pathColor === 'gradient' ? '#f43f5e' : lineColor}
+                        hideMap={hideMapTiles}
+                        noGlow={false}
+                        isCapturing={downloading}
+                        recenterTrigger={recenterTrigger}
+                        fitToContainer
+                        showZoomControls={false}
+                        cardioType={data.type}
+                        hideMarkers={isTransparent || isAShape}
+                        hideStartMarker
+                        mapPaddingBottomRight={layout === 'map-hero' ? [30, 80] : [40, 180]}
+                        mapPaddingTopLeft={isAShape ? [60, 40] : [40, 40]}
+                      />
                     </div>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-white/30 font-medium">
-                      No GPS recorded
+                    <div className="w-full h-full flex items-center justify-center text-white/30 font-mono text-sm">
+                      No GPS Track Recorded
                     </div>
                   )}
-                  {/* Strava-like bottom gradient for text readability if overlay stats are shown */}
-                  {(showOverlayStats || showDistanceOnly) && (
-                    <div className="absolute inset-x-0 bottom-0 h-[60%] bg-gradient-to-t from-black/60 via-black/20 to-transparent z-[1000]" />
-                  )}
-                  {/* Subtle top gradient for logo */}
-                  {(showOverlayStats || showDistanceOnly || layout === 'map-only' || layout === 'path-only' || layout === 'map-path-only' || layout === 'path-only-nomarker') && !isAShape && (
-                    <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/30 to-transparent z-[1000]" />
+
+                  {/* Gradient Vignettes for Readability */}
+                  {!isTransparent && !isPolaroid && (
+                    <>
+                      <div className="absolute inset-x-0 bottom-0 h-[65%] bg-gradient-to-t from-[#090605]/90 via-[#090605]/50 to-transparent z-[1000]" />
+                      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-[#090605]/70 to-transparent z-[1000]" />
+                    </>
                   )}
                 </div>
               )}
 
-              {/* Solid Background with App Logo Watermark (for Stats layout) */}
+              {/* Solid Telemetry Background with Signature Watermark */}
               {isSolidBg && (
-                <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden opacity-5">
-                  <svg viewBox="0 0 100 100" className="w-[150%] h-auto absolute" style={{ transform: 'rotate(45deg)' }}>
-                    <rect x="25" y="25" width="50" height="50" fill="none" stroke="white" strokeWidth="4" rx="8" />
-                  </svg>
+                <div className="absolute inset-0 z-0 flex items-center justify-center overflow-hidden opacity-5 pointer-events-none">
+                  <div className="font-sans text-[22vw] font-black text-white tracking-widest rotate-12">
+                    APPARATUS
+                  </div>
                 </div>
               )}
 
-              {/* Content Foreground */}
+              {/* Foreground UI Layer */}
               <div className="relative z-10 w-full h-full flex flex-col justify-between p-6 pointer-events-none">
                 
-                {/* Header Logo (Hidden for polaroid) */}
-                {!isPolaroid && !isAShape && (
-                  <div className={`flex flex-col items-center justify-center gap-1 ${isSolidBg ? 'mt-4' : 'mt-2'}`}>
-                    <span className="cardio-share-brand font-sans tracking-[0.3em] text-[18px] font-black text-white drop-shadow-md">
-                      ΛPPΛRΛTUS
+                {/* Header Brand Bar */}
+                {!isPolaroid && (
+                  <div className="flex items-center justify-between w-full">
+                    <span className="font-sans tracking-[0.3em] text-[15px] font-black text-white drop-shadow-md">
+                      APPARATUS
+                    </span>
+
+                    <span className={`text-[11px] font-mono font-bold tracking-wider px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-md border border-white/10 uppercase ${currentTextColorCls}`}>
+                      {typeLabel}
                     </span>
                   </div>
                 )}
 
-                {/* Center space filler (Hidden for polaroid) */}
-                {!isPolaroid && <div className="flex-1" />}
-
-                {/* Stats Overlay */}
-                {(showOverlayStats || showDistanceOnly) && (
-                  <div className="flex flex-col gap-3 mb-2 w-full">
-                    <div className="flex items-end gap-2 mb-2">
-                      <div className="flex items-baseline gap-2">
-                        <span className="font-display text-6xl font-black text-white">
-                          {data.distanceKm.toFixed(2)}
-                        </span>
-                        <span className="text-xl font-bold text-white/90 uppercase tracking-widest pl-1">
-                          km
-                        </span>
-                      </div>
-                      <span className={`text-xl font-black uppercase tracking-widest ml-auto mb-1 ${currentTextColorCls}`}>
-                        {typeLabel}
-                      </span>
-                    </div>
-                    
-                    {showOverlayStats && (
-                      <div className="grid grid-cols-3 gap-y-4 gap-x-2">
-                        <div>
-                          <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Time</div>
-                          <div className="font-display font-bold text-xl text-white">
-                            {formatDuration(data.durationSec)}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Pace</div>
-                          <div className="font-display font-bold text-xl text-white">
-                            {data.avgPace.replace(' /km', '')}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Speed</div>
-                          <div className="font-display font-bold text-xl text-white">
-                            {data.avgSpeedKmh?.toFixed(1) || '0.0'}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Max Spd</div>
-                          <div className="font-display font-bold text-xl text-white">
-                            {data.maxSpeedKmh?.toFixed(1) || '0.0'}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Elev</div>
-                          <div className="font-display font-bold text-xl text-white">
-                            {data.elevationGainM || 0}m
-                          </div>
-                        </div>
-                        {data.steps !== undefined && data.steps > 0 && (
-                          <div>
-                            <div className="text-[9px] font-bold text-white/80 uppercase tracking-widest mb-0.5">Steps</div>
-                            <div className="font-display font-bold text-xl text-white">
-                              {data.steps.toLocaleString()}
-                            </div>
-                          </div>
-                        )}
-                        <div>
-                          <div className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${currentTextColorCls}`}>Calories</div>
-                          <div className={`font-display font-bold text-xl ${currentTextColorCls}`}>
-                            {data.calories}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Centered Stats for Stats-only view */}
-                {/* Centered Stats for Stats-only view */}
-                {layout === 'stats-only' && (
-                  <div className="flex-1 flex flex-col items-center justify-center w-full">
-                    <div className="text-center mb-10">
-                      <div className="font-display text-[5.5rem] leading-none font-black text-white tracking-tighter">
-                        {data.distanceKm.toFixed(2)}
-                      </div>
-                      <div className="text-sm font-bold text-white/60 uppercase tracking-widest mt-1">
-                        Kilometers
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-3 gap-y-8 gap-x-2 w-full max-w-[320px]">
-                      <div className="text-center">
-                        <div className="font-display font-bold text-2xl text-white mb-1">{formatDuration(data.durationSec)}</div>
-                        <div className="text-[9px] font-bold text-white/50 uppercase tracking-widest">Time</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="font-display font-bold text-2xl text-white mb-1">{data.avgPace.replace(' /km', '')}</div>
-                        <div className="text-[9px] font-bold text-white/50 uppercase tracking-widest">Pace</div>
-                      </div>
-                      <div className="text-center">
-                        <div className={`font-display font-bold text-2xl mb-1 ${currentTextColorCls}`}>{data.calories}</div>
-                        <div className={`text-[9px] font-bold opacity-80 uppercase tracking-widest ${currentTextColorCls}`}>Cals</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="font-display font-bold text-2xl text-white mb-1">{data.avgSpeedKmh?.toFixed(1) || '0.0'}</div>
-                        <div className="text-[9px] font-bold text-white/50 uppercase tracking-widest">Speed</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="font-display font-bold text-2xl text-white mb-1">{data.maxSpeedKmh?.toFixed(1) || '0.0'}</div>
-                        <div className="text-[9px] font-bold text-white/50 uppercase tracking-widest">Max</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="font-display font-bold text-2xl text-white mb-1">{data.elevationGainM || 0}m</div>
-                        <div className="text-[9px] font-bold text-white/50 uppercase tracking-widest">Elev</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Polaroid */}
+                {/* Polaroid Frame */}
                 {isPolaroid && (
-                  <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none p-6 pb-12">
-                    <div className="bg-[#fcfbf9] rounded-sm p-4 pb-10 shadow-[0_20px_40px_rgba(0,0,0,0.6)] w-full rotate-[1deg] border border-black/5">
-                      <div className="w-full aspect-square bg-gray-200 rounded-sm overflow-hidden relative">
-                        <RouteMap route={data.route || []} theme="satellite" height="100%" fitToContainer showZoomControls hideStartMarker hideMap={false} highlightColor="#f43f5e" cardioType={data.type as any} />
+                  <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none p-5 pb-8">
+                    <div className="bg-[#fcfbf9] rounded-2xl p-4 pb-8 shadow-[0_25px_50px_rgba(0,0,0,0.7)] w-full border border-black/10">
+                      <div className="w-full aspect-square bg-gray-900 rounded-xl overflow-hidden relative shadow-inner">
+                        <RouteMap route={data.route || []} theme="satellite" height="100%" fitToContainer showZoomControls={false} hideStartMarker hideMap={false} highlightColor="#f43f5e" cardioType={data.type as any} />
                       </div>
-                      <div className="mt-6 flex flex-col items-center gap-1 font-sans text-gray-800">
-                        <div className="text-2xl font-black italic">{data.distanceKm.toFixed(2)} km {typeLabel}</div>
-                        <div className="text-sm opacity-60 font-bold">{formatDuration(data.durationSec)} • {displayDate}</div>
+                      <div className="mt-5 flex flex-col items-center gap-1 font-sans text-gray-900">
+                        <div className="text-2xl font-black italic tracking-tight">{data.distanceKm.toFixed(2)} km {typeLabel}</div>
+                        <div className="text-xs font-mono font-bold text-gray-500">{formatDuration(data.durationSec)} · {data.avgPace} · {displayDate}</div>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {/* Just Date for map-only variants */}
-                {(layout === 'map-only' || layout === 'path-only' || layout === 'map-path-only' || layout === 'path-only-nomarker' || isAShape) && (
-                  <div className={`text-right ${isAShape ? 'mt-auto' : ''}`}>
-                    <span className="text-xs font-bold text-white/80 drop-shadow-md uppercase tracking-wider bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-sm">
-                      {displayDate}
-                    </span>
+                {/* Hero Distance & Metrics Overlay (Non-Polaroid) */}
+                {!isPolaroid && layout !== 'path-minimal' && (
+                  <div className="flex flex-col gap-3 mb-1 w-full">
+                    {/* Distance Hero */}
+                    <div className="flex items-end justify-between">
+                      <div>
+                        <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-white/70 mb-0.5">
+                          Total Distance
+                        </div>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="font-mono text-5xl sm:text-6xl font-black tracking-tight text-white drop-shadow-md">
+                            {data.distanceKm.toFixed(2)}
+                          </span>
+                          <span className="font-mono text-lg font-bold text-white/80 uppercase">
+                            km
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-white/70 mb-0.5">
+                          Date
+                        </div>
+                        <div className="text-xs font-mono font-medium text-white/90">
+                          {format(new Date(data.date), 'MMM d, yyyy')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Pro Metric Typography Grid (No bounding boxes / cards / horizontal line) */}
+                    <div className="grid grid-cols-3 gap-y-3 gap-x-2 pt-1">
+                      <div className="flex flex-col">
+                        <div className="text-[10px] font-mono font-bold text-white/60 uppercase tracking-wider mb-0.5">Time</div>
+                        <div className="font-mono text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-sm">{formatDuration(data.durationSec)}</div>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <div className="text-[10px] font-mono font-bold text-white/60 uppercase tracking-wider mb-0.5">Pace</div>
+                        <div className="font-mono text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-sm">{data.avgPace.replace(' /km', '')}</div>
+                      </div>
+
+                      <div className="flex flex-col">
+                        <div className={`text-[10px] font-mono font-bold uppercase tracking-wider mb-0.5 ${currentTextColorCls}`}>Calories</div>
+                        <div className={`font-mono text-xl sm:text-2xl font-black tracking-tight drop-shadow-sm ${currentTextColorCls}`}>{data.calories}</div>
+                      </div>
+
+                      {data.avgSpeedKmh !== undefined && (
+                        <div className="flex flex-col">
+                          <div className="text-[10px] font-mono font-bold text-white/60 uppercase tracking-wider mb-0.5">Avg Spd</div>
+                          <div className="font-mono text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-sm">{data.avgSpeedKmh.toFixed(1)} <span className="text-xs font-normal text-white/60">km/h</span></div>
+                        </div>
+                      )}
+
+                      {data.elevationGainM !== undefined && (
+                        <div className="flex flex-col">
+                          <div className="text-[10px] font-mono font-bold text-white/60 uppercase tracking-wider mb-0.5">Elevation</div>
+                          <div className="font-mono text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-sm">{data.elevationGainM}m</div>
+                        </div>
+                      )}
+
+                      {(data.steps !== undefined && data.steps > 0) && (
+                        <div className="flex flex-col">
+                          <div className="text-[10px] font-mono font-bold text-white/60 uppercase tracking-wider mb-0.5">Steps</div>
+                          <div className="font-mono text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-sm">{data.steps.toLocaleString()}</div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
+
+                {/* Minimalist Path Corner Stamp */}
+                {layout === 'path-minimal' && (
+                  <div className="mt-auto flex items-end justify-between">
+                    <div>
+                      <div className="font-mono text-4xl font-black text-white">{data.distanceKm.toFixed(2)} km</div>
+                      <div className="text-xs font-mono text-white/70">{formatDuration(data.durationSec)} · {data.avgPace}</div>
+                    </div>
+                    <div className="text-xs font-mono font-bold text-white/60 uppercase">{displayDate}</div>
+                  </div>
+                )}
+
               </div>
             </div>
 
-            {/* Explicit swipe affordances; map gestures remain available between
-                the controls and these buttons also work for mouse users. */}
+            {/* Previous / Next Arrows */}
             <button
               type="button"
-              aria-label="Previous card"
+              aria-label="Previous template"
               onClick={goPrevious}
-              className="absolute left-2 top-1/2 z-[210] -translate-y-1/2 rounded-full bg-black/45 p-2 text-white/80 shadow-md backdrop-blur-sm hover:bg-black/65 hover:text-white"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 border border-white/10 text-white flex items-center justify-center shadow-lg backdrop-blur-md transition-all active:scale-90"
             >
-              <ChevronLeft size={22} />
+              <ChevronLeft size={20} />
             </button>
             <button
               type="button"
-              aria-label="Next card"
+              aria-label="Next template"
               onClick={goNext}
-              className="absolute right-2 top-1/2 z-[210] -translate-y-1/2 rounded-full bg-black/45 p-2 text-white/80 shadow-md backdrop-blur-sm hover:bg-black/65 hover:text-white"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/60 hover:bg-black/80 border border-white/10 text-white flex items-center justify-center shadow-lg backdrop-blur-md transition-all active:scale-90"
             >
-              <ChevronRight size={22} />
+              <ChevronRight size={20} />
             </button>
           </motion.div>
-
-          {/* Dots Indicator */}
-          <div className="flex items-center justify-center gap-1.5 mt-3">
-            {LAYOUTS.map((_, idx) => (
-              <div 
-                key={idx} 
-                className={`h-1.5 rounded-full transition-all duration-300 ${idx === layoutIndex ? 'w-5 bg-white shadow-[0_0_8px_rgba(255,255,255,0.5)]' : 'w-1.5 bg-white/20'}`}
-              />
-            ))}
-          </div>
         </div>
 
-        {/* Controls */}
-        <div className="w-full max-w-[400px] mx-auto px-4 pb-6 flex flex-col gap-2 mt-2">
-          
-          {/* Map theme selector (only when map tiles are visible) */}
-          {!hideMapTiles && layout !== 'stats-only' && (
-            <div className="w-full max-w-[95vw] mx-auto bg-white/5 backdrop-blur-xl rounded-[24px] border border-white/10 overflow-hidden">
-              <div className="flex overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {AVAILABLE_THEMES.map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setSelectedTheme(t)}
-                    className={`shrink-0 px-4 py-2 rounded-[20px] text-xs font-bold tracking-wide transition-all duration-300 ${
-                      selectedTheme === t 
-                        ? 'bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7] text-white shadow-[0_4px_12px_rgba(244,63,94,0.4)]' 
-                        : 'text-white/60 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    {MAP_THEMES[t].label}
-                  </button>
-                ))}
+        {/* Customization Toolbar */}
+        <div className="w-full max-w-[400px] shrink-0 mx-auto px-2 mt-3 flex flex-col gap-2.5 pb-4">
+          {/* Tab Selector */}
+          <div className="flex items-center justify-around bg-[#1a100d]/90 backdrop-blur-xl rounded-2xl p-1 border border-[#42241b]">
+            <button
+              onClick={() => setActiveTab('layout')}
+              className={`flex-1 py-1.5 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeTab === 'layout' ? 'bg-sienna text-white shadow-sm' : 'text-white/60 hover:text-white'}`}
+            >
+              <LayoutIcon size={13} /> Style
+            </button>
+            <button
+              onClick={() => setActiveTab('theme')}
+              className={`flex-1 py-1.5 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeTab === 'theme' ? 'bg-sienna text-white shadow-sm' : 'text-white/60 hover:text-white'}`}
+            >
+              <Layers size={13} /> Map
+            </button>
+            <button
+              onClick={() => setActiveTab('colors')}
+              className={`flex-1 py-1.5 rounded-xl font-mono text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${activeTab === 'colors' ? 'bg-sienna text-white shadow-sm' : 'text-white/60 hover:text-white'}`}
+            >
+              <Palette size={13} /> Color
+            </button>
+          </div>
+
+          {/* Tab Content: Styles */}
+          {activeTab === 'layout' && (
+            <div className="flex overflow-x-auto gap-2 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {LAYOUT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setLayout(opt.id)}
+                  className={`shrink-0 px-4 py-2 rounded-full font-mono text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                    layout === opt.id 
+                      ? 'bg-sienna border-sienna text-white' 
+                      : 'bg-[#1a100d] border-[#42241b] text-white/70 hover:text-white hover:border-[#5a2e22]'
+                  }`}
+                >
+                  <span>{opt.icon}</span>
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Tab Content: Map Themes */}
+          {activeTab === 'theme' && (
+            <div className="flex overflow-x-auto gap-2 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {AVAILABLE_THEMES.map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setSelectedTheme(t)}
+                  className={`shrink-0 px-4 py-2 rounded-full font-mono text-xs font-bold transition-all border ${
+                    selectedTheme === t
+                      ? 'bg-sienna border-sienna text-white'
+                      : 'bg-[#1a100d] border-[#42241b] text-white/70 hover:text-white hover:border-[#5a2e22]'
+                  }`}
+                >
+                  {MAP_THEMES[t].label}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Tab Content: Color Pickers */}
+          {activeTab === 'colors' && (
+            <div className="flex flex-col gap-2 bg-[#1a100d]/90 backdrop-blur-xl rounded-2xl p-3 border border-[#42241b]">
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-mono font-bold text-white/60 uppercase w-12 shrink-0">Trail</span>
+                <div className="flex-1 flex overflow-x-auto gap-2 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {PATH_COLORS.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => setPathColor(c.id)}
+                      className={`shrink-0 w-7 h-7 rounded-full ${c.bg} transition-all border-2 ${pathColor === c.id ? 'border-white ring-2 ring-white/40 scale-110 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                      title={c.label}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 pt-2 border-t border-[#42241b]">
+                <span className="text-[11px] font-mono font-bold text-white/60 uppercase w-12 shrink-0">Text</span>
+                <div className="flex-1 flex overflow-x-auto gap-2 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {TEXT_COLORS.map(c => (
+                    <button
+                      key={c.id}
+                      onClick={() => setTextColor(c.id)}
+                      className={`shrink-0 w-7 h-7 rounded-full ${c.bg} transition-all border-2 ${textColor === c.id ? 'border-white ring-2 ring-white/40 scale-110 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           )}
 
-          {/* Color Pickers */}
-          <div className="w-full max-w-[95vw] mx-auto bg-white/5 backdrop-blur-xl rounded-[24px] border border-white/10 overflow-hidden p-3 flex flex-col gap-3">
-            {/* Path Color */}
-              <div className="flex min-w-0 items-center gap-3">
-              <span className="text-xs font-bold text-white/60 uppercase tracking-wider w-16 shrink-0">Path</span>
-              <div className="min-w-0 flex-1 flex overflow-x-auto gap-2 px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {PATH_COLORS.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => setPathColor(c.id)}
-                    className={`shrink-0 w-8 h-8 rounded-full ${c.bg} transition-all duration-300 border-2 ${pathColor === c.id ? 'border-white ring-2 ring-white/30 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'border-transparent opacity-50 hover:opacity-100'}`}
-                  />
-                ))}
-              </div>
-            </div>
-            
-            {/* Text Color */}
-              <div className="flex min-w-0 items-center gap-3">
-              <span className="text-xs font-bold text-white/60 uppercase tracking-wider w-16 shrink-0">Text</span>
-              <div className="min-w-0 flex-1 flex overflow-x-auto gap-2 px-1 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {TEXT_COLORS.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => setTextColor(c.id)}
-                    className={`shrink-0 w-8 h-8 rounded-full ${c.bg} transition-all duration-300 border-2 ${textColor === c.id ? 'border-white ring-2 ring-white/30 shadow-[0_0_10px_rgba(255,255,255,0.5)]' : 'border-transparent opacity-50 hover:opacity-100'}`}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex justify-center gap-6 w-full mt-2">
-            <svg width="0" height="0" className="absolute">
-              <defs>
-                <linearGradient id="icon-gradient" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#fbbf24" offset="0%" />
-                  <stop stopColor="#f43f5e" offset="50%" />
-                  <stop stopColor="#a855f7" offset="100%" />
-                </linearGradient>
-              </defs>
-            </svg>
-
+          {/* Primary Action Buttons (Apparatus Theme Matched Gradient) */}
+          <div className="grid grid-cols-2 gap-3 mt-1">
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="p-4 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-[0.90] disabled:opacity-50"
-              title="Save to Photos"
+              className="py-3.5 px-4 rounded-2xl bg-gradient-to-b from-[#251510] to-[#1a100d] hover:from-[#2e1913] hover:to-[#221410] border border-[#522b20] text-[#fff3eb] font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-sm"
             >
-              {didCopy ? <Check size={28} className="text-green-400" /> : <Download size={28} style={{ stroke: 'url(#icon-gradient)' }} />}
+              {didCopy ? (
+                <>
+                  <Check size={18} className="text-emerald-400" /> Saved!
+                </>
+              ) : (
+                <>
+                  <Download size={18} className="text-amber-500" /> Save Image
+                </>
+              )}
             </button>
-            
+
             <button
               onClick={handleShare}
               disabled={downloading}
-              className="p-4 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-[0.90] disabled:opacity-50"
-              title="Share Activity"
+              className="py-3.5 px-4 rounded-2xl bg-gradient-to-r from-sienna via-[#e66345] to-amber-500 hover:opacity-95 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-[0_8px_25px_rgba(235,89,60,0.38)] transition-all active:scale-95 disabled:opacity-50"
             >
-              <Share2 size={28} style={{ stroke: 'url(#icon-gradient)' }} />
+              <Share2 size={18} /> Share Story
             </button>
-
-            {(!hideMapTiles || showMapBackground || showPathBackground) && (
-              <button
-                onClick={() => setRecenterTrigger(prev => prev + 1)}
-                disabled={downloading}
-                className="p-4 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all active:scale-[0.90] disabled:opacity-50"
-                title="Recenter Map"
-              >
-                <LocateFixed size={28} style={{ stroke: 'url(#icon-gradient)' }} />
-              </button>
-            )}
           </div>
         </div>
       </motion.div>

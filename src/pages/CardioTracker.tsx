@@ -1,21 +1,29 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers, RotateCcw, ChevronRight, ChevronUp, ChevronDown, LocateFixed, Compass, Loader2 } from 'lucide-react';
+import { 
+  ArrowLeft, Play, Pause, Square, MapPin, Clock, Flame, TrendingUp, 
+  Mountain, Zap, Footprints, Bike, Dumbbell, Navigation, Layers, 
+  RotateCcw, ChevronRight, ChevronUp, ChevronDown, LocateFixed, 
+  Compass, Loader2, Trophy, Sparkles, Share2, Check, Activity, Award
+} from 'lucide-react';
 import { useCompassHeading } from '@/hooks/useCompassHeading';
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
-import { useQueryClient } from '@tanstack/react-query';
-import { requestNotificationPermission, clearNotification, showNotification, cancelRemainingTodayReminders, scheduleInactivityReminders } from '@/utils/notifications';
-import { requestForegroundPermissions, startWorkoutForegroundService, updateWorkoutForegroundService, stopWorkoutForegroundService, setupForegroundServiceListeners } from '@/utils/foreground-service';
+import { requestNotificationPermission } from '@/utils/notifications';
+import { 
+  requestForegroundPermissions, startWorkoutForegroundService, 
+  updateWorkoutForegroundService, stopWorkoutForegroundService, 
+  setupForegroundServiceListeners 
+} from '@/utils/foreground-service';
 import { useUIStore } from '@/stores/ui-store';
 import { useCardioStore, startGpsWatch, finishTracking } from '@/stores/cardio-store';
 import { usePedometerStore } from '@/stores/pedometer-store';
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { saveCardioActivity, getUserCardioActivities } from '@/services/cardio';
 import { calculateCardioCalories } from '@/lib/calories';
-import { startActiveSession, updateActiveSession, endActiveSession, postActivity } from '@/services/social';
+import { startActiveSession, endActiveSession, postActivity } from '@/services/social';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 import { updateUserChallengeProgress } from '@/services/community';
@@ -80,11 +88,51 @@ function getLiveSteps(
   return estSteps;
 }
 
-const ACTIVITY_OPTIONS: { type: CardioActivityType | 'workout'; label: string; icon: React.ReactNode; color: string; description: string }[] = [
-  { type: 'workout' as any, label: 'Workout', icon: <Dumbbell size={28} />, color: 'from-orange-500 to-red-500', description: 'Gym session with exercises' },
-  { type: 'walk', label: 'Walk', icon: <Footprints size={28} />, color: 'from-emerald-500 to-teal-500', description: 'Track your walking route' },
-  { type: 'run', label: 'Run', icon: <Zap size={28} />, color: 'from-blue-500 to-cyan-500', description: 'Track your running route' },
-  { type: 'cycle', label: 'Cycle', icon: <Bike size={28} />, color: 'from-purple-500 to-pink-500', description: 'Track your cycling route' },
+const ACTIVITY_OPTIONS: { type: CardioActivityType | 'workout'; label: string; tag: string; icon: React.ReactNode; color: string; bgGradient: string; description: string }[] = [
+  { 
+    type: 'workout' as any, 
+    label: 'Strength Workout', 
+    tag: 'GYM & REPS',
+    icon: <Dumbbell size={28} />, 
+    color: 'from-orange-500 to-amber-500', 
+    bgGradient: 'from-orange-500/10 via-amber-500/5 to-transparent',
+    description: 'Weight training, routines and logged sets' 
+  },
+  { 
+    type: 'walk', 
+    label: 'Outdoor Walk', 
+    tag: 'STEPS & GPS',
+    icon: <Footprints size={28} />, 
+    color: 'from-emerald-500 to-teal-500', 
+    bgGradient: 'from-emerald-500/10 via-teal-500/5 to-transparent',
+    description: 'Track steps, pace and scenic walking route' 
+  },
+  { 
+    type: 'run', 
+    label: 'Running Session', 
+    tag: 'TEMPO & DISTANCE',
+    icon: <Zap size={28} />, 
+    color: 'from-cyan-500 to-blue-600', 
+    bgGradient: 'from-cyan-500/10 via-blue-600/5 to-transparent',
+    description: 'Live pace, interval splits and GPS track' 
+  },
+  { 
+    type: 'cycle', 
+    label: 'Cycling & Ride', 
+    tag: 'SPEED & ELEVATION',
+    icon: <Bike size={28} />, 
+    color: 'from-purple-500 to-rose-500', 
+    bgGradient: 'from-purple-500/10 via-rose-500/5 to-transparent',
+    description: 'Speedometer, max speed and elevation gain' 
+  },
+];
+
+const EFFORT_LEVELS = [
+  { id: 'easy', emoji: '😴', label: 'Easy', color: 'text-emerald-400' },
+  { id: 'moderate', emoji: '😊', label: 'Moderate', color: 'text-cyan-400' },
+  { id: 'hard', emoji: '😅', label: 'Hard', color: 'text-amber-400' },
+  { id: 'brutal', emoji: '🥵', label: 'Brutal', color: 'text-orange-500' },
+  { id: 'max_effort', emoji: '💀', label: 'Max Effort', color: 'text-rose-500' },
 ];
 
 export function CardioTracker() {
@@ -174,7 +222,10 @@ export function CardioTracker() {
   const [isSaving, setIsSaving] = useState(false);
   const [summaryData, setSummaryData] = useState<Partial<CardioActivity> | null>(null);
   const [showShare, setShowShare] = useState(false);
+  const [shareDataOverride, setShareDataOverride] = useState<CardioShareData | null>(null);
   const [recentActivities, setRecentActivities] = useState<CardioActivity[]>([]);
+  const [workoutEffort, setWorkoutEffort] = useState<string>('moderate');
+  const [workoutNotes, setWorkoutNotes] = useState<string>('');
 
   const [isExpanded, setIsExpanded] = useState(false);
   const [recenterTrigger, setRecenterTrigger] = useState(0);
@@ -193,10 +244,30 @@ export function CardioTracker() {
 
   // Fetch recent activities
   useEffect(() => {
-    if (user && screen === 'select') {
-      getUserCardioActivities(user.uid, 5).then(setRecentActivities).catch(console.error);
+    if (user && (screen === 'select' || screen === 'summary')) {
+      getUserCardioActivities(user.uid, 6).then(setRecentActivities).catch(console.error);
     }
   }, [user, screen]);
+
+  // Weekly Stats Calculation
+  const weeklyStats = useMemo(() => {
+    const oneWeekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+    const pastWeek = recentActivities.filter(a => {
+      const ts = a.startedAt?.toDate ? a.startedAt.toDate().getTime() : new Date(a.date).getTime();
+      return ts >= oneWeekAgo;
+    });
+
+    const totalKm = pastWeek.reduce((acc, curr) => acc + (curr.distanceKm || 0), 0);
+    const totalTimeSec = pastWeek.reduce((acc, curr) => acc + (curr.durationSec || 0), 0);
+    const totalCalories = pastWeek.reduce((acc, curr) => acc + (curr.calories || 0), 0);
+
+    return {
+      totalKm: totalKm.toFixed(1),
+      totalSessions: pastWeek.length,
+      totalHours: (totalTimeSec / 3600).toFixed(1),
+      totalCalories,
+    };
+  }, [recentActivities]);
 
   // Timer — pauses when manually paused OR auto-paused
   useEffect(() => {
@@ -220,29 +291,6 @@ export function CardioTracker() {
     }, 1000);
     return () => clearInterval(interval);
   }, [store.isTracking, store.startedAt, store.isPaused, store.autoPauseStatus, store.totalPausedMs, store.autoPausedAt]);
-
-  // Update live session periodically for social feed
-  useEffect(() => {
-    if (!store.isTracking || !user || !store.activityType) return;
-    const interval = setInterval(() => {
-      const st = useCardioStore.getState();
-      const currentElapsedSec = Math.floor((Date.now() - (st.startedAt || Date.now()) - st.totalPausedMs) / 1000);
-      
-      const cals = calculateCardioCalories(
-        st.activityType!,
-        st.distanceKm,
-        currentElapsedSec / 60,
-        userWeight || 70,
-        st.currentSpeedKmh
-      );
-      updateActiveSession(user.uid, {
-        currentExercise: `${st.distanceKm.toFixed(2)} km`,
-        caloriesBurned: cals,
-        steps: getLiveSteps(st.activityType, st.distanceKm, pedometerStore)
-      }).catch(console.error);
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [store.isTracking, user, store.activityType, userWeight, pedometerStore.isSessionActive]);
 
   const handleBackgroundSave = async () => {
     if (!store.isTracking || !store.activityType) return;
@@ -314,7 +362,6 @@ export function CardioTracker() {
     await requestNotificationPermission();
     await requestForegroundPermissions();
     
-    // Start ongoing Strava-style notification with PAUSE/RESUME and STOP buttons
     const initialContent = getCardioNotificationContent(store, 0);
     startWorkoutForegroundService('cardio', initialContent.title, initialContent.body, false);
     
@@ -430,7 +477,7 @@ export function CardioTracker() {
     setSummaryData(data);
     setScreen('summary');
 
-    // Auto-save
+    // Auto-save to Firestore
     if (user && dist > 0.01) {
       setIsSaving(true);
       try {
@@ -448,13 +495,13 @@ export function CardioTracker() {
           pausedDurationSec,
           distanceKm: dist,
           avgSpeedKmh: Math.round(avgSpeed * 10) / 10,
-          maxSpeedKmh: Math.round(store.maxSpeedKmh * 10) / 10,
+          maxSpeedKmh: Math.round(Math.max(store.maxSpeedKmh, avgSpeed) * 10) / 10,
           avgPace: `${pace} /km`,
           calories: calories,
           elevationGainM: Math.round(store.elevationGainM),
           route: store.routePoints,
           visibility: 'followers',
-          notes: '',
+          notes: workoutNotes || `Effort: ${workoutEffort}`,
           steps: steps,
           stepSource: usePedometerStore.getState().stepSource,
         });
@@ -499,11 +546,7 @@ export function CardioTracker() {
           console.error('Failed to update challenges:', err);
         }
 
-        // Smart Background Reminders
-        cancelRemainingTodayReminders().catch(() => {});
-        scheduleInactivityReminders().catch(() => {});
-
-        showToast('Activity saved!');
+        showToast('Workout saved to logbook!');
       } catch (err) {
         console.error('Failed to save activity:', err);
         showToast('Failed to save activity', 'error');
@@ -532,112 +575,219 @@ export function CardioTracker() {
       )
     : 0;
 
-  // ─── Select Screen ───
+  // ─── Screen 1: Select Screen ───
   if (screen === 'select') {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-24 max-w-3xl mx-auto px-4 pt-6 md:pt-10">
-        <div className="mb-10 flex items-center gap-5">
-          <button 
-            onClick={() => navigate('/')}
-            className="w-11 h-11 shrink-0 flex items-center justify-center rounded-full bg-[var(--card)]/80 backdrop-blur-md border border-[var(--border)] text-[var(--text)] hover:bg-[var(--border)] transition-all shadow-sm active:scale-95"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div>
-            <div className="font-mono text-amber-500 dark:text-amber-400 text-[10px] tracking-widest mb-1.5 font-bold uppercase">Activity Tracker</div>
-            <h1 className="font-display text-3xl md:text-4xl text-[var(--text)] leading-none tracking-tight">Start Tracking</h1>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-28 max-w-3xl mx-auto px-4 pt-6 md:pt-10" style={themeStyles}>
+        {/* Header Bar */}
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => navigate('/')}
+              className="w-11 h-11 shrink-0 flex items-center justify-center rounded-2xl bg-[var(--card)]/80 backdrop-blur-md border border-[var(--border)] text-[var(--text)] hover:bg-[var(--border)] transition-all shadow-sm active:scale-95"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div>
+              <div className="font-mono text-sienna text-[10px] tracking-widest font-bold uppercase flex items-center gap-1.5">
+                <Activity size={12} /> Outdoor & Gym
+              </div>
+              <h1 className="font-display text-3xl md:text-4xl text-[var(--text)] leading-none tracking-tight mt-0.5">
+                Activity Hub
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 font-mono text-xs font-bold">
+            <Navigation size={12} /> GPS Ready
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5 mb-12">
+        {/* Weekly Stats Glance */}
+        <div className="p-4 rounded-3xl bg-[var(--card)]/80 backdrop-blur-xl border border-[var(--border)] mb-8 shadow-sm">
+          <div className="text-[10px] font-mono font-bold uppercase text-[var(--muted)] tracking-wider mb-3 flex items-center gap-1.5">
+            <Award size={13} className="text-amber-500" /> Past 7 Days Performance
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="p-3 rounded-2xl bg-[var(--bg)]/60 border border-[var(--border)]/60">
+              <div className="font-mono text-2xl font-black text-[var(--text)]">{weeklyStats.totalKm} <span className="text-xs font-normal text-[var(--muted)]">km</span></div>
+              <div className="text-[9px] font-mono font-bold text-[var(--muted)] uppercase mt-0.5">Distance</div>
+            </div>
+            <div className="p-3 rounded-2xl bg-[var(--bg)]/60 border border-[var(--border)]/60">
+              <div className="font-mono text-2xl font-black text-[var(--text)]">{weeklyStats.totalCalories} <span className="text-xs font-normal text-[var(--muted)]">kcal</span></div>
+              <div className="text-[9px] font-mono font-bold text-[var(--muted)] uppercase mt-0.5">Calories</div>
+            </div>
+            <div className="p-3 rounded-2xl bg-[var(--bg)]/60 border border-[var(--border)]/60">
+              <div className="font-mono text-2xl font-black text-[var(--text)]">{weeklyStats.totalSessions}</div>
+              <div className="text-[9px] font-mono font-bold text-[var(--muted)] uppercase mt-0.5">Workouts</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Activity Selection Cards */}
+        <div className="mb-4 text-xs font-mono font-bold uppercase text-[var(--muted)] tracking-wider">
+          Choose Workout Mode
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-10">
           {ACTIVITY_OPTIONS.map((opt) => (
             <motion.button
               key={opt.type}
               whileHover={{ scale: 1.02, y: -2 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => handleStartActivity(opt.type)}
-              className="flex flex-col gap-4 p-6 rounded-[2rem] bg-white/50 dark:bg-white/5 backdrop-blur-xl border border-[var(--border)] hover:border-sienna/50 hover:bg-white/80 dark:hover:bg-white/10 transition-all text-left group shadow-lg shadow-black/5"
+              className={`relative overflow-hidden flex flex-col gap-3.5 p-5 rounded-[2rem] bg-gradient-to-br ${opt.bgGradient} bg-[var(--card)]/90 backdrop-blur-xl border border-[var(--border)] hover:border-sienna/50 transition-all text-left group shadow-lg shadow-black/5`}
             >
               <div className="flex items-center justify-between w-full">
-                <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${opt.color} flex items-center justify-center text-white shrink-0 group-hover:scale-110 group-hover:-rotate-3 transition-all duration-300 shadow-md`}>
+                <div className={`w-13 h-13 p-3 rounded-2xl bg-gradient-to-br ${opt.color} flex items-center justify-center text-white shrink-0 group-hover:scale-110 group-hover:-rotate-3 transition-all duration-300 shadow-md`}>
                   {opt.icon}
                 </div>
-                <div className="w-8 h-8 rounded-full bg-[var(--border)]/50 flex items-center justify-center text-[var(--text)] group-hover:bg-[var(--text)] group-hover:text-[var(--bg)] transition-colors">
-                  <ChevronRight size={16} />
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-mono font-bold tracking-wider px-2 py-0.5 rounded-full bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] uppercase">
+                    {opt.tag}
+                  </span>
+                  <div className="w-8 h-8 rounded-full bg-[var(--border)]/60 flex items-center justify-center text-[var(--text)] group-hover:bg-sienna group-hover:text-white transition-colors">
+                    <ChevronRight size={16} />
+                  </div>
                 </div>
               </div>
-              <div className="flex-1 min-w-0 mt-2">
-                <h3 className="font-bold text-[19px] text-[var(--text)] tracking-tight mb-1">{opt.label}</h3>
-                <p className="text-[13px] text-bone-dim leading-relaxed">{opt.description}</p>
+              <div className="flex-1 min-w-0 mt-1">
+                <h3 className="font-bold text-xl text-[var(--text)] tracking-tight mb-1">{opt.label}</h3>
+                <p className="text-[12px] text-[var(--muted)] leading-relaxed">{opt.description}</p>
               </div>
             </motion.button>
           ))}
         </div>
 
-        {/* Recent Activities */}
+        {/* Recent Activities List */}
         {recentActivities.length > 0 && (
           <div>
-            <h2 className="font-display text-lg mb-4">Recent Activities</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-display text-xl text-[var(--text)]">Recent Cardio History</h2>
+              <span className="text-xs font-mono text-[var(--muted)]">{recentActivities.length} logged</span>
+            </div>
+
             <div className="space-y-3">
               {recentActivities.map((act) => {
-                const typeLabel = act.type === 'walk' ? '🚶 Walk' : act.type === 'run' ? '🏃 Run' : '🚴 Cycle';
+                const typeLabel = act.type === 'walk' ? 'Walk' : act.type === 'run' ? 'Run' : 'Ride';
+                const typeIcon = act.type === 'walk' ? <Footprints size={16} className="text-emerald-500" /> : act.type === 'run' ? <Zap size={16} className="text-cyan-500" /> : <Bike size={16} className="text-purple-500" />;
+                
                 return (
-                  <div key={act.id} className="card p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span className="text-lg">{typeLabel.split(' ')[0]}</span>
+                  <div 
+                    key={act.id} 
+                    className="p-4 rounded-2xl bg-[var(--card)]/80 backdrop-blur-md border border-[var(--border)] flex items-center justify-between shadow-sm hover:border-sienna/40 transition-all"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex items-center justify-center shrink-0">
+                        {typeIcon}
+                      </div>
                       <div>
-                        <div className="font-semibold text-sm">{typeLabel.split(' ')[1]} — {act.distanceKm.toFixed(2)} km</div>
-                        <div className="text-xs text-bone-dim font-mono">
+                        <div className="font-bold text-sm text-[var(--text)] flex items-center gap-2">
+                          <span>{typeLabel}</span>
+                          <span className="font-mono text-xs font-normal text-[var(--muted)]">· {act.distanceKm.toFixed(2)} km</span>
+                        </div>
+                        <div className="text-xs text-[var(--muted)] font-mono mt-0.5">
                           {formatDuration(act.durationSec)} · {act.avgPace} · {act.calories} kcal
                         </div>
                       </div>
                     </div>
-                    <div className="text-xs text-bone-dim font-mono">{act.date}</div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setShareDataOverride({
+                            type: act.type as any,
+                            date: act.date,
+                            distanceKm: act.distanceKm,
+                            durationSec: act.durationSec,
+                            calories: act.calories,
+                            avgPace: act.avgPace,
+                            avgSpeedKmh: act.avgSpeedKmh,
+                            maxSpeedKmh: act.maxSpeedKmh,
+                            elevationGainM: act.elevationGainM,
+                            route: act.route,
+                            steps: act.steps,
+                          });
+                          setShowShare(true);
+                        }}
+                        className="p-2 rounded-xl bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-sienna hover:border-sienna/50 transition-colors shadow-sm"
+                        title="Share Activity Card"
+                      >
+                        <Share2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
             </div>
           </div>
         )}
+
+        {/* Global Share Modal */}
+        {showShare && (shareDataOverride || summaryData) && (
+          <CardioShareModal
+            data={shareDataOverride || {
+              type: summaryData?.type as any,
+              date: new Date().toISOString(),
+              distanceKm: summaryData?.distanceKm || 0,
+              durationSec: summaryData?.durationSec || 0,
+              calories: summaryData?.calories || 0,
+              avgPace: summaryData?.avgPace || '0:00 /km',
+              avgSpeedKmh: summaryData?.avgSpeedKmh || 0,
+              maxSpeedKmh: summaryData?.maxSpeedKmh || 0,
+              elevationGainM: summaryData?.elevationGainM || 0,
+              route: summaryData?.route,
+              currentLocation: store.currentLocation,
+              steps: summaryData?.steps,
+            }}
+            mapTheme={mapLayer}
+            onClose={() => {
+              setShowShare(false);
+              setShareDataOverride(null);
+            }}
+          />
+        )}
       </motion.div>
     );
   }
 
-  // ─── Ready Screen ───
+  // ─── Screen 2: Ready Screen ───
   if (screen === 'ready' && urlType) {
     const typeLabel = urlType === 'walk' ? 'Walking' : urlType === 'run' ? 'Running' : 'Cycling';
-    const isDark = useUIStore.getState().theme === 'dark';
+    const typeIcon = urlType === 'walk' ? <Footprints size={32} /> : urlType === 'run' ? <Zap size={32} /> : <Bike size={32} />;
 
     return createPortal(
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="cardio-ready-screen fixed inset-0 z-[9999] bg-[var(--bg)] flex flex-col h-screen overflow-hidden">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="cardio-ready-screen fixed inset-0 z-[9999] bg-[#090605] flex flex-col h-screen overflow-hidden" style={themeStyles}>
         
-        {/* Background Map */}
+        {/* Background Live Map */}
         <div className="absolute inset-0 z-0">
           <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive={false} height="100%" theme={mapLayer} cardioType={store.activityType as any} />
-          <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg)] via-transparent to-transparent z-[1]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#090605] via-[#090605]/40 to-transparent z-[1]" />
         </div>
 
-        {/* Header Overlay */}
+        {/* Top Header Overlay */}
         <div className="relative z-10 flex items-start justify-between p-6 safe-top pointer-events-none">
           <button 
             onClick={() => { setSearchParams({}); setScreen('select'); }}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--card)]/80 backdrop-blur-md shadow-sm border border-[var(--border)] text-[var(--text)] pointer-events-auto transition-transform active:scale-95"
+            className="w-11 h-11 flex items-center justify-center rounded-2xl bg-[#1a100d]/90 backdrop-blur-md shadow-md border border-[#42241b] text-white pointer-events-auto transition-transform active:scale-95"
           >
             <ArrowLeft size={20} />
           </button>
           
           <div className="flex flex-col gap-2 items-end">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[var(--card)]/80 backdrop-blur-md shadow-sm border border-[var(--border)] pointer-events-auto">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-[#1a100d]/90 backdrop-blur-md shadow-md border border-[#42241b] pointer-events-auto">
               {store.gpsStatus === 'error' || store.gpsStatus === 'denied' ? (
-                <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-[var(--text)]">{store.gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}</span></>
+                <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-white">{store.gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}</span></>
               ) : store.gpsStatus === 'waiting' || store.gpsStatus === 'warming_up' ? (
-                <><Loader2 size={14} className="animate-spin text-amber-500" /><span className="text-xs font-bold text-[var(--text)]">{store.gpsStatus === 'warming_up' ? 'Warming Up' : 'Waiting for GPS'}</span></>
+                <><Loader2 size={14} className="animate-spin text-amber-500" /><span className="text-xs font-bold text-white">Acquiring GPS...</span></>
               ) : store.gpsStatus === 'degraded' ? (
-                <><Navigation size={14} className="text-amber-500" /><span className="text-xs font-bold text-[var(--text)]">Poor Signal</span></>
-              ) : store.gpsStatus === 'active' ? (
-                <><Navigation size={14} className="text-emerald-500" /><span className="text-xs font-bold text-[var(--text)]">GPS Active</span></>
+                <><Navigation size={14} className="text-amber-500" /><span className="text-xs font-bold text-white">Poor Signal (±{Math.round(store.gpsAccuracy)}m)</span></>
               ) : (
-                <><Navigation size={14} className="text-gray-400" /><span className="text-xs font-bold text-[var(--text)]">GPS Ready</span></>
+                <>
+                  <Navigation size={14} className="text-emerald-400" />
+                  <span className="text-xs font-bold text-white">GPS Locked</span>
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                </>
               )}
             </div>
             
@@ -647,7 +797,7 @@ export function CardioTracker() {
                 const nextIdx = (themes.indexOf(mapLayer) + 1) % themes.length;
                 setMapLayer(themes[nextIdx]);
               }}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--card)]/80 backdrop-blur-md shadow-sm border border-[var(--border)] text-[var(--text)] pointer-events-auto transition-transform active:scale-95"
+              className="w-10 h-10 flex items-center justify-center rounded-2xl bg-[#1a100d]/90 backdrop-blur-md shadow-md border border-[#42241b] text-white pointer-events-auto transition-transform active:scale-95"
               title={MAP_THEMES[mapLayer].label}
             >
               <Layers size={18} />
@@ -655,38 +805,47 @@ export function CardioTracker() {
           </div>
         </div>
 
-        {/* Content Overlay */}
-        <div className="relative z-10 flex-1 flex flex-col justify-end p-8 pb-[100px] pointer-events-none">
+        {/* Content HUD Overlay */}
+        <div className="relative z-10 flex-1 flex flex-col justify-end p-8 pb-16 pointer-events-none">
           <div className="pointer-events-auto text-center mb-8">
-            <h1 className="cardio-ready-title font-sans text-5xl font-black tracking-tight text-[var(--text)] drop-shadow-md mb-2">{typeLabel}</h1>
-            <p className="text-sm font-semibold text-bone-dim tracking-widest uppercase bg-ink/80 px-4 py-1.5 rounded-full inline-block">Tap to begin</p>
+            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-sienna to-amber-500 text-white flex items-center justify-center mx-auto mb-3 shadow-[0_10px_30px_rgba(235,89,60,0.4)]">
+              {typeIcon}
+            </div>
+            <h1 className="font-sans text-4xl sm:text-5xl font-black tracking-tight text-white drop-shadow-md mb-2">
+              {typeLabel} Ready
+            </h1>
+            <p className="text-xs font-mono font-bold text-white/70 tracking-widest uppercase bg-black/60 px-4 py-1.5 rounded-full inline-block backdrop-blur-md border border-white/10">
+              High Precision GPS Active · Tap Play
+            </p>
           </div>
           
-          <button
-            onClick={handleStartTracking}
-            className={`cardio-ready-start w-24 h-24 rounded-full flex items-center justify-center hover:scale-105 transition-transform active:scale-95 shadow-[0_10px_40px_rgba(0,0,0,0.3)] mx-auto pointer-events-auto ${
-              isDark ? 'bg-white text-black' : 'bg-black text-white'
-            }`}
-          >
-            <Play size={40} fill="currentColor" className="ml-1" />
-          </button>
+          {/* Big Pulsing Start Button */}
+          <div className="relative flex items-center justify-center mx-auto pointer-events-auto">
+            <div className="absolute w-32 h-32 rounded-full bg-sienna/25 animate-ping" />
+            <div className="absolute w-28 h-28 rounded-full bg-amber-500/20 animate-pulse" />
+            
+            <button
+              onClick={handleStartTracking}
+              className="relative w-24 h-24 rounded-full bg-gradient-to-tr from-sienna via-amber-500 to-rose-500 text-white flex items-center justify-center shadow-[0_12px_40px_rgba(235,89,60,0.6)] hover:scale-105 transition-all active:scale-95 z-10 group"
+            >
+              <Play size={42} fill="currentColor" className="ml-1.5 group-hover:scale-110 transition-transform" />
+            </button>
+          </div>
         </div>
       </motion.div>,
       document.body
     );
   }
 
-  // ─── Tracking Screen ───
+  // ─── Screen 3: Tracking Screen ───
   if (screen === 'tracking') {
-    const isDarkMap = mapLayer === 'dark' || mapLayer === 'satellite' || mapLayer === 'toner';
-    
     const avgSpeed = elapsedSec > 0 ? (store.distanceKm / (elapsedSec / 3600)).toFixed(1) : '0.0';
     const currentPace = formatPaceMs(store.currentPaceMs);
     const activityType = store.activityType || 'run';
     const typeLabel = activityType === 'walk' ? 'Walk' : activityType === 'run' ? 'Run' : 'Cycle';
 
     return createPortal(
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-ink flex flex-col h-screen overflow-hidden">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-[#090605] flex flex-col h-screen overflow-hidden" style={themeStyles}>
         
         {/* Full Screen Map Background */}
         <div className="absolute inset-0 z-0">
@@ -702,34 +861,29 @@ export function CardioTracker() {
                 setSearchParams({});
                 navigate('/');
               }}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-ink/90 backdrop-blur-md shadow-sm border border-line text-bone pointer-events-auto transition-transform active:scale-95"
+              className="w-11 h-11 flex items-center justify-center rounded-2xl bg-[#1a100d]/90 backdrop-blur-md shadow-md border border-[#42241b] text-white pointer-events-auto transition-transform active:scale-95"
             >
               <ArrowLeft size={20} />
             </button>
 
-            {/* Activity Type */}
-            <div className="flex items-center px-4 py-2 h-10 rounded-full bg-ink/90 backdrop-blur-md shadow-sm border border-line pointer-events-auto">
-               <span className="text-sm font-bold text-bone tracking-wide">{typeLabel}</span>
+            {/* Activity Type Badge */}
+            <div className="flex items-center px-4 py-2 h-11 rounded-2xl bg-[#1a100d]/90 backdrop-blur-md shadow-md border border-[#42241b] pointer-events-auto">
+               <span className="text-sm font-bold text-white tracking-wide">{typeLabel}</span>
             </div>
           </div>
           
-          <div className="flex flex-col gap-3 items-end">
-            <div className="flex items-center gap-2 px-4 py-2 h-10 rounded-full bg-ink/90 backdrop-blur-md shadow-sm border border-line pointer-events-auto">
+          <div className="flex flex-col gap-2.5 items-end">
+            <div className="flex items-center gap-2 px-4 py-2 h-11 rounded-2xl bg-[#1a100d]/90 backdrop-blur-md shadow-md border border-[#42241b] pointer-events-auto">
               {store.gpsStatus === 'error' || store.gpsStatus === 'denied' ? (
-                <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-bone">{store.gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}</span></>
+                <><Navigation size={14} className="text-red-500" /><span className="text-xs font-bold text-white">{store.gpsStatus === 'denied' ? 'GPS Denied' : 'GPS Error'}</span></>
               ) : store.gpsStatus === 'active' ? (
                 <>
-                  <Navigation size={14} className="text-emerald-500" />
-                  <span className="text-xs font-bold text-bone">GPS Active</span>
-                  {/* GPS accuracy quality dot */}
-                  <div className={`w-2 h-2 rounded-full ${store.gpsAccuracy > 0 && store.gpsAccuracy <= 10 ? 'bg-emerald-400' : store.gpsAccuracy <= 30 ? 'bg-yellow-400' : store.gpsAccuracy <= 80 ? 'bg-orange-400' : 'bg-red-400'}`} title={`±${Math.round(store.gpsAccuracy)}m`} />
+                  <Navigation size={14} className="text-emerald-400" />
+                  <span className="text-xs font-bold text-white">Live GPS</span>
+                  <div className={`w-2 h-2 rounded-full ${store.gpsAccuracy > 0 && store.gpsAccuracy <= 10 ? 'bg-emerald-400' : store.gpsAccuracy <= 30 ? 'bg-yellow-400' : 'bg-orange-400'}`} title={`±${Math.round(store.gpsAccuracy)}m`} />
                 </>
-              ) : store.gpsStatus === 'waiting' || store.gpsStatus === 'warming_up' ? (
-                <><Loader2 size={14} className="animate-spin text-amber-500" /><span className="text-xs font-bold text-bone">{store.gpsStatus === 'warming_up' ? 'Warming Up' : 'Waiting for GPS'}</span></>
-              ) : store.gpsStatus === 'degraded' ? (
-                <><Navigation size={14} className="text-amber-500" /><span className="text-xs font-bold text-bone">Poor Signal</span></>
               ) : (
-                <><Navigation size={14} className="text-bone-dim" /><span className="text-xs font-bold text-bone">GPS Ready</span></>
+                <><Loader2 size={14} className="animate-spin text-amber-500" /><span className="text-xs font-bold text-white">Warming Up</span></>
               )}
             </div>
             
@@ -740,7 +894,7 @@ export function CardioTracker() {
                 const nextIdx = (themes.indexOf(mapLayer) + 1) % themes.length;
                 setMapLayer(themes[nextIdx]);
               }}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-ink/90 backdrop-blur-md shadow-sm border border-line text-bone pointer-events-auto transition-transform active:scale-95"
+              className="w-11 h-11 flex items-center justify-center rounded-2xl bg-[#1a100d]/90 backdrop-blur-md shadow-md border border-[#42241b] text-white pointer-events-auto transition-transform active:scale-95"
               title={MAP_THEMES[mapLayer].label}
             >
               <Layers size={18} />
@@ -748,19 +902,17 @@ export function CardioTracker() {
           </div>
         </div>
 
-        {/* Floating Actions (above the bottom sheet) */}
+        {/* Floating Actions */}
         <div className="absolute right-4 bottom-[230px] z-10 pointer-events-auto flex flex-col gap-3 transition-all" style={{ transform: isExpanded ? 'translateY(-290px)' : 'translateY(0)' }}>
           <button
             onClick={toggleMapRotation}
             className={`w-12 h-12 flex items-center justify-center rounded-full bg-[var(--card)]/90 backdrop-blur-md shadow-lg border border-[var(--border)] active:scale-95 transition-transform ${mapRotationMode ? 'text-emerald-500' : 'text-[var(--text)]'}`}
-            style={themeStyles}
             title="Toggle Map Rotation"
           >
             <Compass size={22} className={mapRotationMode ? 'animate-pulse' : ''} />
           </button>
           <button
             onClick={() => setRecenterTrigger(t => t + 1)}
-            style={themeStyles}
             className="w-12 h-12 flex items-center justify-center rounded-full bg-[var(--card)]/90 backdrop-blur-md text-sienna shadow-lg border border-[var(--border)] active:scale-95 transition-transform"
           >
             <LocateFixed size={22} />
@@ -768,7 +920,7 @@ export function CardioTracker() {
         </div>
 
         {/* Expandable Bottom Sheet */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-auto" style={themeStyles}>
+        <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-auto">
           <motion.div 
             animate={{ height: isExpanded ? 520 : 220 }}
             transition={{ type: 'spring', damping: 28, stiffness: 260 }}
@@ -1048,89 +1200,148 @@ export function CardioTracker() {
     );
   }
 
-  // ─── Summary Screen ───
+  // ─── Screen 4: Summary & Celebration Screen ───
   if (screen === 'summary' && summaryData) {
     const typeLabel = summaryData.type === 'walk' ? 'Walk' : summaryData.type === 'run' ? 'Run' : 'Cycle';
-    const typeEmoji = summaryData.type === 'walk' ? '🚶' : summaryData.type === 'run' ? '🏃' : '🚴';
 
     return (
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="pb-24">
-        {/* Celebration */}
-        <div className="text-center mb-6">
-          <div className="text-5xl mb-3">{typeEmoji}</div>
-          <h1 className="font-display text-3xl mb-1">{typeLabel} Complete!</h1>
-          <p className="text-sm text-bone-dim font-mono">{new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</p>
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        className="pb-28 max-w-2xl mx-auto px-4 pt-4 md:pt-8"
+        style={themeStyles}
+      >
+        {/* Celebration Particles FX */}
+        <div className="relative flex flex-col items-center text-center mb-6">
+          <div className="relative mb-3">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-amber-500 via-sienna to-rose-500 flex items-center justify-center text-white shadow-[0_10px_35px_rgba(235,89,60,0.5)]">
+              <Trophy size={40} className="animate-bounce" />
+            </div>
+            <div className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-amber-400 text-black flex items-center justify-center shadow-md">
+              <Sparkles size={16} />
+            </div>
+          </div>
+
+          <div className="font-mono text-xs font-bold text-sienna uppercase tracking-widest mb-1 flex items-center gap-1.5">
+            <Sparkles size={12} /> Workout Finished
+          </div>
+          <h1 className="font-display text-3xl md:text-4xl text-[var(--text)] tracking-tight">
+            Crushed Your {typeLabel}! 🔥
+          </h1>
+          <p className="text-xs text-[var(--muted)] font-mono mt-1">
+            {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          </p>
         </div>
 
-        {/* Glassmorphism Summary Card */}
-        <div className="relative rounded-3xl overflow-hidden mb-8 shadow-2xl bg-ink-2/30 backdrop-blur-xl border border-line/50">
-          
-          {/* Map (if exists) */}
+        {/* Master Summary Card */}
+        <div className="rounded-3xl overflow-hidden mb-6 shadow-2xl bg-[var(--card)]/90 backdrop-blur-xl border border-[var(--border)]">
+          {/* Map Preview */}
           {summaryData.route && summaryData.route.length > 1 && (
-            <div className="h-[250px] w-full border-b border-line/30 relative">
+            <div className="h-[240px] w-full border-b border-[var(--border)] relative">
               <RouteMap route={summaryData.route} height="100%" cardioType={summaryData.type as any} />
-              <div className="absolute inset-0 pointer-events-none shadow-[inset_0_-20px_40px_rgba(0,0,0,0.1)] dark:shadow-[inset_0_-20px_40px_rgba(0,0,0,0.5)] z-10" />
+              <div className="absolute inset-0 pointer-events-none shadow-[inset_0_-20px_40px_rgba(0,0,0,0.3)] z-10" />
             </div>
           )}
 
           <div className="p-6">
-            {/* Main Stats: Distance and Duration */}
-            <div className="flex items-end justify-between mb-8">
+            {/* Primary Hero Stats: Distance, Time, Pace */}
+            <div className="grid grid-cols-3 gap-3 pb-6 border-b border-[var(--border)]">
+              {/* Distance */}
               <div>
-                <div className="text-[10px] text-sienna font-mono uppercase tracking-widest mb-1 font-bold">Distance</div>
-                <div className="flex items-baseline gap-1">
-                  <span className="font-display text-5xl md:text-6xl tracking-tight leading-none">{summaryData.distanceKm?.toFixed(2)}</span>
-                  <span className="font-mono text-bone-dim text-sm mb-1">km</span>
+                <div className="text-[10px] text-sienna font-mono uppercase tracking-widest font-bold">Distance</div>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="font-mono text-4xl md:text-5xl font-black text-[var(--text)]">{summaryData.distanceKm?.toFixed(2)}</span>
+                  <span className="font-mono text-[var(--muted)] text-xs font-bold">km</span>
                 </div>
               </div>
+
+              {/* Time */}
+              <div className="text-center">
+                <div className="text-[10px] text-amber-500 font-mono uppercase tracking-widest font-bold">Time</div>
+                <div className="font-mono text-3xl md:text-4xl font-extrabold text-[var(--text)] mt-1">
+                  {formatDuration(summaryData.durationSec || 0)}
+                </div>
+              </div>
+
+              {/* Calories */}
               <div className="text-right">
-                <div className="text-[10px] text-amber font-mono uppercase tracking-widest mb-1 font-bold">Time</div>
-                <div className="font-mono text-3xl font-light tracking-tight">{formatDuration(summaryData.durationSec || 0)}</div>
+                <div className="text-[10px] text-rose-500 font-mono uppercase tracking-widest font-bold">Calories</div>
+                <div className="font-mono text-3xl md:text-4xl font-extrabold text-[var(--text)] mt-1">
+                  {summaryData.calories} <span className="text-xs font-mono text-[var(--muted)]">kcal</span>
+                </div>
               </div>
             </div>
 
-            {/* Secondary Stats Grid */}
-            <div className="grid grid-cols-4 gap-2 pt-6 border-t border-line/30 text-center md:text-left">
-              <div>
-                <div className="text-[9px] text-bone-dim font-mono uppercase tracking-wider mb-1">Calories</div>
-                <div className="font-mono text-base font-medium">{summaryData.calories}</div>
+            {/* Secondary Metrics Grid */}
+            <div className="grid grid-cols-4 gap-2 pt-5 text-center">
+              <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
+                <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Avg Pace</div>
+                <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.avgPace?.replace(' /km', '')}</div>
               </div>
-              <div>
-                <div className="text-[9px] text-bone-dim font-mono uppercase tracking-wider mb-1">Avg Pace</div>
-                <div className="font-mono text-base font-medium">{summaryData.avgPace?.replace(' /km', '')}</div>
+              <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
+                <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Avg Spd</div>
+                <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.avgSpeedKmh?.toFixed(1)} <span className="text-[10px]">kph</span></div>
               </div>
-              <div>
-                <div className="text-[9px] text-bone-dim font-mono uppercase tracking-wider mb-1">Avg Spd</div>
-                <div className="font-mono text-base font-medium">{summaryData.avgSpeedKmh?.toFixed(1)}</div>
+              <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
+                <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Max Spd</div>
+                <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.maxSpeedKmh?.toFixed(1)} <span className="text-[10px]">kph</span></div>
               </div>
-              <div>
-                <div className="text-[9px] text-bone-dim font-mono uppercase tracking-wider mb-1">Max Spd</div>
-                <div className="font-mono text-base font-medium">{summaryData.maxSpeedKmh?.toFixed(1)}</div>
+              <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
+                <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Elevation</div>
+                <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.elevationGainM || 0}m</div>
               </div>
             </div>
           </div>
         </div>
 
-        {isSaving ? (
-          <div className="text-center text-sm text-bone-dim font-mono mb-4">Saving...</div>
-        ) : null}
+        {/* Workout Effort Rating */}
+        <div className="p-5 rounded-3xl bg-[var(--card)]/90 backdrop-blur-xl border border-[var(--border)] mb-6 shadow-sm">
+          <div className="text-xs font-mono font-bold uppercase text-[var(--muted)] tracking-wider mb-3">
+            How did it feel? (Effort)
+          </div>
+          <div className="grid grid-cols-5 gap-2">
+            {EFFORT_LEVELS.map((eff) => (
+              <button
+                key={eff.id}
+                onClick={() => setWorkoutEffort(eff.id)}
+                className={`py-2 px-1 rounded-2xl flex flex-col items-center gap-1 transition-all border ${
+                  workoutEffort === eff.id
+                    ? 'bg-sienna/20 border-sienna text-sienna scale-105 shadow-sm font-bold'
+                    : 'bg-[var(--bg)]/60 border-[var(--border)] text-[var(--muted)] hover:border-sienna/40'
+                }`}
+              >
+                <span className="text-xl">{eff.emoji}</span>
+                <span className="text-[10px] font-mono">{eff.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
-        <div className="flex flex-col gap-3 mt-4">
-          <button
-            onClick={handleDone}
-            className="w-full bg-sienna text-white py-4 rounded-2xl font-bold text-lg shadow-[0_4px_14px_0_rgba(235,89,60,0.39)] hover:shadow-[0_6px_20px_rgba(235,89,60,0.23)] transition-all active:scale-[0.98]"
-          >
-            Finish Workout
-          </button>
+        {/* Saving Indicator */}
+        {isSaving && (
+          <div className="text-center text-xs text-amber-500 font-mono mb-4 flex items-center justify-center gap-1.5 animate-pulse">
+            <Loader2 size={14} className="animate-spin" /> Saving activity to your profile...
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="flex flex-col gap-3">
           <button
             onClick={() => setShowShare(true)}
-            className="w-full bg-ink-2/30 backdrop-blur-md border border-line text-bone py-4 rounded-2xl font-bold text-lg hover:bg-ink-3 transition-all active:scale-[0.98]"
+            className="w-full py-4 rounded-2xl font-bold text-base bg-gradient-to-r from-amber-500 via-sienna to-rose-500 text-white shadow-[0_8px_30px_rgba(235,89,60,0.4)] hover:scale-[1.01] transition-all active:scale-[0.98] flex items-center justify-center gap-2"
           >
-            Share Activity
+            <Share2 size={20} /> Share Workout (Story / Card)
+          </button>
+          
+          <button
+            onClick={handleDone}
+            className="w-full py-3.5 rounded-2xl font-bold text-base bg-[var(--card)] border border-[var(--border)] text-[var(--text)] hover:bg-[var(--border)] transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+          >
+            <Check size={18} /> Finish & Return Home
           </button>
         </div>
         
-        {showShare && summaryData && (
+        {showShare && (
           <CardioShareModal
             data={{
               type: summaryData.type as any,
@@ -1144,6 +1355,7 @@ export function CardioTracker() {
               elevationGainM: summaryData.elevationGainM || 0,
               route: summaryData.route,
               currentLocation: store.currentLocation,
+              steps: summaryData.steps,
             }}
             mapTheme={mapLayer}
             onClose={() => setShowShare(false)}
