@@ -90,10 +90,30 @@ const ACTIVITY_OPTIONS: { type: CardioActivityType | 'workout'; label: string; i
 export function CardioTracker() {
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
-  const { showToast } = useUIStore();
+  const { showToast, theme } = useUIStore();
   const userWeight = useUserWeight();
   const store = useCardioStore();
   const [elapsedSec, setElapsedSec] = useState(0);
+
+  const themeStyles = theme === 'dark' ? {
+    '--bg': '#090605',
+    '--card': '#1a100d',
+    '--border': '#42241b',
+    '--text': '#fff3eb',
+    '--muted': '#c4a696',
+    '--teal': '#d7b29d',
+    '--amber': '#d9a441',
+    '--sienna': '#eb593c',
+  } as React.CSSProperties : {
+    '--bg': '#f7f8fb',
+    '--card': '#ffffff',
+    '--border': '#e5e7eb',
+    '--text': '#111827',
+    '--muted': '#6b7280',
+    '--teal': '#2f7a6d',
+    '--amber': '#c98a1f',
+    '--sienna': '#d9532f',
+  } as React.CSSProperties;
 
   const pedometerStore = usePedometerStore();
 
@@ -729,138 +749,298 @@ export function CardioTracker() {
         </div>
 
         {/* Floating Actions (above the bottom sheet) */}
-        <div className="absolute right-4 bottom-[200px] z-10 pointer-events-auto flex flex-col gap-3 transition-all" style={{ transform: isExpanded ? 'translateY(-240px)' : 'translateY(0)' }}>
+        <div className="absolute right-4 bottom-[230px] z-10 pointer-events-auto flex flex-col gap-3 transition-all" style={{ transform: isExpanded ? 'translateY(-290px)' : 'translateY(0)' }}>
           <button
             onClick={toggleMapRotation}
-            className={`w-12 h-12 flex items-center justify-center rounded-full bg-ink/90 backdrop-blur-md shadow-lg border border-line active:scale-95 transition-transform ${mapRotationMode ? 'text-emerald-500' : 'text-bone'}`}
+            className={`w-12 h-12 flex items-center justify-center rounded-full bg-[var(--card)]/90 backdrop-blur-md shadow-lg border border-[var(--border)] active:scale-95 transition-transform ${mapRotationMode ? 'text-emerald-500' : 'text-[var(--text)]'}`}
+            style={themeStyles}
             title="Toggle Map Rotation"
           >
             <Compass size={22} className={mapRotationMode ? 'animate-pulse' : ''} />
           </button>
           <button
             onClick={() => setRecenterTrigger(t => t + 1)}
-            className="w-12 h-12 flex items-center justify-center rounded-full bg-ink/90 backdrop-blur-md text-blue-500 shadow-lg border border-line active:scale-95 transition-transform"
+            style={themeStyles}
+            className="w-12 h-12 flex items-center justify-center rounded-full bg-[var(--card)]/90 backdrop-blur-md text-sienna shadow-lg border border-[var(--border)] active:scale-95 transition-transform"
           >
             <LocateFixed size={22} />
           </button>
         </div>
 
         {/* Expandable Bottom Sheet */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-auto">
+        <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-auto" style={themeStyles}>
           <motion.div 
-            animate={{ height: isExpanded ? 440 : 180 }}
-            className={`cardio-live-panel relative
-              ${isDarkMap 
-                ? 'bg-black/80 text-white border-t border-white/20' 
-                : 'bg-white/90 text-black border-t border-black/10'} 
-              rounded-t-[24px] backdrop-blur-xl
-              flex flex-col overflow-hidden
-            `}
+            animate={{ height: isExpanded ? 520 : 220 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+            className="cardio-live-panel relative bg-[var(--card)]/95 backdrop-blur-2xl text-[var(--text)] border-t border-[var(--border)] rounded-t-[32px] shadow-[0_-15px_50px_rgba(0,0,0,0.35)] flex flex-col overflow-hidden"
           >
             {/* Drag Handle & Toggle */}
             <button 
               onClick={() => setIsExpanded(!isExpanded)}
-              className="w-full h-8 flex items-center justify-center shrink-0 cursor-pointer"
+              className="w-full pt-3 pb-1.5 flex flex-col items-center justify-center shrink-0 group cursor-pointer"
             >
-              <div className={`w-12 h-1.5 rounded-full ${isDarkMap ? 'bg-white/30' : 'bg-black/20'}`}></div>
+              <div className="w-12 h-1.5 rounded-full bg-[var(--border)] group-hover:bg-[var(--muted)] transition-colors" />
+              <div className="flex items-center gap-1 text-[10px] font-mono font-bold text-[var(--muted)] mt-1.5 tracking-wider uppercase">
+                {isExpanded ? (
+                  <>
+                    <ChevronDown size={12} className="text-sienna" /> Collapse Metrics
+                  </>
+                ) : (
+                  <>
+                    <ChevronUp size={12} className="text-sienna" /> All Metrics & Stats
+                  </>
+                )}
+              </div>
             </button>
 
-            {/* Auto-Pause Indicator */}
-            {store.autoPauseStatus === 'PAUSED' && (
-              <div className="flex items-center justify-center gap-2 py-1.5 bg-amber-500/20 backdrop-blur-sm border-b border-amber-500/30">
-                <Pause size={12} className="text-amber-400 animate-pulse" />
-                <span className="text-[11px] font-bold uppercase tracking-widest text-amber-400 animate-pulse">Auto-Paused · Standing Still</span>
-              </div>
-            )}
+            {/* Auto-Pause & Status Indicator */}
+            <AnimatePresence>
+              {store.autoPauseStatus === 'PAUSED' && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: 'auto', marginBottom: 8 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  className="mx-5 px-3.5 py-2 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-between shadow-sm overflow-hidden"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="relative w-7 h-7 rounded-full bg-amber-500/25 text-amber-500 flex items-center justify-center shrink-0">
+                      <Pause size={13} className="animate-pulse" />
+                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-amber-600 dark:text-amber-300 tracking-wide uppercase flex items-center gap-1.5">
+                        Auto-Paused <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                      </div>
+                      <div className="text-[10px] text-[var(--muted)] font-medium">Standing still • Resumes when you move</div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleResume}
+                    className="px-2.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-[11px] shadow-sm transition-all"
+                  >
+                    Resume
+                  </button>
+                </motion.div>
+              )}
 
-            {/* Core Stats (Always Visible) */}
-            <div className="px-6 pb-4 shrink-0" onClick={() => !isExpanded && setIsExpanded(true)}>
-              <div className="flex justify-between items-end mb-4">
-                <div>
-                  <div className={`text-[2.5rem] leading-none font-black tracking-tighter drop-shadow-md ${store.autoPauseStatus === 'PAUSED' ? 'opacity-50' : ''}`}>
+              {store.isPaused && store.autoPauseStatus !== 'PAUSED' && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: 'auto', marginBottom: 8 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  className="mx-5 px-3.5 py-2 rounded-2xl bg-sienna/15 border border-sienna/30 flex items-center justify-between shadow-sm overflow-hidden"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-full bg-sienna/25 text-sienna flex items-center justify-center shrink-0">
+                      <Pause size={13} />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-sienna tracking-wide uppercase">Session Paused</div>
+                      <div className="text-[10px] text-[var(--muted)] font-medium">Timer & tracking temporarily halted</div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleResume}
+                    className="px-2.5 py-1 rounded-xl bg-sienna hover:bg-sienna/90 active:scale-95 text-white font-bold text-[11px] shadow-sm transition-all"
+                  >
+                    Resume
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Core Stats Hero Row */}
+            <div className="px-6 pt-1 pb-3 shrink-0" onClick={() => !isExpanded && setIsExpanded(true)}>
+              <div className="grid grid-cols-3 gap-3 items-center">
+                {/* Timer */}
+                <div className="flex flex-col">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
+                    <Clock size={11} className="text-sienna" /> Time
+                  </div>
+                  <div className={`font-mono text-3xl sm:text-4xl font-extrabold tracking-tight mt-0.5 ${store.autoPauseStatus === 'PAUSED' || store.isPaused ? 'text-amber-500/70' : 'text-[var(--text)]'}`}>
                     {formatDuration(elapsedSec)}
                   </div>
-                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>{store.autoPauseStatus === 'PAUSED' ? 'Paused' : 'Timer'}</div>
                 </div>
-                <div className="text-right">
-                  <div className="text-[2rem] leading-none font-black tracking-tighter drop-shadow-md">
-                    {store.distanceKm.toFixed(2)}
+
+                {/* Distance */}
+                <div className="flex flex-col items-center">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
+                    <MapPin size={11} className="text-emerald-500" /> Distance
                   </div>
-                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Km</div>
+                  <div className="flex items-baseline gap-1 mt-0.5">
+                    <span className="font-mono text-3xl sm:text-4xl font-extrabold tracking-tight text-[var(--text)]">
+                      {store.distanceKm.toFixed(2)}
+                    </span>
+                    <span className="text-xs font-mono font-bold text-[var(--muted)]">km</span>
+                  </div>
+                </div>
+
+                {/* Pace / Speed */}
+                <div className="flex flex-col items-end">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
+                    <Zap size={11} className="text-amber-500" /> {activityType === 'cycle' ? 'Speed' : 'Pace'}
+                  </div>
+                  <div className="font-mono text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text)] mt-0.5">
+                    {activityType === 'cycle' ? `${store.currentSpeedKmh.toFixed(1)}` : currentPace}
+                    <span className="text-[11px] font-sans font-normal text-[var(--muted)] ml-1">
+                      {activityType === 'cycle' ? 'km/h' : '/km'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Expanded Stats (Only visible when expanded) */}
-            <div className={`px-6 flex-1 overflow-hidden transition-opacity duration-300 ${isExpanded ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="grid grid-cols-2 gap-y-6 gap-x-4 mb-6">
-                <div>
-                  <div className="text-2xl font-black drop-shadow-sm">{currentPace}</div>
-                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Pace (min/km)</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-black drop-shadow-sm">{calories}</div>
-                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Calories</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-black drop-shadow-sm">{avgSpeed}</div>
-                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Avg Speed (km/h)</div>
-                </div>
-                <div>
-                  <div className="text-2xl font-black drop-shadow-sm">{store.maxSpeedKmh.toFixed(1)}</div>
-                  <div className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 ${isDarkMap ? 'text-white/70' : 'text-black/60'}`}>Max Speed</div>
-                </div>
-              </div>
-
-              {/* Controls */}
-              <div className="flex items-center justify-center gap-6 mt-4">
+            {/* Collapsed Controls (Fast Access) */}
+            {!isExpanded && (
+              <div className="px-6 pt-1 pb-4 flex items-center justify-center gap-6 shrink-0">
                 <button
                   onClick={store.isPaused ? handleResume : handlePause}
-                  className={`w-16 h-16 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-xl backdrop-blur-xl ${isDarkMap ? 'bg-[#1a1a1a]/30 hover:bg-[#1a1a1a]/50 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'bg-white/40 hover:bg-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(255,255,255,0.4)]'}`}
+                  className="w-12 h-12 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] hover:border-sienna shadow-sm active:scale-95 transition-all"
+                  title={store.isPaused ? "Resume" : "Pause"}
                 >
-                  {store.isPaused ? <Play size={28} fill="currentColor" className="ml-1" /> : <Pause size={28} fill="currentColor" />}
+                  {store.isPaused ? <Play size={20} fill="currentColor" className="ml-0.5 text-sienna" /> : <Pause size={20} fill="currentColor" />}
                 </button>
-                
+
                 <button
                   onClick={handleStop}
-                  className="w-20 h-20 rounded-full bg-gradient-to-br from-red-500 to-red-600 text-white flex items-center justify-center hover:scale-105 transition-all shadow-[inset_0_1px_2px_rgba(255,255,255,0.4),inset_0_0_0_1px_rgba(255,255,255,0.2),0_8px_30px_rgba(239,68,68,0.6)] active:scale-95"
+                  className="px-6 h-12 rounded-full bg-gradient-to-r from-rose-600 via-red-500 to-rose-500 text-white font-bold text-sm flex items-center gap-2 shadow-[0_8px_20px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95 transition-all"
+                  title="Finish & Save"
                 >
-                  <Square size={28} fill="currentColor" />
+                  <Square size={16} fill="currentColor" /> Finish
                 </button>
-                
+
                 <button
                   onClick={() => {
-                    if (window.confirm('Are you sure you want to discard this session?')) {
+                    if (window.confirm('Are you sure you want to discard this cardio session?')) {
                       if (user) endActiveSession(user.uid).catch(console.error);
                       store.reset();
                       setSearchParams({});
                       setScreen('select');
                     }
                   }}
-                  className={`w-16 h-16 flex items-center justify-center rounded-full transition-all active:scale-95 shadow-xl backdrop-blur-xl ${isDarkMap ? 'bg-[#1a1a1a]/30 hover:bg-[#1a1a1a]/50 shadow-[inset_0_1px_1px_rgba(255,255,255,0.15),inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'bg-white/40 hover:bg-white/60 shadow-[inset_0_1px_2px_rgba(255,255,255,0.9),inset_0_0_0_1px_rgba(255,255,255,0.4)]'}`}
+                  className="w-12 h-12 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-red-500 hover:border-red-500/50 shadow-sm active:scale-95 transition-all"
                   title="Discard"
                 >
-                  <RotateCcw size={28} />
+                  <RotateCcw size={18} />
                 </button>
               </div>
+            )}
 
-              {(store.activityType === 'walk' || store.activityType === 'run') && (
-                <div className="cardio-steps-card card p-5 mt-4 bg-ink/40 backdrop-blur-md border-white/10 flex items-center justify-between pointer-events-auto">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-sienna/20 flex items-center justify-center text-sienna">
-                      <Footprints size={20} />
+            {/* Expanded Metrics Dashboard & Pro Controls */}
+            {isExpanded && (
+              <div className="px-6 flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pt-2 pb-6">
+                <div className="grid grid-cols-3 gap-2.5 mb-5">
+                  {/* Current Speed */}
+                  <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
+                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
+                      <Zap size={11} className="text-cyan-500" /> Speed
                     </div>
-                    <div>
-                      <div className="text-sm font-bold text-[var(--text)]">Steps</div>
-                      <div className="text-xs text-bone-dim">{store.activityType === 'walk' ? 'Walking' : 'Running'} Session</div>
+                    <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
+                      {store.currentSpeedKmh.toFixed(1)} <span className="text-[10px] text-[var(--muted)]">km/h</span>
                     </div>
                   </div>
-                  <div className="font-serif text-3xl font-medium tracking-tight">
-                    {getLiveSteps(store.activityType, store.distanceKm, pedometerStore)?.toLocaleString()}
+
+                  {/* Avg Speed */}
+                  <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
+                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
+                      <TrendingUp size={11} className="text-emerald-500" /> Avg Spd
+                    </div>
+                    <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
+                      {avgSpeed} <span className="text-[10px] text-[var(--muted)]">km/h</span>
+                    </div>
                   </div>
+
+                  {/* Max Speed */}
+                  <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
+                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
+                      <Flame size={11} className="text-rose-500" /> Max Spd
+                    </div>
+                    <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
+                      {store.maxSpeedKmh.toFixed(1)} <span className="text-[10px] text-[var(--muted)]">km/h</span>
+                    </div>
+                  </div>
+
+                  {/* Calories */}
+                  <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
+                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
+                      <Flame size={11} className="text-orange-500" /> Calories
+                    </div>
+                    <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
+                      {calories} <span className="text-[10px] text-[var(--muted)]">kcal</span>
+                    </div>
+                  </div>
+
+                  {/* Elevation Gain */}
+                  <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
+                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
+                      <Mountain size={11} className="text-amber-500" /> Elevation
+                    </div>
+                    <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
+                      {Math.round(store.elevationGainM)} <span className="text-[10px] text-[var(--muted)]">m</span>
+                    </div>
+                  </div>
+
+                  {/* Live Steps or Route Pts */}
+                  {(activityType === 'walk' || activityType === 'run') ? (
+                    <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
+                      <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
+                        <Footprints size={11} className="text-teal-500" /> Steps
+                      </div>
+                      <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
+                        {getLiveSteps(store.activityType, store.distanceKm, pedometerStore)?.toLocaleString() || 0}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
+                      <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
+                        <MapPin size={11} className="text-purple-500" /> Points
+                      </div>
+                      <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
+                        {store.routePoints.length}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
+
+                {/* Pro Controls Bar */}
+                <div className="flex items-center justify-center gap-7 pt-1 pb-4">
+                  {/* Pause / Resume */}
+                  <button
+                    onClick={store.isPaused ? handleResume : handlePause}
+                    className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] hover:border-sienna shadow-md active:scale-95 transition-all"
+                    title={store.isPaused ? "Resume" : "Pause"}
+                  >
+                    {store.isPaused ? <Play size={24} fill="currentColor" className="ml-1 text-sienna" /> : <Pause size={24} fill="currentColor" />}
+                  </button>
+
+                  {/* Finish Workout (Primary Center Button) */}
+                  <button
+                    onClick={handleStop}
+                    className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-600 via-red-500 to-rose-500 text-white flex items-center justify-center shadow-[0_10px_25px_rgba(239,68,68,0.45)] hover:scale-105 active:scale-95 transition-all relative group"
+                    title="Finish & Save"
+                  >
+                    <div className="absolute inset-0 rounded-full bg-rose-500 animate-ping opacity-25" />
+                    <Square size={26} fill="currentColor" className="relative z-10" />
+                  </button>
+
+                  {/* Discard */}
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to discard this cardio session?')) {
+                        if (user) endActiveSession(user.uid).catch(console.error);
+                        store.reset();
+                        setSearchParams({});
+                        setScreen('select');
+                      }
+                    }}
+                    className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-red-500 hover:border-red-500/50 shadow-md active:scale-95 transition-all"
+                    title="Discard Session"
+                  >
+                    <RotateCcw size={22} />
+                  </button>
+                </div>
+              </div>
+            )}
           </motion.div>
         </div>
       </motion.div>,

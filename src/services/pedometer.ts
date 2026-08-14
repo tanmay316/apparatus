@@ -137,8 +137,10 @@ class PedometerService {
     this.isTracking = true;
     
     let lastMag = 0;
-    let lastPeakTime = Date.now();
-    const threshold = 12.0; // magnitude threshold to detect a step (gravity is ~9.8 m/s^2)
+    let lastPeakTime = 0;
+    let stepBurstCount = 0;
+    let lastBurstTime = 0;
+    const threshold = 12.8; // magnitude threshold to detect a step (gravity is ~9.8 m/s^2)
 
     this.motionListener = (event: DeviceMotionEvent) => {
       if (!this.isTracking) return;
@@ -146,15 +148,32 @@ class PedometerService {
       if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
       
       const mag = Math.sqrt(acc.x * acc.x + acc.y * acc.y + acc.z * acc.z);
-      
       const now = Date.now();
-      // Detect peak (simple heuristic: crossed threshold, minimum 300ms between steps)
-      if (mag > threshold && lastMag <= threshold && (now - lastPeakTime) > 300) {
-        this.webSteps++;
-        lastPeakTime = now;
-        if (this.callback) {
-          // For web fallback, pass total step count for the current session
-          this.callback(this.webSteps, false);
+
+      // Detect peak (crossed threshold, min 320ms and max 2000ms between walking steps)
+      if (mag > threshold && lastMag <= threshold) {
+        const dt = now - lastPeakTime;
+        if (dt > 320 && dt < 2000) {
+          if (now - lastBurstTime > 2500) {
+            stepBurstCount = 1;
+          } else {
+            stepBurstCount++;
+          }
+          lastBurstTime = now;
+          lastPeakTime = now;
+
+          // Only credit steps after at least 3 continuous steps are confirmed (anti-false trigger)
+          if (stepBurstCount === 3) {
+            this.webSteps += 3;
+            if (this.callback) this.callback(this.webSteps, false);
+          } else if (stepBurstCount > 3) {
+            this.webSteps += 1;
+            if (this.callback) this.callback(this.webSteps, false);
+          }
+        } else if (dt >= 2000 || lastPeakTime === 0) {
+          stepBurstCount = 1;
+          lastBurstTime = now;
+          lastPeakTime = now;
         }
       }
       lastMag = mag;

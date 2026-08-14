@@ -249,7 +249,7 @@ export function BottomNav() {
                           )}
                         </div>
                         <p className={`text-[13px] ${isThisActive ? "text-emerald-600 dark:text-emerald-300 font-semibold" : "text-bone-dim"}`}>
-                          {isThisActive ? "Workout in progress • Tap to resume" : "Log sets, reps & PRs"}
+                          {isThisActive ? "Workout in progress" : "Log sets, reps & PRs"}
                         </p>
                       </div>
                       {isThisActive ? (
@@ -301,7 +301,7 @@ export function BottomNav() {
                           )}
                         </div>
                         <p className={`text-[13px] ${isThisActive ? "text-emerald-600 dark:text-emerald-300 font-semibold" : "text-bone-dim"}`}>
-                          {isThisActive ? "Running in progress • Tap to resume" : "GPS • Pace • Distance"}
+                          {isThisActive ? "Running in progress" : "GPS • Pace • Distance"}
                         </p>
                       </div>
                       {isThisActive ? (
@@ -323,7 +323,7 @@ export function BottomNav() {
                       onClick={() => handleActionClick(isThisActive ? '/cardio' : '/cardio?type=walk')}
                       className={`relative flex items-center gap-4 p-4 rounded-2xl transition-all text-left group overflow-hidden ${
                         isThisActive
-                          ? "bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.35)] animate-pulse"
+                          ? "bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_25px_rgba(10,185,129,0.35)] animate-pulse"
                           : "bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-transparent"
                       }`}
                     >
@@ -332,7 +332,7 @@ export function BottomNav() {
                       )}
                       <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-transform ${
                         isThisActive
-                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]"
+                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(10,185,129,0.5)]"
                           : "bg-emerald-500/10 text-emerald-500 group-hover:scale-110"
                       }`}>
                         <Footprints size={22} className={isThisActive ? "animate-pulse" : ""} />
@@ -353,7 +353,7 @@ export function BottomNav() {
                           )}
                         </div>
                         <p className={`text-[13px] ${isThisActive ? "text-emerald-600 dark:text-emerald-300 font-semibold" : "text-bone-dim"}`}>
-                          {isThisActive ? "Walking in progress • Tap to resume" : "Walking & Hiking"}
+                          {isThisActive ? "Walking in progress" : "Walking & Hiking"}
                         </p>
                       </div>
                       {isThisActive ? (
@@ -375,7 +375,7 @@ export function BottomNav() {
                       onClick={() => handleActionClick(isThisActive ? '/cardio' : '/cardio?type=cycle')}
                       className={`relative flex items-center gap-4 p-4 rounded-2xl transition-all text-left group overflow-hidden ${
                         isThisActive
-                          ? "bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.35)] animate-pulse"
+                          ? "bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_25px_rgba(10,185,129,0.35)] animate-pulse"
                           : "bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-transparent"
                       }`}
                     >
@@ -384,7 +384,7 @@ export function BottomNav() {
                       )}
                       <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-transform ${
                         isThisActive
-                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]"
+                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(10,185,129,0.5)]"
                           : "bg-purple-500/10 text-purple-500 group-hover:scale-110"
                       }`}>
                         <Bike size={22} className={isThisActive ? "animate-pulse" : ""} />
@@ -405,7 +405,7 @@ export function BottomNav() {
                           )}
                         </div>
                         <p className={`text-[13px] ${isThisActive ? "text-emerald-600 dark:text-emerald-300 font-semibold" : "text-bone-dim"}`}>
-                          {isThisActive ? "Cycling in progress • Tap to resume" : "Cycling • Speed • Route"}
+                          {isThisActive ? "Cycling in progress" : "Speed • Route • Elevation"}
                         </p>
                       </div>
                       {isThisActive ? (
