@@ -11,6 +11,7 @@ import { ClansTab } from '@/components/community/ClansTab';
 import { CreateClanSheet } from '@/components/community/CreateClanSheet';
 import { CreateChallengeSheet } from '@/components/community/CreateChallengeSheet';
 import { CreateEventSheet } from '@/components/community/CreateEventSheet';
+import { UpcomingReminderWidget } from '@/components/community/UpcomingReminderWidget';
 
 export function CommunityPage() {
   const [activeTab, setActiveTab] = useState<'events' | 'clans'>('events');
@@ -145,6 +146,8 @@ export function CommunityPage() {
         {createType === 'challenge' && <CreateChallengeSheet onClose={() => setCreateType(null)} />}
         {createType === 'event' && <CreateEventSheet onClose={() => setCreateType(null)} />}
       </AnimatePresence>
+
+      <UpcomingReminderWidget />
     </motion.div>
   );
 }

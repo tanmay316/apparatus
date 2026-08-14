@@ -6,6 +6,7 @@ export interface PrivacySettings {
   showEventsToFollowers: boolean;
   showClansToFollowers: boolean;
   showStatsToFollowers: boolean;
+  showBadgesToFollowers?: boolean;
 }
 
 export interface FollowRequest {
@@ -37,6 +38,22 @@ export interface UserProfile {
   updatedAt: Timestamp;
   stepGoal?: number;
   privacySettings?: PrivacySettings;
+  communityBadges?: EarnedCommunityBadge[];
+}
+
+export interface EarnedCommunityBadge {
+  id: string;
+  title: string;
+  subtitle?: string;
+  description: string;
+  rank: 1 | 2 | 3;
+  sourceType: 'challenge' | 'event';
+  sourceId: string;
+  sourceTitle: string;
+  clanId?: string;
+  clanName?: string;
+  awardedAt: Timestamp | string;
+  badgeStyle?: 'gold' | 'silver' | 'bronze';
 }
 
 export interface UserStats {
@@ -51,6 +68,7 @@ export interface UserStats {
   prCount: number;
   bestHold: number;
   badges: string[];
+  communityBadges?: EarnedCommunityBadge[];
 }
 
 // ─── Plans ───────────────────────────────────────────────────
@@ -531,6 +549,10 @@ export interface ChallengeV2 {
   unit: string;
   startDate: Timestamp;
   endDate: Timestamp;
+  durationValue?: number;
+  durationUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
+  prize?: string;
+  badgesAwarded?: boolean;
   visibility: 'public' | 'clan_only';
   status: ChallengeStatus;
   participantCount: number;
@@ -546,6 +568,7 @@ export interface ChallengeParticipant {
   userPhoto: string;
   progress: number;
   rank: number;
+  badgeAwarded?: 1 | 2 | 3;
   joinedAt: Timestamp | null;
   updatedAt: Timestamp | null;
 }
@@ -566,6 +589,10 @@ export interface SimpleEvent {
   activityType: string;
   startTime: Timestamp;
   endTime: Timestamp;
+  durationValue?: number;
+  durationUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
+  prize?: string;
+  badgesAwarded?: boolean;
   location?: { name?: string; latitude?: number; longitude?: number };
   maxParticipants?: number;
   visibility: 'public' | 'clan_only';
@@ -581,5 +608,6 @@ export interface EventParticipant {
   userId: string;
   userName: string;
   userPhoto: string;
+  badgeAwarded?: 1 | 2 | 3;
   joinedAt: Timestamp | null;
 }

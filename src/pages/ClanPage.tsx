@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Shield, Users, MapPin, Search, Plus, Target, CalendarDays, MessageSquare, Heart, CornerDownRight } from 'lucide-react';
+import { ChevronLeft, Shield, Users, MapPin, Search, Plus, Target, CalendarDays, MessageSquare, Heart, CornerDownRight, Trophy, Sparkles } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -14,6 +14,8 @@ import { ClanMembership, ClanV2, CommunityPost, ChallengeV2, SimpleEvent } from 
 import { useUIStore } from '@/stores/ui-store';
 import { CreateChallengeSheet } from '@/components/community/CreateChallengeSheet';
 import { CreateEventSheet } from '@/components/community/CreateEventSheet';
+import { ChallengeDetailSheet } from '@/components/community/ChallengeDetailSheet';
+import { EventDetailSheet } from '@/components/community/EventDetailSheet';
 import { SinglePostSheet } from '@/components/community/SinglePostSheet';
 import { CreatePostSheet } from '@/components/community/CreatePostSheet';
 import { EditClanSheet } from '@/components/community/EditClanSheet';
@@ -81,6 +83,8 @@ export function ClanPage() {
   const [createEventOpen, setCreateEventOpen] = useState(false);
   const [createPostOpen, setCreatePostOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
+  const [selectedChallengeId, setSelectedChallengeId] = useState<string | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editClanOpen, setEditClanOpen] = useState(false);
   const [editingChallenge, setEditingChallenge] = useState<ChallengeV2 | null>(null);
   const [editingEvent, setEditingEvent] = useState<SimpleEvent | null>(null);
@@ -428,29 +432,61 @@ export function ClanPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {challenges.map(c => (
-                    <div key={c.id} className={`p-5 rounded-3xl ${nmBtn} flex flex-col justify-between`}>
-                      <div>
-                        <div className="flex justify-between items-start mb-2">
-                           <h4 className="font-bold text-bone text-lg pr-4">{c.title}</h4>
-                           <div className="flex items-center gap-2">
-                             <span className="text-[10px] font-mono px-2 py-1 bg-ink-2 rounded text-bone-dim uppercase">{c.status}</span>
-                             {(isLeader || isCoLeader || user?.uid === c.createdBy) && (
-                               <div className="flex items-center gap-1">
-                                 <button onClick={() => setEditingChallenge(c)} className="p-1 hover:text-bone text-bone-dim transition-colors"><span className="text-xs font-mono">Edit</span></button>
-                                 <button onClick={() => deleteChallengeMutation.mutate(c.id!)} className="p-1 hover:text-red-500 text-bone-dim transition-colors"><span className="text-xs font-mono">Del</span></button>
-                               </div>
-                             )}
-                           </div>
+                  {challenges.map(c => {
+                    const now = Date.now();
+                    const s = c.startDate?.toMillis ? c.startDate.toMillis() : 0;
+                    const e = c.endDate?.toMillis ? c.endDate.toMillis() : 0;
+                    let cdText = 'Active';
+                    if (now < s) {
+                      const diff = s - now;
+                      const d = Math.floor(diff / 86400000);
+                      const h = Math.floor((diff / 3600000) % 24);
+                      cdText = d > 0 ? `Starts in ${d}d` : `Starts in ${h}h`;
+                    } else if (e && now <= e) {
+                      const diff = e - now;
+                      const d = Math.floor(diff / 86400000);
+                      const h = Math.floor((diff / 3600000) % 24);
+                      cdText = d > 0 ? `Ends in ${d}d` : `Ends in ${h}h`;
+                    } else if (e && now > e) {
+                      cdText = 'Ended';
+                    }
+
+                    return (
+                      <div 
+                        key={c.id} 
+                        onClick={() => setSelectedChallengeId(c.id!)}
+                        className={`p-5 rounded-3xl ${nmBtn} flex flex-col justify-between cursor-pointer hover:border-emerald-500/50 transition-all group`}
+                      >
+                        <div>
+                          <div className="flex justify-between items-start mb-2">
+                            <h4 className="font-bold text-bone text-lg pr-4 group-hover:text-emerald-400 transition-colors">{c.title}</h4>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full font-bold uppercase">
+                                {cdText}
+                              </span>
+                              {(isLeader || isCoLeader || user?.uid === c.createdBy) && (
+                                <div className="flex items-center gap-1" onClick={ev => ev.stopPropagation()}>
+                                  <button onClick={() => setEditingChallenge(c)} className="p-1 hover:text-bone text-bone-dim transition-colors"><span className="text-xs font-mono">Edit</span></button>
+                                  <button onClick={() => deleteChallengeMutation.mutate(c.id!)} className="p-1 hover:text-red-500 text-bone-dim transition-colors"><span className="text-xs font-mono">Del</span></button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm text-bone-dim mb-3 line-clamp-2">{c.description}</p>
+                          
+                          {c.prize && (
+                            <div className="mb-3 inline-flex items-center gap-1 text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-400/30">
+                              <Trophy size={11} /> {c.prize}
+                            </div>
+                          )}
                         </div>
-                        <p className="text-sm text-bone-dim mb-4 line-clamp-2">{c.description}</p>
+                        <div className="flex justify-between items-center text-xs font-mono text-sienna pt-3 border-t border-line/20">
+                          <span>{c.participantCount} Participants</span>
+                          <span>Goal: {c.target} {c.unit}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center text-xs font-mono text-sienna pt-3 border-t border-line/20">
-                        <span>{c.participantCount} Participants</span>
-                        <span>{c.metric}</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -476,29 +512,60 @@ export function ClanPage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {events.map(e => (
-                    <div key={e.id} className={`p-5 rounded-3xl ${nmBtn} flex flex-col justify-between`}>
-                      <div>
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="text-xs font-mono text-sienna">
-                            {typeof e.startTime?.toDate === 'function' ? e.startTime.toDate().toLocaleDateString() : 'TBD'} @ {typeof e.startTime?.toDate === 'function' ? e.startTime.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'TBD'}
+                  {events.map(e => {
+                    const now = Date.now();
+                    const s = e.startTime?.toMillis ? e.startTime.toMillis() : 0;
+                    const end = e.endTime?.toMillis ? e.endTime.toMillis() : 0;
+                    let cdText = 'Upcoming';
+                    if (now < s) {
+                      const diff = s - now;
+                      const d = Math.floor(diff / 86400000);
+                      const h = Math.floor((diff / 3600000) % 24);
+                      cdText = d > 0 ? `Starts in ${d}d` : `Starts in ${h}h`;
+                    } else if (end && now <= end) {
+                      const diff = end - now;
+                      const d = Math.floor(diff / 86400000);
+                      const h = Math.floor((diff / 3600000) % 24);
+                      cdText = d > 0 ? `Ends in ${d}d` : `Ends in ${h}h`;
+                    } else if (end && now > end) {
+                      cdText = 'Ended';
+                    }
+
+                    return (
+                      <div 
+                        key={e.id} 
+                        onClick={() => setSelectedEventId(e.id!)}
+                        className={`p-5 rounded-3xl ${nmBtn} flex flex-col justify-between cursor-pointer hover:border-blue-500/50 transition-all group`}
+                      >
+                        <div>
+                          <div className="flex justify-between items-start mb-2">
+                            <div className="text-xs font-mono text-sienna flex items-center gap-1.5">
+                              <span>{typeof e.startTime?.toDate === 'function' ? e.startTime.toDate().toLocaleDateString() : 'TBD'}</span>
+                              <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded border border-blue-500/30 uppercase font-bold">{cdText}</span>
+                            </div>
+                            {(isLeader || isCoLeader || user?.uid === e.createdBy) && (
+                              <div className="flex items-center gap-1" onClick={ev => ev.stopPropagation()}>
+                                <button onClick={() => setEditingEvent(e)} className="p-1 hover:text-bone text-bone-dim transition-colors"><span className="text-xs font-mono">Edit</span></button>
+                                <button onClick={() => deleteEventMutation.mutate(e.id!)} className="p-1 hover:text-red-500 text-bone-dim transition-colors"><span className="text-xs font-mono">Del</span></button>
+                              </div>
+                            )}
                           </div>
-                          {(isLeader || isCoLeader || user?.uid === e.createdBy) && (
-                            <div className="flex items-center gap-1">
-                              <button onClick={() => setEditingEvent(e)} className="p-1 hover:text-bone text-bone-dim transition-colors"><span className="text-xs font-mono">Edit</span></button>
-                              <button onClick={() => deleteEventMutation.mutate(e.id!)} className="p-1 hover:text-red-500 text-bone-dim transition-colors"><span className="text-xs font-mono">Del</span></button>
+                          <h4 className="font-bold text-bone text-lg mb-1 group-hover:text-blue-400 transition-colors">{e.title}</h4>
+                          <p className="text-sm text-bone-dim mb-3 line-clamp-2">{e.description}</p>
+                          
+                          {e.prize && (
+                            <div className="mb-3 inline-flex items-center gap-1 text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-400/30">
+                              <Trophy size={11} /> {e.prize}
                             </div>
                           )}
                         </div>
-                        <h4 className="font-bold text-bone text-lg mb-1">{e.title}</h4>
-                        <p className="text-sm text-bone-dim mb-4 line-clamp-2">{e.description}</p>
+                        <div className="flex justify-between items-center text-xs font-mono text-bone pt-3 border-t border-line/20">
+                          <span className="flex items-center gap-1"><MapPin size={12}/> {e.location?.name || 'Remote'}</span>
+                          <span className="text-sienna">{e.participantCount} Attending</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center text-xs font-mono text-bone pt-3 border-t border-line/20">
-                        <span className="flex items-center gap-1"><MapPin size={12}/> {e.location?.name || 'Remote'}</span>
-                        <span className="text-sienna">{e.participantCount} Attending</span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -516,6 +583,24 @@ export function ClanPage() {
       <EditClanSheet clan={clan} isOpen={editClanOpen} onClose={() => setEditClanOpen(false)} />
       {editingChallenge && <EditChallengeSheet challenge={editingChallenge} isOpen={!!editingChallenge} onClose={() => setEditingChallenge(null)} />}
       {editingEvent && <EditEventSheet event={editingEvent} isOpen={!!editingEvent} onClose={() => setEditingEvent(null)} />}
+
+      <AnimatePresence>
+        {selectedChallengeId && (
+          <ChallengeDetailSheet
+            challengeId={selectedChallengeId}
+            onClose={() => setSelectedChallengeId(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {selectedEventId && (
+          <EventDetailSheet
+            eventId={selectedEventId}
+            onClose={() => setSelectedEventId(null)}
+          />
+        )}
+      </AnimatePresence>
 
       {/* FAB for Create Post */}
       {isMember && activeTab === 'posts' && (

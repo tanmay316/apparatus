@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult, signOut as firebaseSignOut } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider, ADMIN_EMAIL } from '@/lib/firebase';
 import { sanitizeUsername, validateDisplayName } from '@/lib/validation';
@@ -175,7 +176,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       if (Capacitor.isNativePlatform()) {
         try {
-          const { SocialLogin } = await import('@capgo/capacitor-social-login');
           const result = await SocialLogin.login({
             provider: 'google',
             options: {},
@@ -220,7 +220,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     
     try {
       if (Capacitor.isNativePlatform()) {
-        const { SocialLogin } = await import('@capgo/capacitor-social-login');
         const result = await SocialLogin.login({
           provider: 'google',
           options: {},
@@ -244,7 +243,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       if (Capacitor.isNativePlatform()) {
         try {
-          const { SocialLogin } = await import('@capgo/capacitor-social-login');
           await SocialLogin.logout({ provider: 'google' });
         } catch (e) {
           console.error('Failed to sign out of native GoogleAuth:', e);

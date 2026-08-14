@@ -201,6 +201,22 @@ export async function getPublicChallenges(limitCount = 20): Promise<ChallengeV2[
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as ChallengeV2));
 }
 
+export async function getAllCommunityChallenges(limitCount = 50): Promise<ChallengeV2[]> {
+  const q = query(
+    collection(db, 'challenges_v2'),
+    where('status', 'in', ['upcoming', 'active', 'completed']),
+    limit(limitCount)
+  );
+  const snap = await getDocs(q);
+  const challenges = snap.docs.map(d => ({ id: d.id, ...d.data() } as ChallengeV2));
+  // Sort with upcoming/active first, then by startDate
+  return challenges.sort((a, b) => {
+    const aTime = a.startDate?.toMillis ? a.startDate.toMillis() : 0;
+    const bTime = b.startDate?.toMillis ? b.startDate.toMillis() : 0;
+    return bTime - aTime;
+  });
+}
+
 export async function getClanChallenges(clanId: string): Promise<ChallengeV2[]> {
   const q = query(
     collection(db, 'challenges_v2'),
@@ -226,6 +242,117 @@ export async function deleteChallenge(id: string): Promise<void> {
   participantsSnap.docs.forEach(d => batch.delete(d.ref));
   
   await batch.commit();
+}
+
+export async function updateChallengeParticipantScore(challengeId: string, userId: string, newProgress: number): Promise<void> {
+  const partId = `${challengeId}_${userId}`;
+  await updateDoc(doc(db, 'challenge_participants', partId), {
+    progress: newProgress,
+    updatedAt: serverTimestamp()
+  });
+  
+  // Re-fetch and re-rank leaderboard
+  const participantsSnap = await getDocs(
+    query(
+      collection(db, 'challenge_participants'),
+      where('challengeId', '==', challengeId),
+      orderBy('progress', 'desc')
+    )
+  );
+  
+  const batch = writeBatch(db);
+  participantsSnap.docs.forEach((d, idx) => {
+    batch.update(d.ref, { rank: idx + 1 });
+  });
+  await batch.commit();
+}
+
+export async function awardChallengeTop3Badges(challengeId: string): Promise<{ success: boolean; message: string }> {
+  const challengeSnap = await getDoc(doc(db, 'challenges_v2', challengeId));
+  if (!challengeSnap.exists()) throw new Error('Challenge not found');
+  const challenge = { id: challengeSnap.id, ...challengeSnap.data() } as ChallengeV2;
+
+  const leaderboardSnap = await getDocs(
+    query(
+      collection(db, 'challenge_participants'),
+      where('challengeId', '==', challengeId),
+      orderBy('progress', 'desc'),
+      limit(3)
+    )
+  );
+
+  if (leaderboardSnap.empty) {
+    throw new Error('No participants on the leaderboard to award badges');
+  }
+
+  const batch = writeBatch(db);
+  const now = Timestamp.now();
+
+  const rankTitles = {
+    1: { name: 'Gold Champion', style: 'gold' as const, emoji: '🥇' },
+    2: { name: 'Silver Runner-Up', style: 'silver' as const, emoji: '🥈' },
+    3: { name: 'Bronze 3rd Place', style: 'bronze' as const, emoji: '🥉' },
+  };
+
+  for (let i = 0; i < leaderboardSnap.docs.length; i++) {
+    const pDoc = leaderboardSnap.docs[i];
+    const pData = pDoc.data() as ChallengeParticipant;
+    const rank = (i + 1) as 1 | 2 | 3;
+    const info = rankTitles[rank];
+
+    const badgeData = {
+      id: `${challengeId}_rank_${rank}`,
+      title: `${challenge.title}`,
+      subtitle: `${info.emoji} ${info.name} (Rank #${rank})`,
+      description: challenge.description || `Finished #${rank} with ${pData.progress} ${challenge.unit} in "${challenge.title}"`,
+      rank,
+      sourceType: 'challenge' as const,
+      sourceId: challengeId,
+      sourceTitle: challenge.title,
+      clanId: challenge.clanId || '',
+      clanName: challenge.clanName || '',
+      awardedAt: now,
+      badgeStyle: info.style
+    };
+
+    // Update participant doc
+    batch.update(pDoc.ref, { badgeAwarded: rank, rank });
+
+    // Add badge to user doc
+    const userRef = doc(db, 'users', pData.userId);
+    try {
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const existingBadges = userSnap.data().communityBadges || [];
+        const filtered = existingBadges.filter((b: any) => b.id !== badgeData.id);
+        batch.update(userRef, { communityBadges: [...filtered, badgeData] });
+      }
+    } catch { /* ignore user fetch err */ }
+
+    // Create in-app bell notification
+    const noteRef = doc(collection(db, 'notifications'));
+    batch.set(noteRef, {
+      receiverId: pData.userId,
+      senderId: challenge.createdBy,
+      senderName: challenge.creatorName,
+      senderPhoto: challenge.creatorPhoto || '',
+      type: 'achievement',
+      message: `${info.emoji} Congratulations! You earned the ${info.name} Badge for "${challenge.title}"!`,
+      targetId: challengeId,
+      read: false,
+      createdAt: now
+    });
+  }
+
+  // Mark challenge as badges awarded and completed
+  batch.update(doc(db, 'challenges_v2', challengeId), {
+    badgesAwarded: true,
+    status: 'completed',
+    updatedAt: now
+  });
+
+  await batch.commit();
+  return { success: true, message: 'Top 3 badges awarded successfully!' };
 }
 
 export async function getUserChallenges(userId: string): Promise<ChallengeV2[]> {
@@ -270,22 +397,68 @@ export async function leaveChallenge(challengeId: string, userId: string): Promi
   });
 }
 
-export async function getChallengeLeaderboard(challengeId: string, limitCount = 50): Promise<ChallengeParticipant[]> {
+export async function isUserJoinedChallenge(challengeId: string, userId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, 'challenge_participants', `${challengeId}_${userId}`));
+  return snap.exists();
+}
+
+export async function isUserJoinedEvent(eventId: string, userId: string): Promise<boolean> {
+  const snap = await getDoc(doc(db, 'simple_event_participants', `${eventId}_${userId}`));
+  return snap.exists();
+}
+
+export async function getChallengeParticipants(challengeId: string): Promise<ChallengeParticipant[]> {
   const q = query(
     collection(db, 'challenge_participants'),
-    where('challengeId', '==', challengeId),
-    orderBy('progress', 'desc'),
-    orderBy('updatedAt', 'asc'),
-    limit(limitCount)
+    where('challengeId', '==', challengeId)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as ChallengeParticipant));
+}
+
+export async function getChallengeLeaderboard(challengeId: string, limitCount = 100): Promise<ChallengeParticipant[]> {
+  const q = query(
+    collection(db, 'challenge_participants'),
+    where('challengeId', '==', challengeId)
   );
   const snap = await getDocs(q);
   
-  // Assign ranks locally based on fetched order
-  return snap.docs.map((d, index) => ({ 
+  const list = snap.docs.map(d => ({ 
     id: d.id, 
-    ...d.data(),
-    rank: index + 1 
+    ...d.data() 
   } as ChallengeParticipant));
+
+  // Sort by progress descending, then by joinedAt / updatedAt ascending
+  list.sort((a, b) => {
+    const pA = Number(a.progress) || 0;
+    const pB = Number(b.progress) || 0;
+    if (pB !== pA) return pB - pA;
+    const aTime = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : (a.joinedAt?.toMillis ? a.joinedAt.toMillis() : 0);
+    const bTime = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : (b.joinedAt?.toMillis ? b.joinedAt.toMillis() : 0);
+    return aTime - bTime;
+  });
+  
+  return list.slice(0, limitCount).map((p, index) => ({ 
+    ...p,
+    rank: p.rank || (index + 1)
+  }));
+}
+
+export async function updateLeaderboardRanks(
+  challengeId: string,
+  updatedRanks: { userId: string; rank: number; progress: number; badgeAwarded?: 1 | 2 | 3 }[]
+): Promise<void> {
+  const batch = writeBatch(db);
+  for (const item of updatedRanks) {
+    const partRef = doc(db, 'challenge_participants', `${challengeId}_${item.userId}`);
+    batch.update(partRef, {
+      rank: item.rank,
+      progress: item.progress,
+      badgeAwarded: item.badgeAwarded || null,
+      updatedAt: serverTimestamp()
+    });
+  }
+  await batch.commit();
 }
 
 export async function updateUserChallengeProgress(userId: string, updates: { metric: ChallengeMetric, amount: number }[]): Promise<void> {
@@ -347,6 +520,21 @@ export async function getPublicEvents(limitCount = 20): Promise<SimpleEvent[]> {
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as SimpleEvent));
 }
 
+export async function getAllCommunityEvents(limitCount = 50): Promise<SimpleEvent[]> {
+  const q = query(
+    collection(db, 'simple_events'),
+    where('status', 'in', ['upcoming', 'ongoing', 'active', 'completed']),
+    limit(limitCount)
+  );
+  const snap = await getDocs(q);
+  const events = snap.docs.map(d => ({ id: d.id, ...d.data() } as SimpleEvent));
+  return events.sort((a, b) => {
+    const aTime = a.startTime?.toMillis ? a.startTime.toMillis() : 0;
+    const bTime = b.startTime?.toMillis ? b.startTime.toMillis() : 0;
+    return bTime - aTime;
+  });
+}
+
 export async function getClanEvents(clanId: string): Promise<SimpleEvent[]> {
   const q = query(
     collection(db, 'simple_events'),
@@ -355,6 +543,111 @@ export async function getClanEvents(clanId: string): Promise<SimpleEvent[]> {
   );
   const snap = await getDocs(q);
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as SimpleEvent));
+}
+
+export async function getEventParticipants(eventId: string): Promise<EventParticipant[]> {
+  const q = query(
+    collection(db, 'simple_event_participants'),
+    where('eventId', '==', eventId),
+    orderBy('joinedAt', 'asc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as EventParticipant));
+}
+
+export async function getUserEvents(userId: string): Promise<SimpleEvent[]> {
+  const q = query(collection(db, 'simple_event_participants'), where('userId', '==', userId));
+  const snap = await getDocs(q);
+  const eventIds = snap.docs.map(d => d.data().eventId);
+  if (eventIds.length === 0) return [];
+
+  const results: SimpleEvent[] = [];
+  for (let i = 0; i < eventIds.length; i += 10) {
+    const chunk = eventIds.slice(i, i + 10);
+    const eq = query(collection(db, 'simple_events'), where(documentId(), 'in', chunk));
+    const es = await getDocs(eq);
+    results.push(...es.docs.map(d => ({ id: d.id, ...d.data() } as SimpleEvent)));
+  }
+  return results;
+}
+
+export async function awardEventTop3Badges(
+  eventId: string,
+  topWinners: { userId: string; userName: string; userPhoto?: string; rank: 1 | 2 | 3 }[]
+): Promise<{ success: boolean; message: string }> {
+  const eventSnap = await getDoc(doc(db, 'simple_events', eventId));
+  if (!eventSnap.exists()) throw new Error('Event not found');
+  const event = { id: eventSnap.id, ...eventSnap.data() } as SimpleEvent;
+
+  const batch = writeBatch(db);
+  const now = Timestamp.now();
+
+  const rankTitles = {
+    1: { name: 'Gold Champion', style: 'gold' as const, emoji: '🥇' },
+    2: { name: 'Silver Runner-Up', style: 'silver' as const, emoji: '🥈' },
+    3: { name: 'Bronze 3rd Place', style: 'bronze' as const, emoji: '🥉' },
+  };
+
+  for (const winner of topWinners) {
+    const info = rankTitles[winner.rank];
+    const badgeData = {
+      id: `${eventId}_rank_${winner.rank}`,
+      title: `${event.title}`,
+      subtitle: `${info.emoji} ${info.name} (Rank #${winner.rank})`,
+      description: event.description || `Awarded for Rank #${winner.rank} in "${event.title}"`,
+      rank: winner.rank,
+      sourceType: 'event' as const,
+      sourceId: eventId,
+      sourceTitle: event.title,
+      clanId: event.clanId || '',
+      clanName: event.clanName || '',
+      awardedAt: now,
+      badgeStyle: info.style
+    };
+
+    // Update participant doc if exists
+    const partRef = doc(db, 'simple_event_participants', `${eventId}_${winner.userId}`);
+    try {
+      const pSnap = await getDoc(partRef);
+      if (pSnap.exists()) {
+        batch.update(partRef, { badgeAwarded: winner.rank });
+      }
+    } catch { /* ignore */ }
+
+    // Update user profile
+    const userRef = doc(db, 'users', winner.userId);
+    try {
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const existingBadges = userSnap.data().communityBadges || [];
+        const filtered = existingBadges.filter((b: any) => b.id !== badgeData.id);
+        batch.update(userRef, { communityBadges: [...filtered, badgeData] });
+      }
+    } catch { /* ignore */ }
+
+    // In-app notification
+    const noteRef = doc(collection(db, 'notifications'));
+    batch.set(noteRef, {
+      receiverId: winner.userId,
+      senderId: event.createdBy,
+      senderName: event.creatorName,
+      senderPhoto: event.creatorPhoto || '',
+      type: 'achievement',
+      message: `${info.emoji} Congratulations! You earned the ${info.name} Badge for "${event.title}"!`,
+      targetId: eventId,
+      read: false,
+      createdAt: now
+    });
+  }
+
+  batch.update(doc(db, 'simple_events', eventId), {
+    badgesAwarded: true,
+    status: 'completed',
+    updatedAt: now
+  });
+
+  await batch.commit();
+  return { success: true, message: 'Event badges awarded successfully!' };
 }
 
 export async function updateSimpleEvent(id: string, data: Partial<SimpleEvent>): Promise<void> {

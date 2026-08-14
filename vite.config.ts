@@ -22,6 +22,21 @@ export default defineConfig(({ mode }) => ({
     sourcemap: false,
     cssMinify: true,
     chunkSizeWarningLimit: 1000,
+    rolldownOptions: {
+      checks: {
+        pluginTimings: false,
+      },
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('firebase')) return 'vendor-firebase';
+          if (id.includes('recharts')) return 'vendor-charts';
+          if (id.includes('framer-motion')) return 'vendor-motion';
+          if (id.includes('react') || id.includes('@tanstack') || id.includes('scheduler') || id.includes('lucide')) return 'vendor-react';
+          return undefined;
+        },
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -35,10 +50,6 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-  // Strip console.log and console.warn in production builds
-  esbuild: mode === 'production' ? {
-    drop: ['console', 'debugger'],
-  } : undefined,
   server: {
     port: 3000,
     open: true,

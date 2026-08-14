@@ -24,6 +24,7 @@ import { ActivityPostCard } from '@/components/social/ActivityPostCard';
 import { getUserSkills } from '@/services/skills';
 import { getUserEventRegistrations, getEventsByIds } from '@/services/events';
 import { getUserClans } from '@/services/community';
+import { CommunityBadgeCard } from '@/components/community/CommunityBadgeCard';
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
@@ -909,6 +910,41 @@ export function ProfilePage() {
                     </div>
                   ))}
                 </div>
+              </motion.div>
+            )}
+
+            {/* SECTION: COMMUNITY TROPHIES & PODIUM SHOWOFF */}
+            {((isOwnProfile || viewProfile.privacySettings?.showBadgesToFollowers !== false)) && (
+              <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Award className="text-amber-400" size={18} />
+                    <h3 className="font-serif text-base tracking-tight text-[var(--text)]">Podium Trophies & Showoff</h3>
+                  </div>
+                  {((isOwnProfile ? (myProfile?.communityBadges || viewProfile.communityBadges) : viewProfile.communityBadges) || []).length > 0 && (
+                    <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-400/30">
+                      {((isOwnProfile ? (myProfile?.communityBadges || viewProfile.communityBadges) : viewProfile.communityBadges) || []).length} Won
+                    </span>
+                  )}
+                </div>
+
+                {(() => {
+                  const cBadges = (isOwnProfile ? (myProfile?.communityBadges || viewProfile.communityBadges) : viewProfile.communityBadges) || [];
+                  if (cBadges.length === 0) {
+                    return (
+                      <div className="p-5 text-center bg-[var(--bg)]/60 rounded-2xl border border-dashed border-[var(--border)] text-xs text-[var(--muted)] font-mono leading-relaxed">
+                        🏆 Win Top 3 in Clan & Community challenges to earn and showcase metallic Gold, Silver & Bronze badges here!
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="space-y-3">
+                      {cBadges.map((b: any) => (
+                        <CommunityBadgeCard key={b.id} badge={b} />
+                      ))}
+                    </div>
+                  );
+                })()}
               </motion.div>
             )}
 
