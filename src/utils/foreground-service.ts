@@ -1,5 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { ForegroundService, ServiceType } from '@capawesome-team/capacitor-android-foreground-service';
+import { useCardioStore } from '@/stores/cardio-store';
+import { useWorkoutStore } from '@/stores/workout-store';
 
 export type ForegroundServiceType = 'cardio' | 'gym';
 
@@ -86,6 +88,18 @@ export async function setupForegroundServiceListeners(
         onPauseResume();
       } else if (event.buttonId === 2) {
         onStop();
+      }
+    });
+    await ForegroundService.addListener('notificationTapped', () => {
+      if (latestForegroundServiceType === 'cardio' || useCardioStore.getState().isTracking) {
+        window.location.href = '/cardio';
+      } else if (latestForegroundServiceType === 'gym' || useWorkoutStore.getState().isActive) {
+        const { planId, dayId } = useWorkoutStore.getState();
+        if (planId && dayId) {
+          window.location.href = `/workout/${planId}/day/${dayId}`;
+        } else {
+          window.location.href = '/plans';
+        }
       }
     });
   } catch (err) {

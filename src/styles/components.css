@@ -49,6 +49,35 @@
     color: #fbe1d1 !important;
   }
 
+  /* Upcoming countdown and prize badge styles (high contrast in both light and dark themes) */
+  .badge-countdown-upcoming {
+    background-color: rgba(245, 158, 11, 0.18);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    color: #78350f !important;
+    font-weight: 800;
+  }
+
+  [data-theme='dark'] .badge-countdown-upcoming,
+  .dark .badge-countdown-upcoming {
+    background-color: rgba(245, 158, 11, 0.2);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: #fde68a !important;
+  }
+
+  .badge-prize {
+    background-color: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: #78350f !important;
+    font-weight: 800;
+  }
+
+  [data-theme='dark'] .badge-prize,
+  .dark .badge-prize {
+    background-color: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #fde68a !important;
+  }
+
   /* ─── Buttons (Tactile Clay Pill Buttons) ───────────────── */
   .btn-primary {
     @apply text-white font-display font-semibold tracking-wide px-6 py-3 rounded-2xl text-sm inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed;

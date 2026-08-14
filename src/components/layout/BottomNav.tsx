@@ -1,8 +1,10 @@
 import React, { useRef, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Dumbbell, Apple, TrendingUp, Users, Navigation, Zap, Footprints, Bike, X, ChevronRight, MapPin, ArrowRight } from 'lucide-react';
+import { Dumbbell, Apple, TrendingUp, Users, Navigation, Zap, Footprints, Bike, X, ChevronRight, MapPin, ArrowRight, Activity as ActivityIcon } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
+import { useCardioStore } from '@/stores/cardio-store';
+import { useWorkoutStore } from '@/stores/workout-store';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { isToday, isYesterday, format } from 'date-fns';
@@ -22,6 +24,14 @@ export function BottomNav() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const { user } = useAuthStore();
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
+
+  const cardioStore = useCardioStore();
+  const workoutStore = useWorkoutStore();
+
+  const isCardioActive = cardioStore.isTracking;
+  const activeCardioType = cardioStore.activityType; // 'walk' | 'run' | 'cycle'
+  const isWorkoutActive = workoutStore.isActive;
+  const hasActiveSession = isCardioActive || isWorkoutActive;
 
   useEffect(() => {
     if (sheetOpen && user) {
@@ -59,8 +69,6 @@ export function BottomNav() {
     return index;
   }, [location.pathname]);
 
-  // Removed line width effect since we are stacking icon and text vertically.
-
   const handleActionClick = (path: string) => {
     setSheetOpen(false);
     navigate(path);
@@ -75,6 +83,20 @@ export function BottomNav() {
         .dark .nav-tab-icon-active { color: #ffffff; }
         .nav-tab-icon-inactive { color: rgba(93, 42, 26, 0.7); }
         .dark .nav-tab-icon-inactive { color: rgba(255, 255, 255, 0.6); }
+
+        @keyframes pulseActiveGlow {
+          0%, 100% {
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.7), 0 0 30px rgba(16, 185, 129, 0.3);
+            transform: scale(1);
+          }
+          50% {
+            box-shadow: 0 0 25px rgba(16, 185, 129, 1), 0 0 45px rgba(16, 185, 129, 0.5);
+            transform: scale(1.05);
+          }
+        }
+        .animate-active-glow {
+          animation: pulseActiveGlow 2s infinite ease-in-out;
+        }
       `}</style>
       <div className="bottom-nav-shell fixed bottom-[calc(env(safe-area-inset-bottom,0px)+12px)] left-1/2 -translate-x-1/2 w-[92%] max-w-[420px] z-[500]">
         <nav
@@ -99,9 +121,24 @@ export function BottomNav() {
                           : "hover:bg-black/5 dark:hover:bg-white/10"
                         }`}
                     >
-                      <div className="w-10 h-10 rounded-full bg-sienna flex items-center justify-center text-white shadow-lg">
-                        <IconComponent size={20} strokeWidth={2.5} />
-                      </div>
+                      {hasActiveSession ? (
+                        <div className="relative flex items-center justify-center">
+                          {/* Vibrant Animated Pulse Glow */}
+                          <span className="absolute -inset-2 rounded-full bg-emerald-500/40 blur-md animate-pulse"></span>
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-sienna to-emerald-600 flex items-center justify-center text-white shadow-xl relative z-10 border-2 border-emerald-400 animate-active-glow">
+                            <IconComponent size={20} strokeWidth={2.5} />
+                          </div>
+                          {/* Live Radar Ping */}
+                          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 z-20">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-85"></span>
+                            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-ink"></span>
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-sienna flex items-center justify-center text-white shadow-lg">
+                          <IconComponent size={20} strokeWidth={2.5} />
+                        </div>
+                      )}
                     </button>
                   </div>
                 );
@@ -152,8 +189,8 @@ export function BottomNav() {
               className="fixed bottom-0 left-0 right-0 z-[520] bg-white dark:bg-ink rounded-t-3xl p-6 max-w-[600px] mx-auto shadow-[0_-10px_40px_rgba(0,0,0,0.2)] max-h-[90vh] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
               <div className="flex items-center justify-between mb-2">
-                <div className="font-mono text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest">
-                  Start Activity
+                <div className="font-mono text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <ActivityIcon size={12} className="text-sienna" /> Start Activity
                 </div>
                 <button
                   onClick={() => setSheetOpen(false)}
@@ -168,65 +205,219 @@ export function BottomNav() {
               </h3>
 
               <div className="flex flex-col gap-3">
-                {/* Workout */}
-                <button
-                  onClick={() => handleActionClick('/plans')}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left group"
-                >
-                  <div className="w-12 h-12 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center shrink-0">
-                    <Dumbbell size={22} className="group-hover:scale-110 transition-transform" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Weight Training</h4>
-                    <p className="text-[13px] text-bone-dim">Log sets, reps & PRs</p>
-                  </div>
-                  <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
-                </button>
+                {/* Workout / Weight Training */}
+                {(() => {
+                  const isThisActive = isWorkoutActive;
+                  return (
+                    <button
+                      onClick={() => {
+                        if (isThisActive && workoutStore.planId && workoutStore.dayId) {
+                          handleActionClick(`/workout/${workoutStore.planId}/day/${workoutStore.dayId}`);
+                        } else {
+                          handleActionClick('/plans');
+                        }
+                      }}
+                      className={`relative flex items-center gap-4 p-4 rounded-2xl transition-all text-left group overflow-hidden ${
+                        isThisActive
+                          ? "bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.35)] animate-pulse"
+                          : "bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-transparent"
+                      }`}
+                    >
+                      {isThisActive && (
+                        <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-emerald-500/20 rounded-full blur-xl pointer-events-none" />
+                      )}
+                      <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-transform ${
+                        isThisActive
+                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]"
+                          : "bg-orange-500/10 text-orange-500 group-hover:scale-110"
+                      }`}>
+                        <Dumbbell size={22} className={isThisActive ? "animate-pulse" : ""} />
+                        {isThisActive && (
+                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white border border-emerald-600"></span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-[17px] text-bone tracking-tight">Weight Training</h4>
+                          {isThisActive && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-black uppercase bg-emerald-500 text-white shadow-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span> Live Active
+                            </span>
+                          )}
+                        </div>
+                        <p className={`text-[13px] ${isThisActive ? "text-emerald-600 dark:text-emerald-300 font-semibold" : "text-bone-dim"}`}>
+                          {isThisActive ? "Workout in progress • Tap to resume" : "Log sets, reps & PRs"}
+                        </p>
+                      </div>
+                      {isThisActive ? (
+                        <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold shrink-0">
+                          Resume <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                        </div>
+                      ) : (
+                        <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
+                      )}
+                    </button>
+                  );
+                })()}
 
                 {/* Run */}
-                <button
-                  onClick={() => handleActionClick('/cardio?type=run')}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left group"
-                >
-                  <div className="w-12 h-12 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
-                    <Zap size={22} className="group-hover:scale-110 transition-transform" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Run</h4>
-                    <p className="text-[13px] text-bone-dim">GPS • Pace • Distance</p>
-                  </div>
-                  <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
-                </button>
+                {(() => {
+                  const isThisActive = isCardioActive && activeCardioType === 'run';
+                  return (
+                    <button
+                      onClick={() => handleActionClick(isThisActive ? '/cardio' : '/cardio?type=run')}
+                      className={`relative flex items-center gap-4 p-4 rounded-2xl transition-all text-left group overflow-hidden ${
+                        isThisActive
+                          ? "bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.35)] animate-pulse"
+                          : "bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-transparent"
+                      }`}
+                    >
+                      {isThisActive && (
+                        <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-emerald-500/20 rounded-full blur-xl pointer-events-none" />
+                      )}
+                      <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-transform ${
+                        isThisActive
+                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]"
+                          : "bg-blue-500/10 text-blue-500 group-hover:scale-110"
+                      }`}>
+                        <Zap size={22} className={isThisActive ? "animate-pulse" : ""} />
+                        {isThisActive && (
+                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white border border-emerald-600"></span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-[17px] text-bone tracking-tight">Run</h4>
+                          {isThisActive && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-black uppercase bg-emerald-500 text-white shadow-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span> Live Active
+                            </span>
+                          )}
+                        </div>
+                        <p className={`text-[13px] ${isThisActive ? "text-emerald-600 dark:text-emerald-300 font-semibold" : "text-bone-dim"}`}>
+                          {isThisActive ? "Running in progress • Tap to resume" : "GPS • Pace • Distance"}
+                        </p>
+                      </div>
+                      {isThisActive ? (
+                        <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold shrink-0">
+                          Resume <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                        </div>
+                      ) : (
+                        <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
+                      )}
+                    </button>
+                  );
+                })()}
 
                 {/* Walk */}
-                <button
-                  onClick={() => handleActionClick('/cardio?type=walk')}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left group"
-                >
-                  <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
-                    <Footprints size={22} className="group-hover:scale-110 transition-transform" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Walk</h4>
-                    <p className="text-[13px] text-bone-dim">Walking & Hiking</p>
-                  </div>
-                  <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
-                </button>
+                {(() => {
+                  const isThisActive = isCardioActive && activeCardioType === 'walk';
+                  return (
+                    <button
+                      onClick={() => handleActionClick(isThisActive ? '/cardio' : '/cardio?type=walk')}
+                      className={`relative flex items-center gap-4 p-4 rounded-2xl transition-all text-left group overflow-hidden ${
+                        isThisActive
+                          ? "bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.35)] animate-pulse"
+                          : "bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-transparent"
+                      }`}
+                    >
+                      {isThisActive && (
+                        <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-emerald-500/20 rounded-full blur-xl pointer-events-none" />
+                      )}
+                      <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-transform ${
+                        isThisActive
+                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]"
+                          : "bg-emerald-500/10 text-emerald-500 group-hover:scale-110"
+                      }`}>
+                        <Footprints size={22} className={isThisActive ? "animate-pulse" : ""} />
+                        {isThisActive && (
+                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white border border-emerald-600"></span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-[17px] text-bone tracking-tight">Walk</h4>
+                          {isThisActive && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-black uppercase bg-emerald-500 text-white shadow-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span> Live Active
+                            </span>
+                          )}
+                        </div>
+                        <p className={`text-[13px] ${isThisActive ? "text-emerald-600 dark:text-emerald-300 font-semibold" : "text-bone-dim"}`}>
+                          {isThisActive ? "Walking in progress • Tap to resume" : "Walking & Hiking"}
+                        </p>
+                      </div>
+                      {isThisActive ? (
+                        <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold shrink-0">
+                          Resume <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                        </div>
+                      ) : (
+                        <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
+                      )}
+                    </button>
+                  );
+                })()}
 
                 {/* Ride */}
-                <button
-                  onClick={() => handleActionClick('/cardio?type=cycle')}
-                  className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors text-left group"
-                >
-                  <div className="w-12 h-12 rounded-full bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
-                    <Bike size={22} className="group-hover:scale-110 transition-transform" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[17px] text-bone tracking-tight">Ride</h4>
-                    <p className="text-[13px] text-bone-dim">Cycling • Speed • Route</p>
-                  </div>
-                  <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
-                </button>
+                {(() => {
+                  const isThisActive = isCardioActive && activeCardioType === 'cycle';
+                  return (
+                    <button
+                      onClick={() => handleActionClick(isThisActive ? '/cardio' : '/cardio?type=cycle')}
+                      className={`relative flex items-center gap-4 p-4 rounded-2xl transition-all text-left group overflow-hidden ${
+                        isThisActive
+                          ? "bg-emerald-500/15 dark:bg-emerald-500/20 border-2 border-emerald-500 shadow-[0_0_25px_rgba(16,185,129,0.35)] animate-pulse"
+                          : "bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-transparent"
+                      }`}
+                    >
+                      {isThisActive && (
+                        <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-emerald-500/20 rounded-full blur-xl pointer-events-none" />
+                      )}
+                      <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-transform ${
+                        isThisActive
+                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]"
+                          : "bg-purple-500/10 text-purple-500 group-hover:scale-110"
+                      }`}>
+                        <Bike size={22} className={isThisActive ? "animate-pulse" : ""} />
+                        {isThisActive && (
+                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white border border-emerald-600"></span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-[17px] text-bone tracking-tight">Ride</h4>
+                          {isThisActive && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-black uppercase bg-emerald-500 text-white shadow-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span> Live Active
+                            </span>
+                          )}
+                        </div>
+                        <p className={`text-[13px] ${isThisActive ? "text-emerald-600 dark:text-emerald-300 font-semibold" : "text-bone-dim"}`}>
+                          {isThisActive ? "Cycling in progress • Tap to resume" : "Cycling • Speed • Route"}
+                        </p>
+                      </div>
+                      {isThisActive ? (
+                        <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-mono text-xs font-bold shrink-0">
+                          Resume <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                        </div>
+                      ) : (
+                        <ChevronRight size={20} className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500" />
+                      )}
+                    </button>
+                  );
+                })()}
               </div>
 
               {/* Recent */}

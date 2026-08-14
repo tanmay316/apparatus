@@ -18,6 +18,7 @@ import { ChallengeDetailSheet } from '@/components/community/ChallengeDetailShee
 import { EventDetailSheet } from '@/components/community/EventDetailSheet';
 import { SinglePostSheet } from '@/components/community/SinglePostSheet';
 import { CreatePostSheet } from '@/components/community/CreatePostSheet';
+import { formatChallengeGoal } from '@/components/community/UpcomingReminderWidget';
 import { EditClanSheet } from '@/components/community/EditClanSheet';
 import { EditChallengeSheet } from '@/components/community/EditChallengeSheet';
 import { EditEventSheet } from '@/components/community/EditEventSheet';
@@ -373,37 +374,52 @@ export function ClanPage() {
               
               <div className="space-y-3">
                 {members.map(member => (
-                  <div key={member.id} className={`flex items-center justify-between p-4 rounded-2xl ${nmBtn}`}>
-                    <div className="flex items-center gap-4">
+                  <div key={member.id} className="flex items-center justify-between p-4 rounded-2xl bg-ink-2/60 border border-line/30 hover:border-line/60 transition-colors">
+                    <div 
+                      onClick={() => {
+                        if (member.userId === user?.uid) navigate('/profile');
+                        else navigate(`/profile/${member.userId}`);
+                      }}
+                      className="flex items-center gap-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+                    >
                       {member.userPhoto ? (
-                        <img src={member.userPhoto} alt={member.userName} className="w-10 h-10 rounded-full" />
+                        <img 
+                          src={member.userPhoto} 
+                          alt={member.userName} 
+                          className="w-10 h-10 rounded-full object-cover shrink-0 border border-line/30" 
+                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                        />
                       ) : (
-                        <div className="w-10 h-10 rounded-full bg-ink-3 flex items-center justify-center text-bone font-bold">
+                        <div className="w-10 h-10 rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold shrink-0">
                           {member.userName.charAt(0)}
                         </div>
                       )}
                       <div>
-                        <div className="text-bone font-bold">{member.userName} {member.userId === user?.uid && '(You)'}</div>
+                        <div className="text-bone font-bold text-sm hover:underline">{member.userName} {member.userId === user?.uid && '(You)'}</div>
                         <div className="text-xs font-mono text-bone-dim flex items-center gap-2">
-                          {member.role === 'leader' && <span className="text-amber-400">👑 Leader</span>}
-                          {member.role === 'co_leader' && <span className="text-emerald-400">⚔️ Co-Leader</span>}
+                          {member.role === 'leader' && <span className="text-amber-400 font-bold">👑 Leader</span>}
+                          {member.role === 'co_leader' && <span className="text-emerald-400 font-bold">⚔️ Co-Leader</span>}
                           {member.role === 'member' && <span>Member</span>}
                         </div>
                       </div>
                     </div>
                     
                     {isLeader && member.userId !== user?.uid && (
-                      <div className="relative z-10 w-[160px]">
-                        <CustomSelect
-                          className={`w-full text-xs font-mono ${nmInset}`}
+                      <div className="shrink-0">
+                        <select
                           value={member.role}
-                          onChange={(val) => handleRoleChange(member.userId, val as any, member.userName)}
-                          options={[
-                            { value: 'member', label: 'Member' },
-                            { value: 'co_leader', label: 'Co-Leader' },
-                            { value: 'leader', label: 'Transfer Leadership' }
-                          ]}
-                        />
+                          onChange={(e) => handleRoleChange(member.userId, e.target.value as any, member.userName)}
+                          className="bg-ink-3 hover:bg-ink-2 text-bone border border-line rounded-xl px-3 py-1.5 text-xs font-mono font-bold focus:ring-1 focus:ring-sienna outline-none transition-colors cursor-pointer appearance-none pr-7"
+                          style={{
+                            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23d9a441' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'right 8px center'
+                          }}
+                        >
+                          <option value="member" className="bg-ink text-bone">Member</option>
+                          <option value="co_leader" className="bg-ink text-bone">Co-Leader</option>
+                          <option value="leader" className="bg-ink text-amber-400">Transfer Leadership</option>
+                        </select>
                       </div>
                     )}
                   </div>
@@ -482,7 +498,9 @@ export function ClanPage() {
                         </div>
                         <div className="flex justify-between items-center text-xs font-mono text-sienna pt-3 border-t border-line/20">
                           <span>{c.participantCount} Participants</span>
-                          <span>Goal: {c.target} {c.unit}</span>
+                          {formatChallengeGoal(c.target, c.unit, c.metric) && (
+                            <span>Goal: {formatChallengeGoal(c.target, c.unit, c.metric)}</span>
+                          )}
                         </div>
                       </div>
                     );

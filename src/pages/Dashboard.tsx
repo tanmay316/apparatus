@@ -17,6 +17,7 @@ import { WeeklyTimeline } from '@/components/dashboard/WeeklyTimeline';
 import { XPPanel } from '@/components/dashboard/XPPanel';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { LiveTrainingHub } from '@/components/social/LiveTrainingHub';
+import { UpcomingReminderWidget } from '@/components/community/UpcomingReminderWidget';
 import type { PlanDay, Activity } from '@/types';
 
 // ─── Constants ───────────────────────────────────────────────
@@ -302,6 +303,9 @@ export function Dashboard() {
           onClose={() => setCardioShareData(null)}
         />
       )}
+
+      {/* Floating 24h Starting Soon Reminders */}
+      <UpcomingReminderWidget />
     </div>
   );
 }

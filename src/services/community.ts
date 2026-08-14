@@ -1,6 +1,22 @@
 import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, increment, setDoc, writeBatch, Timestamp, documentId } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric, CommunityPost } from '@/types';
+import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, SimpleEventStatus, CommunityPost } from '@/types';
+
+// ─── UTILS ────────────────────────────────────────────────────────
+export function formatChallengeGoal(target?: number, unit?: string, metric?: string): string {
+  const trimmedUnit = (unit || '').trim();
+  const trimmedMetric = (metric || '').trim();
+  
+  if (metric === 'other' || !target || target === 1) {
+    return trimmedUnit || trimmedMetric || (target ? `${target}` : '');
+  }
+
+  if (trimmedUnit.startsWith(`${target} `) || trimmedUnit === `${target}`) {
+    return trimmedUnit;
+  }
+
+  return `${target} ${trimmedUnit}`.trim();
+}
 
 // ─── CLANS (V2) ──────────────────────────────────────────────────
 
@@ -166,10 +182,10 @@ export async function transferLeadership(clanId: string, currentLeaderId: string
 
 // ─── CHALLENGES (V2) ─────────────────────────────────────────────
 
-export async function createChallenge(challenge: Omit<ChallengeV2, 'id' | 'status' | 'participantCount' | 'createdAt'>): Promise<string> {
+export async function createChallenge(challenge: Omit<ChallengeV2, 'id' | 'participantCount' | 'createdAt'> & { status?: ChallengeStatus }): Promise<string> {
   const docRef = await addDoc(collection(db, 'challenges_v2'), {
     ...challenge,
-    status: 'active', // assuming active upon creation, or should check dates
+    status: challenge.status || 'active',
     participantCount: 1,
     createdAt: serverTimestamp(),
   });
@@ -378,23 +394,42 @@ export async function joinChallenge(challengeId: string, userId: string, userNam
     challengeId,
     userId,
     userName,
-    userPhoto,
+    userPhoto: userPhoto || '',
     progress: 0,
-    rank: 999999, // Will be updated
+    rank: 0,
+    isRanked: false,
     joinedAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
+
+  const q = query(collection(db, 'challenge_participants'), where('challengeId', '==', challengeId));
+  const snap = await getDocs(q);
   await updateDoc(doc(db, 'challenges_v2', challengeId), {
-    participantCount: increment(1)
+    participantCount: snap.size
   });
 }
 
 export async function leaveChallenge(challengeId: string, userId: string): Promise<void> {
   const partId = `${challengeId}_${userId}`;
   await deleteDoc(doc(db, 'challenge_participants', partId));
+
+  const q = query(collection(db, 'challenge_participants'), where('challengeId', '==', challengeId));
+  const snap = await getDocs(q);
   await updateDoc(doc(db, 'challenges_v2', challengeId), {
-    participantCount: increment(-1)
+    participantCount: snap.size
   });
+}
+
+export async function isUserClanMember(clanId: string, userId: string): Promise<boolean> {
+  try {
+    const membershipSnap = await getDoc(doc(db, 'clan_memberships', `${clanId}_${userId}`));
+    if (membershipSnap.exists() && membershipSnap.data().status !== 'left') return true;
+    const clanSnap = await getDoc(doc(db, 'clans_v2', clanId));
+    if (clanSnap.exists() && clanSnap.data().leaderId === userId) return true;
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 export async function isUserJoinedChallenge(challengeId: string, userId: string): Promise<boolean> {
@@ -416,46 +451,53 @@ export async function getChallengeParticipants(challengeId: string): Promise<Cha
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as ChallengeParticipant));
 }
 
-export async function getChallengeLeaderboard(challengeId: string, limitCount = 100): Promise<ChallengeParticipant[]> {
+export async function getChallengeLeaderboard(challengeId: string): Promise<ChallengeParticipant[]> {
   const q = query(
     collection(db, 'challenge_participants'),
     where('challengeId', '==', challengeId)
   );
   const snap = await getDocs(q);
   
-  const list = snap.docs.map(d => ({ 
-    id: d.id, 
-    ...d.data() 
-  } as ChallengeParticipant));
+  const list = snap.docs
+    .map(d => ({ id: d.id, ...d.data() } as ChallengeParticipant))
+    .filter(p => p.isRanked === true && typeof p.rank === 'number' && p.rank > 0 && p.rank < 9999);
 
-  // Sort by progress descending, then by joinedAt / updatedAt ascending
-  list.sort((a, b) => {
-    const pA = Number(a.progress) || 0;
-    const pB = Number(b.progress) || 0;
-    if (pB !== pA) return pB - pA;
-    const aTime = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : (a.joinedAt?.toMillis ? a.joinedAt.toMillis() : 0);
-    const bTime = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : (b.joinedAt?.toMillis ? b.joinedAt.toMillis() : 0);
-    return aTime - bTime;
-  });
-  
-  return list.slice(0, limitCount).map((p, index) => ({ 
-    ...p,
-    rank: p.rank || (index + 1)
-  }));
+  // Sort strictly by published rank
+  list.sort((a, b) => (a.rank || 999) - (b.rank || 999));
+  return list;
 }
 
 export async function updateLeaderboardRanks(
   challengeId: string,
-  updatedRanks: { userId: string; rank: number; progress: number; badgeAwarded?: 1 | 2 | 3 }[]
+  updatedRanks: { userId: string; rank: number; progress?: number; customResult?: string; badgeAwarded?: 1 | 2 | 3 }[]
 ): Promise<void> {
   const batch = writeBatch(db);
   for (const item of updatedRanks) {
     const partRef = doc(db, 'challenge_participants', `${challengeId}_${item.userId}`);
     batch.update(partRef, {
       rank: item.rank,
-      progress: item.progress,
+      progress: item.progress ?? 0,
+      customResult: item.customResult || '',
+      isRanked: true,
       badgeAwarded: item.badgeAwarded || null,
       updatedAt: serverTimestamp()
+    });
+  }
+  await batch.commit();
+}
+
+export async function updateEventLeaderboardRanks(
+  eventId: string,
+  updatedRanks: { userId: string; rank: number; customResult?: string; badgeAwarded?: 1 | 2 | 3 }[]
+): Promise<void> {
+  const batch = writeBatch(db);
+  for (const item of updatedRanks) {
+    const partRef = doc(db, 'simple_event_participants', `${eventId}_${item.userId}`);
+    batch.update(partRef, {
+      rank: item.rank,
+      customResult: item.customResult || '',
+      isRanked: true,
+      badgeAwarded: item.badgeAwarded || null
     });
   }
   await batch.commit();
@@ -489,10 +531,10 @@ export async function updateUserChallengeProgress(userId: string, updates: { met
 
 // ─── EVENTS (V2) ─────────────────────────────────────────────────
 
-export async function createSimpleEvent(event: Omit<SimpleEvent, 'id' | 'status' | 'participantCount' | 'createdAt'>): Promise<string> {
+export async function createSimpleEvent(event: Omit<SimpleEvent, 'id' | 'participantCount' | 'createdAt'> & { status?: SimpleEventStatus }): Promise<string> {
   const docRef = await addDoc(collection(db, 'simple_events'), {
     ...event,
-    status: 'upcoming',
+    status: event.status || 'upcoming',
     participantCount: 1,
     createdAt: serverTimestamp(),
   });
@@ -673,19 +715,27 @@ export async function joinEvent(eventId: string, userId: string, userName: strin
     eventId,
     userId,
     userName,
-    userPhoto,
+    userPhoto: userPhoto || '',
+    rank: 0,
+    isRanked: false,
     joinedAt: serverTimestamp()
   });
+
+  const q = query(collection(db, 'simple_event_participants'), where('eventId', '==', eventId));
+  const snap = await getDocs(q);
   await updateDoc(doc(db, 'simple_events', eventId), {
-    participantCount: increment(1)
+    participantCount: snap.size
   });
 }
 
 export async function leaveEvent(eventId: string, userId: string): Promise<void> {
   const partId = `${eventId}_${userId}`;
   await deleteDoc(doc(db, 'simple_event_participants', partId));
+
+  const q = query(collection(db, 'simple_event_participants'), where('eventId', '==', eventId));
+  const snap = await getDocs(q);
   await updateDoc(doc(db, 'simple_events', eventId), {
-    participantCount: increment(-1)
+    participantCount: snap.size
   });
 }
 

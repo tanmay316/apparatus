@@ -8,6 +8,8 @@ import { Toast } from '@/components/ui/Toast';
 import { requestNotificationPermission, scheduleDailyReminders } from '@/utils/notifications';
 import { UpdatePopup } from '@/components/ui/UpdatePopup';
 import { useUIStore } from '@/stores/ui-store';
+import { useWorkoutStore } from '@/stores/workout-store';
+import { useCardioStore } from '@/stores/cardio-store';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
@@ -134,8 +136,18 @@ function PreferencesSync() {
     if (Capacitor.isNativePlatform()) {
       try {
         LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
-          const data = action.notification.extra;
-          if (data?.type === 'follow_request') {
+          const data = action.notification?.extra;
+          const id = action.notification?.id;
+          if (data?.type === 'cardio' || id === 101 || data?.session === 'cardio') {
+            window.location.href = '/cardio';
+          } else if (data?.type === 'gym' || id === 1001 || id === 102 || data?.session === 'gym') {
+            const { planId, dayId } = useWorkoutStore.getState();
+            if (planId && dayId) {
+              window.location.href = `/workout/${planId}/day/${dayId}`;
+            } else {
+              window.location.href = '/plans';
+            }
+          } else if (data?.type === 'follow_request') {
             window.location.href = `/?redirect_modal=followers`; 
           }
         });
@@ -194,6 +206,7 @@ export function App() {
               <Route path="community" element={<CommunityPage />} />
               <Route path="clan/:id" element={<ErrorBoundary><ClanPage /></ErrorBoundary>} />
               <Route path="nutrition" element={<NutritionDashboard />} />
+              <Route path="profile" element={<ProfilePage />} />
               <Route path="profile/:username" element={<ProfilePage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="admin" element={<AdminPage />} />

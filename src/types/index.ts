@@ -566,8 +566,10 @@ export interface ChallengeParticipant {
   userId: string;
   userName: string;
   userPhoto: string;
-  progress: number;
-  rank: number;
+  progress?: number;
+  rank?: number;
+  customResult?: string;
+  isRanked?: boolean;
   badgeAwarded?: 1 | 2 | 3;
   joinedAt: Timestamp | null;
   updatedAt: Timestamp | null;
@@ -608,6 +610,9 @@ export interface EventParticipant {
   userId: string;
   userName: string;
   userPhoto: string;
+  rank?: number;
+  customResult?: string;
+  isRanked?: boolean;
   badgeAwarded?: 1 | 2 | 3;
   joinedAt: Timestamp | null;
 }
