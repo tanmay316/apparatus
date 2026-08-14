@@ -60,21 +60,47 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
 
   // Chat listener
   useEffect(() => {
-    if (!session.startedAt) return;
+    if (!session?.uid) return;
     
-    const q = query(
-      collection(db, 'activeSessions', session.uid, 'chat'),
-      where('createdAt', '>=', session.startedAt),
-      orderBy('createdAt', 'asc')
-    );
+    const chatColl = collection(db, 'activeSessions', session.uid, 'chat');
+    const q = query(chatColl, orderBy('createdAt', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+      const msgs = snap.docs.map(d => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          _timestamp: data.createdAt?.toMillis 
+            ? data.createdAt.toMillis() 
+            : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : (typeof data.createdAt === 'number' ? data.createdAt : Date.now())),
+        };
+      });
+      // Sort defensively so pending local writes (with null serverTimestamp) appear immediately at the bottom
+      msgs.sort((a, b) => a._timestamp - b._timestamp);
+      setMessages(msgs);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
+    }, (err) => {
+      console.warn('[LiveSessionModal] orderBy error, falling back to unordered listener:', err);
+      onSnapshot(chatColl, (fallbackSnap) => {
+        const msgs = fallbackSnap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            ...data,
+            _timestamp: data.createdAt?.toMillis 
+              ? data.createdAt.toMillis() 
+              : (data.createdAt?.seconds ? data.createdAt.seconds * 1000 : (typeof data.createdAt === 'number' ? data.createdAt : Date.now())),
+          };
+        });
+        msgs.sort((a, b) => a._timestamp - b._timestamp);
+        setMessages(msgs);
+        setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 80);
+      });
     });
 
     return () => unsubscribe();
-  }, [session.uid]);
+  }, [session?.uid]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -211,8 +211,7 @@ service cloud.firestore {
       allow write: if isOwner(uid);
       
       match /chat/{chatId} {
-        allow read: if isAuthenticated();
-        allow create: if isAuthenticated();
+        allow read, create, delete: if isAuthenticated();
       }
     }
 

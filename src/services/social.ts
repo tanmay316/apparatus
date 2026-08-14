@@ -562,6 +562,15 @@ export interface ActiveSession {
 
 export async function startActiveSession(uid: string, sessionData: Omit<ActiveSession, 'uid' | 'updatedAt'> & { startedAt?: any }) {
   const ref = doc(db, 'activeSessions', uid);
+  // Clear any residual chat documents from an aborted prior session
+  const chatRef = collection(db, 'activeSessions', uid, 'chat');
+  const snap = await getDocs(chatRef).catch(() => null);
+  if (snap && snap.docs.length > 0) {
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit().catch(() => {});
+  }
+
   await setDoc(ref, {
     ...sessionData,
     uid,

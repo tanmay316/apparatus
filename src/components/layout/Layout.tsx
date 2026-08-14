@@ -5,6 +5,7 @@ import { Topbar } from './Topbar';
 import { BottomNav } from './BottomNav';
 import { ReminderManager } from './ReminderManager';
 import FloatingAIBot from '../nutrition/FloatingAIBot';
+import { LiveChatOverlay } from '../social/LiveChatOverlay';
 import { Video, Bot } from 'lucide-react';
 
 import { useAuthStore } from '@/stores/auth-store';
@@ -34,6 +35,7 @@ export function Layout() {
       {!location.pathname.startsWith('/cardio') && <Topbar />}
       <ReminderManager />
       <FloatingAIBot />
+      <LiveChatOverlay />
       {!location.pathname.startsWith('/cardio') && <BottomNav />}
 
       <main className={location.pathname.startsWith('/cardio') ? "h-full w-full" : "max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-4 pb-28 relative"}>

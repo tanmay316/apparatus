@@ -13,7 +13,6 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { ExerciseLogModal } from '@/components/ui/ExerciseLogModal';
-import { LiveChatOverlay } from '@/components/social/LiveChatOverlay';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
@@ -994,8 +993,6 @@ export function WorkoutSession() {
           }}
         />
       )}
-
-      <LiveChatOverlay />
     </motion.div>
   );
 }
