@@ -27,6 +27,9 @@ import { startActiveSession, endActiveSession, postActivity } from '@/services/s
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 import { updateUserChallengeProgress } from '@/services/community';
+import { calculateCorrectedElevation } from '@/services/elevation-service';
+import { NativeWorkoutLocation } from '@/utils/native-workout-location';
+import { Capacitor } from '@capacitor/core';
 import type { CardioActivityType, CardioActivity } from '@/types';
 
 function localDateKey(d: Date) {
@@ -142,6 +145,7 @@ export function CardioTracker() {
   const userWeight = useUserWeight();
   const store = useCardioStore();
   const [elapsedSec, setElapsedSec] = useState(0);
+  const processingRef = useRef(false); // Guard against double-clicks during recovery
 
   const themeStyles = theme === 'dark' ? {
     '--bg': '#090605',
@@ -217,6 +221,12 @@ export function CardioTracker() {
     if (screen === 'ready' || (screen === 'tracking' && !store.isPaused)) {
       startGpsWatch();
     }
+    // Check if there is an active native session to hydrate immediately
+    store.syncWithNativeSession().then(hasActive => {
+      if (hasActive) {
+        setScreen('tracking');
+      }
+    });
   }, [screen, store.isPaused]);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -230,7 +240,10 @@ export function CardioTracker() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [recenterTrigger, setRecenterTrigger] = useState(0);
 
-  const { heading, requestPermission, visualHeadingRef } = useCompassHeading();
+  const { heading, requestPermission, visualHeadingRef } = useCompassHeading({
+    movementBearing: store.currentLocation?.heading,
+    speedKmh: store.currentSpeedKmh
+  });
   const [mapRotationMode, setMapRotationMode] = useState(false);
 
   const toggleMapRotation = async () => {
@@ -361,6 +374,9 @@ export function CardioTracker() {
 
     await requestNotificationPermission();
     await requestForegroundPermissions();
+    if (Capacitor.isNativePlatform()) {
+      NativeWorkoutLocation.requestBatteryOptimizationExemption().catch(() => {});
+    }
     
     const initialContent = getCardioNotificationContent(store, 0);
     startWorkoutForegroundService('cardio', initialContent.title, initialContent.body, false);
@@ -412,22 +428,31 @@ export function CardioTracker() {
   };
 
   const handlePause = () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
     store.pauseTracking();
     const st = useCardioStore.getState();
     const elapsed = st.startedAt ? Math.max(0, Math.floor((Date.now() - st.startedAt - st.totalPausedMs) / 1000)) : elapsedSec;
     const { title, body } = getCardioNotificationContent(st, elapsed);
     updateWorkoutForegroundService('cardio', title, body, true);
+    processingRef.current = false;
   };
 
   const handleResume = () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
     store.resumeTracking();
     const st = useCardioStore.getState();
     const elapsed = st.startedAt ? Math.max(0, Math.floor((Date.now() - st.startedAt - st.totalPausedMs) / 1000)) : elapsedSec;
     const { title, body } = getCardioNotificationContent(st, elapsed);
     updateWorkoutForegroundService('cardio', title, body, false);
+    processingRef.current = false;
   };
 
   const handleStop = async () => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    try {
     if (store.activityType === 'walk' || store.activityType === 'run') {
       await pedometerStore.stopSession();
     }
@@ -458,6 +483,19 @@ export function CardioTracker() {
 
     const steps = getLiveSteps(finalStore.activityType!, dist, pedometerStore);
 
+    // Compute DEM-corrected elevation gain from full route points
+    let finalElevationGain = Math.round(finalStore.elevationGainM);
+    if (finalStore.routePoints && finalStore.routePoints.length > 2) {
+      try {
+        const demResult = await calculateCorrectedElevation(finalStore.routePoints);
+        if (demResult.correctedElevationGainM > 0) {
+          finalElevationGain = demResult.correctedElevationGainM;
+        }
+      } catch (err) {
+        console.warn('DEM elevation calculation fallback to GPS:', err);
+      }
+    }
+
     const data: Partial<CardioActivity> = {
       type: finalStore.activityType!,
       distanceKm: dist,
@@ -469,7 +507,7 @@ export function CardioTracker() {
       avgSpeedKmh: Math.round(avgSpeed * 10) / 10,
       maxSpeedKmh: Math.round(Math.max(finalStore.maxSpeedKmh, avgSpeed) * 10) / 10,
       calories,
-      elevationGainM: Math.round(finalStore.elevationGainM),
+      elevationGainM: finalElevationGain,
       route: finalStore.routePoints,
       steps,
     };
@@ -498,8 +536,8 @@ export function CardioTracker() {
           maxSpeedKmh: Math.round(Math.max(store.maxSpeedKmh, avgSpeed) * 10) / 10,
           avgPace: `${pace} /km`,
           calories: calories,
-          elevationGainM: Math.round(store.elevationGainM),
-          route: store.routePoints,
+          elevationGainM: finalElevationGain,
+          route: finalStore.routePoints,
           visibility: 'followers',
           notes: workoutNotes || `Effort: ${workoutEffort}`,
           steps: steps,
@@ -554,10 +592,16 @@ export function CardioTracker() {
         setIsSaving(false);
       }
     }
+    } finally {
+      processingRef.current = false;
+    }
   };
 
   const handleDiscard = async () => {
+    if (processingRef.current) return;
     if (window.confirm('Are you sure you want to discard this cardio session?')) {
+      processingRef.current = true;
+      try {
       if (user) endActiveSession(user.uid).catch(console.error);
       stopWorkoutForegroundService('cardio');
       await stopGpsWatch();
@@ -567,6 +611,9 @@ export function CardioTracker() {
       store.reset();
       setSearchParams({});
       setScreen('select');
+      } finally {
+        processingRef.current = false;
+      }
     }
   };
 
@@ -865,6 +912,22 @@ export function CardioTracker() {
         <div className="absolute inset-0 z-0">
           <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} cardioType={store.activityType as any} heading={heading} mapRotationMode={mapRotationMode} visualHeadingRef={visualHeadingRef} />
         </div>
+
+        {/* Recovery Overlay — shows when replaying native buffer after background */}
+        <AnimatePresence>
+          {store.isRecovering && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-30 bg-[#090605]/80 backdrop-blur-md flex flex-col items-center justify-center gap-4 pointer-events-none"
+            >
+              <Loader2 size={40} className="animate-spin text-amber-500" />
+              <div className="text-white font-bold text-lg">Recovering GPS data...</div>
+              <div className="text-white/60 text-sm font-mono">Syncing background tracking</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Top Header */}
         <div className="absolute top-6 left-4 right-4 z-20 safe-top pointer-events-none flex justify-between items-start">

@@ -339,30 +339,43 @@ export function RouteMap({
     if (!visualHeadingRef) return;
     
     let rafId: number;
+    let lastAppliedConeHeading: number | null = null;
+    let lastAppliedMapHeading: number | null = null;
+    const HEADING_CHANGE_THRESHOLD = 2; // Only update when heading changes by > 2°
+
     const animate = () => {
       const vHead = visualHeadingRef.current;
       if (mapContainerRef.current) {
-        // Map Container Rotation
-        mapContainerRef.current.style.transform = mapRotationMode && vHead !== null
-          ? `translateZ(0) rotate(${-vHead}deg)`
-          : `translateZ(0) rotate(${manualRotationRef.current}deg)`;
+        // Map Container Rotation — only update if heading changed meaningfully
+        const targetMapHeading = mapRotationMode && vHead !== null ? -vHead : manualRotationRef.current;
+        if (lastAppliedMapHeading === null || Math.abs(targetMapHeading - lastAppliedMapHeading) > HEADING_CHANGE_THRESHOLD) {
+          mapContainerRef.current.style.transform = `translateZ(0) rotate(${targetMapHeading}deg)`;
+          lastAppliedMapHeading = targetMapHeading;
+        }
           
-        // Icon/Cone Rotation
-        const coneEl = mapContainerRef.current.querySelector('.compass-cone') as HTMLElement;
+        // Icon/Cone Rotation — guard with threshold to prevent sub-pixel jitter
         const validHeading = vHead !== null ? vHead : currentLocation?.heading;
         
-        if (coneEl) {
-          if (validHeading != null) {
-            coneEl.style.opacity = '1';
-            coneEl.style.transform = `translate(-50%, -50%) rotate(${validHeading}deg)`;
-          } else {
-            coneEl.style.opacity = '0';
+        if (validHeading != null) {
+          const headingChanged = lastAppliedConeHeading === null || Math.abs(validHeading - lastAppliedConeHeading) > HEADING_CHANGE_THRESHOLD;
+          if (headingChanged) {
+            const coneEl = mapContainerRef.current.querySelector('.compass-cone') as HTMLElement;
+            if (coneEl) {
+              coneEl.style.opacity = '1';
+              coneEl.style.transition = 'none';
+              coneEl.style.transform = `translate(-50%, -50%) rotate(${validHeading}deg)`;
+            }
+            
+            const markerEl = mapContainerRef.current.querySelector('.compass-marker') as HTMLElement;
+            if (markerEl) {
+              markerEl.style.transition = 'none';
+              markerEl.style.transform = `rotate(${validHeading}deg)`;
+            }
+            lastAppliedConeHeading = validHeading;
           }
-        }
-        
-        const markerEl = mapContainerRef.current.querySelector('.compass-marker') as HTMLElement;
-        if (markerEl) {
-          markerEl.style.transform = `rotate(${validHeading ?? 0}deg)`;
+        } else {
+          const coneEl = mapContainerRef.current.querySelector('.compass-cone') as HTMLElement;
+          if (coneEl) coneEl.style.opacity = '0';
         }
       }
       rafId = requestAnimationFrame(animate);

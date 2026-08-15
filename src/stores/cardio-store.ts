@@ -1,7 +1,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { RoutePoint, CardioActivityType } from '@/types';
-import { usePedometerStore } from './pedometer-store';
+import { Geolocation } from '@capacitor/geolocation';
+import { Capacitor } from '@capacitor/core';
+import type { PluginListenerHandle } from '@capacitor/core';
+import { NativeWorkoutLocation, type NativeWorkoutPoint, type NativeWorkoutSessionSummary } from '@/utils/native-workout-location';
 
 // ────────────────────────────────────────────────────────────
 // Haversine distance (km)
@@ -21,7 +24,6 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 // 1. Plausibility & Speed Engine Configuration
 // ────────────────────────────────────────────────────────────
 
-/** Returns the maximum believable speed (km/h) and acceleration (km/h/s) */
 const ACTIVITY_SPEED_LIMITS = {
   walk: { maxSpeed: 15, maxAccel: 5 },
   run: { maxSpeed: 35, maxAccel: 10 },
@@ -33,186 +35,160 @@ function getSpeedLimits(type: CardioActivityType | null) {
   return ACTIVITY_SPEED_LIMITS[type] || ACTIVITY_SPEED_LIMITS.walk;
 }
 
-// EMA Alpha determines smoothing factor. Lower = smoother but more lag.
-const EMA_ALPHA = 0.3; 
-const SPEED_BUFFER_SIZE = 3; // For median filter
+const EMA_ALPHA = 0.25; 
+const SPEED_BUFFER_SIZE = 5;
 let rawSpeedBuffer: number[] = [];
 let emaSpeed = 0;
-let lastTrustedSpeedKmh: number | null = null;
 
 let lastRawGpsPoint: RoutePoint | null = null;
 let lastAcceptedDistancePoint: RoutePoint | null = null;
 let lastRoutePoint: RoutePoint | null = null;
 let lastMovementPoint: RoutePoint | null = null;
-let lastStationaryAnchor: RoutePoint | null = null;
-let consecutiveMovingCount = 0;
-let gpsFixCount = 0;
-let goodFixCount = 0;
-let gapRecoveryFixes = 0;
-let warmupConsecutiveFixes = 0;
-let consecutiveHighSpeedFixes = 0;
-let lastWarmupGoodPoint: RoutePoint | null = null;
-let stepsAtLastMovement = 0;
+let lastMovementTs = 0;
+
+// Elevation smoothing buffer
+const ALTITUDE_BUFFER_SIZE = 5;
+let altitudeBuffer: number[] = [];
+let lastElevationAnchorAlt: number | null = null;
+
+function getSmoothedAltitude(alt: number): number {
+  altitudeBuffer.push(alt);
+  if (altitudeBuffer.length > ALTITUDE_BUFFER_SIZE) altitudeBuffer.shift();
+  const sorted = [...altitudeBuffer].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
 
 function resetTrackingSegmentState() {
   lastRawGpsPoint = null;
   lastAcceptedDistancePoint = null;
   lastRoutePoint = null;
   lastMovementPoint = null;
-  lastStationaryAnchor = null;
-  consecutiveMovingCount = 0;
-  lastTrustedSpeedKmh = null;
-  gpsFixCount = 0;
-  goodFixCount = 0;
-  gapRecoveryFixes = 0;
-  warmupConsecutiveFixes = 0;
-  consecutiveHighSpeedFixes = 0;
-  lastWarmupGoodPoint = null;
-  stepsAtLastMovement = 0;
+  altitudeBuffer = [];
+  lastElevationAnchorAlt = null;
 }
 
 function pushSpeed(raw: number): number {
-  // 1. Sliding window for Median
   rawSpeedBuffer.push(raw);
   if (rawSpeedBuffer.length > SPEED_BUFFER_SIZE) {
     rawSpeedBuffer.shift();
   }
-  
-  // Calculate median
   const sorted = [...rawSpeedBuffer].sort((a, b) => a - b);
   const median = sorted[Math.floor(sorted.length / 2)];
 
-  // 2. Exponential Moving Average
   if (emaSpeed === 0 && median > 0) {
-    emaSpeed = median; // Initialize EMA on first movement
+    emaSpeed = median;
   } else {
     emaSpeed = (EMA_ALPHA * median) + ((1 - EMA_ALPHA) * emaSpeed);
   }
-  
   return emaSpeed;
 }
 
 function resetSpeedEngine() {
   rawSpeedBuffer = [];
   emaSpeed = 0;
-  lastTrustedSpeedKmh = null;
-}
-
-function accuracyConfidence(accuracy?: number): number {
-  if (accuracy == null || !Number.isFinite(accuracy)) return 0.5;
-  if (accuracy <= 10) return 1;
-  if (accuracy <= 20) return 0.8;
-  if (accuracy <= 40) return 0.55;
-  if (accuracy <= 60) return 0.3;
-  return 0;
+  altitudeBuffer = [];
+  lastElevationAnchorAlt = null;
 }
 
 // ────────────────────────────────────────────────────────────
-// 3. Auto-Pause — pause timer when user is standing still
+// Background Resilience — Page Visibility + Native Sync
 // ────────────────────────────────────────────────────────────
 
-// Universal "stopped" threshold — 0.8 km/h ≈ standing completely still.
-const AUTO_PAUSE_SPEED_THRESHOLD = 0.8; // km/h
-const AUTO_PAUSE_DELAY_MS = 4_000;      // 4 seconds of being "stopped"
-
-let lastMovementTs = 0;  // timestamp of last point where speed > threshold
-
-// ────────────────────────────────────────────────────────────
-// 4. Background Resilience — Page Visibility + Wake Lock
-// ────────────────────────────────────────────────────────────
-
-let pageHiddenAt: number | null = null;
 let visibilityListenerAttached = false;
-let keepAliveIntervalId: ReturnType<typeof setInterval> | null = null;
 
 function attachVisibilityListener() {
   if (visibilityListenerAttached) return;
   visibilityListenerAttached = true;
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') {
-      // Page going to background — record timestamp
-      pageHiddenAt = Date.now();
-    } else {
-      // Page coming back to foreground. The Android foreground service owns
-      // collection while the WebView is suspended; never stop/restart it here.
-      // Restarting discarded the native listener and repeatedly put sessions
-      // back into GPS warm-up after screen lock.
-      pageHiddenAt = null;
+    if (document.visibilityState === 'visible') {
       const state = useCardioStore.getState();
-      if (state.isTracking && !state.isPaused) {
-        if (Capacitor.isNativePlatform()) {
-          // Recover every point collected while the screen was off.
-          if (watchIdRef === 'native-workout-location') {
-            replayNativeLocationBuffer(state.lastGpsTimestamp);
-          } else {
-            startGpsWatch();
-          }
-        } else {
-          // Browser watches can be suspended, unlike the native service.
-          if (watchIdRef !== null) stopGpsWatch().then(() => startGpsWatch());
-          else startGpsWatch();
-        }
+      if (Capacitor.isNativePlatform() && state.isTracking) {
+        useCardioStore.getState().syncWithNativeSession();
       }
     }
   });
 }
 
-import { Geolocation } from '@capacitor/geolocation';
-import { Capacitor } from '@capacitor/core';
-import type { PluginListenerHandle } from '@capacitor/core';
-import { NativeWorkoutLocation, type NativeWorkoutPoint } from '@/utils/native-workout-location';
-
-// Haversine formula to calculate distance between two lat/lon coordinates in meters
-function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371e3; // Radius of the earth in m
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-// ────────────────────────────────────────────────────────────
-// Global GPS (lives outside React for persistence)
-// ────────────────────────────────────────────────────────────
 let watchIdRef: string | number | null = null;
 let nativeLocationListener: PluginListenerHandle | null = null;
+let nativeStateListener: PluginListenerHandle | null = null;
 
 /**
- * Replays the native service's durable journal into the store. Android can
- * suspend the WebView while the screen is locked, so listener events are only
- * a live UI convenience; the journal is the authoritative record.
+ * Replays or syncs the native service's state directly into the store.
  */
-export const replayNativeLocationBuffer = async (fromTimestamp?: number) => {
-  if (!Capacitor.isNativePlatform()) return;
+export const syncWithNativeSession = async (): Promise<boolean> => {
+  if (!Capacitor.isNativePlatform()) return false;
 
-  const state = useCardioStore.getState();
-  const timestamp = fromTimestamp ?? state.startedAt ?? state.lastGpsTimestamp;
   try {
-    const buffered = await NativeWorkoutLocation.getLocationsAfter({ timestamp });
-    buffered.points
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .forEach(handleNativeLocation);
+    const summary: NativeWorkoutSessionSummary = await NativeWorkoutLocation.getSessionSummary();
+    if (summary.state === 'TRACKING' || summary.state === 'PAUSED') {
+      const downsampled = await NativeWorkoutLocation.getDownsampledPoints({ maxPoints: 500 });
+      const pts: RoutePoint[] = downsampled.points.map(p => ({
+        lat: p.lat,
+        lng: p.lng,
+        ts: p.timestamp,
+        alt: p.altitude ?? undefined,
+        speed: p.speed ?? undefined,
+      }));
+
+      useCardioStore.setState({
+        isTracking: true,
+        isPaused: summary.state === 'PAUSED',
+        activityType: summary.activityType,
+        startedAt: summary.startedAt,
+        pausedAt: summary.pausedAt > 0 ? summary.pausedAt : null,
+        totalPausedMs: summary.totalPausedMs,
+        movingDurationSec: summary.movingDurationSec,
+        distanceKm: summary.distanceMeters / 1000,
+        currentSpeedKmh: summary.currentSpeedKmh,
+        maxSpeedKmh: summary.maxSpeedKmh,
+        elevationGainM: summary.elevationGainM,
+        currentLocation: summary.lastLat && summary.lastLng ? {
+          lat: summary.lastLat,
+          lng: summary.lastLng,
+          heading: summary.lastBearing ?? undefined,
+        } : null,
+        gpsAccuracy: summary.lastAccuracy,
+        gpsStatus: 'active',
+        lastGpsTimestamp: summary.lastTimestamp,
+        routePoints: pts,
+        isRecovering: false,
+      });
+      return true;
+    }
   } catch (error) {
-    // The live listener remains useful if a device/vendor blocks database access.
-    console.warn('[CardioStore] Failed to replay native location buffer:', error);
+    console.warn('[CardioStore] Failed to sync native session summary:', error);
   }
+  return false;
 };
 
-/** Flush native points before stopping so a locked-screen route is not lost. */
+/** Flush native points before stopping and retrieve full resolution route for saving. */
 export const finishTracking = async () => {
-  const beforeFinish = useCardioStore.getState();
-  if (beforeFinish.isTracking) {
-    // Read the entire session rather than only points newer than the last JS
-    // callback. addPoint de-duplicates timestamps, and this recovers callbacks
-    // the WebView missed while Android kept the foreground service alive.
-    await replayNativeLocationBuffer(beforeFinish.startedAt ?? 0);
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const summary = await NativeWorkoutLocation.getSessionSummary();
+      const allPoints = await NativeWorkoutLocation.getLocationsAfter({ timestamp: 0 });
+      const fullRoute: RoutePoint[] = allPoints.points.map(p => ({
+        lat: p.lat,
+        lng: p.lng,
+        ts: p.timestamp,
+        alt: p.altitude ?? undefined,
+        speed: p.speed ?? undefined,
+      }));
+
+      useCardioStore.setState({
+        distanceKm: summary.distanceMeters / 1000,
+        movingDurationSec: summary.movingDurationSec,
+        maxSpeedKmh: summary.maxSpeedKmh,
+        elevationGainM: summary.elevationGainM,
+        routePoints: fullRoute.length > 0 ? fullRoute : useCardioStore.getState().routePoints,
+      });
+    } catch (e) {
+      console.warn('[CardioStore] Error reading final session data:', e);
+    }
   }
-  // Wait for the native stop command before returning. This removes the
-  // location-service notification immediately when a workout is saved.
+
   await stopGpsWatch();
   const finalState = useCardioStore.getState();
   finalState.stopTracking();
@@ -226,8 +202,8 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
       longitude: point.lng,
       accuracy: point.accuracy ?? 999,
       altitude: point.altitude,
-      altitudeAccuracy: null,
-      heading: null,
+      altitudeAccuracy: point.verticalAccuracy ?? null,
+      heading: point.bearing ?? null,
       speed: point.speed,
       toJSON: () => ({}),
     },
@@ -235,6 +211,7 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
     toJSON: () => ({}),
   } as unknown as GeolocationPosition);
 }
+
 const checkPermissionsNative = async () => {
   try {
     let perm = await Geolocation.checkPermissions();
@@ -247,7 +224,7 @@ const checkPermissionsNative = async () => {
   }
 };
 
-/** Central GPS point handler — applies smart accuracy check and feeds to store */
+/** Central GPS point handler */
 function handleGpsPosition(pos: GeolocationPosition) {
   const storeState = useCardioStore.getState();
   const accuracy = pos.coords.accuracy;
@@ -256,7 +233,6 @@ function handleGpsPosition(pos: GeolocationPosition) {
   const rawHeading = pos.coords.heading;
   const hasValidHeading = rawHeading != null && !Number.isNaN(rawHeading);
   
-  // Prevent wild map jumps during warmup and while stationary by smoothing visual marker
   if (!storeState.currentLocation) {
     useCardioStore.setState({ 
       currentLocation: { 
@@ -265,20 +241,18 @@ function handleGpsPosition(pos: GeolocationPosition) {
         heading: hasValidHeading ? rawHeading : undefined
       }
     });
-  } else if ((Number.isFinite(accuracy) && accuracy <= 75) || Capacitor.isNativePlatform() === false) {
+  } else if ((Number.isFinite(accuracy) && accuracy <= 40) || Capacitor.isNativePlatform() === false) {
     const cur = storeState.currentLocation;
     const distM = haversineKm(cur.lat, cur.lng, newLat, newLng) * 1000;
-    const isStationary = storeState.currentSpeedKmh < 1.0 && distM < 6;
+    const isStationary = storeState.currentSpeedKmh < 0.8 && distM < 4;
     
     let lat = newLat;
     let lng = newLng;
     let heading = hasValidHeading ? rawHeading : cur.heading;
 
     if (isStationary) {
-      // Apply low-pass dampening when stationary so icon settles gracefully without jumping
-      lat = cur.lat * 0.75 + newLat * 0.25;
-      lng = cur.lng * 0.75 + newLng * 0.25;
-      // Do not jitter heading when stationary
+      lat = cur.lat * 0.8 + newLat * 0.2;
+      lng = cur.lng * 0.8 + newLng * 0.2;
       heading = cur.heading;
     }
 
@@ -291,8 +265,8 @@ function handleGpsPosition(pos: GeolocationPosition) {
     });
   }
 
-  // ── GPS Warmup: discard early inaccurate points ──────────
-  if (!Number.isFinite(accuracy) || accuracy > 150) return;
+  // Reject inaccurate fixes
+  if (!Number.isFinite(accuracy) || accuracy > 60) return;
 
   const pt = {
     lat: pos.coords.latitude,
@@ -307,18 +281,12 @@ function handleGpsPosition(pos: GeolocationPosition) {
 }
 
 export const startGpsWatch = async (newSession = false) => {
-  // Promote the ready-screen preview watch to the durable Android service when
-  // the user actually starts the workout.
   if (watchIdRef !== null) {
     if (newSession && Capacitor.isNativePlatform() && watchIdRef !== 'native-workout-location') {
       await stopGpsWatch();
     } else {
-      // Navigating back to the tracking screen does not necessarily trigger a
-      // visibility event. Pull the durable native journal here as well so the
-      // live distance catches up immediately instead of waiting for the next
-      // GPS callback.
       if (Capacitor.isNativePlatform() && watchIdRef === 'native-workout-location' && useCardioStore.getState().isTracking) {
-        await replayNativeLocationBuffer(useCardioStore.getState().lastGpsTimestamp);
+        await syncWithNativeSession();
       }
       return;
     }
@@ -327,7 +295,6 @@ export const startGpsWatch = async (newSession = false) => {
   attachVisibilityListener();
 
   if (Capacitor.isNativePlatform()) {
-    // NATIVE CAPACITOR APP
     const hasPerm = await checkPermissionsNative();
     if (!hasPerm) {
       console.warn('[CardioStore] GPS permission denied natively');
@@ -343,19 +310,24 @@ export const startGpsWatch = async (newSession = false) => {
         );
         return;
       }
+
       nativeLocationListener = await NativeWorkoutLocation.addListener('location', handleNativeLocation);
+      nativeStateListener = await NativeWorkoutLocation.addListener('stateChange', (ev) => {
+        if (ev.state === 'PAUSED') useCardioStore.setState({ isPaused: true });
+        else if (ev.state === 'TRACKING') useCardioStore.setState({ isPaused: false });
+      });
+
       await NativeWorkoutLocation.start({
         reset: newSession,
         activityType: useCardioStore.getState().activityType ?? undefined,
       });
       watchIdRef = 'native-workout-location';
-      await replayNativeLocationBuffer(useCardioStore.getState().lastGpsTimestamp);
+      await syncWithNativeSession();
     } catch (e) {
       console.warn('[CardioStore] Failed native GPS:', e);
       useCardioStore.setState({ gpsStatus: 'error' });
     }
   } else {
-    // WEB BROWSER
     if (!navigator.geolocation) {
       useCardioStore.setState({ gpsStatus: 'error' });
       return;
@@ -381,13 +353,12 @@ export const stopGpsWatch = async () => {
   if (Capacitor.isNativePlatform()) {
     if (watchIdRef === 'native-workout-location') {
       await nativeLocationListener?.remove();
+      await nativeStateListener?.remove();
       nativeLocationListener = null;
+      nativeStateListener = null;
     } else if (watchIdRef !== null) {
       try { await Geolocation.clearWatch({ id: watchIdRef as string }); } catch {}
     }
-    // The WebView can be recreated while the native service stays alive. Stop
-    // it even when this in-memory watcher ID was lost, so discard/save always
-    // removes the ongoing cardio notification.
     try { await NativeWorkoutLocation.stop(); } catch {}
   } else if (watchIdRef !== null) {
     navigator.geolocation.clearWatch(watchIdRef as number);
@@ -410,26 +381,31 @@ interface CardioState {
   startedAt: number | null;
   pausedAt: number | null;
   totalPausedMs: number;
+  movingDurationSec: number;
   routePoints: RoutePoint[];
-  paceWindow: { dist: number; dt: number; ts: number }[]; // Rolling moving-time pace
+  paceWindow: { dist: number; dt: number; ts: number }[];
   distanceKm: number;
   currentSpeedKmh: number;
-  currentPaceMs: number; // min/km in ms (e.g. 5:00 = 300000ms)
+  currentPaceMs: number;
   maxSpeedKmh: number;
   elevationGainM: number;
   gpsStatus: GpsStatus;
   gpsAccuracy: number;
   currentLocation: { lat: number, lng: number, heading?: number } | null;
   lastGpsTimestamp: number;
+  isRecovering: boolean;
 
   // Actions
   startTracking: (type: CardioActivityType) => void;
   pauseTracking: () => void;
   resumeTracking: () => void;
   addPoint: (point: RoutePoint & { accuracy?: number }) => void;
+  syncWithNativeSession: () => Promise<boolean>;
   stopTracking: () => void;
   reset: () => void;
 }
+
+const MAX_DISPLAY_POINTS = 2000;
 
 const IDLE: Partial<CardioState> = {
   isTracking: false,
@@ -440,6 +416,7 @@ const IDLE: Partial<CardioState> = {
   startedAt: null,
   pausedAt: null,
   totalPausedMs: 0,
+  movingDurationSec: 0,
   routePoints: [],
   paceWindow: [],
   distanceKm: 0,
@@ -451,6 +428,7 @@ const IDLE: Partial<CardioState> = {
   gpsAccuracy: 0,
   currentLocation: null,
   lastGpsTimestamp: 0,
+  isRecovering: false,
 };
 
 export const useCardioStore = create<CardioState>()(
@@ -458,12 +436,15 @@ export const useCardioStore = create<CardioState>()(
     (set, get) => ({
       ...(IDLE as CardioState),
 
+      syncWithNativeSession: async () => {
+        return await syncWithNativeSession();
+      },
+
       startTracking: (type) => {
         resetSpeedEngine();
         resetTrackingSegmentState();
         lastMovementTs = Date.now();
 
-        // IMPORTANT: set isTracking FIRST so GPS callbacks aren't dropped
         set({
           isTracking: true,
           isPaused: false,
@@ -473,6 +454,7 @@ export const useCardioStore = create<CardioState>()(
           startedAt: Date.now(),
           pausedAt: null,
           totalPausedMs: 0,
+          movingDurationSec: 0,
           routePoints: [],
           paceWindow: [],
           distanceKm: 0,
@@ -483,17 +465,20 @@ export const useCardioStore = create<CardioState>()(
           gpsStatus: 'waiting',
           gpsAccuracy: get().gpsAccuracy || 0,
           lastGpsTimestamp: 0,
-          // Keep currentLocation to avoid the 20s re-locating delay on start
+          isRecovering: false,
         });
-        // Start GPS after state is ready (if not already running)
+
         startGpsWatch(true);
       },
 
       pauseTracking: () => {
-        stopGpsWatch();
+        if (Capacitor.isNativePlatform()) {
+          NativeWorkoutLocation.pause().catch(console.warn);
+        } else {
+          stopGpsWatch();
+        }
         resetTrackingSegmentState();
         const { autoPauseStatus, autoPausedAt } = get();
-        // If auto-paused, collapse the auto-pause into totalPausedMs before manual pause
         let extraAutoPause = 0;
         if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
           extraAutoPause = Date.now() - autoPausedAt;
@@ -508,11 +493,15 @@ export const useCardioStore = create<CardioState>()(
       },
 
       resumeTracking: () => {
+        if (Capacitor.isNativePlatform()) {
+          NativeWorkoutLocation.resume().catch(console.warn);
+        } else {
+          startGpsWatch();
+        }
         resetSpeedEngine();
         resetTrackingSegmentState();
         lastMovementTs = Date.now();
 
-        startGpsWatch();
         const { pausedAt, totalPausedMs } = get();
         const addedPause = pausedAt ? Date.now() - pausedAt : 0;
         set({
@@ -536,28 +525,26 @@ export const useCardioStore = create<CardioState>()(
         if (point.alt !== undefined) rawPt.alt = point.alt;
         if (point.speed !== undefined) rawPt.speed = point.speed;
 
-        let { gpsStatus, autoPauseStatus, autoPausedAt, totalPausedMs } = state;
+        let { gpsStatus, autoPauseStatus, autoPausedAt, totalPausedMs, movingDurationSec } = state;
         const limits = getSpeedLimits(state.activityType);
         
-        // ── Phase 1: GPS Warmup Logic ──
         if (gpsStatus === 'waiting' || gpsStatus === 'off') {
            gpsStatus = 'warming_up';
         }
         
         if (gpsStatus === 'warming_up') {
-           const targetAccuracy = Capacitor.isNativePlatform() ? 65 : 200;
+           const targetAccuracy = Capacitor.isNativePlatform() ? 30 : 50;
            if (accuracy && accuracy <= targetAccuracy) {
-             warmupConsecutiveFixes++;
-             if (warmupConsecutiveFixes >= 2) {
-               gpsStatus = 'active';
-               lastRawGpsPoint = rawPt;
-               lastAcceptedDistancePoint = rawPt;
-               lastRoutePoint = rawPt;
-               lastMovementPoint = rawPt;
-               lastMovementTs = now;
+             gpsStatus = 'active';
+             lastRawGpsPoint = rawPt;
+             lastAcceptedDistancePoint = rawPt;
+             lastRoutePoint = rawPt;
+             lastMovementPoint = rawPt;
+             lastMovementTs = now;
+             if (rawPt.alt !== undefined) {
+               lastElevationAnchorAlt = rawPt.alt;
+               altitudeBuffer = [rawPt.alt];
              }
-           } else {
-             warmupConsecutiveFixes = 0;
            }
            set({ gpsStatus, gpsAccuracy: accuracy || 0, lastGpsTimestamp: now });
            return;
@@ -565,7 +552,6 @@ export const useCardioStore = create<CardioState>()(
 
         const prev = lastRawGpsPoint;
         lastRawGpsPoint = rawPt;
-        gpsFixCount += 1;
 
         let addedDistance = 0;
         let addedElevation = 0;
@@ -579,29 +565,25 @@ export const useCardioStore = create<CardioState>()(
           const rawDistanceKm = haversineKm(prev.lat, prev.lng, rawPt.lat, rawPt.lng);
           const derivedSpeedKmh = (rawDistanceKm / dtSec) * 3600;
 
-          // ── Speed Calculation ──
           if (nativeSpeedKmh !== null && nativeSpeedKmh > 0 && nativeSpeedKmh <= limits.maxSpeed) {
             currentSpeed = nativeSpeedKmh;
           } else if (derivedSpeedKmh <= limits.maxSpeed) {
-            // If very slow jitter (< 0.5 km/h over < 2m), treat as stationary jitter
-            if (derivedSpeedKmh < 0.6 && (rawDistanceKm * 1000) < 2) {
+            if (derivedSpeedKmh < 0.6 && (rawDistanceKm * 1000) < 1.5) {
               currentSpeed = 0;
             } else {
               currentSpeed = derivedSpeedKmh;
             }
           }
 
-          // ── Distance Filtering & Quality Gate ──
           const distanceAnchor = lastAcceptedDistancePoint ?? prev;
           const distanceCandidateKm = haversineKm(distanceAnchor.lat, distanceAnchor.lng, rawPt.lat, rawPt.lng);
           const distanceCandidateM = distanceCandidateKm * 1000;
           const anchorDtSec = Math.max(0.1, (now - distanceAnchor.ts) / 1000);
           const candidateSpeedKmh = (distanceCandidateKm / anchorDtSec) * 3600;
 
-          // Distance acceptance: accuracy within reasonable limits (< 60m), speed realistic
-          const isAccurate = !accuracy || accuracy <= 60;
-          const isReasonableSpeed = candidateSpeedKmh <= limits.maxSpeed * 1.35;
-          const hasMovedThreshold = distanceCandidateM >= 2.5;
+          const isAccurate = !accuracy || accuracy <= 20;
+          const isReasonableSpeed = candidateSpeedKmh <= limits.maxSpeed * 1.25;
+          const hasMovedThreshold = distanceCandidateM >= 2.0;
 
           if (isAccurate && isReasonableSpeed && hasMovedThreshold) {
             addedDistance = distanceCandidateKm;
@@ -610,9 +592,20 @@ export const useCardioStore = create<CardioState>()(
             lastMovementPoint = rawPt;
           }
 
-          if (rawPt.alt !== undefined && distanceAnchor.alt !== undefined) {
-            const diff = rawPt.alt - distanceAnchor.alt;
-            if (diff > 1.5 && diff < 80 && addedDistance > 0) addedElevation = diff;
+          // Elevation filtering
+          if (rawPt.alt !== undefined && (!accuracy || accuracy <= 25)) {
+            const smoothedAlt = getSmoothedAltitude(rawPt.alt);
+            if (lastElevationAnchorAlt !== null) {
+              const diff = smoothedAlt - lastElevationAnchorAlt;
+              if (diff >= 1.5 && diff < 80) {
+                addedElevation = diff;
+                lastElevationAnchorAlt = smoothedAlt;
+              } else if (diff <= -1.5 && diff > -80) {
+                lastElevationAnchorAlt = smoothedAlt;
+              }
+            } else {
+              lastElevationAnchorAlt = smoothedAlt;
+            }
           }
         } else {
           lastAcceptedDistancePoint = rawPt;
@@ -620,12 +613,16 @@ export const useCardioStore = create<CardioState>()(
           lastMovementPoint = rawPt;
           lastMovementTs = now;
           if (nativeSpeedKmh !== null) currentSpeed = nativeSpeedKmh;
+          if (rawPt.alt !== undefined) {
+            lastElevationAnchorAlt = rawPt.alt;
+            altitudeBuffer = [rawPt.alt];
+          }
         }
 
         const smoothedSpeed = pushSpeed(currentSpeed);
         const displaySpeed = Math.round(smoothedSpeed * 10) / 10;
 
-        // ── Auto-Pause State Machine (10s tolerance) ──
+        // Auto-pause & Moving Time Accumulator
         const isStationaryNow = currentSpeed < 0.6 && addedDistance === 0;
 
         if (isStationaryNow) {
@@ -633,49 +630,56 @@ export const useCardioStore = create<CardioState>()(
             autoPauseStatus = 'CANDIDATE_STOP';
             lastMovementTs = now;
           } else if (autoPauseStatus === 'CANDIDATE_STOP') {
-            // Require 10 seconds of true zero movement before entering PAUSED state
-            if (now - lastMovementTs > 10_000) {
+            if (now - lastMovementTs > 6_000) {
               autoPauseStatus = 'PAUSED';
               autoPausedAt = now;
             }
           }
         } else {
-          // Immediately unpause when movement resumes
           if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
             totalPausedMs += (now - autoPausedAt);
           }
           autoPauseStatus = 'MOVING';
           autoPausedAt = null;
           lastMovementTs = now;
+          if (dtSec > 0) movingDurationSec += Math.round(dtSec);
         }
 
-        // ── Pace Engine (Rolling 30s window) ───────────────
+        // Rolling Moving-Pace Window
         let newPaceWindow = [...state.paceWindow];
         if (addedDistance > 0 && dtSec > 0) {
           newPaceWindow.push({ dist: addedDistance, dt: dtSec, ts: now });
         }
         
-        const LIVE_PACE_WINDOW_MS = 30_000;
+        const LIVE_PACE_WINDOW_MS = 45_000;
         newPaceWindow = newPaceWindow.filter(p => now - p.ts < LIVE_PACE_WINDOW_MS);
 
-        let currentPaceMs = 0;
+        let currentPaceMs = state.currentPaceMs;
         if (newPaceWindow.length > 0) {
           const sumDist = newPaceWindow.reduce((a, b) => a + b.dist, 0);
           const sumDt = newPaceWindow.reduce((a, b) => a + b.dt, 0);
-          if (sumDist >= 0.02) {
+          if (sumDist >= 0.005) {
             currentPaceMs = (sumDt * 1000) / sumDist;
+          }
+        } else if (autoPauseStatus === 'PAUSED' || isStationaryNow) {
+          if (now - lastMovementTs > 5_000) {
+            currentPaceMs = 0;
           }
         }
 
-        // Route Point addition: preserve full route with smooth spacing (~2.5m)
+        // Route Point addition (cap display memory)
         const routeDistM = lastRoutePoint
           ? haversineKm(lastRoutePoint.lat, lastRoutePoint.lng, rawPt.lat, rawPt.lng) * 1000
           : Infinity;
         const shouldAddRoutePoint = routeDistM >= 2.5 || addedDistance > 0 || state.routePoints.length === 0;
         if (shouldAddRoutePoint) lastRoutePoint = rawPt;
-        const nextRoutePoints = shouldAddRoutePoint ? [...state.routePoints, rawPt] : state.routePoints;
+        let nextRoutePoints = shouldAddRoutePoint ? [...state.routePoints, rawPt] : state.routePoints;
 
-        // Max Speed: only register if realistic and sustained
+        if (nextRoutePoints.length > MAX_DISPLAY_POINTS) {
+          const half = Math.floor(nextRoutePoints.length / 2);
+          nextRoutePoints = nextRoutePoints.filter((_, i) => i >= half || i % 2 === 0);
+        }
+
         const newMaxSpeed = currentSpeed >= 1.5 && currentSpeed <= limits.maxSpeed
           ? Math.max(state.maxSpeedKmh, currentSpeed)
           : state.maxSpeedKmh;
@@ -684,6 +688,7 @@ export const useCardioStore = create<CardioState>()(
           routePoints: nextRoutePoints,
           currentLocation: rawPt,
           distanceKm: state.distanceKm + addedDistance,
+          movingDurationSec,
           currentSpeedKmh: autoPauseStatus === 'PAUSED' ? 0 : displaySpeed,
           maxSpeedKmh: newMaxSpeed,
           elevationGainM: state.elevationGainM + addedElevation,
@@ -724,6 +729,12 @@ export const useCardioStore = create<CardioState>()(
         set({ ...(IDLE as CardioState) });
       },
     }),
-    { name: 'apparatus-cardio-storage' }
+    {
+      name: 'apparatus-cardio-storage',
+      partialize: (state) => {
+        const { routePoints, paceWindow, ...rest } = state;
+        return rest;
+      },
+    }
   )
 );
