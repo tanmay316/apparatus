@@ -753,9 +753,9 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                         <div className="min-w-0 flex-1">
                           <div 
                             onClick={() => handleNavigateProfile(p.userId)}
-                            className="font-bold text-sm text-bone flex items-center gap-1.5 cursor-pointer hover:underline flex-wrap"
+                            className="font-bold text-sm text-bone flex items-center gap-1.5 cursor-pointer hover:underline min-w-0"
                           >
-                            <span className="break-words leading-tight">{p.userName}</span>
+                            <span className="truncate">{p.userName}</span>
                             {p.userId === user?.uid && <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded shrink-0">You</span>}
                           </div>
                           <div className="text-xs font-mono text-bone-dim truncate">

@@ -480,7 +480,7 @@ export function ClanPage() {
                       cdClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
                     } else if (e && now > e) {
                       cdText = 'Concluded';
-                      cdClass = 'badge-prize border font-black shadow-sm';
+                      cdClass = 'bg-red-500/10 text-red-500 border border-red-500/30 px-2 py-0.5 rounded font-black uppercase tracking-widest shadow-sm';
                     }
 
                     return (
@@ -584,7 +584,7 @@ export function ClanPage() {
                       cdClass = 'bg-blue-500/10 text-blue-400 border-blue-500/30';
                     } else if (end && now > end) {
                       cdText = 'Concluded';
-                      cdClass = 'badge-prize border shadow-sm';
+                      cdClass = 'bg-red-500/10 text-red-500 border border-red-500/30 px-2 py-0.5 rounded font-black uppercase tracking-widest shadow-sm';
                     }
 
                     return (

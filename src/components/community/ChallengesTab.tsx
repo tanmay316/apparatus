@@ -36,7 +36,7 @@ function getCountdownLabel(startMs: number, endMs: number) {
   return {
     type: 'ended' as const,
     text: 'Concluded',
-    color: 'badge-prize px-2.5 py-0.5 rounded-full font-black shadow-sm'
+    color: 'bg-red-500/10 text-red-500 border border-red-500/30 px-2 py-0.5 rounded font-black uppercase tracking-widest shadow-sm'
   };
 }
 
@@ -223,17 +223,17 @@ export function ChallengesTab() {
                   className="card p-5 flex flex-col justify-between group cursor-pointer hover:border-emerald-500/50 transition-all space-y-4"
                 >
                   <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0 border border-emerald-500/20">
                           <Target size={24} />
                         </div>
-                        <div>
-                          <h4 className="font-display text-lg text-bone group-hover:text-emerald-400 transition-colors line-clamp-1">{c.title}</h4>
+                        <div className="min-w-0">
+                          <h4 className="font-display text-lg text-bone group-hover:text-emerald-400 transition-colors truncate">{c.title}</h4>
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[10px] font-mono text-bone-dim uppercase">{c.metric}</span>
                             {c.visibility === 'clan_only' && (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono uppercase bg-sienna/20 text-sienna px-1.5 py-0.5 rounded border border-sienna/30">
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono uppercase bg-sienna/20 text-sienna px-1.5 py-0.5 rounded border border-sienna/30 shrink-0">
                                 <Shield size={9} /> Clan
                               </span>
                             )}
@@ -241,24 +241,29 @@ export function ChallengesTab() {
                         </div>
                       </div>
 
-                      {(isAdmin || user?.uid === c.createdBy) && (
-                        <div className="flex items-center gap-1 shrink-0" onClick={ev => ev.stopPropagation()}>
-                          <button 
-                            onClick={() => setEditingChallenge(c)}
-                            className="p-1.5 rounded-lg hover:bg-ink-3 text-bone-dim hover:text-bone transition-colors"
-                            title="Edit Challenge"
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                          <button 
-                            onClick={() => deleteChallengeMutation.mutate(c.id!)}
-                            className="p-1.5 rounded-lg hover:bg-red-500/20 text-bone-dim hover:text-red-400 transition-colors"
-                            title="Delete Challenge"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <span className={`text-[9px] sm:text-[10px] whitespace-nowrap ${cd.color}`}>
+                          {cd.text}
+                        </span>
+                        {(isAdmin || user?.uid === c.createdBy) && (
+                          <div className="flex items-center gap-1" onClick={ev => ev.stopPropagation()}>
+                            <button 
+                              onClick={() => setEditingChallenge(c)}
+                              className="p-1.5 rounded-lg hover:bg-ink-3 text-bone-dim hover:text-bone transition-colors"
+                              title="Edit Challenge"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                            <button 
+                              onClick={() => deleteChallengeMutation.mutate(c.id!)}
+                              className="p-1.5 rounded-lg hover:bg-red-500/20 text-bone-dim hover:text-red-400 transition-colors"
+                              title="Delete Challenge"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <p className="text-xs text-bone-dim line-clamp-2 leading-relaxed">{c.description}</p>
@@ -290,9 +295,6 @@ export function ChallengesTab() {
                     )}
                     
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-bone-dim">
-                      <span className={`text-[10px] ${cd.color}`}>
-                        {cd.text}
-                      </span>
                       <span className="flex items-center gap-1">
                         <Users size={11} className="text-emerald-400" /> {c.participantCount || 0} Athletes
                       </span>
@@ -304,12 +306,7 @@ export function ChallengesTab() {
                       </div>
                     )}
 
-                    {c.prize && (
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold text-amber-950 dark:text-amber-200 bg-amber-500/20 border border-amber-400/40">
-                        <Trophy size={12} className="shrink-0 text-amber-600 dark:text-amber-400" />
-                        <span className="truncate">{c.prize}</span>
-                      </div>
-                    )}
+
                   </div>
                 </div>
               );

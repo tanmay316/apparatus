@@ -37,7 +37,7 @@ function getCountdownLabel(startMs: number, endMs: number) {
   return {
     type: 'ended' as const,
     text: 'Concluded',
-    color: 'badge-prize px-2.5 py-0.5 rounded-full font-black shadow-sm'
+    color: 'bg-red-500/10 text-red-500 border border-red-500/30 px-2 py-0.5 rounded font-black uppercase tracking-widest shadow-sm'
   };
 }
 
@@ -247,50 +247,54 @@ export function EventsChallengesTab() {
                     onClick={() => setSelectedChallengeId(c.id!)}
                     className="card p-4 flex flex-col gap-2 group cursor-pointer hover:border-emerald-500/50 transition-all"
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
-                        <Target size={24} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5 min-w-0">
-                          <h4 className="font-display text-lg text-bone truncate">{c.title}</h4>
-                          {c.visibility === 'clan_only' && (
-                            <span className="inline-flex items-center gap-0.5 text-[9px] font-mono uppercase bg-sienna/20 text-sienna px-1.5 py-0.5 rounded border border-sienna/30 shrink-0">
-                              <Shield size={9} /> Clan
-                            </span>
-                          )}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+                          <Target size={24} />
                         </div>
-                        <p className="text-xs text-bone-dim line-clamp-1 mb-1.5">{c.description}</p>
-                        
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-bone-dim">
-                          <span className={`px-2 py-0.5 rounded-full border text-[10px] font-bold ${cd.color}`}>
-                            {cd.text}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Users size={11} /> {c.participantCount}
-                          </span>
-                          <span>• Goal: {c.target} {c.unit}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5 min-w-0">
+                            <h4 className="font-display text-lg text-bone truncate">{c.title}</h4>
+                            {c.visibility === 'clan_only' && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono uppercase bg-sienna/20 text-sienna px-1.5 py-0.5 rounded border border-sienna/30 shrink-0">
+                                <Shield size={9} /> Clan
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-bone-dim line-clamp-1 mb-1.5">{c.description}</p>
+                          
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-bone-dim">
+                            <span className="flex items-center gap-1">
+                              <Users size={11} /> {c.participantCount}
+                            </span>
+                            <span>• Goal: {c.target} {c.unit}</span>
+                          </div>
                         </div>
                       </div>
 
-                      {(isAdmin || user?.uid === c.createdBy) && (
-                        <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
-                          <button 
-                            onClick={() => setEditingChallenge(c)}
-                            className="p-1.5 rounded-lg hover:bg-ink-3 text-bone-dim hover:text-bone transition-colors"
-                            title="Edit Challenge"
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                          <button 
-                            onClick={() => deleteChallengeMutation.mutate(c.id!)}
-                            className="p-1.5 rounded-lg hover:bg-red-500/20 text-bone-dim hover:text-red-400 transition-colors"
-                            title="Delete Challenge"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <span className={`px-2 py-0.5 rounded-full border text-[9px] sm:text-[10px] font-bold whitespace-nowrap ${cd.color}`}>
+                          {cd.text}
+                        </span>
+                        {(isAdmin || user?.uid === c.createdBy) && (
+                          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                            <button 
+                              onClick={() => setEditingChallenge(c)}
+                              className="p-1.5 rounded-lg hover:bg-ink-3 text-bone-dim hover:text-bone transition-colors"
+                              title="Edit Challenge"
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                            <button 
+                              onClick={() => deleteChallengeMutation.mutate(c.id!)}
+                              className="p-1.5 rounded-lg hover:bg-red-500/20 text-bone-dim hover:text-red-400 transition-colors"
+                              title="Delete Challenge"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {c.topWinner && (

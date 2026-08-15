@@ -236,7 +236,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
                     <div className="absolute inset-2.5 rounded-full border border-black/25 pointer-events-none" />
 
                     {/* Inner Metallic Bevel Face */}
-                    <div className="w-full h-full rounded-full bg-gradient-to-br from-black/85 via-zinc-900 to-black/95 flex flex-col items-center justify-center relative overflow-hidden border border-white/20 shadow-2xl">
+                    <div className={`absolute ${aspectRatio === '9/16' ? 'inset-[10px]' : 'inset-[8px]'} rounded-full bg-gradient-to-br from-black/85 via-zinc-900 to-black/95 flex flex-col items-center justify-center overflow-hidden border border-white/20 shadow-2xl z-10`}>
                       <div className="absolute -top-6 -left-6 w-20 h-20 bg-white/15 rounded-full blur-md pointer-events-none" />
                       
                       <Icon size={44} className={medalConfig.textColor} />
@@ -301,10 +301,10 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="flex-1 py-3 text-xs font-mono font-bold flex items-center justify-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
+              className="flex-1 py-3 text-xs font-mono font-bold flex items-center justify-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors whitespace-nowrap"
             >
-              {didCopy ? <Check size={16} className="text-emerald-400" /> : <Download size={16} />}
-              {downloading ? 'Exporting...' : didCopy ? 'Saved!' : 'Download Image'}
+              {didCopy ? <Check size={16} className="text-emerald-400 shrink-0" /> : <Download size={16} className="shrink-0" />}
+              <span>{downloading ? 'Exporting...' : didCopy ? 'Saved!' : 'Download Image'}</span>
             </button>
             <button
               onClick={handleShare}
