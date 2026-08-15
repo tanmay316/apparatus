@@ -34,7 +34,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
         title: 'GOLD CHAMPION',
         rankLabel: '1ST PLACE',
         icon: Crown,
-        radialBg: 'radial-gradient(circle at 50% 42%, #fef08a 0%, #facc15 35%, #eab308 60%, #ca8a04 85%, #854d0e 100%)',
+        radialBg: 'radial-gradient(circle at 50% 38%, #fff59d 0%, #fde047 22%, #eab308 48%, #ca8a04 72%, #713f12 100%)',
         glowColor: 'rgba(245, 158, 11, 0.4)',
         borderColor: 'border-amber-400/50',
         textColor: 'text-amber-300',
@@ -45,7 +45,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
         title: 'SILVER RUNNER-UP',
         rankLabel: '2ND PLACE',
         icon: Trophy,
-        radialBg: 'radial-gradient(circle at 50% 42%, #ffffff 0%, #f1f5f9 35%, #cbd5e1 60%, #94a3b8 85%, #475569 100%)',
+        radialBg: 'radial-gradient(circle at 50% 38%, #ffffff 0%, #f1f5f9 22%, #cbd5e1 48%, #94a3b8 72%, #334155 100%)',
         glowColor: 'rgba(203, 213, 225, 0.4)',
         borderColor: 'border-slate-300/50',
         textColor: 'text-slate-200',
@@ -55,7 +55,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
         title: 'BRONZE PODIUM',
         rankLabel: '3RD PLACE',
         icon: Award,
-        radialBg: 'radial-gradient(circle at 50% 42%, #ffb52e 0%, #f97316 42%, #d95b12 68%, #a84412 84%, #7c3412 100%)',
+        radialBg: 'radial-gradient(circle at 50% 38%, #ffbf45 0%, #ff9d16 22%, #f97316 48%, #d95b12 72%, #8f3b12 100%)',
         glowColor: 'rgba(217, 119, 6, 0.4)',
         borderColor: 'border-orange-400/40',
         textColor: 'text-orange-300',
@@ -232,11 +232,24 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
                     className={`${aspectRatio === '9/16' ? 'w-32 h-32' : 'w-28 h-28'} shrink-0 rounded-full relative flex items-center justify-center`}
                     style={{
                       background: medalConfig.radialBg,
-                      boxShadow: `0 0 12px ${medalConfig.glowColor}, 0 0 24px ${medalConfig.glowColor}`
+                      boxShadow: `
+                        0 0 10px ${medalConfig.glowColor},
+                        0 0 24px ${medalConfig.glowColor},
+                        inset 0 1px 2px rgba(255,255,255,0.45),
+                        inset 0 -3px 5px rgba(0,0,0,0.35)
+                      `,
                     }}
                   >
-                    {/* Clean inner dark face */}
-                    <div className={`absolute ${aspectRatio === '9/16' ? 'inset-[9px]' : 'inset-[8px]'} rounded-full bg-gradient-to-br from-black/95 via-zinc-900 to-black flex flex-col items-center justify-center overflow-hidden z-10`}>
+                    {/* Inner metallic dark face */}
+                    <div 
+                      className={`absolute ${aspectRatio === '9/16' ? 'inset-[9px]' : 'inset-[8px]'} rounded-full bg-gradient-to-br from-black/90 via-zinc-900 to-black/95 flex flex-col items-center justify-center overflow-hidden z-10`}
+                      style={{
+                        boxShadow: `
+                          inset 0 1px 2px rgba(255,255,255,0.12),
+                          inset 0 -3px 6px rgba(0,0,0,0.65)
+                        `,
+                      }}
+                    >
                       <div className="absolute -top-6 -left-6 w-20 h-20 bg-white/10 rounded-full blur-md pointer-events-none" />
                       
                       <Icon size={44} className={medalConfig.textColor} />

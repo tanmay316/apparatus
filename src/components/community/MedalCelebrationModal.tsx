@@ -45,7 +45,7 @@ export function MedalCelebrationModal() {
         name: 'GOLD CHAMPION',
         placement: '1ST PLACE VICTORY',
         icon: Crown,
-        radialBg: 'radial-gradient(circle at 50% 42%, #fef08a 0%, #facc15 35%, #eab308 60%, #ca8a04 85%, #854d0e 100%)',
+        radialBg: 'radial-gradient(circle at 50% 38%, #fff59d 0%, #fde047 22%, #eab308 48%, #ca8a04 72%, #713f12 100%)',
         metalBorder: 'border-yellow-300/80',
         glow: 'shadow-[0_0_60px_rgba(245,158,11,0.7)]',
         glowColor: 'rgba(245,158,11,0.6)',
@@ -59,7 +59,7 @@ export function MedalCelebrationModal() {
         name: 'SILVER RUNNER-UP',
         placement: '2ND PLACE PODIUM',
         icon: Trophy,
-        radialBg: 'radial-gradient(circle at 50% 42%, #ffffff 0%, #f1f5f9 35%, #cbd5e1 60%, #94a3b8 85%, #475569 100%)',
+        radialBg: 'radial-gradient(circle at 50% 38%, #ffffff 0%, #f1f5f9 22%, #cbd5e1 48%, #94a3b8 72%, #334155 100%)',
         metalBorder: 'border-slate-300/80',
         glow: 'shadow-[0_0_60px_rgba(203,213,225,0.6)]',
         glowColor: 'rgba(203,213,225,0.6)',
@@ -72,7 +72,7 @@ export function MedalCelebrationModal() {
         name: 'BRONZE MEDALIST',
         placement: '3RD PLACE PODIUM',
         icon: Award,
-        radialBg: 'radial-gradient(circle at 50% 42%, #ffb52e 0%, #f97316 42%, #d95b12 68%, #a84412 84%, #7c3412 100%)',
+        radialBg: 'radial-gradient(circle at 50% 38%, #ffbf45 0%, #ff9d16 22%, #f97316 48%, #d95b12 72%, #8f3b12 100%)',
         metalBorder: 'border-amber-500/80',
         glow: 'shadow-[0_0_60px_rgba(217,119,6,0.6)]',
         glowColor: 'rgba(217,119,6,0.6)',
@@ -178,11 +178,24 @@ export function MedalCelebrationModal() {
                 className="w-32 h-32 rounded-full relative flex items-center justify-center shrink-0"
                 style={{
                   background: medalConfig.radialBg,
-                  boxShadow: `0 0 20px ${medalConfig.glowColor}, 0 0 45px ${medalConfig.glowColor}`
+                  boxShadow: `
+                    0 0 20px ${medalConfig.glowColor},
+                    0 0 45px ${medalConfig.glowColor},
+                    inset 0 1px 2px rgba(255,255,255,0.45),
+                    inset 0 -3px 5px rgba(0,0,0,0.35)
+                  `,
                 }}
               >
                 {/* Inner Metallic Bevel Face */}
-                <div className="absolute inset-[9px] rounded-full bg-gradient-to-br from-black/95 via-zinc-900 to-black flex flex-col items-center justify-center overflow-hidden z-10 shadow-2xl">
+                <div 
+                  className="absolute inset-[9px] rounded-full bg-gradient-to-br from-black/90 via-zinc-900 to-black/95 flex flex-col items-center justify-center overflow-hidden z-10 shadow-2xl"
+                  style={{
+                    boxShadow: `
+                      inset 0 1px 2px rgba(255,255,255,0.12),
+                      inset 0 -3px 6px rgba(0,0,0,0.65)
+                    `,
+                  }}
+                >
                   {/* Subtle Light Reflection Flare */}
                   <div className="absolute -top-6 -left-6 w-20 h-20 bg-white/10 rounded-full blur-md pointer-events-none" />
                   
