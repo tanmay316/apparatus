@@ -228,9 +228,12 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
               {/* Center Medallion Hero */}
               <div className="relative z-10 flex flex-col items-center text-center my-auto">
                 <div className={`relative ${aspectRatio === '1/1' ? 'mb-4' : 'mb-6'}`}>
-                  {/* Glowing halo */}
-                  <div className="absolute inset-0 rounded-full blur-xl scale-125 opacity-60 bg-gradient-to-tr from-amber-500 to-yellow-300" />
-                  <div className={`${aspectRatio === '9/16' ? 'w-32 h-32 p-2.5' : 'w-28 h-28 p-2'} shrink-0 rounded-full bg-gradient-to-b ${medalConfig.medalGradient} relative flex items-center justify-center border-4 ${medalConfig.borderColor}`}>
+                  <div 
+                    className={`${aspectRatio === '9/16' ? 'w-32 h-32 p-2.5' : 'w-28 h-28 p-2'} shrink-0 rounded-full bg-gradient-to-b ${medalConfig.medalGradient} relative flex items-center justify-center border-4 ${medalConfig.borderColor} overflow-hidden`}
+                    style={{
+                      boxShadow: `0 0 16px ${medalConfig.glowColor}, 0 0 30px ${medalConfig.glowColor}`
+                    }}
+                  >
                     {/* Outer Engraved Ridges */}
                     <div className="absolute inset-1 rounded-full border border-white/40 pointer-events-none opacity-80" />
                     <div className="absolute inset-2.5 rounded-full border border-black/25 pointer-events-none" />
