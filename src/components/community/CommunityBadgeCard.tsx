@@ -117,6 +117,10 @@ export function CommunityBadgeCard({ badge, compact = false, onShare }: Communit
             <>
               <Shield size={11} className="text-amber-500 shrink-0" /> {badge.clanName}
             </>
+          ) : badge.clanId ? (
+            <>
+              <Shield size={11} className="text-amber-500 shrink-0" /> Clan Challenge
+            </>
           ) : (
             <>Global Challenge</>
           )}

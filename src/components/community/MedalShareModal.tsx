@@ -18,7 +18,13 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
   const [downloading, setDownloading] = useState(false);
   const [didCopy, setDidCopy] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<'9/16' | '1/1'>('9/16');
-  const [theme, setTheme] = useState<'dark-gold' | 'cyber-noir' | 'deep-emerald'>('dark-gold');
+  const [theme, setTheme] = useState<'dark-gold' | 'cyber-noir' | 'deep-emerald' | 'light-gold' | 'crimson'>('dark-gold');
+
+  const isLight = theme === 'light-gold';
+  const tPrimary = isLight ? 'text-black' : 'text-white';
+  const tSecondary = isLight ? 'text-black/60' : 'text-white/60';
+  const tTertiary = isLight ? 'text-black/40' : 'text-white/40';
+  const borderLight = isLight ? 'border-black/10' : 'border-white/10';
 
   const isGold = badge.rank === 1;
   const isSilver = badge.rank === 2;
@@ -156,17 +162,21 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
             </div>
 
             <div className="flex gap-1.5">
-              {(['dark-gold', 'cyber-noir', 'deep-emerald'] as const).map(t => (
+              {(['dark-gold', 'cyber-noir', 'deep-emerald', 'light-gold', 'crimson'] as const).map(t => (
                 <button
                   key={t}
                   onClick={() => setTheme(t)}
-                  className={`w-6 h-6 rounded-full border-2 transition-transform ${
+                  className={`w-5 h-5 rounded-full border transition-transform shadow-sm ${
                     t === 'dark-gold'
                       ? 'bg-amber-950 border-amber-400'
                       : t === 'cyber-noir'
                       ? 'bg-zinc-900 border-zinc-400'
-                      : 'bg-emerald-950 border-emerald-400'
-                  } ${theme === t ? 'scale-110 ring-2 ring-white/50' : 'opacity-60'}`}
+                      : t === 'deep-emerald'
+                      ? 'bg-emerald-950 border-emerald-400'
+                      : t === 'light-gold'
+                      ? 'bg-amber-100 border-amber-500'
+                      : 'bg-red-950 border-red-500'
+                  } ${theme === t ? 'scale-125 ring-1 ring-white' : 'opacity-70 hover:opacity-100 border-white/20'}`}
                 />
               ))}
             </div>
@@ -177,15 +187,19 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
             <div
               ref={cardRef}
               style={{
-                width: aspectRatio === '9/16' ? '320px' : '360px',
-                height: aspectRatio === '9/16' ? '540px' : '360px',
+                width: aspectRatio === '9/16' ? '320px' : '380px',
+                height: aspectRatio === '9/16' ? '540px' : '380px',
               }}
-              className={`relative rounded-2xl overflow-hidden p-6 flex flex-col justify-between select-none shadow-2xl border ${
+              className={`relative rounded-2xl overflow-hidden ${aspectRatio === '9/16' ? 'p-6' : 'p-5'} flex flex-col justify-between select-none shadow-2xl border ${
                 theme === 'dark-gold'
                   ? 'bg-gradient-to-b from-[#1c1408] via-[#0d0a04] to-[#050402] border-amber-500/40'
                   : theme === 'cyber-noir'
                   ? 'bg-gradient-to-b from-[#18181b] via-[#09090b] to-[#000000] border-zinc-700'
-                  : 'bg-gradient-to-b from-[#062419] via-[#03140e] to-[#010a07] border-emerald-500/40'
+                  : theme === 'deep-emerald'
+                  ? 'bg-gradient-to-b from-[#062419] via-[#03140e] to-[#010a07] border-emerald-500/40'
+                  : theme === 'light-gold'
+                  ? 'bg-gradient-to-b from-[#fdfbf7] via-[#f7f2e9] to-[#efdfc2] border-amber-300'
+                  : 'bg-gradient-to-b from-[#2a0808] via-[#140202] to-[#050000] border-rose-500/40'
               }`}
             >
               {/* Background ambient lighting */}
@@ -197,12 +211,12 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
               {/* Top Header */}
               <div className="relative z-10 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-white p-1 flex items-center justify-center border border-white/20">
+                  <div className="w-8 h-8 rounded-full bg-white p-1 flex items-center justify-center border border-black/10 shadow-sm shrink-0">
                     <img src="/logo.png" alt="Apparatus" className="w-full h-full object-contain" />
                   </div>
                   <div>
-                    <div className="text-[10px] font-mono tracking-widest uppercase text-white/60">APPARATUS ARENA</div>
-                    <div className="text-xs font-bold text-white/90">Official Podium</div>
+                    <div className={`text-[10px] font-mono tracking-widest uppercase ${tSecondary}`}>APPARATUS ARENA</div>
+                    <div className={`text-xs font-bold ${tPrimary}`}>Official Podium</div>
                   </div>
                 </div>
 
@@ -213,10 +227,10 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
 
               {/* Center Medallion Hero */}
               <div className="relative z-10 flex flex-col items-center text-center my-auto">
-                <div className="relative mb-6">
+                <div className={`relative ${aspectRatio === '1/1' ? 'mb-4' : 'mb-6'}`}>
                   {/* Glowing halo */}
                   <div className="absolute inset-0 rounded-full blur-xl scale-125 opacity-60 bg-gradient-to-tr from-amber-500 to-yellow-300" />
-                  <div className={`w-32 h-32 rounded-full p-2.5 bg-gradient-to-b ${medalConfig.medalGradient} relative flex items-center justify-center border-4 ${medalConfig.borderColor}`}>
+                  <div className={`${aspectRatio === '9/16' ? 'w-32 h-32 p-2.5' : 'w-28 h-28 p-2'} rounded-full bg-gradient-to-b ${medalConfig.medalGradient} relative flex items-center justify-center border-4 ${medalConfig.borderColor}`}>
                     {/* Outer Engraved Ridges */}
                     <div className="absolute inset-1 rounded-full border border-white/40 pointer-events-none opacity-80" />
                     <div className="absolute inset-2.5 rounded-full border border-black/25 pointer-events-none" />
@@ -234,35 +248,39 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
                   </div>
                 </div>
 
-                <div className={`text-xs font-mono uppercase tracking-widest font-black mb-1 ${medalConfig.textColor}`}>
+                <div className={`text-[11px] font-mono uppercase tracking-widest font-black mb-1 ${medalConfig.textColor}`}>
                   {medalConfig.title}
                 </div>
-                <h2 className="font-display text-xl text-white font-bold leading-tight max-w-[260px] line-clamp-2 drop-shadow-md">
+                <h2 className={`font-display text-xl ${tPrimary} font-bold leading-tight max-w-[260px] line-clamp-2 drop-shadow-md`}>
                   {badge.title}
                 </h2>
                 {badge.description && (
-                  <p className="text-[11px] font-mono text-white/70 mt-2 line-clamp-2 max-w-[260px]">
+                  <p className={`text-[11px] font-mono ${tSecondary} mt-2 line-clamp-2 max-w-[260px]`}>
                     {badge.description}
                   </p>
                 )}
               </div>
 
               {/* Bottom Footer */}
-              <div className="relative z-10 pt-3 border-t border-white/10 flex items-center justify-between">
+              <div className={`relative z-10 pt-3 border-t ${borderLight} flex items-center justify-between`}>
                 <div className="flex items-center gap-2">
                   {user?.photoURL ? (
-                    <img src={user.photoURL} alt="" crossOrigin="anonymous" className="w-7 h-7 rounded-full object-cover border border-white/30" />
+                    <img src={user.photoURL} alt="" crossOrigin="anonymous" className={`w-7 h-7 rounded-full object-cover border ${borderLight}`} />
                   ) : (
-                    <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white">
+                    <div className={`w-7 h-7 rounded-full bg-black/10 border ${borderLight} flex items-center justify-center font-bold text-xs ${tPrimary}`}>
                       {(user?.displayName || 'A')[0]}
                     </div>
                   )}
                   <div className="text-left">
-                    <div className="text-xs font-bold text-white/90 truncate max-w-[130px]">{user?.displayName || 'Apparatus Athlete'}</div>
-                    <div className="text-[9px] font-mono text-white/60 flex items-center gap-1">
+                    <div className={`text-xs font-bold ${tPrimary} truncate max-w-[130px]`}>{user?.displayName || 'Apparatus Athlete'}</div>
+                    <div className={`text-[9px] font-mono ${tSecondary} flex items-center gap-1`}>
                       {badge.clanName ? (
                         <>
                           <Shield size={9} className="text-amber-500" /> {badge.clanName}
+                        </>
+                      ) : badge.clanId ? (
+                        <>
+                          <Shield size={9} className="text-amber-500" /> Clan Challenge
                         </>
                       ) : (
                         <>Global Challenge</>
@@ -272,7 +290,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
                 </div>
 
                 <div className="text-right">
-                  <span className="text-[9px] font-mono text-white/40">apparatus.fit</span>
+                  <span className={`text-[9px] font-mono ${tTertiary}`}>apparatus.fit</span>
                 </div>
               </div>
             </div>
@@ -283,7 +301,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="btn-secondary flex-1 py-3 text-xs font-mono font-bold flex items-center justify-center gap-1.5"
+              className="flex-1 py-3 text-xs font-mono font-bold flex items-center justify-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors"
             >
               {didCopy ? <Check size={16} className="text-emerald-400" /> : <Download size={16} />}
               {downloading ? 'Exporting...' : didCopy ? 'Saved!' : 'Download Image'}
