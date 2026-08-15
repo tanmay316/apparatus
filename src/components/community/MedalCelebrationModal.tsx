@@ -45,13 +45,13 @@ export function MedalCelebrationModal() {
         name: 'GOLD CHAMPION',
         placement: '1ST PLACE VICTORY',
         icon: Crown,
-        gradient: 'from-amber-300 via-yellow-400 to-amber-600',
+        radialBg: 'radial-gradient(circle at 50% 42%, #fef08a 0%, #facc15 35%, #eab308 60%, #ca8a04 85%, #854d0e 100%)',
         metalBorder: 'border-yellow-300/80',
         glow: 'shadow-[0_0_60px_rgba(245,158,11,0.7)]',
+        glowColor: 'rgba(245,158,11,0.6)',
+        textColor: 'text-amber-300',
         accentText: 'text-amber-900 dark:text-amber-300',
         pillBg: 'bg-amber-500/25 border-2 border-amber-500/70 text-amber-950 dark:text-amber-100',
-        discBg: 'bg-gradient-to-b from-amber-400 via-yellow-500 to-amber-700',
-        innerRim: 'border-amber-300/60 shadow-inner',
         emoji: '🥇',
       }
     : isSilver
@@ -59,26 +59,26 @@ export function MedalCelebrationModal() {
         name: 'SILVER RUNNER-UP',
         placement: '2ND PLACE PODIUM',
         icon: Trophy,
-        gradient: 'from-slate-100 via-slate-300 to-slate-500',
+        radialBg: 'radial-gradient(circle at 50% 42%, #ffffff 0%, #f1f5f9 35%, #cbd5e1 60%, #94a3b8 85%, #475569 100%)',
         metalBorder: 'border-slate-300/80',
         glow: 'shadow-[0_0_60px_rgba(203,213,225,0.6)]',
+        glowColor: 'rgba(203,213,225,0.6)',
+        textColor: 'text-slate-200',
         accentText: 'text-slate-900 dark:text-slate-200',
         pillBg: 'bg-slate-300/30 border-2 border-slate-400/70 text-slate-950 dark:text-slate-100',
-        discBg: 'bg-gradient-to-b from-slate-200 via-slate-300 to-slate-500',
-        innerRim: 'border-white/70 shadow-inner',
         emoji: '🥈',
       }
     : {
         name: 'BRONZE MEDALIST',
         placement: '3RD PLACE PODIUM',
         icon: Award,
-        gradient: 'from-amber-600 via-orange-600 to-amber-900',
+        radialBg: 'radial-gradient(circle at 50% 42%, #ffb52e 0%, #f97316 42%, #d95b12 68%, #a84412 84%, #7c3412 100%)',
         metalBorder: 'border-amber-500/80',
         glow: 'shadow-[0_0_60px_rgba(217,119,6,0.6)]',
+        glowColor: 'rgba(217,119,6,0.6)',
+        textColor: 'text-orange-300',
         accentText: 'text-orange-950 dark:text-orange-300',
         pillBg: 'bg-orange-600/25 border-2 border-orange-500/70 text-orange-950 dark:text-orange-100',
-        discBg: 'bg-gradient-to-b from-amber-500 via-orange-600 to-amber-900',
-        innerRim: 'border-amber-400/60 shadow-inner',
         emoji: '🥉',
       };
 
@@ -171,24 +171,24 @@ export function MedalCelebrationModal() {
             </div>
 
             {/* Modern 3D Metallic Medallion Hero */}
-            <div className="relative mb-6">
+            <div className="relative mb-6 flex justify-center">
               <motion.div
                 animate={{ rotate: [0, 4, -4, 0], scale: [1, 1.04, 1] }}
                 transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-                className={`w-32 h-32 rounded-full p-2.5 ${medalConfig.discBg} ${medalConfig.glow} relative flex items-center justify-center border-4 ${medalConfig.metalBorder}`}
+                className="w-32 h-32 rounded-full relative flex items-center justify-center shrink-0"
+                style={{
+                  background: medalConfig.radialBg,
+                  boxShadow: `0 0 20px ${medalConfig.glowColor}, 0 0 45px ${medalConfig.glowColor}`
+                }}
               >
-                {/* Outer Engraved Ridges */}
-                <div className="absolute inset-1 rounded-full border border-white/40 pointer-events-none opacity-80" />
-                <div className="absolute inset-2.5 rounded-full border border-black/25 pointer-events-none" />
-
                 {/* Inner Metallic Bevel Face */}
-                <div className="w-full h-full rounded-full bg-gradient-to-br from-black/85 via-zinc-900 to-black/95 flex flex-col items-center justify-center relative overflow-hidden border border-white/20 shadow-2xl">
+                <div className="absolute inset-[9px] rounded-full bg-gradient-to-br from-black/95 via-zinc-900 to-black flex flex-col items-center justify-center overflow-hidden z-10 shadow-2xl">
                   {/* Subtle Light Reflection Flare */}
-                  <div className="absolute -top-6 -left-6 w-20 h-20 bg-white/15 rounded-full blur-md pointer-events-none" />
+                  <div className="absolute -top-6 -left-6 w-20 h-20 bg-white/10 rounded-full blur-md pointer-events-none" />
                   
-                  <Icon size={44} className="text-amber-400 dark:text-amber-300 drop-shadow-[0_2px_10px_rgba(245,158,11,0.5)]" />
+                  <Icon size={44} className={medalConfig.textColor} />
                   
-                  <div className="mt-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-[11px] font-mono font-black tracking-widest text-amber-300">
+                  <div className={`mt-1 px-2.5 py-0.5 rounded-full border text-[11px] font-mono font-black tracking-widest ${medalConfig.pillBg}`}>
                     RANK #{unseenMedal.rank}
                   </div>
                 </div>
