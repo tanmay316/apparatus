@@ -111,7 +111,7 @@ export function ProfilePage() {
     queryKey: ['userCommunityBadges', targetUid],
     queryFn: () => getUserCommunityBadges(targetUid!),
     enabled: !!targetUid,
-    staleTime: 1000 * 5,
+    staleTime: 0,
     refetchOnMount: 'always',
   });
 
@@ -124,7 +124,7 @@ export function ProfilePage() {
       return { uid: targetUid, ...snap.data() } as UserProfile;
     },
     enabled: !!targetUid,
-    staleTime: 1000 * 5,
+    staleTime: 0,
     refetchOnMount: 'always',
   });
 

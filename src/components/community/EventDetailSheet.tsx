@@ -60,7 +60,9 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
   const { data: participants = [], isLoading: loadingParticipants } = useQuery({
     queryKey: ['eventParticipants', eventId],
     queryFn: () => getEventParticipants(eventId),
-    enabled: !!eventId
+    enabled: !!eventId,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   // Automatically repair / sync participantCount in Firestore if desynced
@@ -193,30 +195,46 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
         const edit = rankEdits[p.userId];
         let rankVal: number;
         if (edit && edit.rank !== '' && edit.rank !== undefined) {
-          rankVal = typeof edit.rank === 'number' ? edit.rank : (parseInt(edit.rank, 10) || (idx + 1));
+          rankVal = typeof edit.rank === 'number' ? edit.rank : (parseInt(edit.rank as string, 10) || (idx + 1));
         } else {
           rankVal = (p.rank && p.rank > 0 && p.rank < 9999) ? p.rank : (idx + 1);
         }
+
+        let badgeVal: 1 | 2 | 3 | undefined;
+        if (edit && edit.badgeAwarded !== undefined) {
+          badgeVal = edit.badgeAwarded;
+        } else if (rankVal >= 1 && rankVal <= 3) {
+          badgeVal = rankVal as 1 | 2 | 3;
+        } else {
+          badgeVal = undefined;
+        }
+
         return {
+          id: p.id,
           userId: p.userId,
           rank: Math.max(1, rankVal),
           customResult: edit?.customResult !== undefined ? edit.customResult : (p.customResult || ''),
-          badgeAwarded: edit?.badgeAwarded !== undefined ? edit.badgeAwarded : p.badgeAwarded
+          badgeAwarded: badgeVal
         };
       });
       await updateEventLeaderboardRanks(eventId, updates);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Small delay to let Firestore consistency settle
+      await new Promise(r => setTimeout(r, 500));
+      await queryClient.refetchQueries({ queryKey: ['eventParticipants', eventId] });
       queryClient.invalidateQueries({ queryKey: ['event', eventId] });
-      queryClient.invalidateQueries({ queryKey: ['eventParticipants', eventId] });
       queryClient.invalidateQueries({ queryKey: ['publicEvents'] });
       queryClient.invalidateQueries({ queryKey: ['clanEvents'] });
       queryClient.invalidateQueries({ queryKey: ['allCommunityEvents'] });
       queryClient.invalidateQueries({ queryKey: ['freshUserProfile'] });
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
       queryClient.invalidateQueries({ queryKey: ['userCelebrationProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['userCommunityBadges'] });
+      useAuthStore.getState().refreshProfile().catch(() => {});
       showToast('Event rankings and results saved!', 'success');
       setShowRankModal(false);
+      setRankEdits({});
     },
     onError: (err: any) => showToast(err?.message || 'Failed to save event ranks', 'error')
   });
@@ -598,8 +616,10 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           <div className="flex gap-2">
                             <div className="w-24 shrink-0">
-                              <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Rank #</label>
+                              <label htmlFor={`rank-${p.userId}`} className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Rank #</label>
                               <input
+                                id={`rank-${p.userId}`}
+                                name={`rank-${p.userId}`}
                                 type="number"
                                 min="1"
                                 max="999"
@@ -607,13 +627,23 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                                 placeholder={`${idx + 1}`}
                                 onChange={(e) => {
                                   const raw = e.target.value;
+                                  const num = raw === '' ? '' : parseInt(raw, 10);
                                   setRankEdits(prev => {
                                     const existing = prev[p.userId] || curr;
+                                    let newBadge = existing.badgeAwarded;
+                                    if (typeof num === 'number') {
+                                      if (num >= 1 && num <= 3) {
+                                        newBadge = num as 1 | 2 | 3;
+                                      } else if (num > 3) {
+                                        newBadge = undefined;
+                                      }
+                                    }
                                     return {
                                       ...prev,
                                       [p.userId]: {
                                         ...existing,
-                                        rank: raw === '' ? '' : parseInt(raw, 10)
+                                        rank: num,
+                                        badgeAwarded: newBadge
                                       }
                                     };
                                   });
@@ -623,8 +653,10 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                             </div>
 
                             <div className="flex-1 min-w-[140px]">
-                              <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Medal / Badge</label>
+                              <label htmlFor={`medal-${p.userId}`} className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Medal / Badge</label>
                               <select
+                                id={`medal-${p.userId}`}
+                                name={`medal-${p.userId}`}
                                 value={curr.badgeAwarded || ''}
                                 onChange={(e) => {
                                   const v = e.target.value ? (parseInt(e.target.value) as 1 | 2 | 3) : undefined;
@@ -632,7 +664,11 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                                     const existing = prev[p.userId] || curr;
                                     return {
                                       ...prev,
-                                      [p.userId]: { ...existing, badgeAwarded: v }
+                                      [p.userId]: { 
+                                        ...existing, 
+                                        badgeAwarded: v,
+                                        rank: v !== undefined ? v : existing.rank
+                                      }
                                     };
                                   });
                                 }}
@@ -647,8 +683,10 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                           </div>
 
                           <div>
-                            <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Result / Note</label>
+                            <label htmlFor={`custom-result-${p.userId}`} className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Result / Note</label>
                             <input
+                              id={`custom-result-${p.userId}`}
+                              name={`custom-result-${p.userId}`}
                               type="text"
                               value={curr.customResult}
                               placeholder="e.g. 1st Place"

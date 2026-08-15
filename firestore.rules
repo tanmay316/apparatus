@@ -55,7 +55,7 @@ service cloud.firestore {
           && request.resource.data.isAdmin == resource.data.isAdmin
           && request.resource.data.displayName.size() <= 50
           && request.resource.data.bio.size() <= 500)
-        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['communityBadges']));
+        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['communityBadges', 'unseenMedalAward']));
       allow delete: if isOwner(uid);
 
       match /stats/{statId} {

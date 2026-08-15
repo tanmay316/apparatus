@@ -57,13 +57,17 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
   // Fetch only officially ranked leaderboard participants
   const { data: leaderboard = [], isLoading: loadingLeaderboard } = useQuery({
     queryKey: ['challengeLeaderboard', challengeId],
-    queryFn: () => getChallengeLeaderboard(challengeId)
+    queryFn: () => getChallengeLeaderboard(challengeId),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   // Fetch all enrolled participants
   const { data: allParticipants = [], isLoading: loadingAllParticipants } = useQuery({
     queryKey: ['challengeParticipants', challengeId],
-    queryFn: () => getChallengeParticipants(challengeId)
+    queryFn: () => getChallengeParticipants(challengeId),
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   // Automatically repair / sync participantCount in Firestore if desynced
@@ -196,32 +200,48 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
         const edit = rankEdits[p.userId];
         let rankVal: number;
         if (edit && edit.rank !== '' && edit.rank !== undefined) {
-          rankVal = typeof edit.rank === 'number' ? edit.rank : (parseInt(edit.rank, 10) || (idx + 1));
+          rankVal = typeof edit.rank === 'number' ? edit.rank : (parseInt(edit.rank as string, 10) || (idx + 1));
         } else {
           rankVal = (p.rank && p.rank > 0 && p.rank < 9999) ? p.rank : (idx + 1);
         }
+
+        let badgeVal: 1 | 2 | 3 | undefined;
+        if (edit && edit.badgeAwarded !== undefined) {
+          badgeVal = edit.badgeAwarded;
+        } else if (rankVal >= 1 && rankVal <= 3) {
+          badgeVal = rankVal as 1 | 2 | 3;
+        } else {
+          badgeVal = undefined;
+        }
+
         return {
+          id: p.id,
           userId: p.userId,
           rank: Math.max(1, rankVal),
           progress: edit?.progress !== undefined ? (typeof edit.progress === 'number' ? edit.progress : parseFloat(edit.progress as string) || 0) : (p.progress || 0),
           customResult: edit?.customResult !== undefined ? edit.customResult : (p.customResult || ''),
-          badgeAwarded: edit?.badgeAwarded !== undefined ? edit.badgeAwarded : p.badgeAwarded
+          badgeAwarded: badgeVal
         };
       });
       await updateLeaderboardRanks(challengeId, updates);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      // Small delay to let Firestore consistency settle
+      await new Promise(r => setTimeout(r, 500));
+      await queryClient.refetchQueries({ queryKey: ['challengeLeaderboard', challengeId] });
+      await queryClient.refetchQueries({ queryKey: ['challengeParticipants', challengeId] });
       queryClient.invalidateQueries({ queryKey: ['challenge', challengeId] });
-      queryClient.invalidateQueries({ queryKey: ['challengeLeaderboard', challengeId] });
-      queryClient.invalidateQueries({ queryKey: ['challengeParticipants', challengeId] });
       queryClient.invalidateQueries({ queryKey: ['publicChallenges'] });
       queryClient.invalidateQueries({ queryKey: ['clanChallenges'] });
       queryClient.invalidateQueries({ queryKey: ['allCommunityChallenges'] });
       queryClient.invalidateQueries({ queryKey: ['freshUserProfile'] });
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
       queryClient.invalidateQueries({ queryKey: ['userCelebrationProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['userCommunityBadges'] });
+      useAuthStore.getState().refreshProfile().catch(() => {});
       showToast('Leaderboard ranks & scores saved!', 'success');
       setShowRankModal(false);
+      setRankEdits({});
     },
     onError: (err: any) => showToast(err?.message || 'Failed to save ranks', 'error')
   });
@@ -621,8 +641,10 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                           <div className="flex gap-2">
                             <div className="w-24 shrink-0">
-                              <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Rank #</label>
+                              <label htmlFor={`rank-${p.userId}`} className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Rank #</label>
                               <input
+                                id={`rank-${p.userId}`}
+                                name={`rank-${p.userId}`}
                                 type="number"
                                 min="1"
                                 max="999"
@@ -630,13 +652,23 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                                 placeholder={`${idx + 1}`}
                                 onChange={(e) => {
                                   const raw = e.target.value;
+                                  const num = raw === '' ? '' : parseInt(raw, 10);
                                   setRankEdits(prev => {
                                     const existing = prev[p.userId] || curr;
+                                    let newBadge = existing.badgeAwarded;
+                                    if (typeof num === 'number') {
+                                      if (num >= 1 && num <= 3) {
+                                        newBadge = num as 1 | 2 | 3;
+                                      } else if (num > 3) {
+                                        newBadge = undefined;
+                                      }
+                                    }
                                     return {
                                       ...prev,
                                       [p.userId]: {
                                         ...existing,
-                                        rank: raw === '' ? '' : parseInt(raw, 10)
+                                        rank: num,
+                                        badgeAwarded: newBadge
                                       }
                                     };
                                   });
@@ -646,8 +678,10 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                             </div>
 
                             <div className="flex-1 min-w-[140px]">
-                              <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Medal / Badge</label>
+                              <label htmlFor={`medal-${p.userId}`} className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Medal / Badge</label>
                               <select
+                                id={`medal-${p.userId}`}
+                                name={`medal-${p.userId}`}
                                 value={curr.badgeAwarded || ''}
                                 onChange={(e) => {
                                   const v = e.target.value ? (parseInt(e.target.value) as 1 | 2 | 3) : undefined;
@@ -655,7 +689,11 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                                     const existing = prev[p.userId] || curr;
                                     return {
                                       ...prev,
-                                      [p.userId]: { ...existing, badgeAwarded: v }
+                                      [p.userId]: { 
+                                        ...existing, 
+                                        badgeAwarded: v,
+                                        rank: v !== undefined ? v : existing.rank 
+                                      }
                                     };
                                   });
                                 }}
@@ -670,8 +708,10 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                           </div>
 
                           <div>
-                            <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Custom Result</label>
+                            <label htmlFor={`custom-result-${p.userId}`} className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Custom Result</label>
                             <input
+                              id={`custom-result-${p.userId}`}
+                              name={`custom-result-${p.userId}`}
                               type="text"
                               value={curr.customResult}
                               placeholder="e.g. 2.5 rounds"
