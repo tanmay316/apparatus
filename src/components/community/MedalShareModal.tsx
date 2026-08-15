@@ -125,7 +125,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="bg-ink border border-line rounded-3xl p-5 max-w-md w-full shadow-2xl space-y-4 text-bone relative my-auto"
+          className="bg-[#141416] border border-white/10 rounded-3xl p-5 max-w-md w-full shadow-2xl space-y-4 text-white relative my-auto"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 pb-3">
@@ -177,8 +177,8 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
             <div
               ref={cardRef}
               style={{
-                width: '320px',
-                height: aspectRatio === '9/16' ? '540px' : '320px',
+                width: aspectRatio === '9/16' ? '320px' : '360px',
+                height: aspectRatio === '9/16' ? '540px' : '360px',
               }}
               className={`relative rounded-2xl overflow-hidden p-6 flex flex-col justify-between select-none shadow-2xl border ${
                 theme === 'dark-gold'
@@ -197,7 +197,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
               {/* Top Header */}
               <div className="relative z-10 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-white/10 p-1 flex items-center justify-center border border-white/20">
+                  <div className="w-8 h-8 rounded-full bg-white p-1 flex items-center justify-center border border-white/20">
                     <img src="/logo.png" alt="Apparatus" className="w-full h-full object-contain" />
                   </div>
                   <div>
@@ -251,7 +251,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
               <div className="relative z-10 pt-3 border-t border-white/10 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {user?.photoURL ? (
-                    <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full object-cover border border-white/30" />
+                    <img src={user.photoURL} alt="" crossOrigin="anonymous" className="w-7 h-7 rounded-full object-cover border border-white/30" />
                   ) : (
                     <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center font-bold text-xs text-white">
                       {(user?.displayName || 'A')[0]}

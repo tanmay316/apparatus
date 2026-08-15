@@ -27,16 +27,18 @@ export function MedalCelebrationModal() {
         const data = snap.data();
         if (data.unseenMedalAward) {
           setUnseenMedal(data.unseenMedalAward as EarnedCommunityBadge);
+        } else {
+          setUnseenMedal(null);
         }
       }
     });
     return () => unsub();
   }, [user?.uid]);
 
-  if (!user || !unseenMedal) return null;
+  if (!user) return null;
 
-  const isGold = unseenMedal.rank === 1;
-  const isSilver = unseenMedal.rank === 2;
+  const isGold = unseenMedal?.rank === 1;
+  const isSilver = unseenMedal?.rank === 2;
 
   const medalConfig = isGold
     ? {
@@ -107,6 +109,7 @@ export function MedalCelebrationModal() {
   return createPortal(
     <>
       <AnimatePresence>
+      {unseenMedal && (
         <div className="fixed inset-0 z-[850] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
           {/* Confetti / Particle FX */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -226,15 +229,15 @@ export function MedalCelebrationModal() {
             </div>
           </motion.div>
         </div>
-      </AnimatePresence>
-
-      {/* Share Modal */}
-      {showShareModal && (
-        <MedalShareModal
-          badge={unseenMedal}
-          onClose={() => setShowShareModal(false)}
-        />
       )}
+    </AnimatePresence>
+    
+    {showShareModal && unseenMedal && (
+      <MedalShareModal
+        badge={unseenMedal}
+        onClose={() => setShowShareModal(false)}
+      />
+    )}
     </>,
     document.body
   );
