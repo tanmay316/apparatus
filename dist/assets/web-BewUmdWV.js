@@ -1,0 +1,1 @@
+import{r as e}from"./dist-DS-py3R3.js";var t=class extends e{async show(e){}async hide(e){}};export{t as SplashScreenWeb};

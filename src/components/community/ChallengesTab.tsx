@@ -36,12 +36,12 @@ function getCountdownLabel(startMs: number, endMs: number) {
   return {
     type: 'ended' as const,
     text: 'Concluded',
-    color: 'text-bone-dim bg-ink-3 border-line/20'
+    color: 'text-amber-950 dark:text-amber-100 bg-amber-500/25 border-2 border-amber-500/60 font-black shadow-sm'
   };
 }
 
 export function ChallengesTab() {
-  const [filter, setFilter] = useState<'all' | 'active' | 'upcoming'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'upcoming' | 'concluded'>('all');
   const [selectedChallengeId, setSelectedChallengeId] = useState<string | null>(null);
   const [editingChallenge, setEditingChallenge] = useState<ChallengeV2 | null>(null);
 
@@ -74,25 +74,29 @@ export function ChallengesTab() {
   });
 
   const filteredChallenges = challenges.filter(c => {
-    if (filter === 'all') return true;
     const now = Date.now();
     const startMs = c.startDate?.toMillis ? c.startDate.toMillis() : 0;
     const endMs = c.endDate?.toMillis ? c.endDate.toMillis() : 0;
     if (filter === 'upcoming') return now < startMs;
     if (filter === 'active') return now >= startMs && (endMs ? now <= endMs : true);
+    if (filter === 'concluded') return endMs ? now > endMs : false;
     return true;
   });
 
-  const featured = filteredChallenges[0];
+  // Featured challenge must never be a concluded challenge, and hidden in concluded tab
+  const featured = filter === 'concluded' ? null : filteredChallenges.find(c => {
+    const endMs = c.endDate?.toMillis ? c.endDate.toMillis() : 0;
+    return !endMs || Date.now() <= endMs;
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Filter Tabs */}
       <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {['all', 'active', 'upcoming'].map(f => (
+        {(['all', 'active', 'upcoming', 'concluded'] as const).map(f => (
           <button
             key={f}
-            onClick={() => setFilter(f as any)}
+            onClick={() => setFilter(f)}
             className={`px-4 py-2 rounded-full text-xs font-mono uppercase tracking-wider transition-colors whitespace-nowrap ${
               filter === f ? 'bg-ink text-bone font-bold shadow-sm border border-line/40' : 'bg-ink-2 text-bone-dim hover:bg-ink-3'
             }`}
@@ -261,6 +265,30 @@ export function ChallengesTab() {
                   </div>
 
                   <div className="space-y-2 pt-2 border-t border-line/20">
+                    {c.topWinner && (
+                      <div className="mt-1 p-2.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30 flex items-center justify-between gap-2 shadow-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
+                            🥇
+                          </div>
+                          <div className="min-w-0 truncate">
+                            <span className="text-[10px] font-mono uppercase text-amber-700 dark:text-amber-500 font-black mr-1">Champion:</span>
+                            <span className="text-xs font-bold text-foreground truncate">{c.topWinner.userName}</span>
+                          </div>
+                        </div>
+                        {c.topWinner.customResult && (
+                          <span className="text-[10px] font-mono text-foreground font-bold shrink-0">{c.topWinner.customResult}</span>
+                        )}
+                      </div>
+                    )}
+
+                    {c.prize && (
+                      <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-xs font-mono font-bold text-foreground">
+                        <Trophy size={12} className="text-amber-500 shrink-0" />
+                        <span className="truncate">{c.prize}</span>
+                      </div>
+                    )}
+                    
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-bone-dim">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${cd.color}`}>
                         {cd.text}
@@ -277,8 +305,8 @@ export function ChallengesTab() {
                     )}
 
                     {c.prize && (
-                      <div className="badge-prize inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold truncate">
-                        <Trophy size={11} className="shrink-0" />
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold text-amber-950 dark:text-amber-200 bg-amber-500/20 border border-amber-400/40">
+                        <Trophy size={12} className="shrink-0 text-amber-600 dark:text-amber-400" />
                         <span className="truncate">{c.prize}</span>
                       </div>
                     )}

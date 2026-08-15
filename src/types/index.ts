@@ -39,6 +39,7 @@ export interface UserProfile {
   stepGoal?: number;
   privacySettings?: PrivacySettings;
   communityBadges?: EarnedCommunityBadge[];
+  unseenMedalAward?: EarnedCommunityBadge | null;
 }
 
 export interface EarnedCommunityBadge {
@@ -553,6 +554,13 @@ export interface ChallengeV2 {
   durationUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
   prize?: string;
   badgesAwarded?: boolean;
+  topWinner?: {
+    userId: string;
+    userName: string;
+    userPhoto?: string;
+    customResult?: string;
+    rank: number;
+  };
   visibility: 'public' | 'clan_only';
   status: ChallengeStatus;
   participantCount: number;
@@ -595,6 +603,13 @@ export interface SimpleEvent {
   durationUnit?: 'minutes' | 'hours' | 'days' | 'weeks' | 'months';
   prize?: string;
   badgesAwarded?: boolean;
+  topWinner?: {
+    userId: string;
+    userName: string;
+    userPhoto?: string;
+    customResult?: string;
+    rank: number;
+  };
   location?: { name?: string; latitude?: number; longitude?: number };
   maxParticipants?: number;
   visibility: 'public' | 'clan_only';

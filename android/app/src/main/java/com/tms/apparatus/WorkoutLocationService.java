@@ -382,12 +382,23 @@ public final class WorkoutLocationService extends Service implements LocationLis
         String activity = activityLabel(prefs.getString(KEY_ACTIVITY_TYPE, "walk"));
 
         String title = isPaused ? activity + " (Paused)" : "Apparatus • " + activity;
-        String line1 = formatDuration(movingDurationSec) + "  •  " + String.format(java.util.Locale.US, "%.2f km", distanceMeters / 1000f);
-        String line2 = "Speed: " + String.format(java.util.Locale.US, "%.1f km/h", speedKmh) +
-                "  •  Pace: " + formatPace(distanceMeters, movingDurationSec);
+        String paceStr = formatPace(distanceMeters, movingDurationSec);
+        String line1 = formatDuration(movingDurationSec) + "  •  " + String.format(java.util.Locale.US, "%.2f km", distanceMeters / 1000f) + "  •  " + paceStr + (paceStr.equals("--:--") ? "" : " /km");
+        String line2 = "Speed: " + String.format(java.util.Locale.US, "%.1f km/h", speedKmh);
 
         Intent openAppIntent = new Intent(this, MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, openAppIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0));
+
+        // Action 1: Pause or Resume
+        Intent pauseResumeIntent = new Intent(this, WorkoutLocationService.class)
+                .setAction(isPaused ? ACTION_RESUME : ACTION_PAUSE);
+        PendingIntent pauseResumePending = PendingIntent.getService(this, 1, pauseResumeIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0));
+
+        // Action 2: Stop
+        Intent stopIntent = new Intent(this, WorkoutLocationService.class).setAction(ACTION_STOP);
+        PendingIntent stopPending = PendingIntent.getService(this, 2, stopIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0));
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
@@ -397,6 +408,9 @@ public final class WorkoutLocationService extends Service implements LocationLis
                 .setSubText(line2)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(line1 + "\n" + line2))
                 .setContentIntent(pendingIntent)
+                .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
+                        isPaused ? "RESUME" : "PAUSE", pauseResumePending)
+                .addAction(android.R.drawable.ic_menu_close_clear_cancel, "STOP", stopPending)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true);
 

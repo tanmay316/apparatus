@@ -392,7 +392,7 @@ export function ClanPage() {
                         if (member.userId === user?.uid) navigate('/profile');
                         else navigate(`/profile/${member.userId}`);
                       }}
-                      className="flex items-center gap-3.5 cursor-pointer hover:opacity-80 transition-opacity"
+                      className="flex items-center gap-3.5 cursor-pointer hover:opacity-80 transition-opacity min-w-0 flex-1"
                     >
                       {member.userPhoto ? (
                         <img 
@@ -406,9 +406,9 @@ export function ClanPage() {
                           {member.userName.charAt(0)}
                         </div>
                       )}
-                      <div>
-                        <div className="text-bone font-bold text-sm hover:underline">{member.userName} {member.userId === user?.uid && '(You)'}</div>
-                        <div className="text-xs font-mono text-bone-dim flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-bone font-bold text-sm hover:underline truncate max-w-[130px] sm:max-w-[220px]">{member.userName} {member.userId === user?.uid && '(You)'}</div>
+                        <div className="text-xs font-mono text-bone-dim flex items-center gap-2 truncate">
                           {member.role === 'leader' && <span className="text-amber-400 font-bold">👑 Leader</span>}
                           {member.role === 'co_leader' && <span className="text-emerald-400 font-bold">⚔️ Co-Leader</span>}
                           {member.role === 'member' && <span>Member</span>}
@@ -465,18 +465,22 @@ export function ClanPage() {
                     const s = c.startDate?.toMillis ? c.startDate.toMillis() : 0;
                     const e = c.endDate?.toMillis ? c.endDate.toMillis() : 0;
                     let cdText = 'Active';
+                    let cdClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
                     if (now < s) {
                       const diff = s - now;
                       const d = Math.floor(diff / 86400000);
                       const h = Math.floor((diff / 3600000) % 24);
                       cdText = d > 0 ? `Starts in ${d}d` : `Starts in ${h}h`;
+                      cdClass = 'badge-countdown-upcoming';
                     } else if (e && now <= e) {
                       const diff = e - now;
                       const d = Math.floor(diff / 86400000);
                       const h = Math.floor((diff / 3600000) % 24);
                       cdText = d > 0 ? `Ends in ${d}d` : `Ends in ${h}h`;
+                      cdClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
                     } else if (e && now > e) {
-                      cdText = 'Ended';
+                      cdText = 'Concluded';
+                      cdClass = 'bg-amber-500/25 text-amber-950 dark:text-amber-100 border-2 border-amber-500/60 font-black shadow-sm';
                     }
 
                     return (
@@ -489,7 +493,7 @@ export function ClanPage() {
                           <div className="flex justify-between items-start mb-2">
                             <h4 className="font-bold text-bone text-lg pr-4 group-hover:text-emerald-400 transition-colors">{c.title}</h4>
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] font-mono px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full font-bold uppercase">
+                              <span className={`text-[10px] font-mono px-2 py-0.5 border rounded-full uppercase ${cdClass}`}>
                                 {cdText}
                               </span>
                               {(isLeader || isCoLeader || user?.uid === c.createdBy) && (
@@ -502,9 +506,27 @@ export function ClanPage() {
                           </div>
                           <p className="text-sm text-bone-dim mb-3 line-clamp-2">{c.description}</p>
                           
+                          {c.topWinner && (
+                            <div className="mt-1 p-2.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30 flex items-center justify-between gap-2 shadow-sm">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
+                                  🥇
+                                </div>
+                                <div className="min-w-0 truncate">
+                                  <span className="text-[10px] font-mono uppercase text-amber-700 dark:text-amber-500 font-black mr-1">Champion:</span>
+                                  <span className="text-xs font-bold text-foreground truncate">{c.topWinner.userName}</span>
+                                </div>
+                              </div>
+                              {c.topWinner.customResult && (
+                                <span className="text-[10px] font-mono text-foreground font-bold shrink-0">{c.topWinner.customResult}</span>
+                              )}
+                            </div>
+                          )}
+
                           {c.prize && (
-                            <div className="mb-3 inline-flex items-center gap-1 text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-400/30">
-                              <Trophy size={11} /> {c.prize}
+                            <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-xs font-mono font-bold text-foreground">
+                              <Trophy size={12} className="text-amber-500 shrink-0" />
+                              <span className="truncate">{c.prize}</span>
                             </div>
                           )}
                         </div>
@@ -547,18 +569,22 @@ export function ClanPage() {
                     const s = e.startTime?.toMillis ? e.startTime.toMillis() : 0;
                     const end = e.endTime?.toMillis ? e.endTime.toMillis() : 0;
                     let cdText = 'Upcoming';
+                    let cdClass = 'bg-blue-500/10 text-blue-400 border-blue-500/30';
                     if (now < s) {
                       const diff = s - now;
                       const d = Math.floor(diff / 86400000);
                       const h = Math.floor((diff / 3600000) % 24);
                       cdText = d > 0 ? `Starts in ${d}d` : `Starts in ${h}h`;
+                      cdClass = 'badge-countdown-upcoming';
                     } else if (end && now <= end) {
                       const diff = end - now;
                       const d = Math.floor(diff / 86400000);
                       const h = Math.floor((diff / 3600000) % 24);
                       cdText = d > 0 ? `Ends in ${d}d` : `Ends in ${h}h`;
+                      cdClass = 'bg-blue-500/10 text-blue-400 border-blue-500/30';
                     } else if (end && now > end) {
-                      cdText = 'Ended';
+                      cdText = 'Concluded';
+                      cdClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm';
                     }
 
                     return (
@@ -571,7 +597,7 @@ export function ClanPage() {
                           <div className="flex justify-between items-start mb-2">
                             <div className="text-xs font-mono text-sienna flex items-center gap-1.5">
                               <span>{typeof e.startTime?.toDate === 'function' ? e.startTime.toDate().toLocaleDateString() : 'TBD'}</span>
-                              <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 text-blue-400 rounded border border-blue-500/30 uppercase font-bold">{cdText}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded border uppercase font-bold ${cdClass}`}>{cdText}</span>
                             </div>
                             {(isLeader || isCoLeader || user?.uid === e.createdBy) && (
                               <div className="flex items-center gap-1" onClick={ev => ev.stopPropagation()}>
@@ -582,10 +608,28 @@ export function ClanPage() {
                           </div>
                           <h4 className="font-bold text-bone text-lg mb-1 group-hover:text-blue-400 transition-colors">{e.title}</h4>
                           <p className="text-sm text-bone-dim mb-3 line-clamp-2">{e.description}</p>
+
+                          {e.topWinner && (
+                            <div className="mt-1 p-2.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30 flex items-center justify-between gap-2 shadow-sm">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
+                                  🥇
+                                </div>
+                                <div className="min-w-0 truncate">
+                                  <span className="text-[10px] font-mono uppercase text-amber-700 dark:text-amber-500 font-black mr-1">1st Place:</span>
+                                  <span className="text-xs font-bold text-foreground truncate">{e.topWinner.userName}</span>
+                                </div>
+                              </div>
+                              {e.topWinner.customResult && (
+                                <span className="text-[10px] font-mono text-foreground font-bold shrink-0">{e.topWinner.customResult}</span>
+                              )}
+                            </div>
+                          )}
                           
                           {e.prize && (
-                            <div className="mb-3 inline-flex items-center gap-1 text-[11px] font-mono text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-400/30">
-                              <Trophy size={11} /> {e.prize}
+                            <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-xs font-mono font-bold text-foreground">
+                              <Trophy size={12} className="text-amber-500 shrink-0" />
+                              <span className="truncate">{e.prize}</span>
                             </div>
                           )}
                         </div>

@@ -16,6 +16,7 @@ import { SplashScreen } from '@capacitor/splash-screen';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { OTAUpdater } from '@/components/ui/OTAUpdater';
+import { MedalCelebrationModal } from '@/components/community/MedalCelebrationModal';
 
 const AuthPage = lazy(() => import('@/pages/AuthPage').then(m => ({ default: m.AuthPage })));
 const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -231,6 +232,7 @@ export function App() {
         </Suspense>
         <Toast />
         <UpdatePopup />
+        <MedalCelebrationModal />
       </BrowserRouter>
     </QueryClientProvider>
   );

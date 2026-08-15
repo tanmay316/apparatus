@@ -46,16 +46,16 @@ type ShareLayout =
   | 'a-shape-stencil'
   | 'transparent-sticker';
 
-const LAYOUT_OPTIONS: { id: ShareLayout; label: string; icon: string }[] = [
-  { id: 'pro-glass', label: 'Pro Glass', icon: '⚡' },
-  { id: 'sunset-glow', label: 'Sunset Dusk', icon: '🌅' },
-  { id: 'cyber-neon', label: 'Cyber Neon', icon: '👾' },
-  { id: 'map-hero', label: 'Map Hero', icon: '🗺️' },
-  { id: 'path-minimal', label: 'Pure Path', icon: '✨' },
-  { id: 'stats-pro', label: 'Telemetry', icon: '📊' },
-  { id: 'polaroid-vintage', label: 'Polaroid', icon: '📸' },
-  { id: 'a-shape-stencil', label: 'A-Stencil', icon: '🅰️' },
-  { id: 'transparent-sticker', label: 'Sticker', icon: '🪄' },
+const LAYOUT_OPTIONS: { id: ShareLayout; label: string }[] = [
+  { id: 'pro-glass', label: 'Pro Glass' },
+  { id: 'sunset-glow', label: 'Sunset Dusk' },
+  { id: 'cyber-neon', label: 'Cyber Neon' },
+  { id: 'map-hero', label: 'Map Hero' },
+  { id: 'path-minimal', label: 'Pure Path' },
+  { id: 'stats-pro', label: 'Telemetry' },
+  { id: 'polaroid-vintage', label: 'Polaroid' },
+  { id: 'a-shape-stencil', label: 'A-Stencil' },
+  { id: 'transparent-sticker', label: 'Sticker' },
 ];
 
 const AVAILABLE_THEMES = Object.keys(MAP_THEMES) as MapThemeKey[];
@@ -545,13 +545,12 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                 <button
                   key={opt.id}
                   onClick={() => setLayout(opt.id)}
-                  className={`shrink-0 px-4 py-2 rounded-full font-mono text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                  className={`shrink-0 px-4 py-2 rounded-full font-mono text-xs font-bold transition-all flex items-center justify-center border ${
                     layout === opt.id 
-                      ? 'bg-sienna border-sienna text-white' 
+                      ? 'bg-sienna border-sienna text-white shadow-sm' 
                       : 'bg-[#1a100d] border-[#42241b] text-white/70 hover:text-white hover:border-[#5a2e22]'
                   }`}
                 >
-                  <span>{opt.icon}</span>
                   <span>{opt.label}</span>
                 </button>
               ))}

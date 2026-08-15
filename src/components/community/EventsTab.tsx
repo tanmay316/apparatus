@@ -35,7 +35,7 @@ function getCountdownLabel(startMs: number, endMs: number) {
   return {
     type: 'ended' as const,
     text: 'Concluded',
-    color: 'text-bone-dim bg-ink-3 border-line/20'
+    color: 'text-amber-950 dark:text-amber-100 bg-amber-500/25 border-2 border-amber-500/60 font-black shadow-sm'
   };
 }
 
@@ -260,6 +260,23 @@ export function EventsTab() {
                   </div>
 
                   <div className="space-y-2 pt-2 border-t border-line/20">
+                    {e.topWinner && (
+                      <div className="mt-1 p-2.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30 flex items-center justify-between gap-2 shadow-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
+                            🥇
+                          </div>
+                          <div className="min-w-0 truncate">
+                            <span className="text-[10px] font-mono uppercase text-amber-700 dark:text-amber-500 font-black mr-1">Champion:</span>
+                            <span className="text-xs font-bold text-foreground truncate">{e.topWinner.userName}</span>
+                          </div>
+                        </div>
+                        {e.topWinner.customResult && (
+                          <span className="text-[10px] font-mono text-foreground font-bold shrink-0">{e.topWinner.customResult}</span>
+                        )}
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-bone-dim">
                       <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold ${cd.color}`}>
                         {cd.text}

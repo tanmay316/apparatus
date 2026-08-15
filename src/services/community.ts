@@ -1,6 +1,6 @@
 import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, increment, setDoc, writeBatch, Timestamp, documentId } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, SimpleEventStatus, CommunityPost } from '@/types';
+import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, SimpleEventStatus, CommunityPost, EarnedCommunityBadge } from '@/types';
 
 // ─── UTILS ────────────────────────────────────────────────────────
 export function formatChallengeGoal(target?: number, unit?: string, metric?: string): string {
@@ -464,6 +464,27 @@ export async function getChallengeLeaderboard(challengeId: string): Promise<Chal
 
   // Sort strictly by published rank
   list.sort((a, b) => (a.rank || 999) - (b.rank || 999));
+
+  // Auto-sync topWinner to challenge if missing
+  if (list.length > 0 && list[0].rank === 1) {
+    getDoc(doc(db, 'challenges_v2', challengeId)).then((cSnap) => {
+      if (cSnap.exists()) {
+        const cData = cSnap.data();
+        if (!cData.topWinner || cData.topWinner.userId !== list[0].userId) {
+          updateDoc(doc(db, 'challenges_v2', challengeId), {
+            topWinner: {
+              userId: list[0].userId,
+              userName: list[0].userName || 'Champion',
+              userPhoto: list[0].userPhoto || '',
+              customResult: list[0].customResult || '',
+              rank: 1
+            }
+          }).catch(() => {});
+        }
+      }
+    }).catch(() => {});
+  }
+
   return list;
 }
 
@@ -471,18 +492,124 @@ export async function updateLeaderboardRanks(
   challengeId: string,
   updatedRanks: { userId: string; rank: number; progress?: number; customResult?: string; badgeAwarded?: 1 | 2 | 3 }[]
 ): Promise<void> {
+  const challengeSnap = await getDoc(doc(db, 'challenges_v2', challengeId));
+  const challengeData = challengeSnap.exists() ? (challengeSnap.data() as ChallengeV2) : null;
+  const challengeTitle = challengeData?.title || 'Community Challenge';
+
   const batch = writeBatch(db);
+  const now = Timestamp.now();
+
+  const rankTitles = {
+    1: { name: 'Gold Champion', style: 'gold' as const, emoji: '🥇' },
+    2: { name: 'Silver Runner-Up', style: 'silver' as const, emoji: '🥈' },
+    3: { name: 'Bronze 3rd Place', style: 'bronze' as const, emoji: '🥉' },
+  };
+
+  let topWinner: { userId: string; userName: string; userPhoto: string; customResult: string; rank: number } | null = null;
+
   for (const item of updatedRanks) {
     const partRef = doc(db, 'challenge_participants', `${challengeId}_${item.userId}`);
-    batch.update(partRef, {
+    const badgeAward = item.badgeAwarded || (item.rank <= 3 && item.rank >= 1 ? (item.rank as 1 | 2 | 3) : undefined);
+
+    batch.set(partRef, {
       rank: item.rank,
       progress: item.progress ?? 0,
       customResult: item.customResult || '',
       isRanked: true,
-      badgeAwarded: item.badgeAwarded || null,
+      badgeAwarded: badgeAward || null,
       updatedAt: serverTimestamp()
-    });
+    }, { merge: true });
+
+    if (badgeAward && rankTitles[badgeAward]) {
+      const info = rankTitles[badgeAward];
+      const badgeData: EarnedCommunityBadge = {
+        id: `${challengeId}_rank_${badgeAward}`,
+        title: challengeTitle,
+        subtitle: `${info.emoji} ${info.name} (Rank #${item.rank})`,
+        description: item.customResult || `Finished #${item.rank} with ${item.progress || 0} in "${challengeTitle}"`,
+        rank: badgeAward,
+        sourceType: 'challenge',
+        sourceId: challengeId,
+        sourceTitle: challengeTitle,
+        clanId: challengeData?.clanId || '',
+        clanName: challengeData?.clanName || '',
+        awardedAt: now,
+        badgeStyle: info.style
+      };
+
+      const userRef = doc(db, 'users', item.userId);
+      try {
+        const userSnap = await getDoc(userRef);
+        const uData = userSnap.exists() ? userSnap.data() : {};
+        const existingBadges = uData.communityBadges || [];
+        const filtered = existingBadges.filter((b: any) => b.id !== badgeData.id);
+        
+        batch.set(userRef, {
+          communityBadges: [...filtered, badgeData],
+          unseenMedalAward: badgeData
+        }, { merge: true });
+
+        if (item.rank === 1 && !topWinner) {
+          topWinner = {
+            userId: item.userId,
+            userName: uData.displayName || 'Champion',
+            userPhoto: uData.photoURL || '',
+            customResult: item.customResult || '',
+            rank: 1
+          };
+        }
+
+        // Notify the winner
+        const winnerNoteRef = doc(collection(db, 'notifications'));
+        batch.set(winnerNoteRef, {
+          receiverId: item.userId,
+          senderId: challengeData?.createdBy || item.userId,
+          senderName: challengeData?.creatorName || 'Apparatus Arena',
+          senderPhoto: challengeData?.creatorPhoto || '',
+          type: 'achievement',
+          message: `${info.emoji} Congratulations! You won the ${info.name} Medal in "${challengeTitle}"!`,
+          targetId: challengeId,
+          read: false,
+          createdAt: now
+        });
+
+        // Notify followers of this winner
+        try {
+          const followersSnap = await getDocs(collection(db, `followers/${item.userId}/followers`));
+          followersSnap.docs.forEach(fDoc => {
+            const followerId = fDoc.id;
+            if (followerId && followerId !== item.userId) {
+              const followNoteRef = doc(collection(db, 'notifications'));
+              batch.set(followNoteRef, {
+                receiverId: followerId,
+                senderId: item.userId,
+                senderName: uData.displayName || 'An athlete',
+                senderPhoto: uData.photoURL || '',
+                type: 'achievement',
+                message: `${info.emoji} ${uData.displayName || 'An athlete you follow'} earned the ${info.name} Medal in "${challengeTitle}"!`,
+                targetId: item.userId,
+                read: false,
+                createdAt: now
+              });
+            }
+          });
+        } catch { /* ignore */ }
+      } catch { /* ignore */ }
+    }
   }
+
+  if (challengeSnap.exists()) {
+    const updatePayload: any = {
+      badgesAwarded: true,
+      status: 'completed',
+      updatedAt: now
+    };
+    if (topWinner) {
+      updatePayload.topWinner = topWinner;
+    }
+    batch.update(doc(db, 'challenges_v2', challengeId), updatePayload);
+  }
+
   await batch.commit();
 }
 
@@ -490,16 +617,123 @@ export async function updateEventLeaderboardRanks(
   eventId: string,
   updatedRanks: { userId: string; rank: number; customResult?: string; badgeAwarded?: 1 | 2 | 3 }[]
 ): Promise<void> {
+  const eventSnap = await getDoc(doc(db, 'simple_events', eventId));
+  const eventData = eventSnap.exists() ? (eventSnap.data() as SimpleEvent) : null;
+  const eventTitle = eventData?.title || 'Community Event';
+
   const batch = writeBatch(db);
+  const now = Timestamp.now();
+
+  const rankTitles = {
+    1: { name: 'Gold Champion', style: 'gold' as const, emoji: '🥇' },
+    2: { name: 'Silver Runner-Up', style: 'silver' as const, emoji: '🥈' },
+    3: { name: 'Bronze 3rd Place', style: 'bronze' as const, emoji: '🥉' },
+  };
+
+  let topWinner: { userId: string; userName: string; userPhoto: string; customResult: string; rank: number } | null = null;
+
   for (const item of updatedRanks) {
     const partRef = doc(db, 'simple_event_participants', `${eventId}_${item.userId}`);
-    batch.update(partRef, {
+    const badgeAward = item.badgeAwarded || (item.rank <= 3 && item.rank >= 1 ? (item.rank as 1 | 2 | 3) : undefined);
+
+    batch.set(partRef, {
       rank: item.rank,
       customResult: item.customResult || '',
       isRanked: true,
-      badgeAwarded: item.badgeAwarded || null
-    });
+      badgeAwarded: badgeAward || null,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+
+    if (badgeAward && rankTitles[badgeAward]) {
+      const info = rankTitles[badgeAward];
+      const badgeData: EarnedCommunityBadge = {
+        id: `${eventId}_rank_${badgeAward}`,
+        title: eventTitle,
+        subtitle: `${info.emoji} ${info.name} (Rank #${item.rank})`,
+        description: item.customResult || `Finished #${item.rank} in "${eventTitle}"`,
+        rank: badgeAward,
+        sourceType: 'event',
+        sourceId: eventId,
+        sourceTitle: eventTitle,
+        clanId: eventData?.clanId || '',
+        clanName: eventData?.clanName || '',
+        awardedAt: now,
+        badgeStyle: info.style
+      };
+
+      const userRef = doc(db, 'users', item.userId);
+      try {
+        const userSnap = await getDoc(userRef);
+        const uData = userSnap.exists() ? userSnap.data() : {};
+        const existingBadges = uData.communityBadges || [];
+        const filtered = existingBadges.filter((b: any) => b.id !== badgeData.id);
+        
+        batch.set(userRef, {
+          communityBadges: [...filtered, badgeData],
+          unseenMedalAward: badgeData
+        }, { merge: true });
+
+        if (item.rank === 1 && !topWinner) {
+          topWinner = {
+            userId: item.userId,
+            userName: uData.displayName || 'Champion',
+            userPhoto: uData.photoURL || '',
+            customResult: item.customResult || '',
+            rank: 1
+          };
+        }
+
+        // Notify winner
+        const winnerNoteRef = doc(collection(db, 'notifications'));
+        batch.set(winnerNoteRef, {
+          receiverId: item.userId,
+          senderId: eventData?.createdBy || item.userId,
+          senderName: eventData?.creatorName || 'Apparatus Arena',
+          senderPhoto: '',
+          type: 'achievement',
+          message: `${info.emoji} Congratulations! You won the ${info.name} Medal in "${eventTitle}"!`,
+          targetId: eventId,
+          read: false,
+          createdAt: now
+        });
+
+        // Notify followers
+        try {
+          const followersSnap = await getDocs(collection(db, `followers/${item.userId}/followers`));
+          followersSnap.docs.forEach(fDoc => {
+            const followerId = fDoc.id;
+            if (followerId && followerId !== item.userId) {
+              const followNoteRef = doc(collection(db, 'notifications'));
+              batch.set(followNoteRef, {
+                receiverId: followerId,
+                senderId: item.userId,
+                senderName: uData.displayName || 'An athlete',
+                senderPhoto: uData.photoURL || '',
+                type: 'achievement',
+                message: `${info.emoji} ${uData.displayName || 'An athlete you follow'} earned the ${info.name} Medal in "${eventTitle}"!`,
+                targetId: item.userId,
+                read: false,
+                createdAt: now
+              });
+            }
+          });
+        } catch { /* ignore */ }
+      } catch { /* ignore */ }
+    }
   }
+
+  if (eventSnap.exists()) {
+    const updatePayload: any = {
+      badgesAwarded: true,
+      status: 'completed',
+      updatedAt: now
+    };
+    if (topWinner) {
+      updatePayload.topWinner = topWinner;
+    }
+    batch.update(doc(db, 'simple_events', eventId), updatePayload);
+  }
+
   await batch.commit();
 }
 
@@ -813,4 +1047,117 @@ export async function deleteClanPost(postId: string): Promise<void> {
   const commentsSnap = await getDocs(query(collection(db, 'community_post_comments'), where('postId', '==', postId)));
   commentsSnap.docs.forEach(d => batch.delete(d.ref));
   await batch.commit();
+}
+
+export async function getUserCommunityBadges(userId: string): Promise<EarnedCommunityBadge[]> {
+  if (!userId) return [];
+  const badgeMap = new Map<string, EarnedCommunityBadge>();
+
+  const rankTitles: Record<number, { name: string; style: 'gold' | 'silver' | 'bronze'; emoji: string }> = {
+    1: { name: 'Gold Champion', style: 'gold', emoji: '🥇' },
+    2: { name: 'Silver Runner-Up', style: 'silver', emoji: '🥈' },
+    3: { name: 'Bronze 3rd Place', style: 'bronze', emoji: '🥉' },
+  };
+
+  // 1. From User Document
+  try {
+    const userSnap = await getDoc(doc(db, 'users', userId));
+    if (userSnap.exists()) {
+      const uData = userSnap.data();
+      const list = uData.communityBadges || [];
+      list.forEach((b: EarnedCommunityBadge) => {
+        if (b && b.id) badgeMap.set(b.id, b);
+      });
+    }
+  } catch (e) {
+    console.error('Failed to fetch badges from user doc', e);
+  }
+
+  // 2. From Challenge Participants
+  try {
+    const q = query(
+      collection(db, 'challenge_participants'),
+      where('userId', '==', userId)
+    );
+    const snap = await getDocs(q);
+
+    for (const d of snap.docs) {
+      const data = d.data();
+      const rawRank = data.badgeAwarded || (data.rank <= 3 && data.rank >= 1 ? data.rank : undefined);
+      const rank = rawRank as 1 | 2 | 3 | undefined;
+      if (rank && rankTitles[rank]) {
+        const badgeId = `${data.challengeId}_rank_${rank}`;
+        if (!badgeMap.has(badgeId)) {
+          let cTitle = 'Challenge Victory';
+          try {
+            const cSnap = await getDoc(doc(db, 'challenges_v2', data.challengeId));
+            if (cSnap.exists()) cTitle = cSnap.data().title || cTitle;
+          } catch {}
+
+          const info = rankTitles[rank];
+          const bObj: EarnedCommunityBadge = {
+            id: badgeId,
+            title: cTitle,
+            subtitle: `${info.emoji} ${info.name} (Rank #${rank})`,
+            description: data.customResult || `Rank #${rank} in "${cTitle}"`,
+            rank,
+            sourceType: 'challenge',
+            sourceId: data.challengeId,
+            sourceTitle: cTitle,
+            awardedAt: data.updatedAt || data.joinedAt || Timestamp.now(),
+            badgeStyle: info.style
+          };
+          badgeMap.set(badgeId, bObj);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Failed to fetch badges from challenge participants', e);
+  }
+
+  // 3. From Event Participants
+  try {
+    const q = query(
+      collection(db, 'simple_event_participants'),
+      where('userId', '==', userId)
+    );
+    const snap = await getDocs(q);
+
+    for (const d of snap.docs) {
+      const data = d.data();
+      const rawRank = data.badgeAwarded || (data.rank <= 3 && data.rank >= 1 ? data.rank : undefined);
+      const rank = rawRank as 1 | 2 | 3 | undefined;
+      if (rank && rankTitles[rank]) {
+        const badgeId = `${data.eventId}_rank_${rank}`;
+        if (!badgeMap.has(badgeId)) {
+          let eTitle = 'Event Victory';
+          try {
+            const eSnap = await getDoc(doc(db, 'simple_events', data.eventId));
+            if (eSnap.exists()) eTitle = eSnap.data().title || eTitle;
+          } catch {}
+
+          const info = rankTitles[rank];
+          const bObj: EarnedCommunityBadge = {
+            id: badgeId,
+            title: eTitle,
+            subtitle: `${info.emoji} ${info.name} (Rank #${rank})`,
+            description: data.customResult || `Rank #${rank} in "${eTitle}"`,
+            rank,
+            sourceType: 'event',
+            sourceId: data.eventId,
+            sourceTitle: eTitle,
+            awardedAt: data.updatedAt || Timestamp.now(),
+            badgeStyle: info.style
+          };
+          badgeMap.set(badgeId, bObj);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Failed to fetch badges from event participants', e);
+  }
+
+  const allBadges = Array.from(badgeMap.values());
+  allBadges.sort((a, b) => (a.rank || 3) - (b.rank || 3));
+  return allBadges;
 }

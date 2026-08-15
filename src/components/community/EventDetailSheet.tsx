@@ -41,7 +41,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
   const [statusPopup, setStatusPopup] = useState<{ isOpen: boolean; type: 'joined' | 'left' } | null>(null);
 
   // Form state for ranking attendees
-  const [rankEdits, setRankEdits] = useState<{ [userId: string]: { rank: number; customResult: string; badgeAwarded?: 1 | 2 | 3 } }>({});
+  const [rankEdits, setRankEdits] = useState<{ [userId: string]: { rank: number | string; customResult: string; badgeAwarded?: 1 | 2 | 3 } }>({});
 
   useEffect(() => {
     document.body.classList.add('community-create-open');
@@ -100,8 +100,9 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
   });
 
   const isClanMember = !isClanOnly || (isClanMemberDirect ?? userClans.some(c => c.id === event?.clanId)) || isAdmin;
+  const isClanLeader = event?.clanId ? userClans.some(c => c.id === event.clanId && (c.leaderId === user?.uid || (c as any).admins?.includes(user?.uid) || (c as any).role === 'leader' || (c as any).role === 'co-leader')) : false;
   const isJoined = isJoinedState !== null ? isJoinedState : (isJoinedDirect ?? participants.some(p => p.userId === user?.uid));
-  const isCreatorOrAdmin = isAdmin || user?.uid === event?.createdBy;
+  const isCreatorOrAdmin = isAdmin || user?.uid === event?.createdBy || isClanLeader;
 
   // Filter ranked participants for the official leaderboard
   const rankedParticipants = participants.filter(p => p.isRanked === true && typeof p.rank === 'number' && p.rank > 0 && p.rank < 9999);
@@ -109,7 +110,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
 
   // Initialize rank manager
   const openRankManager = () => {
-    const initial: { [userId: string]: { rank: number; customResult: string; badgeAwarded?: 1 | 2 | 3 } } = {};
+    const initial: { [userId: string]: { rank: number | string; customResult: string; badgeAwarded?: 1 | 2 | 3 } } = {};
     participants.forEach((p, idx) => {
       initial[p.userId] = {
         rank: (p.rank && p.rank > 0 && p.rank < 9999) ? p.rank : (idx + 1),
@@ -188,16 +189,32 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
 
   const saveRanksMutation = useMutation({
     mutationFn: async () => {
-      const updates = Object.entries(rankEdits).map(([userId, data]) => ({
-        userId,
-        rank: data.rank,
-        customResult: data.customResult,
-        badgeAwarded: data.badgeAwarded
-      }));
+      const updates = participants.map((p, idx) => {
+        const edit = rankEdits[p.userId];
+        let rankVal: number;
+        if (edit && edit.rank !== '' && edit.rank !== undefined) {
+          rankVal = typeof edit.rank === 'number' ? edit.rank : (parseInt(edit.rank, 10) || (idx + 1));
+        } else {
+          rankVal = (p.rank && p.rank > 0 && p.rank < 9999) ? p.rank : (idx + 1);
+        }
+        return {
+          userId: p.userId,
+          rank: Math.max(1, rankVal),
+          customResult: edit?.customResult !== undefined ? edit.customResult : (p.customResult || ''),
+          badgeAwarded: edit?.badgeAwarded !== undefined ? edit.badgeAwarded : p.badgeAwarded
+        };
+      });
       await updateEventLeaderboardRanks(eventId, updates);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['event', eventId] });
       queryClient.invalidateQueries({ queryKey: ['eventParticipants', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['publicEvents'] });
+      queryClient.invalidateQueries({ queryKey: ['clanEvents'] });
+      queryClient.invalidateQueries({ queryKey: ['allCommunityEvents'] });
+      queryClient.invalidateQueries({ queryKey: ['freshUserProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['userCelebrationProfile'] });
       showToast('Event rankings and results saved!', 'success');
       setShowRankModal(false);
     },
@@ -392,17 +409,6 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                     {joinMutation.isPending ? 'RSVPing...' : 'RSVP / Join Event'}
                   </button>
                 )}
-
-                {isCreatorOrAdmin && (
-                  <div className="flex items-center gap-2 ml-auto flex-wrap">
-                    <button
-                      onClick={openRankManager}
-                      className="px-3.5 py-2 rounded-xl bg-ink-2 hover:bg-ink-3 text-bone border border-line text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
-                    >
-                      <SlidersHorizontal size={13} className="text-blue-400" /> Update Leaderboard & Ranks
-                    </button>
-                  </div>
-                )}
               </div>
             </motion.div>
           )}
@@ -410,25 +416,14 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
           {/* Compact View when Details are Collapsed */}
           {!isDetailsExpanded && (
             <div className="px-6 py-2.5 flex items-center justify-between bg-ink-2/20">
-              <div className="flex items-center gap-3">
-                <h2 className="font-display text-lg text-bone truncate max-w-xs">{event.title}</h2>
+              <div className="flex items-center gap-3 min-w-0">
+                <h2 className="font-display text-lg text-bone truncate">{event.title}</h2>
                 <button
                   onClick={() => setShowAttendeesModal(true)}
-                  className="text-xs font-mono text-blue-400 hover:underline flex items-center gap-1"
+                  className="text-xs font-mono text-blue-400 hover:underline flex items-center gap-1 shrink-0"
                 >
                   <Users size={12} /> {realParticipantCount} Attendees
                 </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {isCreatorOrAdmin && (
-                  <button
-                    onClick={openRankManager}
-                    className="px-3 py-1 rounded-lg bg-ink-3 hover:bg-ink-2 text-bone border border-line text-xs font-mono font-bold flex items-center gap-1 transition-colors"
-                  >
-                    <SlidersHorizontal size={12} className="text-blue-400" /> Update Leaderboard
-                  </button>
-                )}
               </div>
             </div>
           )}
@@ -436,13 +431,36 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
 
         {/* Official Event Leaderboard & Attendees Section */}
         <div className="flex-1 overflow-y-auto p-6 bg-ink space-y-4">
-          <div className="flex items-center justify-between">
+          {/* Concluded Status Notice */}
+          {countdownType === 'ended' && (
+            <div className="p-3.5 mb-5 rounded-2xl bg-blue-500/10 border-2 border-blue-500/40 flex items-start gap-3 shadow-sm">
+              <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+                <CheckCircle2 size={16} className="text-blue-500 dark:text-blue-400" />
+              </div>
+              <div className="text-xs font-mono font-bold leading-relaxed text-foreground">
+                <span className="font-black uppercase text-blue-600 dark:text-blue-400 mr-1.5">Event Concluded:</span>
+                Final attendee placements, results, and podium medals are recorded below.
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <h3 className="font-display text-xl text-bone flex items-center gap-2">
               <Trophy size={18} className="text-amber-400" /> Event Standings & Leaderboard
             </h3>
-            {rankedParticipants.length > 0 && (
-              <span className="text-xs font-mono text-bone-dim">{rankedParticipants.length} Ranked</span>
-            )}
+            <div className="flex items-center gap-2">
+              {rankedParticipants.length > 0 && (
+                <span className="text-xs font-mono text-bone-dim mr-1">{rankedParticipants.length} Ranked</span>
+              )}
+              {isCreatorOrAdmin && (
+                <button
+                  onClick={openRankManager}
+                  className="px-3.5 py-1.5 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                >
+                  <SlidersHorizontal size={13} /> {countdownType === 'ended' ? 'Update Final Standings' : 'Update Standings'}
+                </button>
+              )}
+            </div>
           </div>
           
           <div className="space-y-2.5">
@@ -461,7 +479,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                       onClick={openRankManager}
                       className="btn-primary px-4 py-2 text-xs font-mono font-bold inline-flex items-center gap-1.5"
                     >
-                      <SlidersHorizontal size={13} /> Update & Publish Standings Now
+                      <SlidersHorizontal size={13} /> Update & Publish Standings
                     </button>
                   </div>
                 )}
@@ -501,21 +519,23 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
                         <span 
                           onClick={() => handleNavigateProfile(p.userId)}
-                          className="font-bold text-bone text-sm truncate cursor-pointer hover:underline"
+                          className="font-bold text-bone text-sm break-words cursor-pointer hover:underline leading-snug"
                         >
                           {p.userName}
                         </span>
                         {p.userId === user?.uid && (
-                          <span className="text-[10px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded border border-blue-500/30">You</span>
+                          <span className="text-[10px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded border border-blue-500/30 shrink-0">You</span>
                         )}
                         {rankBadge && (
-                          <LeaderboardBadgeChip rank={rankBadge} />
+                          <div className="shrink-0">
+                            <LeaderboardBadgeChip rank={rankBadge} />
+                          </div>
                         )}
                       </div>
-                      <div className="text-xs font-mono text-bone-dim truncate">
+                      <div className="text-xs font-mono text-bone-dim truncate mt-0.5">
                         {p.customResult || 'Official Placement'}
                       </div>
                     </div>
@@ -550,75 +570,100 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                 {participants.length === 0 ? (
                   <div className="text-center py-8 text-bone-dim font-mono text-sm">No attendees registered yet.</div>
                 ) : (
-                  participants.map((p) => {
+                  participants.map((p, idx) => {
+                    const fallbackRank = (p.rank && p.rank > 0 && p.rank < 9999) ? p.rank : (idx + 1);
                     const curr = rankEdits[p.userId] || { 
-                      rank: (p.rank && p.rank > 0 && p.rank < 9999) ? p.rank : 1, 
+                      rank: fallbackRank, 
                       customResult: p.customResult || '', 
                       badgeAwarded: p.badgeAwarded 
                     };
+                    const currentRankVal = curr.rank !== undefined ? curr.rank : fallbackRank;
+
                     return (
-                      <div key={p.userId} className="p-3.5 rounded-2xl bg-ink-2 border border-line/40 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-bone">{p.userName}</span>
-                            {curr.badgeAwarded && <LeaderboardBadgeChip rank={curr.badgeAwarded} />}
+                      <div key={p.userId} className="p-4 rounded-2xl bg-ink-2 border border-line/40 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1 flex-wrap">
+                            <span className="font-bold text-sm sm:text-base text-bone break-words leading-tight">{p.userName}</span>
+                            {curr.badgeAwarded && (
+                              <div className="shrink-0 scale-95 origin-left">
+                                <LeaderboardBadgeChip rank={curr.badgeAwarded} />
+                              </div>
+                            )}
                           </div>
-                          <span className="text-[10px] font-mono text-bone-dim">ID: {p.userId.slice(0, 6)}</span>
+                          <span className="text-[10px] font-mono text-bone-dim shrink-0 bg-ink-3 px-2 py-0.5 rounded border border-line/30">
+                            ID: {p.userId.slice(0, 6)}
+                          </span>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <label className="block text-[10px] font-mono text-bone-dim uppercase">Rank #</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={curr.rank}
-                              onChange={(e) => {
-                                const v = parseInt(e.target.value) || 1;
-                                setRankEdits(prev => ({
-                                  ...prev,
-                                  [p.userId]: { ...prev[p.userId], rank: v }
-                                }));
-                              }}
-                              className="input-field w-full text-xs font-mono text-bone py-1.5"
-                            />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div className="flex gap-2">
+                            <div className="w-24 shrink-0">
+                              <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Rank #</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="999"
+                                value={currentRankVal}
+                                placeholder={`${idx + 1}`}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  setRankEdits(prev => {
+                                    const existing = prev[p.userId] || curr;
+                                    return {
+                                      ...prev,
+                                      [p.userId]: {
+                                        ...existing,
+                                        rank: raw === '' ? '' : parseInt(raw, 10)
+                                      }
+                                    };
+                                  });
+                                }}
+                                className="input-field w-full text-xs font-mono text-bone py-2 font-bold"
+                              />
+                            </div>
+
+                            <div className="flex-1 min-w-[140px]">
+                              <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Medal / Badge</label>
+                              <select
+                                value={curr.badgeAwarded || ''}
+                                onChange={(e) => {
+                                  const v = e.target.value ? (parseInt(e.target.value) as 1 | 2 | 3) : undefined;
+                                  setRankEdits(prev => {
+                                    const existing = prev[p.userId] || curr;
+                                    return {
+                                      ...prev,
+                                      [p.userId]: { ...existing, badgeAwarded: v }
+                                    };
+                                  });
+                                }}
+                                className="input-field w-full text-xs font-mono text-bone py-2 cursor-pointer bg-ink-3"
+                              >
+                                <option value="">No Medal</option>
+                                <option value="1">🥇 1st Gold</option>
+                                <option value="2">🥈 2nd Silver</option>
+                                <option value="3">🥉 3rd Bronze</option>
+                              </select>
+                            </div>
                           </div>
 
                           <div>
-                            <label className="block text-[10px] font-mono text-bone-dim uppercase">Result / Note</label>
+                            <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Result / Note</label>
                             <input
                               type="text"
                               value={curr.customResult}
                               placeholder="e.g. 1st Place"
                               onChange={(e) => {
                                 const v = e.target.value;
-                                setRankEdits(prev => ({
-                                  ...prev,
-                                  [p.userId]: { ...prev[p.userId], customResult: v }
-                                }));
+                                setRankEdits(prev => {
+                                  const existing = prev[p.userId] || curr;
+                                  return {
+                                    ...prev,
+                                    [p.userId]: { ...existing, customResult: v }
+                                  };
+                                });
                               }}
-                              className="input-field w-full text-xs font-mono text-bone py-1.5"
+                              className="input-field w-full text-xs font-mono text-bone py-2"
                             />
-                          </div>
-
-                          <div>
-                            <label className="block text-[10px] font-mono text-bone-dim uppercase">Medal</label>
-                            <select
-                              value={curr.badgeAwarded || ''}
-                              onChange={(e) => {
-                                const v = e.target.value ? (parseInt(e.target.value) as 1 | 2 | 3) : undefined;
-                                setRankEdits(prev => ({
-                                  ...prev,
-                                  [p.userId]: { ...prev[p.userId], badgeAwarded: v }
-                                }));
-                              }}
-                              className="input-field w-full text-xs font-mono text-bone py-1.5 bg-ink-3"
-                            >
-                              <option value="">None</option>
-                              <option value="1">🥇 Gold</option>
-                              <option value="2">🥈 Silver</option>
-                              <option value="3">🥉 Bronze</option>
-                            </select>
                           </div>
                         </div>
                       </div>
@@ -665,8 +710,8 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                   <div className="text-center py-8 text-bone-dim font-mono text-sm">No attendees registered yet.</div>
                 ) : (
                   participants.map((p, idx) => (
-                    <div key={p.userId || idx} className="flex items-center justify-between p-3 rounded-2xl bg-ink-2 border border-line/20">
-                      <div className="flex items-center gap-3">
+                    <div key={p.userId || idx} className="flex items-center justify-between p-3 rounded-2xl bg-ink-2 border border-line/20 gap-2 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div 
                           onClick={() => handleNavigateProfile(p.userId)}
                           className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-ink-3 border border-line/30 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
@@ -682,20 +727,24 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                             <span className="font-bold text-bone text-sm">{p.userName?.charAt(0) || '?'}</span>
                           )}
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <div 
                             onClick={() => handleNavigateProfile(p.userId)}
-                            className="font-bold text-sm text-bone flex items-center gap-1.5 cursor-pointer hover:underline"
+                            className="font-bold text-sm text-bone flex items-center gap-1.5 cursor-pointer hover:underline flex-wrap"
                           >
-                            {p.userName}
-                            {p.userId === user?.uid && <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1 py-0.5 rounded">You</span>}
+                            <span className="break-words leading-tight">{p.userName}</span>
+                            {p.userId === user?.uid && <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1 py-0.5 rounded shrink-0">You</span>}
                           </div>
-                          <div className="text-xs font-mono text-bone-dim">
+                          <div className="text-xs font-mono text-bone-dim truncate">
                             {p.isRanked ? `Rank #${p.rank} • ${p.customResult || ''}` : 'Registered Attendee'}
                           </div>
                         </div>
                       </div>
-                      {p.badgeAwarded && <LeaderboardBadgeChip rank={p.badgeAwarded} />}
+                      {p.badgeAwarded && (
+                        <div className="shrink-0">
+                          <LeaderboardBadgeChip rank={p.badgeAwarded} />
+                        </div>
+                      )}
                     </div>
                   ))
                 )}

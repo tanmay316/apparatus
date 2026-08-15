@@ -23,8 +23,9 @@ import { calculateWorkoutCalories } from '@/lib/calories';
 import { ActivityPostCard } from '@/components/social/ActivityPostCard';
 import { getUserSkills } from '@/services/skills';
 import { getUserEventRegistrations, getEventsByIds } from '@/services/events';
-import { getUserClans } from '@/services/community';
+import { getUserClans, getUserCommunityBadges } from '@/services/community';
 import { CommunityBadgeCard } from '@/components/community/CommunityBadgeCard';
+import { MedalShareModal } from '@/components/community/MedalShareModal';
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
@@ -76,6 +77,7 @@ export function ProfilePage() {
   const [importingPlan, setImportingPlan] = useState<string | null>(null);
   const [profileShareData, setProfileShareData] = useState<ShareCardData | null>(null);
   const [cardioShareData, setCardioShareData] = useState<CardioShareData | null>(null);
+  const [selectedMedalToShare, setSelectedMedalToShare] = useState<any | null>(null);
   const [feedTab, setFeedTab] = useState<'activity' | 'communities' | 'posts' | 'bookmarks' | 'events'>('activity');
   const [showAllActivities, setShowAllActivities] = useState(false);
   const [showAllTimeline, setShowAllTimeline] = useState(false);
@@ -102,6 +104,28 @@ export function ProfilePage() {
     queryKey: ['userClans', viewProfile?.uid],
     queryFn: () => getUserClans(viewProfile!.uid),
     enabled: !!viewProfile?.uid,
+  });
+
+  const targetUid = viewProfile?.uid || currentUser?.uid || myProfile?.uid;
+  const { data: userCommunityBadges = [] } = useQuery({
+    queryKey: ['userCommunityBadges', targetUid],
+    queryFn: () => getUserCommunityBadges(targetUid!),
+    enabled: !!targetUid,
+    staleTime: 1000 * 5,
+    refetchOnMount: 'always',
+  });
+
+  const { data: freshUserProfile } = useQuery({
+    queryKey: ['freshUserProfile', targetUid],
+    queryFn: async () => {
+      if (!targetUid) return null;
+      const snap = await getDoc(doc(db, 'users', targetUid));
+      if (!snap.exists()) return null;
+      return { uid: targetUid, ...snap.data() } as UserProfile;
+    },
+    enabled: !!targetUid,
+    staleTime: 1000 * 5,
+    refetchOnMount: 'always',
   });
 
   // Theme support local properties mapping
@@ -913,34 +937,40 @@ export function ProfilePage() {
               </motion.div>
             )}
 
-            {/* SECTION: COMMUNITY TROPHIES & PODIUM SHOWOFF */}
+            {/* SECTION: COMMUNITY TROPHIES (PODIUM TROPHIES) */}
             {((isOwnProfile || viewProfile.privacySettings?.showBadgesToFollowers !== false)) && (
               <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <Award className="text-amber-400" size={18} />
-                    <h3 className="font-serif text-base tracking-tight text-[var(--text)]">Podium Trophies & Showoff</h3>
+                    <h3 className="font-serif text-base tracking-tight text-[var(--text)]">Podium Trophies</h3>
                   </div>
-                  {((isOwnProfile ? (myProfile?.communityBadges || viewProfile.communityBadges) : viewProfile.communityBadges) || []).length > 0 && (
-                    <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-400/30">
-                      {((isOwnProfile ? (myProfile?.communityBadges || viewProfile.communityBadges) : viewProfile.communityBadges) || []).length} Won
+                  {((userCommunityBadges.length > 0 ? userCommunityBadges : (freshUserProfile?.communityBadges || viewProfile?.communityBadges || myProfile?.communityBadges || [])).length > 0) && (
+                    <span className="text-xs font-mono font-bold text-amber-500 dark:text-amber-300 bg-amber-500/15 px-2.5 py-0.5 rounded-full border border-amber-400/40">
+                      {(userCommunityBadges.length > 0 ? userCommunityBadges : (freshUserProfile?.communityBadges || viewProfile?.communityBadges || myProfile?.communityBadges || [])).length} Won
                     </span>
                   )}
                 </div>
 
                 {(() => {
-                  const cBadges = (isOwnProfile ? (myProfile?.communityBadges || viewProfile.communityBadges) : viewProfile.communityBadges) || [];
+                  const cBadges = userCommunityBadges.length > 0 
+                    ? userCommunityBadges 
+                    : (freshUserProfile?.communityBadges || viewProfile?.communityBadges || myProfile?.communityBadges || []);
                   if (cBadges.length === 0) {
                     return (
-                      <div className="p-5 text-center bg-[var(--bg)]/60 rounded-2xl border border-dashed border-[var(--border)] text-xs text-[var(--muted)] font-mono leading-relaxed">
-                        🏆 Win Top 3 in Clan & Community challenges to earn and showcase metallic Gold, Silver & Bronze badges here!
+                      <div className="p-5 text-center bg-[var(--bg)]/80 rounded-2xl border border-dashed border-[var(--border)] text-xs text-[var(--text)]/80 font-mono leading-relaxed font-semibold">
+                        🏆 Win Top 3 in Clan & Community challenges to earn and showcase metallic Gold, Silver & Bronze podium trophies here!
                       </div>
                     );
                   }
                   return (
                     <div className="space-y-3">
                       {cBadges.map((b: any) => (
-                        <CommunityBadgeCard key={b.id} badge={b} />
+                        <CommunityBadgeCard 
+                          key={b.id} 
+                          badge={b} 
+                          onShare={(badge) => setSelectedMedalToShare(badge)}
+                        />
                       ))}
                     </div>
                   );
@@ -1035,6 +1065,13 @@ export function ProfilePage() {
         <CardioShareModal
           data={cardioShareData}
           onClose={() => setCardioShareData(null)}
+        />
+      )}
+
+      {selectedMedalToShare && (
+        <MedalShareModal
+          badge={selectedMedalToShare}
+          onClose={() => setSelectedMedalToShare(null)}
         />
       )}
     </div>

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Target, Users, TrendingUp, Edit3, Trash2, Trophy, Sparkles, 
   Shield, Crown, Award, Check, UserCheck, ChevronRight, SlidersHorizontal, 
-  ChevronUp, ChevronDown, Medal, Calendar
+  ChevronUp, ChevronDown, Medal, Calendar, CheckCircle2
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -38,7 +38,7 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
   const [statusPopup, setStatusPopup] = useState<{ isOpen: boolean; type: 'joined' | 'left' } | null>(null);
 
   // Form state for updating leaderboard ranks
-  const [rankEdits, setRankEdits] = useState<{ [userId: string]: { rank: number; progress?: number; customResult: string; badgeAwarded?: 1 | 2 | 3 } }>({});
+  const [rankEdits, setRankEdits] = useState<{ [userId: string]: { rank: number | string; progress?: number | string; customResult: string; badgeAwarded?: 1 | 2 | 3 } }>({});
 
   useEffect(() => {
     document.body.classList.add('community-create-open');
@@ -103,13 +103,14 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
   });
 
   const isClanMember = !isClanOnly || (isClanMemberDirect ?? userClans.some(c => c.id === challenge?.clanId)) || isAdmin;
+  const isClanLeader = challenge?.clanId ? userClans.some(c => c.id === challenge.clanId && (c.leaderId === user?.uid || (c as any).admins?.includes(user?.uid) || (c as any).role === 'leader' || (c as any).role === 'co-leader')) : false;
   const myParticipant = allParticipants.find(p => p.userId === user?.uid);
   const isJoined = isJoinedState !== null ? isJoinedState : (isJoinedDirect ?? !!myParticipant);
-  const isCreatorOrAdmin = isAdmin || user?.uid === challenge?.createdBy;
+  const isCreatorOrAdmin = isAdmin || user?.uid === challenge?.createdBy || isClanLeader;
 
   // Initialize rank manager
   const openRankManager = () => {
-    const initial: { [userId: string]: { rank: number; progress?: number; customResult: string; badgeAwarded?: 1 | 2 | 3 } } = {};
+    const initial: { [userId: string]: { rank: number | string; progress?: number | string; customResult: string; badgeAwarded?: 1 | 2 | 3 } } = {};
     allParticipants.forEach((p, idx) => {
       initial[p.userId] = {
         rank: (p.rank && p.rank > 0 && p.rank < 9999) ? p.rank : (idx + 1),
@@ -172,7 +173,7 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      if (confirm('Are you sure you want to delete this challenge?')) {
+      if (confirm('Are you sure you want to delete this challenge permanently?')) {
         await deleteChallenge(challengeId);
         return true;
       }
@@ -191,18 +192,34 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
 
   const saveRanksMutation = useMutation({
     mutationFn: async () => {
-      const updates = Object.entries(rankEdits).map(([userId, data]) => ({
-        userId,
-        rank: data.rank,
-        progress: data.progress,
-        customResult: data.customResult,
-        badgeAwarded: data.badgeAwarded
-      }));
+      const updates = allParticipants.map((p, idx) => {
+        const edit = rankEdits[p.userId];
+        let rankVal: number;
+        if (edit && edit.rank !== '' && edit.rank !== undefined) {
+          rankVal = typeof edit.rank === 'number' ? edit.rank : (parseInt(edit.rank, 10) || (idx + 1));
+        } else {
+          rankVal = (p.rank && p.rank > 0 && p.rank < 9999) ? p.rank : (idx + 1);
+        }
+        return {
+          userId: p.userId,
+          rank: Math.max(1, rankVal),
+          progress: edit?.progress !== undefined ? (typeof edit.progress === 'number' ? edit.progress : parseFloat(edit.progress as string) || 0) : (p.progress || 0),
+          customResult: edit?.customResult !== undefined ? edit.customResult : (p.customResult || ''),
+          badgeAwarded: edit?.badgeAwarded !== undefined ? edit.badgeAwarded : p.badgeAwarded
+        };
+      });
       await updateLeaderboardRanks(challengeId, updates);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['challenge', challengeId] });
       queryClient.invalidateQueries({ queryKey: ['challengeLeaderboard', challengeId] });
       queryClient.invalidateQueries({ queryKey: ['challengeParticipants', challengeId] });
+      queryClient.invalidateQueries({ queryKey: ['publicChallenges'] });
+      queryClient.invalidateQueries({ queryKey: ['clanChallenges'] });
+      queryClient.invalidateQueries({ queryKey: ['allCommunityChallenges'] });
+      queryClient.invalidateQueries({ queryKey: ['freshUserProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['userCelebrationProfile'] });
       showToast('Leaderboard ranks & scores saved!', 'success');
       setShowRankModal(false);
     },
@@ -414,28 +431,6 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                     {joinMutation.isPending ? 'Joining...' : 'Join Challenge'}
                   </button>
                 )}
-
-                {/* Creator / Leader / Admin Controls */}
-                {isCreatorOrAdmin && (
-                  <div className="flex items-center gap-2 ml-auto flex-wrap">
-                    <button
-                      onClick={openRankManager}
-                      className="px-3.5 py-2 rounded-xl bg-ink-2 hover:bg-ink-3 text-bone border border-line text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
-                    >
-                      <SlidersHorizontal size={13} className="text-emerald-400" /> Update Leaderboard & Ranks
-                    </button>
-
-                    {leaderboard.length > 0 && !challenge.badgesAwarded && (
-                      <button
-                        onClick={() => awardBadgesMutation.mutate()}
-                        disabled={awardBadgesMutation.isPending}
-                        className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
-                      >
-                        <Crown size={13} /> Award Badges
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
             </motion.div>
           )}
@@ -443,25 +438,14 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
           {/* Compact View when Details are Collapsed */}
           {!isDetailsExpanded && (
             <div className="px-6 py-2.5 flex items-center justify-between bg-ink-2/20">
-              <div className="flex items-center gap-3">
-                <h2 className="font-display text-lg text-bone truncate max-w-xs">{challenge.title}</h2>
+              <div className="flex items-center gap-3 min-w-0">
+                <h2 className="font-display text-lg text-bone truncate">{challenge.title}</h2>
                 <button
                   onClick={() => setShowAthletesModal(true)}
-                  className="text-xs font-mono text-emerald-400 hover:underline flex items-center gap-1"
+                  className="text-xs font-mono text-emerald-400 hover:underline flex items-center gap-1 shrink-0"
                 >
                   <Users size={12} /> {realParticipantCount} Athletes
                 </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {isCreatorOrAdmin && (
-                  <button
-                    onClick={openRankManager}
-                    className="px-3 py-1 rounded-lg bg-ink-3 hover:bg-ink-2 text-bone border border-line text-xs font-mono font-bold flex items-center gap-1 transition-colors"
-                  >
-                    <SlidersHorizontal size={12} className="text-emerald-400" /> Update Leaderboard
-                  </button>
-                )}
               </div>
             </div>
           )}
@@ -469,13 +453,36 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
 
         {/* Scrollable Leaderboard Area */}
         <div className="flex-1 overflow-y-auto p-6 bg-ink space-y-4">
-          <div className="flex items-center justify-between">
+          {/* Concluded Status Notice */}
+          {countdownType === 'ended' && (
+            <div className="p-3.5 mb-5 rounded-2xl bg-amber-500/10 border-2 border-amber-500/40 flex items-start gap-3 shadow-sm">
+              <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
+                <CheckCircle2 size={16} className="text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="text-xs font-mono font-bold leading-relaxed text-foreground">
+                <span className="font-black uppercase text-amber-600 dark:text-amber-400 mr-1.5">Challenge Concluded:</span>
+                Final rankings and podium placements have been recorded.
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <h3 className="font-display text-xl text-bone flex items-center gap-2">
               <Trophy size={18} className="text-amber-400" /> Official Leaderboard
             </h3>
-            {leaderboard.length > 0 && (
-              <span className="text-xs font-mono text-bone-dim">{leaderboard.length} Ranked</span>
-            )}
+            <div className="flex items-center gap-2">
+              {leaderboard.length > 0 && (
+                <span className="text-xs font-mono text-bone-dim mr-1">{leaderboard.length} Ranked</span>
+              )}
+              {isCreatorOrAdmin && (
+                <button
+                  onClick={openRankManager}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border border-emerald-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+                >
+                  <SlidersHorizontal size={13} /> {countdownType === 'ended' ? 'Update Final Standings' : 'Update Standings'}
+                </button>
+              )}
+            </div>
           </div>
           
           <div className="space-y-2.5">
@@ -494,7 +501,7 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                       onClick={openRankManager}
                       className="btn-primary px-4 py-2 text-xs font-mono font-bold inline-flex items-center gap-1.5"
                     >
-                      <SlidersHorizontal size={13} /> Update & Publish Rankings Now
+                      <SlidersHorizontal size={13} /> Update & Publish Standings
                     </button>
                   </div>
                 )}
@@ -534,21 +541,23 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
                         <span 
                           onClick={() => handleNavigateProfile(p.userId)}
-                          className="font-bold text-bone text-sm truncate cursor-pointer hover:underline"
+                          className="font-bold text-bone text-sm break-words cursor-pointer hover:underline leading-snug"
                         >
                           {p.userName}
                         </span>
                         {p.userId === user?.uid && (
-                          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/30">You</span>
+                          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/30 shrink-0">You</span>
                         )}
                         {rankBadge && (
-                          <LeaderboardBadgeChip rank={rankBadge} />
+                          <div className="shrink-0">
+                            <LeaderboardBadgeChip rank={rankBadge} />
+                          </div>
                         )}
                       </div>
-                      <div className="text-xs font-mono text-bone-dim truncate">
+                      <div className="text-xs font-mono text-bone-dim truncate mt-0.5">
                         {p.customResult ? p.customResult : (p.progress ? `${p.progress} ${challenge.unit}` : 'Completed')}
                       </div>
                     </div>
@@ -576,83 +585,108 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
               </div>
 
               <p className="text-xs text-bone-dim font-mono">
-                Assign ranks, custom performance results (e.g. "12,450 steps", "45:20 min", "150 reps"), and podium medals.
+                Assign ranks, custom performance results (e.g. "12,450 steps", "45:20 min", "2 Rounds"), and podium medals.
               </p>
 
               <div className="flex-1 overflow-y-auto space-y-3 pr-1">
                 {allParticipants.length === 0 ? (
                   <div className="text-center py-8 text-bone-dim font-mono text-sm">No athletes enrolled yet.</div>
                 ) : (
-                  allParticipants.map((p) => {
+                  allParticipants.map((p, idx) => {
+                    const fallbackRank = (p.rank && p.rank > 0 && p.rank < 9999) ? p.rank : (idx + 1);
                     const curr = rankEdits[p.userId] || { 
-                      rank: (p.rank && p.rank > 0 && p.rank < 9999) ? p.rank : 1, 
+                      rank: fallbackRank, 
                       progress: p.progress || 0, 
-                      customResult: p.customResult || '', 
+                      customResult: p.customResult || (p.progress ? `${p.progress} ${challenge?.unit || ''}` : ''), 
                       badgeAwarded: p.badgeAwarded 
                     };
+                    const currentRankVal = curr.rank !== undefined ? curr.rank : fallbackRank;
+
                     return (
-                      <div key={p.userId} className="p-3.5 rounded-2xl bg-ink-2 border border-line/40 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-bone">{p.userName}</span>
-                            {curr.badgeAwarded && <LeaderboardBadgeChip rank={curr.badgeAwarded} />}
+                      <div key={p.userId} className="p-4 rounded-2xl bg-ink-2 border border-line/40 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1 flex-wrap">
+                            <span className="font-bold text-sm sm:text-base text-bone break-words leading-tight">{p.userName}</span>
+                            {curr.badgeAwarded && (
+                              <div className="shrink-0 scale-95 origin-left">
+                                <LeaderboardBadgeChip rank={curr.badgeAwarded} />
+                              </div>
+                            )}
                           </div>
-                          <span className="text-[10px] font-mono text-bone-dim">ID: {p.userId.slice(0, 6)}</span>
+                          <span className="text-[10px] font-mono text-bone-dim shrink-0 bg-ink-3 px-2 py-0.5 rounded border border-line/30">
+                            ID: {p.userId.slice(0, 6)}
+                          </span>
                         </div>
 
-                        <div className="grid grid-cols-3 gap-2">
-                          <div>
-                            <label className="block text-[10px] font-mono text-bone-dim uppercase">Rank #</label>
-                            <input
-                              type="number"
-                              min="1"
-                              value={curr.rank}
-                              onChange={(e) => {
-                                const v = parseInt(e.target.value) || 1;
-                                setRankEdits(prev => ({
-                                  ...prev,
-                                  [p.userId]: { ...prev[p.userId], rank: v }
-                                }));
-                              }}
-                              className="input-field w-full text-xs font-mono text-bone py-1.5"
-                            />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div className="flex gap-2">
+                            <div className="w-24 shrink-0">
+                              <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Rank #</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="999"
+                                value={currentRankVal}
+                                placeholder={`${idx + 1}`}
+                                onChange={(e) => {
+                                  const raw = e.target.value;
+                                  setRankEdits(prev => {
+                                    const existing = prev[p.userId] || curr;
+                                    return {
+                                      ...prev,
+                                      [p.userId]: {
+                                        ...existing,
+                                        rank: raw === '' ? '' : parseInt(raw, 10)
+                                      }
+                                    };
+                                  });
+                                }}
+                                className="input-field w-full text-xs font-mono text-bone py-2 font-bold"
+                              />
+                            </div>
+
+                            <div className="flex-1 min-w-[140px]">
+                              <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Medal / Badge</label>
+                              <select
+                                value={curr.badgeAwarded || ''}
+                                onChange={(e) => {
+                                  const v = e.target.value ? (parseInt(e.target.value) as 1 | 2 | 3) : undefined;
+                                  setRankEdits(prev => {
+                                    const existing = prev[p.userId] || curr;
+                                    return {
+                                      ...prev,
+                                      [p.userId]: { ...existing, badgeAwarded: v }
+                                    };
+                                  });
+                                }}
+                                className="input-field w-full text-xs font-mono text-bone py-2 cursor-pointer bg-ink-3"
+                              >
+                                <option value="">No Medal</option>
+                                <option value="1">🥇 1st Gold</option>
+                                <option value="2">🥈 2nd Silver</option>
+                                <option value="3">🥉 3rd Bronze</option>
+                              </select>
+                            </div>
                           </div>
 
                           <div>
-                            <label className="block text-[10px] font-mono text-bone-dim uppercase">Custom Result</label>
+                            <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Custom Result</label>
                             <input
                               type="text"
                               value={curr.customResult}
-                              placeholder="e.g. 45:10 min"
+                              placeholder="e.g. 2.5 rounds"
                               onChange={(e) => {
                                 const v = e.target.value;
-                                setRankEdits(prev => ({
-                                  ...prev,
-                                  [p.userId]: { ...prev[p.userId], customResult: v }
-                                }));
+                                setRankEdits(prev => {
+                                  const existing = prev[p.userId] || curr;
+                                  return {
+                                    ...prev,
+                                    [p.userId]: { ...existing, customResult: v }
+                                  };
+                                });
                               }}
-                              className="input-field w-full text-xs font-mono text-bone py-1.5"
+                              className="input-field w-full text-xs font-mono text-bone py-2"
                             />
-                          </div>
-
-                          <div>
-                            <label className="block text-[10px] font-mono text-bone-dim uppercase">Medal / Badge</label>
-                            <select
-                              value={curr.badgeAwarded || ''}
-                              onChange={(e) => {
-                                const v = e.target.value ? (parseInt(e.target.value) as 1 | 2 | 3) : undefined;
-                                setRankEdits(prev => ({
-                                  ...prev,
-                                  [p.userId]: { ...prev[p.userId], badgeAwarded: v }
-                                }));
-                              }}
-                              className="input-field w-full text-xs font-mono text-bone py-1.5 bg-ink-3"
-                            >
-                              <option value="">None</option>
-                              <option value="1">🥇 Gold</option>
-                              <option value="2">🥈 Silver</option>
-                              <option value="3">🥉 Bronze</option>
-                            </select>
                           </div>
                         </div>
                       </div>
@@ -699,8 +733,8 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                   <div className="text-center py-8 text-bone-dim font-mono text-sm">No athletes enrolled yet.</div>
                 ) : (
                   allParticipants.map((p, idx) => (
-                    <div key={p.userId || idx} className="flex items-center justify-between p-3 rounded-2xl bg-ink-2 border border-line/20">
-                      <div className="flex items-center gap-3">
+                    <div key={p.userId || idx} className="flex items-center justify-between p-3 rounded-2xl bg-ink-2 border border-line/20 gap-2 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div 
                           onClick={() => handleNavigateProfile(p.userId)}
                           className="w-10 h-10 rounded-full overflow-hidden shrink-0 bg-ink-3 border border-line/30 flex items-center justify-center cursor-pointer hover:opacity-80 transition-opacity"
@@ -716,20 +750,24 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                             <span className="font-bold text-bone text-sm">{p.userName?.charAt(0) || '?'}</span>
                           )}
                         </div>
-                        <div>
+                        <div className="min-w-0 flex-1">
                           <div 
                             onClick={() => handleNavigateProfile(p.userId)}
-                            className="font-bold text-sm text-bone flex items-center gap-1.5 cursor-pointer hover:underline"
+                            className="font-bold text-sm text-bone flex items-center gap-1.5 cursor-pointer hover:underline flex-wrap"
                           >
-                            {p.userName}
-                            {p.userId === user?.uid && <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded">You</span>}
+                            <span className="break-words leading-tight">{p.userName}</span>
+                            {p.userId === user?.uid && <span className="text-[9px] font-mono text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded shrink-0">You</span>}
                           </div>
-                          <div className="text-xs font-mono text-bone-dim">
+                          <div className="text-xs font-mono text-bone-dim truncate">
                             {p.isRanked ? `Rank #${p.rank} • ${p.customResult || ''}` : 'Enrolled Member'}
                           </div>
                         </div>
                       </div>
-                      {p.badgeAwarded && <LeaderboardBadgeChip rank={p.badgeAwarded} />}
+                      {p.badgeAwarded && (
+                        <div className="shrink-0">
+                          <LeaderboardBadgeChip rank={p.badgeAwarded} />
+                        </div>
+                      )}
                     </div>
                   ))
                 )}

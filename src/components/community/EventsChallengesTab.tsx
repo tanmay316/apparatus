@@ -36,13 +36,13 @@ function getCountdownLabel(startMs: number, endMs: number) {
   }
   return {
     type: 'ended' as const,
-    text: 'Ended',
-    color: 'text-bone-dim bg-ink-3 border-line/20'
+    text: 'Concluded',
+    color: 'text-amber-950 dark:text-amber-100 bg-amber-500/25 border-2 border-amber-500/60 font-black shadow-sm'
   };
 }
 
 export function EventsChallengesTab() {
-  const [filter, setFilter] = useState<'all' | 'active' | 'upcoming'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'upcoming' | 'concluded'>('all');
   const [selectedChallengeId, setSelectedChallengeId] = useState<string | null>(null);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [editingChallenge, setEditingChallenge] = useState<ChallengeV2 | null>(null);
@@ -100,40 +100,44 @@ export function EventsChallengesTab() {
   });
 
   const filteredChallenges = challenges.filter(c => {
-    if (filter === 'all') return true;
     const now = Date.now();
     const startMs = c.startDate?.toMillis ? c.startDate.toMillis() : 0;
     const endMs = c.endDate?.toMillis ? c.endDate.toMillis() : 0;
     if (filter === 'upcoming') return now < startMs;
     if (filter === 'active') return now >= startMs && (endMs ? now <= endMs : true);
+    if (filter === 'concluded') return endMs ? now > endMs : false;
     return true;
   });
 
   const filteredEvents = events.filter(e => {
-    if (filter === 'all') return true;
     const now = Date.now();
     const startMs = e.startTime?.toMillis ? e.startTime.toMillis() : 0;
     const endMs = e.endTime?.toMillis ? e.endTime.toMillis() : 0;
     if (filter === 'upcoming') return now < startMs;
     if (filter === 'active') return now >= startMs && (endMs ? now <= endMs : true);
+    if (filter === 'concluded') return endMs ? now > endMs : false;
     return true;
   });
 
-  const featured = challenges[0];
+  // Featured challenge must never be a concluded challenge, and hidden in concluded tab
+  const featured = filter === 'concluded' ? null : challenges.find(c => {
+    const endMs = c.endDate?.toMillis ? c.endDate.toMillis() : 0;
+    return !endMs || Date.now() <= endMs;
+  });
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Filters */}
       <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {['all', 'active', 'upcoming'].map(f => (
+        {(['all', 'active', 'upcoming', 'concluded'] as const).map(f => (
           <button
             key={f}
-            onClick={() => setFilter(f as any)}
+            onClick={() => setFilter(f)}
             className={`px-4 py-2 rounded-full text-sm font-mono capitalize transition-colors whitespace-nowrap ${
               filter === f ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3'
             }`}
           >
-            {f}
+            {f === 'all' ? 'All' : f}
           </button>
         ))}
       </div>
@@ -248,7 +252,7 @@ export function EventsChallengesTab() {
                         <Target size={24} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
+                        <div className="flex items-center gap-2 mb-0.5 min-w-0">
                           <h4 className="font-display text-lg text-bone truncate">{c.title}</h4>
                           {c.visibility === 'clan_only' && (
                             <span className="inline-flex items-center gap-0.5 text-[9px] font-mono uppercase bg-sienna/20 text-sienna px-1.5 py-0.5 rounded border border-sienna/30 shrink-0">
@@ -289,9 +293,26 @@ export function EventsChallengesTab() {
                       )}
                     </div>
 
+                    {c.topWinner && (
+                      <div className="mt-1 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2 shadow-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
+                            🥇
+                          </div>
+                          <div className="min-w-0 truncate">
+                            <span className="text-[10px] font-mono uppercase text-amber-700 font-black mr-1">Champion:</span>
+                            <span className="text-xs font-bold text-foreground truncate">{c.topWinner.userName}</span>
+                          </div>
+                        </div>
+                        {c.topWinner.customResult && (
+                          <span className="text-[10px] font-mono text-foreground font-bold shrink-0">{c.topWinner.customResult}</span>
+                        )}
+                      </div>
+                    )}
+
                     {c.prize && (
-                      <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-[11px] font-mono text-amber-300">
-                        <Trophy size={12} className="text-amber-400" />
+                      <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-xs font-mono font-bold text-foreground">
+                        <Trophy size={12} className="text-amber-500 shrink-0" />
                         <span className="truncate">{c.prize}</span>
                       </div>
                     )}
@@ -335,7 +356,7 @@ export function EventsChallengesTab() {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
+                        <div className="flex items-center gap-2 mb-0.5 min-w-0">
                           <h4 className="font-display text-lg text-bone truncate">{e.title}</h4>
                           {e.visibility === 'clan_only' && (
                             <span className="inline-flex items-center gap-0.5 text-[9px] font-mono uppercase bg-sienna/20 text-sienna px-1.5 py-0.5 rounded border border-sienna/30 shrink-0">
@@ -375,9 +396,26 @@ export function EventsChallengesTab() {
                       )}
                     </div>
 
+                    {e.topWinner && (
+                      <div className="mt-1 p-2 rounded-xl bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-950/25 border border-amber-400/40 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
+                            🥇
+                          </div>
+                          <div className="min-w-0 truncate">
+                            <span className="text-[10px] font-mono uppercase text-amber-400 font-bold mr-1">1st Place:</span>
+                            <span className="text-xs font-bold text-bone truncate">{e.topWinner.userName}</span>
+                          </div>
+                        </div>
+                        {e.topWinner.customResult && (
+                          <span className="text-[10px] font-mono text-amber-300 font-bold shrink-0">{e.topWinner.customResult}</span>
+                        )}
+                      </div>
+                    )}
+
                     {e.prize && (
                       <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-[11px] font-mono text-amber-300">
-                        <Trophy size={12} className="text-amber-400" />
+                        <Trophy size={12} className="text-amber-400 shrink-0" />
                         <span className="truncate">{e.prize}</span>
                       </div>
                     )}

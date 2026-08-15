@@ -12,11 +12,6 @@ import { useCompassHeading } from '@/hooks/useCompassHeading';
 import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { requestNotificationPermission } from '@/utils/notifications';
-import { 
-  requestForegroundPermissions, startWorkoutForegroundService, 
-  updateWorkoutForegroundService, stopWorkoutForegroundService, 
-  setupForegroundServiceListeners 
-} from '@/utils/foreground-service';
 import { useUIStore } from '@/stores/ui-store';
 import { useCardioStore, startGpsWatch, stopGpsWatch, finishTracking } from '@/stores/cardio-store';
 import { usePedometerStore } from '@/stores/pedometer-store';
@@ -291,15 +286,6 @@ export function CardioTracker() {
         const raw = Date.now() - store.startedAt! - totalPause;
         const currentSec = Math.max(0, Math.floor(raw / 1000));
         setElapsedSec(currentSec);
-
-        // Update Foreground Service with live Strava-style stats every 3s
-        if (currentSec % 3 === 0) {
-          const st = useCardioStore.getState();
-          if (st.activityType) {
-            const { title, body, isPaused } = getCardioNotificationContent(st, currentSec);
-            updateWorkoutForegroundService('cardio', title, body, isPaused);
-          }
-        }
       }
     }, 1000);
     return () => clearInterval(interval);
@@ -318,7 +304,6 @@ export function CardioTracker() {
     const route = finalStore.routePoints;
     const elevation = finalStore.elevationGainM;
     const maxSpeed = finalStore.maxSpeedKmh;
-    stopWorkoutForegroundService('cardio');
 
     if (user) {
       endActiveSession(user.uid).catch(console.error);
@@ -373,33 +358,9 @@ export function CardioTracker() {
     }
 
     await requestNotificationPermission();
-    await requestForegroundPermissions();
     if (Capacitor.isNativePlatform()) {
       NativeWorkoutLocation.requestBatteryOptimizationExemption().catch(() => {});
     }
-    
-    const initialContent = getCardioNotificationContent(store, 0);
-    startWorkoutForegroundService('cardio', initialContent.title, initialContent.body, false);
-    
-    setupForegroundServiceListeners(
-      () => {
-        const st = useCardioStore.getState();
-        if (st.isPaused) {
-          st.resumeTracking();
-        } else {
-          st.pauseTracking();
-        }
-        const next = useCardioStore.getState();
-        const elapsed = next.startedAt
-          ? Math.max(0, Math.floor((Date.now() - next.startedAt - next.totalPausedMs) / 1000))
-          : 0;
-        const { title, body, isPaused } = getCardioNotificationContent(next, elapsed);
-        updateWorkoutForegroundService('cardio', title, body, isPaused);
-      },
-      () => {
-        handleStopRef.current?.();
-      }
-    );
     
     store.startTracking(type);
     setScreen('tracking');
@@ -431,10 +392,6 @@ export function CardioTracker() {
     if (processingRef.current) return;
     processingRef.current = true;
     store.pauseTracking();
-    const st = useCardioStore.getState();
-    const elapsed = st.startedAt ? Math.max(0, Math.floor((Date.now() - st.startedAt - st.totalPausedMs) / 1000)) : elapsedSec;
-    const { title, body } = getCardioNotificationContent(st, elapsed);
-    updateWorkoutForegroundService('cardio', title, body, true);
     processingRef.current = false;
   };
 
@@ -442,10 +399,6 @@ export function CardioTracker() {
     if (processingRef.current) return;
     processingRef.current = true;
     store.resumeTracking();
-    const st = useCardioStore.getState();
-    const elapsed = st.startedAt ? Math.max(0, Math.floor((Date.now() - st.startedAt - st.totalPausedMs) / 1000)) : elapsedSec;
-    const { title, body } = getCardioNotificationContent(st, elapsed);
-    updateWorkoutForegroundService('cardio', title, body, false);
     processingRef.current = false;
   };
 
@@ -458,7 +411,6 @@ export function CardioTracker() {
     }
 
     const finalStore = await finishTracking();
-    stopWorkoutForegroundService('cardio');
 
     if (user) {
       endActiveSession(user.uid).catch(console.error);
@@ -603,7 +555,6 @@ export function CardioTracker() {
       processingRef.current = true;
       try {
       if (user) endActiveSession(user.uid).catch(console.error);
-      stopWorkoutForegroundService('cardio');
       await stopGpsWatch();
       if (store.activityType === 'walk' || store.activityType === 'run') {
         await pedometerStore.stopSession();
@@ -981,16 +932,40 @@ export function CardioTracker() {
 
         {/* Floating Actions */}
         <div className="absolute right-4 bottom-[230px] z-10 pointer-events-auto flex flex-col gap-3 transition-all" style={{ transform: isExpanded ? 'translateY(-290px)' : 'translateY(0)' }}>
+          {/* True North-Pointing Compass Rose Widget */}
           <button
             onClick={toggleMapRotation}
-            className={`w-12 h-12 flex items-center justify-center rounded-full bg-[var(--card)]/90 backdrop-blur-md shadow-lg border border-[var(--border)] active:scale-95 transition-transform ${mapRotationMode ? 'text-emerald-500' : 'text-[var(--text)]'}`}
-            title="Toggle Map Rotation"
+            className={`relative w-14 h-14 rounded-full bg-[#1a100d]/95 backdrop-blur-xl shadow-2xl border-2 active:scale-95 transition-all flex items-center justify-center group ${
+              mapRotationMode ? 'border-sienna shadow-[0_0_15px_rgba(235,89,60,0.4)]' : 'border-[#42241b]'
+            }`}
+            title={mapRotationMode ? "Map rotated (Track-Up). Tap for North-Up" : "North-Up. Tap to rotate map with heading"}
           >
-            <Compass size={22} className={mapRotationMode ? 'animate-pulse' : ''} />
+            {/* Cardinal Direction Letters */}
+            <span className="absolute top-1 text-[9px] font-black text-red-500 tracking-tighter leading-none">N</span>
+            <span className="absolute right-1 text-[8px] font-bold text-white/50 tracking-tighter leading-none">E</span>
+            <span className="absolute bottom-1 text-[8px] font-bold text-white/50 tracking-tighter leading-none">S</span>
+            <span className="absolute left-1 text-[8px] font-bold text-white/50 tracking-tighter leading-none">W</span>
+
+            {/* Rotating Dual-Color Compass Needle pointing to North */}
+            <div 
+              className="w-full h-full absolute inset-0 flex items-center justify-center pointer-events-none transition-transform duration-100 ease-out"
+              style={{ transform: `rotate(${heading != null ? -heading : 0}deg)` }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" className="filter drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                {/* North Needle (Red/Orange) */}
+                <polygon points="12,3 15.5,12 12,10.5 8.5,12" fill="#ef4444" />
+                {/* South Needle (White/Slate) */}
+                <polygon points="12,21 15.5,12 12,13.5 8.5,12" fill="#e2e8f0" />
+                {/* Center Pivot Pin */}
+                <circle cx="12" cy="12" r="2" fill="#0f172a" stroke="#ef4444" strokeWidth="1" />
+              </svg>
+            </div>
           </button>
+
           <button
             onClick={() => setRecenterTrigger(t => t + 1)}
-            className="w-12 h-12 flex items-center justify-center rounded-full bg-[var(--card)]/90 backdrop-blur-md text-sienna shadow-lg border border-[var(--border)] active:scale-95 transition-transform"
+            className="w-14 h-14 flex items-center justify-center rounded-full bg-[#1a100d]/95 backdrop-blur-xl text-sienna shadow-2xl border-2 border-[#42241b] active:scale-95 transition-transform"
+            title="Recenter Map"
           >
             <LocateFixed size={22} />
           </button>
@@ -1078,13 +1053,13 @@ export function CardioTracker() {
               )}
             </AnimatePresence>
 
-            {/* Core Stats Hero Row */}
+            {/* Core Stats Hero Row (Clean Text Without Icons) */}
             <div className="px-6 pt-1 pb-3 shrink-0" onClick={() => !isExpanded && setIsExpanded(true)}>
               <div className="grid grid-cols-3 gap-3 items-center">
                 {/* Timer */}
                 <div className="flex flex-col">
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
-                    <Clock size={11} className="text-sienna" /> Time
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)]">
+                    Time
                   </div>
                   <div className={`font-mono text-3xl sm:text-4xl font-extrabold tracking-tight mt-0.5 ${store.autoPauseStatus === 'PAUSED' || store.isPaused ? 'text-amber-500/70' : 'text-[var(--text)]'}`}>
                     {formatDuration(elapsedSec)}
@@ -1093,8 +1068,8 @@ export function CardioTracker() {
 
                 {/* Distance */}
                 <div className="flex flex-col items-center">
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
-                    <MapPin size={11} className="text-emerald-500" /> Distance
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)]">
+                    Distance
                   </div>
                   <div className="flex items-baseline gap-1 mt-0.5">
                     <span className="font-mono text-3xl sm:text-4xl font-extrabold tracking-tight text-[var(--text)]">
@@ -1106,8 +1081,8 @@ export function CardioTracker() {
 
                 {/* Pace / Speed */}
                 <div className="flex flex-col items-end">
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] flex items-center gap-1">
-                    <Zap size={11} className="text-amber-500" /> {activityType === 'cycle' ? 'Speed' : 'Pace'}
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)]">
+                    {activityType === 'cycle' ? 'Speed' : 'Pace'}
                   </div>
                   <div className="font-mono text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text)] mt-0.5">
                     {activityType === 'cycle' ? `${store.currentSpeedKmh.toFixed(1)}` : currentPace}
@@ -1148,14 +1123,14 @@ export function CardioTracker() {
               </div>
             )}
 
-            {/* Expanded Metrics Dashboard & Pro Controls */}
+            {/* Expanded Metrics Dashboard (Clean Text Without Icons) */}
             {isExpanded && (
               <div className="px-6 flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pt-2 pb-6">
                 <div className="grid grid-cols-3 gap-2.5 mb-5">
                   {/* Current Speed */}
                   <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
-                      <Zap size={11} className="text-cyan-500" /> Speed
+                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
+                      Speed
                     </div>
                     <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
                       {store.currentSpeedKmh.toFixed(1)} <span className="text-[10px] text-[var(--muted)]">km/h</span>
@@ -1164,8 +1139,8 @@ export function CardioTracker() {
 
                   {/* Avg Speed */}
                   <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
-                      <TrendingUp size={11} className="text-emerald-500" /> Avg Spd
+                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
+                      Avg Spd
                     </div>
                     <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
                       {avgSpeed} <span className="text-[10px] text-[var(--muted)]">km/h</span>
@@ -1174,8 +1149,8 @@ export function CardioTracker() {
 
                   {/* Max Speed */}
                   <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
-                      <Flame size={11} className="text-rose-500" /> Max Spd
+                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
+                      Max Spd
                     </div>
                     <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
                       {store.maxSpeedKmh.toFixed(1)} <span className="text-[10px] text-[var(--muted)]">km/h</span>
@@ -1184,8 +1159,8 @@ export function CardioTracker() {
 
                   {/* Calories */}
                   <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
-                      <Flame size={11} className="text-orange-500" /> Calories
+                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
+                      Calories
                     </div>
                     <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
                       {calories} <span className="text-[10px] text-[var(--muted)]">kcal</span>
@@ -1194,8 +1169,8 @@ export function CardioTracker() {
 
                   {/* Elevation Gain */}
                   <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
-                      <Mountain size={11} className="text-amber-500" /> Elevation
+                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
+                      Elevation
                     </div>
                     <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
                       {Math.round(store.elevationGainM)} <span className="text-[10px] text-[var(--muted)]">m</span>
@@ -1205,8 +1180,8 @@ export function CardioTracker() {
                   {/* Live Steps or Route Pts */}
                   {(activityType === 'walk' || activityType === 'run') ? (
                     <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                      <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
-                        <Footprints size={11} className="text-teal-500" /> Steps
+                      <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
+                        Steps
                       </div>
                       <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
                         {getLiveSteps(store.activityType, store.distanceKm, pedometerStore)?.toLocaleString() || 0}
@@ -1214,8 +1189,8 @@ export function CardioTracker() {
                     </div>
                   ) : (
                     <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                      <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)] flex items-center gap-1">
-                        <MapPin size={11} className="text-purple-500" /> Points
+                      <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
+                        Points
                       </div>
                       <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
                         {store.routePoints.length}
