@@ -37,7 +37,7 @@ function getCountdownLabel(startMs: number, endMs: number) {
   return {
     type: 'ended' as const,
     text: 'Concluded',
-    color: 'text-amber-950 dark:text-amber-100 bg-amber-500/25 border-2 border-amber-500/60 font-black shadow-sm'
+    color: 'badge-prize px-2.5 py-0.5 rounded-full font-black shadow-sm'
   };
 }
 
@@ -206,8 +206,8 @@ export function EventsChallengesTab() {
               </span>
 
               {featured.prize && (
-                <span className="text-amber-300 font-bold flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-400/30">
-                  <Trophy size={12} /> {featured.prize}
+                <span className="badge-prize font-bold flex items-center gap-1.5 px-3 py-1 rounded-full">
+                  <Trophy size={13} className="shrink-0" /> {featured.prize}
                 </span>
               )}
             </div>
@@ -294,13 +294,13 @@ export function EventsChallengesTab() {
                     </div>
 
                     {c.topWinner && (
-                      <div className="mt-1 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2 shadow-sm">
+                      <div className="mt-1 p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700/50 flex items-center justify-between gap-2 shadow-sm">
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
                             🥇
                           </div>
                           <div className="min-w-0 truncate">
-                            <span className="text-[10px] font-mono uppercase text-amber-700 font-black mr-1">Champion:</span>
+                            <span className="text-[10px] font-mono uppercase text-amber-900 dark:text-amber-400 font-black mr-1">Champion:</span>
                             <span className="text-xs font-bold text-foreground truncate">{c.topWinner.userName}</span>
                           </div>
                         </div>
@@ -311,8 +311,8 @@ export function EventsChallengesTab() {
                     )}
 
                     {c.prize && (
-                      <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-xs font-mono font-bold text-foreground">
-                        <Trophy size={12} className="text-amber-500 shrink-0" />
+                      <div className="badge-prize inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold truncate">
+                        <Trophy size={11} className="shrink-0" />
                         <span className="truncate">{c.prize}</span>
                       </div>
                     )}
@@ -397,25 +397,25 @@ export function EventsChallengesTab() {
                     </div>
 
                     {e.topWinner && (
-                      <div className="mt-1 p-2 rounded-xl bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-amber-950/25 border border-amber-400/40 flex items-center justify-between gap-2">
+                      <div className="mt-1 p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700/50 flex items-center justify-between gap-2 shadow-sm">
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
                             🥇
                           </div>
                           <div className="min-w-0 truncate">
-                            <span className="text-[10px] font-mono uppercase text-amber-400 font-bold mr-1">1st Place:</span>
-                            <span className="text-xs font-bold text-bone truncate">{e.topWinner.userName}</span>
+                            <span className="text-[10px] font-mono uppercase text-amber-900 dark:text-amber-400 font-black mr-1">1st Place:</span>
+                            <span className="text-xs font-bold text-foreground truncate">{e.topWinner.userName}</span>
                           </div>
                         </div>
                         {e.topWinner.customResult && (
-                          <span className="text-[10px] font-mono text-amber-300 font-bold shrink-0">{e.topWinner.customResult}</span>
+                          <span className="text-[10px] font-mono text-amber-800 dark:text-amber-300 font-bold shrink-0">{e.topWinner.customResult}</span>
                         )}
                       </div>
                     )}
 
                     {e.prize && (
-                      <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-[11px] font-mono text-amber-300">
-                        <Trophy size={12} className="text-amber-400 shrink-0" />
+                      <div className="badge-prize inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold truncate">
+                        <Trophy size={11} className="shrink-0" />
                         <span className="truncate">{e.prize}</span>
                       </div>
                     )}

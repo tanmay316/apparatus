@@ -480,7 +480,7 @@ export function ClanPage() {
                       cdClass = 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30';
                     } else if (e && now > e) {
                       cdText = 'Concluded';
-                      cdClass = 'bg-amber-500/25 text-amber-950 dark:text-amber-100 border-2 border-amber-500/60 font-black shadow-sm';
+                      cdClass = 'badge-prize border font-black shadow-sm';
                     }
 
                     return (
@@ -507,13 +507,13 @@ export function ClanPage() {
                           <p className="text-sm text-bone-dim mb-3 line-clamp-2">{c.description}</p>
                           
                           {c.topWinner && (
-                            <div className="mt-1 p-2.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30 flex items-center justify-between gap-2 shadow-sm">
+                            <div className="mt-1 p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700/50 flex items-center justify-between gap-2 shadow-sm">
                               <div className="flex items-center gap-2 min-w-0">
                                 <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
                                   🥇
                                 </div>
                                 <div className="min-w-0 truncate">
-                                  <span className="text-[10px] font-mono uppercase text-amber-700 dark:text-amber-500 font-black mr-1">Champion:</span>
+                                  <span className="text-[10px] font-mono uppercase text-amber-900 dark:text-amber-400 font-black mr-1">Champion:</span>
                                   <span className="text-xs font-bold text-foreground truncate">{c.topWinner.userName}</span>
                                 </div>
                               </div>
@@ -524,8 +524,8 @@ export function ClanPage() {
                           )}
 
                           {c.prize && (
-                            <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-xs font-mono font-bold text-foreground">
-                              <Trophy size={12} className="text-amber-500 shrink-0" />
+                            <div className="badge-prize inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold truncate">
+                              <Trophy size={11} className="shrink-0" />
                               <span className="truncate">{c.prize}</span>
                             </div>
                           )}
@@ -584,7 +584,7 @@ export function ClanPage() {
                       cdClass = 'bg-blue-500/10 text-blue-400 border-blue-500/30';
                     } else if (end && now > end) {
                       cdText = 'Concluded';
-                      cdClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-sm';
+                      cdClass = 'badge-prize border shadow-sm';
                     }
 
                     return (
@@ -610,13 +610,13 @@ export function ClanPage() {
                           <p className="text-sm text-bone-dim mb-3 line-clamp-2">{e.description}</p>
 
                           {e.topWinner && (
-                            <div className="mt-1 p-2.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30 flex items-center justify-between gap-2 shadow-sm">
+                            <div className="mt-1 p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700/50 flex items-center justify-between gap-2 shadow-sm">
                               <div className="flex items-center gap-2 min-w-0">
                                 <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
                                   🥇
                                 </div>
                                 <div className="min-w-0 truncate">
-                                  <span className="text-[10px] font-mono uppercase text-amber-700 dark:text-amber-500 font-black mr-1">1st Place:</span>
+                                  <span className="text-[10px] font-mono uppercase text-amber-900 dark:text-amber-400 font-black mr-1">1st Place:</span>
                                   <span className="text-xs font-bold text-foreground truncate">{e.topWinner.userName}</span>
                                 </div>
                               </div>
@@ -627,8 +627,8 @@ export function ClanPage() {
                           )}
                           
                           {e.prize && (
-                            <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-xs font-mono font-bold text-foreground">
-                              <Trophy size={12} className="text-amber-500 shrink-0" />
+                            <div className="badge-prize inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold truncate">
+                              <Trophy size={11} className="shrink-0" />
                               <span className="truncate">{e.prize}</span>
                             </div>
                           )}

@@ -36,7 +36,7 @@ function getCountdownLabel(startMs: number, endMs: number) {
   return {
     type: 'ended' as const,
     text: 'Concluded',
-    color: 'text-amber-950 dark:text-amber-100 bg-amber-500/25 border-2 border-amber-500/60 font-black shadow-sm'
+    color: 'badge-prize px-2.5 py-0.5 rounded-full font-black shadow-sm'
   };
 }
 
@@ -266,13 +266,13 @@ export function ChallengesTab() {
 
                   <div className="space-y-2 pt-2 border-t border-line/20">
                     {c.topWinner && (
-                      <div className="mt-1 p-2.5 rounded-xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30 flex items-center justify-between gap-2 shadow-sm">
+                      <div className="mt-1 p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700/50 flex items-center justify-between gap-2 shadow-sm">
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
                             🥇
                           </div>
                           <div className="min-w-0 truncate">
-                            <span className="text-[10px] font-mono uppercase text-amber-700 dark:text-amber-500 font-black mr-1">Champion:</span>
+                            <span className="text-[10px] font-mono uppercase text-amber-900 dark:text-amber-400 font-black mr-1">Champion:</span>
                             <span className="text-xs font-bold text-foreground truncate">{c.topWinner.userName}</span>
                           </div>
                         </div>
@@ -283,14 +283,14 @@ export function ChallengesTab() {
                     )}
 
                     {c.prize && (
-                      <div className="pt-2 border-t border-line/20 flex items-center gap-1.5 text-xs font-mono font-bold text-foreground">
-                        <Trophy size={12} className="text-amber-500 shrink-0" />
+                      <div className="badge-prize inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold truncate">
+                        <Trophy size={11} className="shrink-0" />
                         <span className="truncate">{c.prize}</span>
                       </div>
                     )}
                     
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-bone-dim">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${cd.color}`}>
+                      <span className={`text-[10px] ${cd.color}`}>
                         {cd.text}
                       </span>
                       <span className="flex items-center gap-1">
