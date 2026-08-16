@@ -66,15 +66,19 @@ public final class WorkoutLocationService extends Service implements LocationLis
 
     // Quality constants
     private static final float MAX_ACCEPTED_ACCURACY_M = 40.0f;
-    private static final float STRICT_MATH_ACCURACY_M = 20.0f;
-    private static final float MIN_MOVEMENT_SPEED_MS = 0.6f; // ~2.16 km/h
-    private static final float MIN_DISTANCE_DELTA_M = 2.0f;
+    private static final float STRICT_MATH_ACCURACY_M = 25.0f;
+    private static final float MIN_MOVEMENT_SPEED_KMH = 1.0f; // ~0.28 m/s
+    private static final float MIN_DISTANCE_DELTA_M = 4.5f; // 4.5m minimum displacement to filter stationary GPS drift
 
     // GPS settling phase — suppress distance for first few seconds to prevent jitter drift
-    private static final long GPS_SETTLING_DURATION_MS = 5000L;
-    private static final float SETTLING_MIN_DISTANCE_M = 8.0f;
-    private static final float SETTLING_MAX_SPEED_KMH = 3.0f;
+    private static final long GPS_SETTLING_DURATION_MS = 4000L;
+    private static final float SETTLING_MIN_DISTANCE_M = 7.0f;
+    private static final float SETTLING_MAX_SPEED_KMH = 3.5f;
     private long sessionSettleUntil = 0L;
+
+    // Spike detection — rolling speed history instead of artificial caps
+    private static final int SPEED_HISTORY_SIZE = 7;
+    private final List<Float> speedHistory = new ArrayList<>();
 
     private LocationManager locationManager;
     private WorkoutLocationDatabase database;
@@ -124,10 +128,14 @@ public final class WorkoutLocationService extends Service implements LocationLis
         String safeType = "run".equals(activityType) || "cycle".equals(activityType) ? activityType : "walk";
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
 
-        if (reset || prefs.getLong(KEY_STARTED_AT, 0L) == 0L) {
+        boolean hasActiveSession = prefs.getLong(KEY_STARTED_AT, 0L) > 0L 
+                && ("TRACKING".equals(prefs.getString(KEY_STATE, "IDLE")) || "PAUSED".equals(prefs.getString(KEY_STATE, "IDLE")));
+
+        if (reset || (!hasActiveSession && prefs.getLong(KEY_STARTED_AT, 0L) == 0L)) {
             database.beginNewSession();
             altBuffer.clear();
             lastElevationAnchor = null;
+            speedHistory.clear();
             sessionSettleUntil = System.currentTimeMillis() + GPS_SETTLING_DURATION_MS;
 
             prefs.edit()
@@ -248,14 +256,45 @@ public final class WorkoutLocationService extends Service implements LocationLis
         } catch (Exception ignored) {}
     }
 
-    private void processLocationMetrics(Location location, SharedPreferences prefs) {
-        String activityType = prefs.getString(KEY_ACTIVITY_TYPE, "walk");
-        float maxSpeedLimitKmh = getMaxSpeedLimit(activityType);
+    /**
+     * Spike detection: checks if a candidate speed is consistent with the recent
+     * speed history. A speed is a "spike" if it jumps far above the recent trend
+     * and then would presumably drop back down — like GPS glitch patterns
+     * (e.g. 5→50→4 km/h). Genuine acceleration (5→8→12→18→25) passes through
+     * because each step is close to the previous trend.
+     */
+    private boolean isSpeedSpike(float candidateSpeedKmh) {
+        if (speedHistory.size() < 3) return false; // Not enough data to judge
 
+        // Get median of recent speeds
+        List<Float> sorted = new ArrayList<>(speedHistory);
+        Collections.sort(sorted);
+        float median = sorted.get(sorted.size() / 2);
+        float recentMax = sorted.get(sorted.size() - 1);
+
+        // Allow generous acceleration envelope from current trend
+        // If median is low (< 5 km/h), allow up to median + 25 km/h (covers starting to bike/drive)
+        // If median is higher, allow up to 3x median or median + 40, whichever is larger
+        float allowedCeiling;
+        if (median < 2.0f) {
+            // Nearly stationary — allow up to 30 km/h to start moving
+            allowedCeiling = 30.0f;
+        } else {
+            allowedCeiling = Math.max(median * 3.0f, Math.max(recentMax * 2.0f, median + 40.0f));
+        }
+
+        return candidateSpeedKmh > allowedCeiling;
+    }
+
+    private void acceptSpeed(float speedKmh) {
+        speedHistory.add(speedKmh);
+        if (speedHistory.size() > SPEED_HISTORY_SIZE) speedHistory.remove(0);
+    }
+
+    private void processLocationMetrics(Location location, SharedPreferences prefs) {
         float accuracy = location.hasAccuracy() ? location.getAccuracy() : 999f;
         boolean hasStrictAccuracy = accuracy <= STRICT_MATH_ACCURACY_M;
 
-        float lastSpeedKmh = prefs.getFloat(KEY_CURRENT_SPEED_KMH, 0f);
         float maxSpeedKmh = prefs.getFloat(KEY_MAX_SPEED_KMH, 0f);
         float distanceMeters = prefs.getFloat(KEY_DISTANCE_METERS, 0f);
         long movingDurationSec = prefs.getLong(KEY_MOVING_DURATION_SEC, 0L);
@@ -264,7 +303,6 @@ public final class WorkoutLocationService extends Service implements LocationLis
 
         float currentSpeedKmh = 0f;
         float addedDistanceM = 0f;
-        float addedElevationM = 0f;
         boolean isMoving = false;
 
         // Speed calculation: Validate native speed vs derived speed
@@ -272,11 +310,11 @@ public final class WorkoutLocationService extends Service implements LocationLis
         if (location.hasSpeed()) {
             float speedMs = location.getSpeed();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasSpeedAccuracy()) {
-                hasGoodNativeSpeed = location.getSpeedAccuracyMetersPerSecond() <= 2.0f;
+                hasGoodNativeSpeed = location.getSpeedAccuracyMetersPerSecond() <= 3.0f;
             } else {
                 hasGoodNativeSpeed = speedMs >= 0f && hasStrictAccuracy;
             }
-            if (hasGoodNativeSpeed) {
+            if (hasGoodNativeSpeed && speedMs > 0f) {
                 currentSpeedKmh = speedMs * 3.6f;
             }
         }
@@ -292,20 +330,39 @@ public final class WorkoutLocationService extends Service implements LocationLis
             float deltaSec = Math.max(0.1f, (location.getTime() - lastTimestamp) / 1000f);
             float derivedSpeedKmh = (deltaM / deltaSec) * 3.6f;
 
-            // Teleportation / jump rejection gate
-            if (derivedSpeedKmh <= maxSpeedLimitKmh * 1.25f) {
-                if (!hasGoodNativeSpeed) {
-                    currentSpeedKmh = (derivedSpeedKmh < 0.6f && deltaM < 1.5f) ? 0f : derivedSpeedKmh;
-                }
+            // Use derived speed as fallback if no good native speed
+            if (!hasGoodNativeSpeed) {
+                currentSpeedKmh = (derivedSpeedKmh < 0.8f && deltaM < 2.5f) ? 0f : derivedSpeedKmh;
+            }
 
-                // Distance acceptance gate with settling logic
-                boolean isSettling = sessionSettleUntil > 0L && location.getTime() < sessionSettleUntil;
-                float requiredDistance = isSettling ? SETTLING_MIN_DISTANCE_M : MIN_DISTANCE_DELTA_M;
-                boolean settlingSpeedOk = !isSettling || derivedSpeedKmh <= SETTLING_MAX_SPEED_KMH;
-                if (hasStrictAccuracy && deltaM >= requiredDistance && settlingSpeedOk) {
-                    addedDistanceM = deltaM;
-                    distanceMeters += addedDistanceM;
-                }
+            // Spike detection: reject if speed is wildly inconsistent with recent trend
+            boolean isSpiked = isSpeedSpike(currentSpeedKmh);
+            if (isSpiked) {
+                // This is a glitch point — don't accumulate distance or update position anchor
+                // Still update timestamp so next delta calculation is correct
+                prefs.edit()
+                    .putFloat(KEY_LAST_ACCURACY, accuracy)
+                    .putLong(KEY_LAST_TIMESTAMP, location.getTime())
+                    .putFloat(KEY_CURRENT_SPEED_KMH, 0f)
+                    .apply();
+                return;
+            }
+
+            // Stationary jitter filter
+            boolean isStationary = (currentSpeedKmh < MIN_MOVEMENT_SPEED_KMH && deltaM < MIN_DISTANCE_DELTA_M);
+            if (isStationary) {
+                currentSpeedKmh = 0f;
+            }
+
+            // Distance acceptance gate with settling logic
+            boolean isSettling = sessionSettleUntil > 0L && location.getTime() < sessionSettleUntil;
+            float requiredDistance = isSettling ? SETTLING_MIN_DISTANCE_M : Math.max(MIN_DISTANCE_DELTA_M, accuracy * 0.25f);
+            boolean settlingSpeedOk = !isSettling || derivedSpeedKmh <= SETTLING_MAX_SPEED_KMH;
+            boolean movementConfirmed = !isStationary && (currentSpeedKmh >= MIN_MOVEMENT_SPEED_KMH || deltaM >= requiredDistance);
+
+            if (hasStrictAccuracy && deltaM >= requiredDistance && settlingSpeedOk && movementConfirmed) {
+                addedDistanceM = deltaM;
+                distanceMeters += addedDistanceM;
             }
 
             // Elevation filtering & gain calculation
@@ -314,8 +371,7 @@ public final class WorkoutLocationService extends Service implements LocationLis
                 if (lastElevationAnchor != null) {
                     double altDiff = smoothedAlt - lastElevationAnchor;
                     if (altDiff >= 1.5 && altDiff < 80.0) {
-                        addedElevationM = (float) altDiff;
-                        elevationGainM += addedElevationM;
+                        elevationGainM += (float) altDiff;
                         lastElevationAnchor = smoothedAlt;
                     } else if (altDiff <= -1.5 && altDiff > -80.0) {
                         lastElevationAnchor = smoothedAlt;
@@ -330,16 +386,21 @@ public final class WorkoutLocationService extends Service implements LocationLis
             }
         }
 
-        // Movement State Machine
-        isMoving = currentSpeedKmh >= (MIN_MOVEMENT_SPEED_MS * 3.6f) || addedDistanceM > 0f;
+        // Accept this speed into the rolling history
+        acceptSpeed(currentSpeedKmh);
+
+        // Movement State Machine — Never auto-stop when moving at speed!
+        isMoving = currentSpeedKmh >= MIN_MOVEMENT_SPEED_KMH || addedDistanceM > 0f;
         if (isMoving && lastTimestamp > 0L) {
             long dtSec = Math.max(1L, (location.getTime() - lastTimestamp) / 1000L);
-            movingDurationSec += dtSec;
+            if (dtSec < 30L) { // Cap burst when waking from background
+                movingDurationSec += dtSec;
+            }
         }
 
         // Don't update max speed during GPS settling (jitter causes phantom speeds)
         boolean isSettlingForMax = sessionSettleUntil > 0L && location.getTime() < sessionSettleUntil;
-        if (!isSettlingForMax && currentSpeedKmh > 1.5f && currentSpeedKmh <= maxSpeedLimitKmh) {
+        if (!isSettlingForMax && currentSpeedKmh > 1.5f && !isSpeedSpike(currentSpeedKmh)) {
             maxSpeedKmh = Math.max(maxSpeedKmh, currentSpeedKmh);
         }
 
@@ -369,9 +430,9 @@ public final class WorkoutLocationService extends Service implements LocationLis
     }
 
     private float getMaxSpeedLimit(String activityType) {
-        if ("cycle".equals(activityType)) return 100f;
-        if ("run".equals(activityType)) return 35f;
-        return 15f;
+        if ("cycle".equals(activityType)) return 140f;
+        if ("run".equals(activityType)) return 90f;
+        return 80f;
     }
 
     private void startForegroundNotification() {

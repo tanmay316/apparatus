@@ -198,10 +198,12 @@ export function CardioTracker() {
           setScreen('ready');
         }
       } else {
-        if (screen !== 'ready') {
+        if (!store.isTracking && screen !== 'ready' && screen !== 'tracking') {
           store.reset();
         }
-        setScreen('ready');
+        if (!store.isTracking) {
+          setScreen('ready');
+        }
       }
     } else {
       if (!store.isTracking && screen !== 'summary' && screen !== 'tracking') {
@@ -209,7 +211,7 @@ export function CardioTracker() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlType]);
+  }, [urlType, store.isTracking]);
 
   // Start GPS for preview on the ready screen or resume if tracking
   useEffect(() => {

@@ -21,24 +21,19 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 // ────────────────────────────────────────────────────────────
-// 1. Plausibility & Speed Engine Configuration
+// 1. Spike Detection & Speed Engine
 // ────────────────────────────────────────────────────────────
 
-const ACTIVITY_SPEED_LIMITS = {
-  walk: { maxSpeed: 15, maxAccel: 5 },
-  run: { maxSpeed: 35, maxAccel: 10 },
-  cycle: { maxSpeed: 100, maxAccel: 15 },
-};
-
-function getSpeedLimits(type: CardioActivityType | null) {
-  if (!type) return ACTIVITY_SPEED_LIMITS.walk;
-  return ACTIVITY_SPEED_LIMITS[type] || ACTIVITY_SPEED_LIMITS.walk;
-}
+// No artificial speed caps — instead we detect sudden spikes
+// that are inconsistent with the rolling speed trend.
+// Genuine gradual acceleration (walk → motorbike) passes through.
 
 const EMA_ALPHA = 0.25; 
 const SPEED_BUFFER_SIZE = 5;
+const SPIKE_HISTORY_SIZE = 7;
 let rawSpeedBuffer: number[] = [];
 let emaSpeed = 0;
+let spikeSpeedHistory: number[] = [];
 
 let lastRawGpsPoint: RoutePoint | null = null;
 let lastAcceptedDistancePoint: RoutePoint | null = null;
@@ -60,6 +55,37 @@ function getSmoothedAltitude(alt: number): number {
   if (altitudeBuffer.length > ALTITUDE_BUFFER_SIZE) altitudeBuffer.shift();
   const sorted = [...altitudeBuffer].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
+}
+
+/**
+ * Spike detection: checks if a candidate speed is consistent with
+ * the recent speed history. Rejects sudden jumps that look like
+ * GPS glitches (e.g. 5→80→3 km/h). Allows genuine gradual
+ * acceleration (5→8→12→18→25) because each step is close to
+ * the previous trend.
+ */
+function isSpeedSpike(candidateSpeedKmh: number): boolean {
+  if (spikeSpeedHistory.length < 3) return false; // Not enough data
+
+  const sorted = [...spikeSpeedHistory].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const recentMax = sorted[sorted.length - 1];
+
+  let allowedCeiling: number;
+  if (median < 2.0) {
+    // Nearly stationary — allow up to 30 km/h to start moving
+    allowedCeiling = 30.0;
+  } else {
+    // Allow generous envelope: 3x median, or 2x recent max, or median+40
+    allowedCeiling = Math.max(median * 3.0, Math.max(recentMax * 2.0, median + 40.0));
+  }
+
+  return candidateSpeedKmh > allowedCeiling;
+}
+
+function acceptSpeedToHistory(speedKmh: number) {
+  spikeSpeedHistory.push(speedKmh);
+  if (spikeSpeedHistory.length > SPIKE_HISTORY_SIZE) spikeSpeedHistory.shift();
 }
 
 function resetTrackingSegmentState() {
@@ -91,6 +117,7 @@ function pushSpeed(raw: number): number {
 function resetSpeedEngine() {
   rawSpeedBuffer = [];
   emaSpeed = 0;
+  spikeSpeedHistory = [];
   altitudeBuffer = [];
   lastElevationAnchorAlt = null;
 }
@@ -561,7 +588,6 @@ export const useCardioStore = create<CardioState>()(
         if (point.speed !== undefined) rawPt.speed = point.speed;
 
         let { gpsStatus, autoPauseStatus, autoPausedAt, totalPausedMs, movingDurationSec } = state;
-        const limits = getSpeedLimits(state.activityType);
         
         if (gpsStatus === 'waiting' || gpsStatus === 'off') {
            gpsStatus = 'warming_up';
@@ -602,14 +628,18 @@ export const useCardioStore = create<CardioState>()(
           const rawDistanceKm = haversineKm(prev.lat, prev.lng, rawPt.lat, rawPt.lng);
           const derivedSpeedKmh = (rawDistanceKm / dtSec) * 3600;
 
-          if (nativeSpeedKmh !== null && nativeSpeedKmh > 0 && nativeSpeedKmh <= limits.maxSpeed) {
+          // Pick best speed source
+          if (nativeSpeedKmh !== null && nativeSpeedKmh >= 0) {
             currentSpeed = nativeSpeedKmh;
-          } else if (derivedSpeedKmh <= limits.maxSpeed) {
-            if (derivedSpeedKmh < 0.6 && (rawDistanceKm * 1000) < 1.5) {
-              currentSpeed = 0;
-            } else {
-              currentSpeed = derivedSpeedKmh;
-            }
+          } else {
+            currentSpeed = derivedSpeedKmh;
+          }
+
+          // Spike detection: reject if speed is wildly inconsistent with recent trend
+          if (isSpeedSpike(currentSpeed)) {
+            // Glitch point — skip it entirely, don't accumulate anything
+            set({ lastGpsTimestamp: now });
+            return;
           }
 
           const distanceAnchor = lastAcceptedDistancePoint ?? prev;
@@ -618,17 +648,27 @@ export const useCardioStore = create<CardioState>()(
           const anchorDtSec = Math.max(0.1, (now - distanceAnchor.ts) / 1000);
           const candidateSpeedKmh = (distanceCandidateKm / anchorDtSec) * 3600;
 
-          const isAccurate = !accuracy || accuracy <= 20;
-          const isReasonableSpeed = candidateSpeedKmh <= limits.maxSpeed * 1.25;
+          const isAccurate = !accuracy || accuracy <= 30;
+
+          // Also check if the distance-implied speed is a spike
+          const isDistanceSpike = isSpeedSpike(candidateSpeedKmh);
+
+          // Stationary jitter suppression
+          const isStationaryCandidate = currentSpeed < 1.0 && distanceCandidateM < 4.5;
+          if (isStationaryCandidate) {
+            currentSpeed = 0;
+          }
+
           // During GPS settling, require larger movement threshold to suppress jitter
           const isSettling = gpsSettledAt > 0 && now < gpsSettledAt;
-          const movementThreshold = isSettling ? 8.0 : 2.0;
+          const movementThreshold = isSettling ? 7.0 : Math.max(4.5, (accuracy || 20) * 0.25);
           const hasMovedThreshold = distanceCandidateM >= movementThreshold;
+          const isMovementConfirmed = !isStationaryCandidate && (currentSpeed >= 1.0 || candidateSpeedKmh >= 1.5 || hasMovedThreshold);
 
           // Suppress distance during settling if speed seems unreasonable for a stationary start
-          const settlingSpeedGate = !isSettling || candidateSpeedKmh <= 3.0;
+          const settlingSpeedGate = !isSettling || candidateSpeedKmh <= 3.5;
 
-          if (isAccurate && isReasonableSpeed && hasMovedThreshold && settlingSpeedGate) {
+          if (isAccurate && !isDistanceSpike && hasMovedThreshold && isMovementConfirmed && settlingSpeedGate) {
             addedDistance = distanceCandidateKm;
             lastAcceptedDistancePoint = rawPt;
             lastMovementTs = now;
@@ -662,11 +702,15 @@ export const useCardioStore = create<CardioState>()(
           }
         }
 
+        // Accept this speed into the spike detection history
+        acceptSpeedToHistory(currentSpeed);
+
         const smoothedSpeed = pushSpeed(currentSpeed);
         const displaySpeed = Math.round(smoothedSpeed * 10) / 10;
 
-        // Auto-pause & Moving Time Accumulator
-        const isStationaryNow = currentSpeed < 0.6 && addedDistance === 0;
+        // Auto-pause & Moving Time Accumulator — Never auto-stop when user is moving at speed!
+        const isMoving = currentSpeed >= 1.0 || addedDistance > 0;
+        const isStationaryNow = !isMoving;
 
         if (isStationaryNow) {
           if (autoPauseStatus === 'MOVING') {
@@ -685,7 +729,7 @@ export const useCardioStore = create<CardioState>()(
           autoPauseStatus = 'MOVING';
           autoPausedAt = null;
           lastMovementTs = now;
-          if (dtSec > 0) movingDurationSec += Math.round(dtSec);
+          if (dtSec > 0 && dtSec < 30) movingDurationSec += Math.round(dtSec);
         }
 
         // Rolling Moving-Pace Window
@@ -710,11 +754,11 @@ export const useCardioStore = create<CardioState>()(
           }
         }
 
-        // Route Point addition (cap display memory)
+        // Route Point addition — Filter stationary jitter from drawing noisy spiderwebs
         const routeDistM = lastRoutePoint
           ? haversineKm(lastRoutePoint.lat, lastRoutePoint.lng, rawPt.lat, rawPt.lng) * 1000
           : Infinity;
-        const shouldAddRoutePoint = routeDistM >= 2.5 || addedDistance > 0 || state.routePoints.length === 0;
+        const shouldAddRoutePoint = (routeDistM >= 5.0 && isMoving) || addedDistance > 0 || state.routePoints.length === 0;
         if (shouldAddRoutePoint) lastRoutePoint = rawPt;
         let nextRoutePoints = shouldAddRoutePoint ? [...state.routePoints, rawPt] : state.routePoints;
 
@@ -725,7 +769,7 @@ export const useCardioStore = create<CardioState>()(
 
         // Don't update max speed during GPS settling (jitter causes phantom 2-3 km/h)
         const isSettlingNow = gpsSettledAt > 0 && now < gpsSettledAt;
-        const newMaxSpeed = !isSettlingNow && currentSpeed >= 1.5 && currentSpeed <= limits.maxSpeed
+        const newMaxSpeed = !isSettlingNow && currentSpeed >= 1.5 && !isSpeedSpike(currentSpeed)
           ? Math.max(state.maxSpeedKmh, currentSpeed)
           : state.maxSpeedKmh;
 
