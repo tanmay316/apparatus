@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import {
   Clock3, Flame, Heart, MessageSquare, Share2, TrendingUp, Dumbbell,
   MoreHorizontal, Check, Bookmark, Send, ChevronDown, ChevronUp, Sparkles, Calendar as CalendarIcon,
-  Zap, Bike, Footprints
+  Zap, Bike, Footprints, Trophy
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -19,6 +19,7 @@ import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { getAvatarUrl } from '@/lib/avatar';
 import { RouteMap } from '@/components/cardio/RouteMap';
 import { CelebrationPodiumCard } from '@/components/community/CelebrationPodiumCard';
+import { getAppShareUrl, shareContent } from '@/lib/share';
 
 function timeAgo(seconds?: number): string {
   if (!seconds) return 'just now';
@@ -35,9 +36,10 @@ interface ActivityPostCardProps {
   onDelete?: (activityId: string) => void;
   onCommentClick?: () => void;
   hideCommentsToggle?: boolean;
+  isEmbedded?: boolean;
 }
 
-export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, hideCommentsToggle }: ActivityPostCardProps) {
+export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, hideCommentsToggle, isEmbedded }: ActivityPostCardProps) {
   const { user, profile } = useAuthStore();
   const { showToast, confirm, units, theme, hiddenPosts, hidePost, unhidePost } = useUIStore();
   const queryClient = useQueryClient();
@@ -53,6 +55,14 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
   const exerciseNames = (details.exercises || []) as string[];
   const isOwnActivity = activity.userId === user?.uid;
   const activityWeight = details.bodyweight || (isOwnActivity ? profile?.weight : undefined);
+
+  // Detect competition celebration post
+  const isCelebration =
+    activity.type === 'achievement' ||
+    Boolean(details.challengeId) ||
+    Boolean(details.eventId) ||
+    Boolean(activity.summary?.includes('Concluded')) ||
+    (typeof details.text === 'string' && (details.text.includes('🥇') || details.text.includes('🏆')));
 
   // Stats calculation
   const displayVolume = Array.isArray(details.exerciseLogs)
@@ -125,7 +135,7 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
     return (
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-        className="flex items-center justify-between p-4 mb-6 rounded-[24px] bg-[#fdfbfb] border border-[#ececec] text-sm shadow-sm"
+        className="flex items-center justify-between p-4 mb-4 sm:mb-6 rounded-[24px] bg-[#fdfbfb] border border-[#ececec] text-sm shadow-sm"
       >
         <span className="text-[#777b86] font-medium font-sans">Post hidden</span>
         <button onClick={() => unhidePost(activity.id!)} className="text-[#5d2a1a] font-bold font-sans hover:underline">Undo</button>
@@ -135,16 +145,16 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
 
   return (
     <motion.article
-      initial={{ opacity: 0, y: 12 }}
+      initial={isEmbedded ? false : { opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="activity-post-card relative text-[#17191c] border border-[#ececec] rounded-[24px] bg-[#fdfbfb] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] p-6 mb-6"
+      whileHover={isEmbedded ? undefined : { y: -2 }}
+      transition={{ duration: 0.25, ease: 'easeOut' }}
+      className="activity-post-card relative text-[#17191c] border border-[#ececec] rounded-[24px] bg-[#fdfbfb] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] p-3.5 sm:p-5 md:p-6 mb-4 sm:mb-6"
     >
       {/* ─── SECTION 1: HEADER ────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-3 mb-5 relative z-20">
-        <div className="flex items-start md:items-center gap-3">
-          <Link to={`/profile/${activity.username || activity.userId}`} className="shrink-0 mt-1 md:mt-0">
+      <div className="flex items-center justify-between gap-3 mb-4 sm:mb-5 relative z-20">
+        <div className="flex items-start md:items-center gap-2.5 sm:gap-3 min-w-0">
+          <Link to={`/profile/${activity.username || activity.userId}`} className="shrink-0 mt-0.5 md:mt-0">
             <img
               src={activity.userPhoto || getAvatarUrl(activity.userName, theme)}
               alt={activity.userName}
@@ -163,14 +173,29 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
               {activity.username && (
                 <span className="text-[11px] font-mono text-[#777b86] hidden sm:inline truncate max-w-[80px]">@{activity.username}</span>
               )}
-              {profile?.experienceLevel && (
+              {isCelebration ? (
+                <span className="text-[9px] md:text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-800 border border-amber-500/30 shrink-0">
+                  Arena Official
+                </span>
+              ) : profile?.experienceLevel && isOwnActivity ? (
                 <span className="text-[9px] md:text-[10px] font-mono font-medium uppercase px-2 py-0.5 rounded-full bg-[#fdfbfb] text-[#777b86] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] shrink-0">
                   {profile.experienceLevel}
                 </span>
-              )}
+              ) : null}
             </div>
-            <div className="text-[10px] md:text-[11px] font-sans font-semibold text-[#777b86] tracking-wider uppercase mt-0.5 md:mt-1 leading-snug">
-              {activity.type === 'event_join' ? 'REGISTERED FOR AN EVENT' : isCardio ? 'COMPLETED A CARDIO SESSION' : 'COMPLETED A WORKOUT'}
+            <div className="text-[10px] md:text-[11px] font-sans font-semibold text-[#777b86] tracking-wider uppercase mt-0.5 md:mt-1 leading-snug flex items-center gap-1">
+              {isCelebration ? (
+                <>
+                  <Trophy size={11} className="text-amber-600 shrink-0" />
+                  <span>{details.eventId ? 'EVENT PODIUM' : 'CHALLENGE PODIUM'}</span>
+                </>
+              ) : activity.type === 'event_join' ? (
+                'REGISTERED FOR AN EVENT'
+              ) : isCardio ? (
+                'COMPLETED A CARDIO SESSION'
+              ) : (
+                'COMPLETED A WORKOUT'
+              )}
             </div>
           </div>
         </div>
@@ -198,9 +223,15 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
                   className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50 overflow-hidden"
                 >
                   <button 
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/post/${activity.id}`);
-                      showToast('Link copied to clipboard');
+                    onClick={async () => {
+                      const res = await shareContent({
+                        title: activity.summary || 'Apparatus Activity Post',
+                        url: getAppShareUrl(`/post/${activity.id}`),
+                        dialogTitle: 'Share Activity Post'
+                      });
+                      if (res.method === 'clipboard') {
+                        showToast('Link copied to clipboard', 'success');
+                      }
                       setShowOptions(false);
                     }}
                     className="w-full text-left px-4 py-2.5 text-[13px] font-sans text-[#17191c] hover:bg-gray-50 flex items-center gap-2"
@@ -258,104 +289,108 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
       </div>
 
       {/* ─── SECTION 2: WORKOUT / ACHIEVEMENT HERO ─────────────────────── */}
-      <div
-        className="relative overflow-hidden rounded-[20px] p-6 mb-5 bg-[#fdfbfb] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.05),inset_-3px_-3px_8px_rgba(255,255,255,1)] flex flex-col justify-between min-h-[130px]"
-      >
-        {activity.type === 'event_join' ? (
-          <div>
-            <h2 className="font-serif text-2xl text-[#17191c] mb-1">{activity.summary}</h2>
-            <p className="text-sm text-[#777b86] font-sans flex items-center gap-1 mt-2">
-              <CalendarIcon size={14} className="text-[#5d2a1a]" />
-              Going to {details.eventTitle || 'an event'}
-            </p>
-          </div>
-        ) : activity.type === 'achievement' || details.text ? (
+      {isCelebration ? (
+        <div className="mb-4 sm:mb-5">
           <CelebrationPodiumCard
             title={activity.summary || (details.title as string) || (details.challengeTitle as string)}
             rawText={(details.text as string) || activity.summary}
             winners={(details.winners as any)}
             sourceType={details.eventId ? 'event' : 'challenge'}
           />
-        ) : isCardio ? (
-          <div className="relative w-full h-[150px] rounded-xl overflow-hidden mt-1 shadow-md">
-            {details.route && details.route.length > 0 ? (
-              <div className="w-full h-full pointer-events-none">
-                <RouteMap 
-                  route={details.route} 
-                  theme={theme === 'dark' ? 'dark' : 'light'} 
-                  height="150px" 
-                  cardioType={activity.type as any}
-                />
-              </div>
-            ) : (
-              <div className="w-full h-full bg-gradient-to-br from-indigo-500/10 to-purple-500/10 flex items-center justify-center">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
-                   {activity.type === 'run' ? <Zap size={32} /> : activity.type === 'cycle' ? <Bike size={32} /> : <Footprints size={32} />}
-                </div>
-              </div>
-            )}
-            
-            {/* Overlay Info */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
-            <div className="absolute bottom-3 left-4 z-10">
-              <div className="text-[10px] font-sans font-bold text-white/90 uppercase tracking-widest mb-0.5">
-                {activity.type}
-              </div>
-              <h3 className="font-serif font-bold text-2xl text-white leading-tight">
-                {details.distanceKm ? `${details.distanceKm.toFixed(2)} km` : 'Cardio'}
-              </h3>
+        </div>
+      ) : (
+        <div
+          className="relative overflow-hidden rounded-[20px] p-4 sm:p-6 mb-4 sm:mb-5 bg-[#fdfbfb] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.05),inset_-3px_-3px_8px_rgba(255,255,255,1)] flex flex-col justify-between min-h-[130px]"
+        >
+          {activity.type === 'event_join' ? (
+            <div>
+              <h2 className="font-serif text-2xl text-[#17191c] mb-1">{activity.summary}</h2>
+              <p className="text-sm text-[#777b86] font-sans flex items-center gap-1 mt-2">
+                <CalendarIcon size={14} className="text-[#5d2a1a]" />
+                Going to {details.eventTitle || 'an event'}
+              </p>
             </div>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2 mb-2">
-                  <span className="text-xs font-sans font-medium text-[#5d2a1a]">
-                    {details.planTitle || 'Custom Program'}
-                  </span>
-                  {details.skill && (
-                    <span className="text-xs font-mono text-[#777b86]">
-                      · Skill: {details.skill}
-                    </span>
-                  )}
+          ) : isCardio ? (
+            <div className="relative w-full h-[150px] rounded-xl overflow-hidden mt-1 shadow-md">
+              {details.route && details.route.length > 0 ? (
+                <div className="w-full h-full pointer-events-none">
+                  <RouteMap 
+                    route={details.route} 
+                    theme={theme === 'dark' ? 'dark' : 'light'} 
+                    height="150px" 
+                    cardioType={activity.type as any}
+                  />
                 </div>
-
-                <h3 className="font-serif font-normal text-2xl text-[#17191c] leading-tight">
-                  {details.dayTitle || activity.summary}
-                </h3>
-              </div>
-
-              {/* Small size Anatomy figure beside workout day title */}
-              {activeMuscles.length > 0 && (
-                <div className="flex items-center gap-1.5 shrink-0 bg-[#fdfbfb] p-2 rounded-2xl shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)]" title="Muscles Targeted">
-                  <AnatomyFigureSVG view="front" activeMuscles={activeMuscles} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
-                  <AnatomyFigureSVG view="back" activeMuscles={activeMuscles} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
+              ) : (
+                <div className="w-full h-full bg-gradient-to-br from-indigo-500/10 to-purple-500/10 flex items-center justify-center">
+                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
+                     {activity.type === 'run' ? <Zap size={32} /> : activity.type === 'cycle' ? <Bike size={32} /> : <Footprints size={32} />}
+                  </div>
                 </div>
               )}
-            </div>
-
-            {/* Muscle Heatmap Text Strip */}
-            {activeMuscleList.length > 0 && (
-              <div className="mt-4 pt-3 flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-mono font-semibold text-[#777b86] flex items-center gap-1">
-                  <Sparkles size={12} className="text-[#979799]" /> Trained:
-                </span>
-                {activeMuscleList.map((m, idx) => (
-                  <span
-                    key={idx}
-                    className="text-xs font-sans text-[#17191c] bg-[#fdfbfb] px-2.5 py-0.5 rounded-md shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)]"
-                  >
-                    {m.replace('_', ' ')}
-                  </span>
-                ))}
+              
+              {/* Overlay Info */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+              <div className="absolute bottom-3 left-4 z-10">
+                <div className="text-[10px] font-sans font-bold text-white/90 uppercase tracking-widest mb-0.5">
+                  {activity.type}
+                </div>
+                <h3 className="font-serif font-bold text-2xl text-white leading-tight">
+                  {details.distanceKm ? `${details.distanceKm.toFixed(2)} km` : 'Cardio'}
+                </h3>
               </div>
-            )}
-          </>
-        )}
-      </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <span className="text-xs font-sans font-medium text-[#5d2a1a]">
+                      {details.planTitle || 'Custom Program'}
+                    </span>
+                    {details.skill && (
+                      <span className="text-xs font-mono text-[#777b86]">
+                        · Skill: {details.skill}
+                      </span>
+                    )}
+                  </div>
 
-      {activity.type !== 'event_join' && activity.type !== 'achievement' && !details.text && (
+                  <h3 className="font-serif font-normal text-2xl text-[#17191c] leading-tight">
+                    {details.dayTitle || activity.summary}
+                  </h3>
+                </div>
+
+                {/* Small size Anatomy figure beside workout day title */}
+                {activeMuscles.length > 0 && (
+                  <div className="flex items-center gap-1.5 shrink-0 bg-[#fdfbfb] p-2 rounded-2xl shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)]" title="Muscles Targeted">
+                    <AnatomyFigureSVG view="front" activeMuscles={activeMuscles} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
+                    <AnatomyFigureSVG view="back" activeMuscles={activeMuscles} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
+                  </div>
+                )}
+              </div>
+
+              {/* Muscle Heatmap Text Strip */}
+              {activeMuscleList.length > 0 && (
+                <div className="mt-4 pt-3 flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-mono font-semibold text-[#777b86] flex items-center gap-1">
+                    <Sparkles size={12} className="text-[#979799]" /> Trained:
+                  </span>
+                  {activeMuscleList.map((m, idx) => (
+                    <span
+                      key={idx}
+                      className="text-xs font-sans text-[#17191c] bg-[#fdfbfb] px-2.5 py-0.5 rounded-md shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)]"
+                    >
+                      {m.replace('_', ' ')}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {activity.type !== 'event_join' && !isCelebration && (
         <>
           {/* ─── SECTION 3: METRICS ROW ────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
@@ -551,7 +586,29 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
 
           {/* Share */}
           <button
-            onClick={() => onShare && onShare(activity)}
+            onClick={async () => {
+              if (isCelebration) {
+                const res = await shareContent({
+                  title: activity.summary || 'Competition Podium - Apparatus',
+                  text: details.text || 'Check out the competition champions on Apparatus!',
+                  url: getAppShareUrl(`/post/${activity.id}`),
+                  dialogTitle: 'Share Podium Results'
+                });
+                if (res.method === 'clipboard') {
+                  showToast('Podium link copied to clipboard!', 'success');
+                }
+              } else if (onShare) {
+                onShare(activity);
+              } else {
+                const res = await shareContent({
+                  title: activity.summary || 'Workout on Apparatus',
+                  url: getAppShareUrl(`/post/${activity.id}`),
+                });
+                if (res.method === 'clipboard') {
+                  showToast('Post link copied to clipboard!', 'success');
+                }
+              }
+            }}
             className="flex items-center gap-1.5 text-[#777b86] hover:text-[#17191c] transition-colors"
           >
             <Share2 size={15} />

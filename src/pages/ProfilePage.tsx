@@ -23,6 +23,7 @@ import { calculateWorkoutCalories } from '@/lib/calories';
 import { ActivityPostCard } from '@/components/social/ActivityPostCard';
 import { getUserSkills } from '@/services/skills';
 import { getUserEventRegistrations, getEventsByIds } from '@/services/events';
+import { getAppShareUrl, shareContent } from '@/lib/share';
 import { getUserClans, getUserCommunityBadges } from '@/services/community';
 import { CommunityBadgeCard } from '@/components/community/CommunityBadgeCard';
 import { MedalShareModal } from '@/components/community/MedalShareModal';
@@ -398,16 +399,14 @@ export function ProfilePage() {
           {isOwnProfile && !editing && (
             <button
               onClick={async () => {
-                const profileUrl = `${window.location.origin}/profile/${p.username}`;
-                try {
-                  if (navigator.share) {
-                    await navigator.share({ title: `${p.displayName} on Apparatus`, url: profileUrl });
-                  } else {
-                    await navigator.clipboard.writeText(profileUrl);
-                    useUIStore.getState().showToast('Profile link copied!', 'success');
-                  }
-                } catch {
-                  // user cancelled share
+                const profileUrl = getAppShareUrl(`/profile/${p.username}`);
+                const res = await shareContent({
+                  title: `${p.displayName} on Apparatus`,
+                  url: profileUrl,
+                  dialogTitle: 'Share Athlete Profile',
+                });
+                if (res.method === 'clipboard') {
+                  useUIStore.getState().showToast('Profile link copied!', 'success');
                 }
               }}
               className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full flex items-center justify-center hover:bg-[var(--bg)] transition-colors"

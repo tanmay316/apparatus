@@ -54,7 +54,7 @@ export function MedalCelebrationModal() {
         glowColor: 'rgba(250, 204, 21, 0.60)',
         strongGlow: 'rgba(250, 204, 21, 0.32)',
         textColor: 'text-amber-200',
-        accentText: 'text-amber-900 dark:text-amber-300',
+        accentText: 'text-amber-300',
         pillBg: 'bg-amber-500/15 text-amber-300 border-amber-500/40',
         emoji: '🥇',
       }
@@ -74,7 +74,7 @@ export function MedalCelebrationModal() {
         glowColor: 'rgba(226, 232, 240, 0.50)',
         strongGlow: 'rgba(226, 232, 240, 0.24)',
         textColor: 'text-slate-100',
-        accentText: 'text-slate-900 dark:text-slate-200',
+        accentText: 'text-slate-200',
         pillBg: 'bg-slate-300/15 text-slate-200 border-slate-300/40',
         emoji: '🥈',
       }
@@ -93,7 +93,7 @@ export function MedalCelebrationModal() {
         glowColor: 'rgba(249, 115, 22, 0.60)',
         strongGlow: 'rgba(249, 115, 22, 0.32)',
         textColor: 'text-orange-200',
-        accentText: 'text-orange-950 dark:text-orange-300',
+        accentText: 'text-orange-300',
         pillBg: 'bg-orange-600/15 text-orange-300 border-orange-500/40',
         emoji: '🥉',
       };

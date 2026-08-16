@@ -17,6 +17,7 @@ import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { CommunityPost, PostComment } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { CelebrationPodiumCard } from './CelebrationPodiumCard';
+import { getAppShareUrl, shareContent } from '@/lib/share';
 
 interface SinglePostSheetProps {
   post: CommunityPost | null;
@@ -144,28 +145,19 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
   // Share Post Handler
   const handleShare = async () => {
     if (!post) return;
-    const shareUrl = window.location.href;
+    const shareUrl = getAppShareUrl(`/post/${post.id}`);
     const shareTitle = post.title || `Post by ${post.authorName}`;
-    const shareText = post.text.slice(0, 100);
+    const shareText = post.text.slice(0, 120);
 
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: shareTitle,
-          text: shareText,
-          url: shareUrl,
-        });
-        return;
-      } catch (err: any) {
-        if (err.name === 'AbortError') return;
-      }
-    }
+    const res = await shareContent({
+      title: shareTitle,
+      text: shareText,
+      url: shareUrl,
+      dialogTitle: 'Share Post',
+    });
 
-    try {
-      await navigator.clipboard.writeText(shareUrl);
+    if (res.method === 'clipboard') {
       showToast('Post link copied to clipboard!', 'success');
-    } catch {
-      showToast('Could not copy link', 'error');
     }
   };
 

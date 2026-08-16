@@ -8,6 +8,7 @@ import { calculateWorkoutCalories } from '@/lib/calories';
 import { drawAnatomyOnCanvas, ACTIVE_ORANGE } from '@/components/ui/AnatomySvg';
 import { format } from 'date-fns';
 import type { MuscleRegion, MuscleScore } from '@/lib/muscle-map';
+import { getAppShareUrl } from '@/lib/share';
 
 export interface ShareCardData {
   dayTitle: string;
@@ -782,7 +783,7 @@ export function ShareCardModal({ data: originalData, onClose }: Props) {
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.origin);
+      await navigator.clipboard.writeText(getAppShareUrl());
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { /* noop */ }

@@ -9,6 +9,7 @@ import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { getAvatarUrl } from '@/lib/avatar';
 import { motion } from 'framer-motion';
 import { CelebrationPodiumCard } from './CelebrationPodiumCard';
+import { getAppShareUrl, shareContent } from '@/lib/share';
 
 function timeAgo(date: any): string {
   if (!date) return 'just now';
@@ -98,27 +99,18 @@ export function ClanPostItem({ post, onClick }: { post: CommunityPost, onClick: 
 
   const handleShare = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    const shareUrl = window.location.href;
+    const shareUrl = getAppShareUrl(`/post/${post.id}`);
     const shareTitle = post.title || `Post by ${post.authorName}`;
 
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: shareTitle,
-          text: post.text.slice(0, 100),
-          url: shareUrl,
-        });
-        return;
-      } catch (err: any) {
-        if (err.name === 'AbortError') return;
-      }
-    }
+    const res = await shareContent({
+      title: shareTitle,
+      text: post.text?.slice(0, 120),
+      url: shareUrl,
+      dialogTitle: 'Share Clan Post',
+    });
 
-    try {
-      await navigator.clipboard.writeText(shareUrl);
+    if (res.method === 'clipboard') {
       showToast('Post link copied to clipboard!', 'success');
-    } catch {
-      showToast('Could not copy link', 'error');
     }
   };
 
@@ -129,7 +121,7 @@ export function ClanPostItem({ post, onClick }: { post: CommunityPost, onClick: 
       whileHover={{ y: -2 }}
       transition={{ duration: 0.3, ease: 'easeOut' }}
       onClick={onClick}
-      className="clan-post-card activity-post-card relative text-[#17191c] border border-[#ececec] rounded-[24px] bg-[#fdfbfb] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] p-6 mb-6 hover:shadow-[10px_10px_24px_rgba(0,0,0,0.08),-10px_-10px_24px_rgba(255,255,255,0.9)] transition-all cursor-pointer"
+      className="clan-post-card activity-post-card relative text-[#17191c] border border-[#ececec] rounded-[24px] bg-[#fdfbfb] shadow-[8px_8px_20px_rgba(0,0,0,0.06),-8px_-8px_20px_rgba(255,255,255,0.8)] p-3.5 sm:p-5 md:p-6 mb-4 sm:mb-6 hover:shadow-[10px_10px_24px_rgba(0,0,0,0.08),-10px_-10px_24px_rgba(255,255,255,0.9)] transition-all cursor-pointer"
     >
       {/* ─── HEADER ─── */}
       <div className="flex items-center justify-between gap-3 mb-4 relative z-20">
