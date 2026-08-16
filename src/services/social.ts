@@ -587,27 +587,30 @@ export function subscribeToNotifications(
   onNew?: (notification: AppNotification) => void
 ): () => void {
   const q = query(collection(db, 'notifications'), where('receiverId', '==', userId));
+  let isInitial = true;
+
   return onSnapshot(q, (snap) => {
     const validNotes: AppNotification[] = [];
     const now = Date.now() / 1000;
     const ONE_WEEK = 7 * 24 * 60 * 60;
     
-    if (onNew) {
+    if (onNew && !isInitial) {
       snap.docChanges().forEach(change => {
         if (change.type === 'added') {
           const data = change.doc.data();
-          const time = data.createdAt?.seconds || 0;
-          // Trigger onNew only if created in the last 15 seconds (to avoid firing on initial load for old notes)
-          if (now - time < 15) {
+          const time = data.createdAt?.toMillis ? data.createdAt.toMillis() / 1000 : (data.createdAt?.seconds || now);
+          if (now - time < 60) {
             onNew({ id: change.doc.id, ...data } as AppNotification);
           }
         }
       });
     }
 
+    isInitial = false;
+
     snap.docs.forEach(d => {
       const data = d.data();
-      const time = data.createdAt?.seconds || 0;
+      const time = data.createdAt?.toMillis ? data.createdAt.toMillis() / 1000 : (data.createdAt?.seconds || 0);
       if (now - time <= ONE_WEEK) {
         validNotes.push({ id: d.id, ...data } as AppNotification);
       }

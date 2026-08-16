@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, searchUsers, subscribeToNotifications } from '@/services/social';
-import { showNotification } from '@/utils/notifications';
+import { showNotification, requestNotificationPermission } from '@/utils/notifications';
 import { COMPACT_LIBRARY } from '@/services/library';
 import { getSamplePlans } from '@/services/plans';
 
@@ -51,6 +51,7 @@ export function Topbar() {
 
   useEffect(() => {
     if (!profile?.uid) return;
+    requestNotificationPermission().catch(() => {});
     const unsub = subscribeToNotifications(
       profile.uid,
       (notes) => {

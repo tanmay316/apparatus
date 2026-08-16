@@ -1807,6 +1807,30 @@ export async function backfillCelebrationPosts(): Promise<{ events: number; chal
         createdChallenges++;
         console.log(`[Backfill] Created public celebration post for challenge "${challenge.title}"`);
       }
+
+      // Send in-app and local push notification to Top 3 Winners
+      const rankInfoMap: Record<number, { name: string; emoji: string }> = {
+        1: { name: 'Gold Champion', emoji: '🥇' },
+        2: { name: 'Silver Runner-Up', emoji: '🥈' },
+        3: { name: 'Bronze 3rd Place', emoji: '🥉' },
+      };
+
+      top3.forEach((w, i) => {
+        if (w.userId) {
+          const info = rankInfoMap[i + 1] || { name: 'Winner', emoji: '🎖️' };
+          addDoc(collection(db, 'notifications'), {
+            receiverId: w.userId,
+            senderId: challenge.createdBy || 'system',
+            senderName: challenge.creatorName || 'Apparatus Arena',
+            senderPhoto: '',
+            type: 'achievement',
+            message: `${info.emoji} Congratulations! You placed Rank #${i + 1} (${info.name}) in "${challenge.title}"!`,
+            targetId: challenge.id,
+            read: false,
+            createdAt: Timestamp.now()
+          }).catch(() => {});
+        }
+      });
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -1951,6 +1975,32 @@ export async function backfillCelebrationPosts(): Promise<{ events: number; chal
         createdEvents++;
         console.log(`[Backfill] Created public celebration post for event "${event.title}"`);
       }
+
+      // Send in-app and local push notification to Top 3 Winners of Event
+      const rankInfoMap: Record<number, { name: string; emoji: string }> = {
+        1: { name: 'Gold Champion', emoji: '🥇' },
+        2: { name: 'Silver Runner-Up', emoji: '🥈' },
+        3: { name: 'Bronze 3rd Place', emoji: '🥉' },
+      };
+
+      const eventParts = partSnap.docs.map(doc => doc.data() as EventParticipant);
+      top3Cleaned.forEach((w) => {
+        const matchingPart = eventParts.find(p => p.userName === w.name);
+        if (matchingPart?.userId) {
+          const rankInfo = rankInfoMap[w.rank] || { name: 'Winner', emoji: '🎖️' };
+          addDoc(collection(db, 'notifications'), {
+            receiverId: matchingPart.userId,
+            senderId: event.createdBy || 'system',
+            senderName: event.creatorName || 'Apparatus Arena',
+            senderPhoto: '',
+            type: 'achievement',
+            message: `${rankInfo.emoji} Congratulations! You placed Rank #${w.rank} (${rankInfo.name}) in "${event.title}"!`,
+            targetId: event.id,
+            read: false,
+            createdAt: Timestamp.now()
+          }).catch(() => {});
+        }
+      });
     }
 
     console.log(`[Backfill] Completed! Created/Updated ${createdEvents} events, ${createdChallenges} challenges.`);

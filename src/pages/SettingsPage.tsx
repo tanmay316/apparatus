@@ -557,13 +557,13 @@ function SettingsForm({ profile }: { profile: any }) {
           </button>
         </motion.div>
 
-        <motion.div variants={item} className="card p-5 space-y-4 border-t-4 border-amber/40">
+        <motion.div variants={item} className="card p-5 space-y-4 border-t-4 border-amber-600/40 dark:border-amber-400/40">
           <div className="flex items-center gap-2 pb-2 border-b border-line/30 mb-2">
-            <LogOut size={18} className="text-amber" />
-            <h3 className="font-display text-base uppercase tracking-wide text-amber">Account Access</h3>
+            <LogOut size={18} className="text-amber-600 dark:text-amber-400" />
+            <h3 className="font-display text-base uppercase tracking-wide text-amber-600 dark:text-amber-400">Account Access</h3>
           </div>
           <p className="text-sm text-bone-dim leading-relaxed">Sign out of your current session on this device.</p>
-          <button type="button" onClick={handleLogout} className="btn-secondary border-amber/40 text-amber hover:bg-amber/10 inline-flex items-center gap-2">
+          <button type="button" onClick={handleLogout} className="btn-secondary border-amber-600/40 dark:border-amber-400/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 inline-flex items-center gap-2">
             <LogOut size={14} /> Sign Out
           </button>
         </motion.div>
