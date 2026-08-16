@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Heart, MessageSquare, Trash2, Bookmark,
-  Share2, ThumbsUp, ThumbsDown, Send, CornerDownLeft, CornerDownRight, Loader2, ImagePlus, Sparkles
+  Share2, ThumbsUp, ThumbsDown, Send, CornerDownLeft, CornerDownRight, Loader2, ImagePlus, Sparkles, Edit3
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -17,6 +17,7 @@ import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { CommunityPost, PostComment } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { CelebrationPodiumCard } from './CelebrationPodiumCard';
+import { EditPostSheet } from './EditPostSheet';
 import { getAppShareUrl, shareContent } from '@/lib/share';
 
 interface SinglePostSheetProps {
@@ -66,6 +67,15 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
     });
   };
 
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentPost, setCurrentPost] = useState<CommunityPost | null>(post);
+
+  useEffect(() => {
+    setCurrentPost(post);
+  }, [post]);
+
+  const activePost = currentPost || post;
+
   // Optimistic Live Post Likes & Bookmark States
   const [localLiked, setLocalLiked] = useState<boolean>(false);
   const [localLikesCount, setLocalLikesCount] = useState<number>(0);
@@ -74,12 +84,12 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
   const bookmarks = profile?.bookmarks || [];
 
   useEffect(() => {
-    if (post) {
-      setLocalLiked((post.likedUserIds || []).includes(user?.uid || ''));
-      setLocalLikesCount(post.likesCount || 0);
-      setLocalSaved(bookmarks.includes(post.id || ''));
+    if (activePost) {
+      setLocalLiked((activePost.likedUserIds || []).includes(user?.uid || ''));
+      setLocalLikesCount(activePost.likesCount || 0);
+      setLocalSaved(bookmarks.includes(activePost.id || ''));
     }
-  }, [post?.id, post?.likedUserIds, post?.likesCount, bookmarks, user?.uid]);
+  }, [activePost?.id, activePost?.likedUserIds, activePost?.likesCount, bookmarks, user?.uid]);
 
   useEffect(() => {
     if (isOpen) {
@@ -89,18 +99,18 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
   }, [isOpen]);
 
   const { data: comments = [], isLoading: loadingComments } = useQuery({
-    queryKey: ['postComments', post?.id],
-    queryFn: () => getPostComments(post!.id!),
-    enabled: !!post && isOpen,
+    queryKey: ['postComments', activePost?.id],
+    queryFn: () => getPostComments(activePost!.id!),
+    enabled: !!activePost && isOpen,
   });
 
   // Images to display (multi-image support + backward compatibility)
   const postImages = useMemo(() => {
-    if (!post) return [];
-    if (post.images && post.images.length > 0) return post.images;
-    if (post.imageUrl) return [post.imageUrl];
+    if (!activePost) return [];
+    if (activePost.images && activePost.images.length > 0) return activePost.images;
+    if (activePost.imageUrl) return [activePost.imageUrl];
     return [];
-  }, [post?.images, post?.imageUrl]);
+  }, [activePost?.images, activePost?.imageUrl]);
 
   // Like Post Handler with 0ms Instant Optimistic Feedback
   const handleTogglePostLike = async () => {
@@ -397,15 +407,25 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
               </div>
 
               <div className="flex items-center gap-1.5">
-                {(isAdmin || user?.uid === post.authorId) && (
-                  <button
-                    onClick={handleDeletePost}
-                    className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors text-xs font-mono flex items-center gap-1 border border-red-500/20"
-                    title="Delete Post"
-                  >
-                    <Trash2 size={13} />
-                    <span className="hidden sm:inline text-[11px]">Delete</span>
-                  </button>
+                {(isAdmin || (activePost && user?.uid === activePost.authorId)) && (
+                  <>
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="p-1.5 rounded-lg bg-ink-2 text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors text-xs font-mono flex items-center gap-1 border border-line/20"
+                      title="Edit Post"
+                    >
+                      <Edit3 size={13} />
+                      <span className="hidden sm:inline text-[11px]">Edit</span>
+                    </button>
+                    <button
+                      onClick={handleDeletePost}
+                      className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors text-xs font-mono flex items-center gap-1 border border-red-500/20"
+                      title="Delete Post"
+                    >
+                      <Trash2 size={13} />
+                      <span className="hidden sm:inline text-[11px]">Delete</span>
+                    </button>
+                  </>
                 )}
                 <button
                   onClick={onClose}
@@ -891,6 +911,18 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                 className="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl"
               />
             </div>
+          )}
+
+          {/* Edit Post Modal */}
+          {isEditing && activePost && (
+            <EditPostSheet
+              post={activePost}
+              isOpen={isEditing}
+              onClose={() => setIsEditing(false)}
+              onUpdated={(updated) => {
+                setCurrentPost(prev => prev ? ({ ...prev, ...updated }) : null);
+              }}
+            />
           )}
         </div>
       )}

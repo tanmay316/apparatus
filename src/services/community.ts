@@ -1238,6 +1238,56 @@ export const createClanPost = async (postData: Omit<CommunityPost, 'id' | 'likes
   return docRef.id;
 };
 
+export async function getClanPostById(postId: string): Promise<CommunityPost | null> {
+  try {
+    const snap = await getDoc(doc(db, 'community_posts', postId));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() } as CommunityPost;
+  } catch (err) {
+    console.error('Error fetching clan post by id:', err);
+    return null;
+  }
+}
+
+export async function updateClanPost(
+  postId: string,
+  data: {
+    title?: string;
+    text?: string;
+    images?: string[];
+    imageUrl?: string | null;
+  }
+): Promise<void> {
+  const postRef = doc(db, 'community_posts', postId);
+  const images = data.images !== undefined
+    ? data.images
+    : (data.imageUrl ? [data.imageUrl] : undefined);
+
+  const updates: Record<string, any> = {
+    updatedAt: serverTimestamp(),
+  };
+  if (data.title !== undefined) updates.title = data.title.trim();
+  if (data.text !== undefined) updates.text = data.text.trim();
+  if (images !== undefined) {
+    updates.images = images;
+    updates.imageUrl = images[0] || null;
+  }
+
+  await updateDoc(postRef, updates);
+}
+
+export async function getClanMembership(clanId: string, userId: string): Promise<ClanMembership | null> {
+  try {
+    const memberId = `${clanId}_${userId}`;
+    const snap = await getDoc(doc(db, 'clan_memberships', memberId));
+    if (!snap.exists()) return null;
+    return snap.data() as ClanMembership;
+  } catch (err) {
+    console.error('Error fetching clan membership:', err);
+    return null;
+  }
+}
+
 export async function getClanPosts(clanId: string, limitCount = 50): Promise<CommunityPost[]> {
   try {
     const q = query(
@@ -1287,12 +1337,14 @@ export async function toggleLikeClanPost(postId: string, userId: string): Promis
   if (!isLiked && data.authorId !== userId) {
     const userSnap = await getDoc(doc(db, 'users', userId));
     const userData = userSnap.exists() ? userSnap.data() : {};
+    const senderName = userData.displayName || 'An athlete';
+    const postContext = data.clanName ? ` in ${data.clanName}` : (data.title ? `: "${data.title}"` : '');
     await notify(data.authorId, {
       type: 'like',
       senderId: userId,
-      senderName: userData.displayName || 'An athlete',
+      senderName,
       senderPhoto: userData.photoURL || '',
-      message: `${userData.displayName || 'An athlete'} liked your post in ${data.clanName}`,
+      message: `${senderName} liked your post${postContext}`,
       targetId: postId,
       read: false,
     });
@@ -1342,12 +1394,13 @@ export async function createPostComment(comment: Omit<PostComment, 'id' | 'creat
       if (postSnap.exists()) {
         const postData = postSnap.data();
         if (postData.authorId && postData.authorId !== comment.userId) {
+          const postContext = postData.clanName ? ` in ${postData.clanName}` : (postData.title ? `: "${postData.title}"` : '');
           await notify(postData.authorId, {
             type: 'comment',
             senderId: comment.userId,
             senderName: comment.userName,
             senderPhoto: comment.userPhoto || '',
-            message: `${comment.userName} commented on your post in ${postData.clanName}`,
+            message: `${comment.userName} commented on your post${postContext}`,
             targetId: comment.postId,
             read: false,
           });
