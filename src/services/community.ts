@@ -1,6 +1,7 @@
 import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, increment, setDoc, writeBatch, Timestamp, documentId } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, SimpleEventStatus, CommunityPost, EarnedCommunityBadge } from '@/types';
+import { notify } from '@/services/social';
 
 // ─── UTILS ────────────────────────────────────────────────────────
 export function formatChallengeGoal(target?: number, unit?: string, metric?: string): string {
@@ -361,6 +362,51 @@ export async function awardChallengeTop3Badges(challengeId: string): Promise<{ s
       read: false,
       createdAt: now
     });
+  }
+
+  // Create Celebration Feed Posts for the Winners
+  for (let i = 0; i < leaderboardSnap.docs.length; i++) {
+    const pData = leaderboardSnap.docs[i].data() as ChallengeParticipant;
+    const rank = (i + 1) as 1 | 2 | 3;
+    const info = rankTitles[rank];
+
+    if (challenge.clanId) {
+      const postRef = doc(collection(db, 'community_posts'));
+      batch.set(postRef, {
+        communityId: challenge.clanId,
+        authorId: pData.userId,
+        authorName: pData.userName,
+        authorPhoto: pData.userPhoto || '',
+        title: `🏆 Challenge Winner!`,
+        text: `Congratulations to ${pData.userName} for placing #${rank} and winning the ${info.name} badge in "${challenge.title}"!`,
+        likesCount: 0,
+        commentsCount: 0,
+        likedUserIds: [],
+        createdAt: now
+      });
+    } else {
+      const activityRef = doc(collection(db, 'activities'));
+      batch.set(activityRef, {
+        userId: pData.userId,
+        userName: pData.userName,
+        userPhoto: pData.userPhoto || '',
+        type: 'achievement',
+        workoutId: null,
+        summary: `Won ${info.name} in ${challenge.title}`,
+        details: {
+          challengeId,
+          challengeTitle: challenge.title,
+          clanId: '',
+          rank,
+          badgeName: info.name,
+          badgeEmoji: info.emoji
+        },
+        visibility: 'public',
+        likesCount: 0,
+        commentsCount: 0,
+        createdAt: now
+      });
+    }
   }
 
   // Mark challenge as badges awarded and completed
@@ -904,6 +950,45 @@ export async function awardEventTop3Badges(
       read: false,
       createdAt: now
     });
+
+    // Create a feed record
+    if (event.clanId) {
+      const postRef = doc(collection(db, 'community_posts'));
+      batch.set(postRef, {
+        communityId: event.clanId,
+        authorId: winner.userId,
+        authorName: winner.userName,
+        authorPhoto: winner.userPhoto || '',
+        title: `🏆 ${info.name} Winner!`,
+        text: `Congratulations to ${winner.userName} for placing #${winner.rank} and winning the ${info.name} badge in "${event.title}"!`,
+        likesCount: 0,
+        commentsCount: 0,
+        likedUserIds: [],
+        createdAt: now
+      });
+    } else {
+      const activityRef = doc(collection(db, 'activities'));
+      batch.set(activityRef, {
+        userId: winner.userId,
+        userName: winner.userName,
+        userPhoto: winner.userPhoto || '',
+        type: 'achievement',
+        workoutId: null,
+        summary: `Won ${info.name} in ${event.title}`,
+        details: {
+          eventId,
+          eventTitle: event.title,
+          clanId: '',
+          rank: winner.rank,
+          badgeName: info.name,
+          badgeEmoji: info.emoji
+        },
+        visibility: 'public',
+        likesCount: 0,
+        commentsCount: 0,
+        createdAt: now
+      });
+    }
   }
 
   batch.update(doc(db, 'simple_events', eventId), {
@@ -1034,12 +1119,33 @@ export async function toggleLikeClanPost(postId: string, userId: string): Promis
     likedUserIds: updatedLikes,
     likesCount: updatedLikes.length
   });
+
+  if (!isLiked && data.authorId !== userId) {
+    const userSnap = await getDoc(doc(db, 'users', userId));
+    const userData = userSnap.exists() ? userSnap.data() : {};
+    await notify(data.authorId, {
+      type: 'like',
+      senderId: userId,
+      senderName: userData.displayName || 'An athlete',
+      senderPhoto: userData.photoURL || '',
+      message: `${userData.displayName || 'An athlete'} liked your post in ${data.clanName}`,
+      targetId: postId,
+      read: false,
+    });
+  }
+
   return !isLiked;
 }
 
 export async function createPostComment(comment: Omit<PostComment, 'id' | 'createdAt'>): Promise<string> {
+  const images = comment.images && comment.images.length > 0
+    ? comment.images
+    : (comment.imageUrl ? [comment.imageUrl] : []);
+
   const docRef = await addDoc(collection(db, 'community_post_comments'), {
     ...comment,
+    imageUrl: images[0] || null,
+    images: images,
     parentId: comment.parentId || null,
     replyToUserId: comment.replyToUserId || null,
     replyToUserName: comment.replyToUserName || null,
@@ -1053,6 +1159,40 @@ export async function createPostComment(comment: Omit<PostComment, 'id' | 'creat
   await updateDoc(doc(db, 'community_posts', comment.postId), {
     commentsCount: increment(1)
   }).catch(() => {});
+
+  // Send Notification
+  try {
+    const targetUserId = comment.replyToUserId;
+    if (targetUserId && targetUserId !== comment.userId) {
+      await notify(targetUserId, {
+        type: 'comment',
+        senderId: comment.userId,
+        senderName: comment.userName,
+        senderPhoto: comment.userPhoto || '',
+        message: `${comment.userName} replied to your comment`,
+        targetId: comment.postId,
+        read: false,
+      });
+    } else if (!targetUserId) {
+      const postSnap = await getDoc(doc(db, 'community_posts', comment.postId));
+      if (postSnap.exists()) {
+        const postData = postSnap.data();
+        if (postData.authorId && postData.authorId !== comment.userId) {
+          await notify(postData.authorId, {
+            type: 'comment',
+            senderId: comment.userId,
+            senderName: comment.userName,
+            senderPhoto: comment.userPhoto || '',
+            message: `${comment.userName} commented on your post in ${postData.clanName}`,
+            targetId: comment.postId,
+            read: false,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error sending comment notification:', err);
+  }
   
   return docRef.id;
 }
@@ -1096,6 +1236,20 @@ export async function toggleLikePostComment(commentId: string, userId: string): 
     dislikedUserIds: newDislikes,
     dislikesCount: newDislikes.length
   });
+
+  if (!isLiked && data.userId !== userId) {
+    const userSnap = await getDoc(doc(db, 'users', userId));
+    const userData = userSnap.exists() ? userSnap.data() : {};
+    await notify(data.userId, {
+      type: 'like',
+      senderId: userId,
+      senderName: userData.displayName || 'An athlete',
+      senderPhoto: userData.photoURL || '',
+      message: `${userData.displayName || 'An athlete'} liked your comment`,
+      targetId: data.postId,
+      read: false,
+    });
+  }
 }
 
 export async function toggleDislikePostComment(commentId: string, userId: string): Promise<void> {

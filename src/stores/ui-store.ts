@@ -5,6 +5,15 @@ export type ThemePreference = 'dark' | 'light';
 export type UnitPreference = 'metric' | 'imperial';
 export type LanguagePreference = 'en' | 'hi';
 
+export interface ConfirmModalOptions {
+  title?: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  type?: 'danger' | 'warning' | 'info' | 'primary';
+  icon?: 'trash' | 'alert' | 'info' | 'logout' | 'check';
+}
+
 interface UIState {
   sidebarOpen: boolean;
   toggleSidebar: () => void;
@@ -13,6 +22,15 @@ interface UIState {
   toast: { message: string; type: 'success' | 'error' | 'info' } | null;
   showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
   clearToast: () => void;
+
+  confirmModal: {
+    isOpen: boolean;
+    options: ConfirmModalOptions;
+    resolve: (value: boolean) => void;
+  } | null;
+  confirm: (options: string | ConfirmModalOptions) => Promise<boolean>;
+  closeConfirm: (result: boolean) => void;
+
   theme: ThemePreference;
   units: UnitPreference;
   language: LanguagePreference;
@@ -25,7 +43,7 @@ interface UIState {
   unhidePost: (id: string) => void;
 }
 
-export const useUIStore = create<UIState>()(persist((set) => ({
+export const useUIStore = create<UIState>()(persist((set, get) => ({
   sidebarOpen: false,
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   closeSidebar: () => set({ sidebarOpen: false }),
@@ -36,6 +54,30 @@ export const useUIStore = create<UIState>()(persist((set) => ({
     setTimeout(() => set({ toast: null }), 3500);
   },
   clearToast: () => set({ toast: null }),
+
+  confirmModal: null,
+  confirm: (options: string | ConfirmModalOptions) => {
+    return new Promise<boolean>((resolve) => {
+      const opts: ConfirmModalOptions = typeof options === 'string'
+        ? { message: options }
+        : options;
+      set({
+        confirmModal: {
+          isOpen: true,
+          options: opts,
+          resolve,
+        },
+      });
+    });
+  },
+  closeConfirm: (result: boolean) => {
+    const modal = get().confirmModal;
+    if (modal?.resolve) {
+      modal.resolve(result);
+    }
+    set({ confirmModal: null });
+  },
+
   theme: 'light',
   units: 'metric',
   language: 'en',

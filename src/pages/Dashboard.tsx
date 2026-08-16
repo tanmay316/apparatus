@@ -129,6 +129,7 @@ export function Dashboard() {
   if (!profile) return null;
 
   // ─── Computed values ─────────────────────────────────────
+  const displayFeed = feed;
   const streakDays: { label: string; done: boolean }[] = [];
   const now = new Date();
   for (let i = 6; i >= 0; i--) {
@@ -149,7 +150,7 @@ export function Dashboard() {
     ? new Set(currentWeekWorkouts.filter((w: any) => w.planId === activePlan.id || activeDays.some(d => d.id === w.dayId)).map((w: any) => w.dayId)).size
     : currentWeekWorkouts.length;
   const targetDays = activePlan?.daysPerWeek || 6;
-  const followersActivity = feed.filter((act: any) => act.userId !== profile.uid);
+  const followersActivity = feed.filter((act: any) => (act.userId || act.authorId) !== profile.uid);
 
   // Session progress for TodayFocusCard
   let sessionProgress = 0;
@@ -286,7 +287,7 @@ export function Dashboard() {
       <XPPanel xp={xp} streak={streak} badges={badges} />
 
       {/* 6. Activity Feed */}
-      <ActivityFeed activities={followersActivity} onShare={handleShareActivity} />
+      <ActivityFeed activities={displayFeed} onShare={handleShareActivity} />
 
       {/* Share modal */}
       {dashboardShareData && (

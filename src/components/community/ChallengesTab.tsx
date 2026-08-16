@@ -47,12 +47,19 @@ export function ChallengesTab() {
 
   const { user, profile } = useAuthStore();
   const isAdmin = !!profile?.isAdmin;
-  const { showToast } = useUIStore();
+  const { showToast, confirm } = useUIStore();
   const queryClient = useQueryClient();
 
   const deleteChallengeMutation = useMutation({
     mutationFn: async (id: string) => {
-      if (confirm('Are you sure you want to delete this challenge?')) {
+      const ok = await confirm({
+        title: 'Delete Challenge',
+        message: 'Are you sure you want to delete this challenge?',
+        confirmText: 'Delete',
+        type: 'danger',
+        icon: 'trash',
+      });
+      if (ok) {
         await deleteChallenge(id);
         return true;
       }

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
-  Clock3, Flame, Heart, MessageCircle, Share2, TrendingUp, Dumbbell,
+  Clock3, Flame, Heart, MessageSquare, Share2, TrendingUp, Dumbbell,
   MoreHorizontal, Check, Bookmark, Send, ChevronDown, ChevronUp, Sparkles, Calendar as CalendarIcon,
   Zap, Bike, Footprints
 } from 'lucide-react';
@@ -15,6 +15,7 @@ import { calculateBodyweightReps, calculateShareVolume, getActiveMuscleScores } 
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { COMPACT_LIBRARY } from '@/services/library';
 import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
+import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { getAvatarUrl } from '@/lib/avatar';
 import { RouteMap } from '@/components/cardio/RouteMap';
 
@@ -31,17 +32,17 @@ interface ActivityPostCardProps {
   activity: Activity;
   onShare?: (activity: Activity) => void;
   onDelete?: (activityId: string) => void;
+  onCommentClick?: () => void;
+  hideCommentsToggle?: boolean;
 }
 
-export function ActivityPostCard({ activity, onShare, onDelete }: ActivityPostCardProps) {
+export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, hideCommentsToggle }: ActivityPostCardProps) {
   const { user, profile } = useAuthStore();
-  const { showToast, units, theme, hiddenPosts, hidePost, unhidePost } = useUIStore();
+  const { showToast, confirm, units, theme, hiddenPosts, hidePost, unhidePost } = useUIStore();
   const queryClient = useQueryClient();
 
   const [isDeleted, setIsDeleted] = useState(false);
-  const [showComments, setShowComments] = useState(false);
   const [showAllExercises, setShowAllExercises] = useState(false);
-  const [commentText, setCommentText] = useState('');
   const [showOptions, setShowOptions] = useState(false);
 
   const bookmarks = profile?.bookmarks || [];
@@ -76,12 +77,6 @@ export function ActivityPostCard({ activity, onShare, onDelete }: ActivityPostCa
     enabled: !!activity.id && !!user,
   });
 
-  const { data: comments = [], refetch: refetchComments } = useQuery({
-    queryKey: ['comments', activity.id],
-    queryFn: () => getComments(activity.id!),
-    enabled: !!activity.id && showComments,
-  });
-
   // Like Mutation with optimistic update
   const likeMutation = useMutation({
     mutationFn: () => toggleLike(activity.id!, user!.uid),
@@ -99,21 +94,6 @@ export function ActivityPostCard({ activity, onShare, onDelete }: ActivityPostCa
       queryClient.setQueryData(['liked', activity.id, user?.uid], context?.previousLiked);
       showToast('Could not update like', 'error');
     },
-  });
-
-  const commentMutation = useMutation({
-    mutationFn: () => addComment(activity.id!, {
-      userId: user!.uid,
-      userName: profile?.displayName || user!.displayName || 'Athlete',
-      userPhoto: profile?.photoURL || user!.photoURL || '',
-      text: commentText.trim(),
-    }),
-    onSuccess: () => {
-      setCommentText('');
-      refetchComments();
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
-    },
-    onError: () => showToast('Could not add comment', 'error'),
   });
 
   const deleteMutation = useMutation({
@@ -228,11 +208,18 @@ export function ActivityPostCard({ activity, onShare, onDelete }: ActivityPostCa
                   </button>
                   {isOwnActivity ? (
                     <button 
-                      onClick={() => {
-                        if (confirm('Are you sure you want to delete this post?')) {
+                      onClick={async () => {
+                        setShowOptions(false);
+                        const ok = await confirm({
+                          title: 'Delete Workout Post',
+                          message: 'Are you sure you want to delete this workout post? This cannot be undone.',
+                          confirmText: 'Delete',
+                          type: 'danger',
+                          icon: 'trash',
+                        });
+                        if (ok) {
                           deleteMutation.mutate();
                         }
-                        setShowOptions(false);
                       }}
                       disabled={deleteMutation.isPending}
                       className="w-full text-left px-4 py-2.5 text-[13px] font-sans text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-50"
@@ -535,18 +522,24 @@ export function ActivityPostCard({ activity, onShare, onDelete }: ActivityPostCa
             className={`flex items-center gap-1.5 transition-colors ${liked ? 'text-red-500 font-bold' : 'text-[#777b86] hover:text-red-500'
               }`}
           >
-            <Heart size={16} fill={liked ? 'currentColor' : 'none'} />
+            <AnimatedHeart isLiked={liked} size={18} />
             <span>{activity.likesCount || 0}</span>
           </motion.button>
 
           {/* Comment */}
-          <button
-            onClick={() => setShowComments(prev => !prev)}
-            className="flex items-center gap-1.5 text-[#777b86] hover:text-[#17191c] transition-colors"
-          >
-            <MessageCircle size={16} />
-            <span>{activity.commentsCount || 0}</span>
-          </button>
+          {!hideCommentsToggle && (
+            <button
+              onClick={() => {
+                if (onCommentClick) {
+                  onCommentClick();
+                }
+              }}
+              className="flex items-center gap-1.5 text-[#777b86] hover:text-[#17191c] transition-colors"
+            >
+              <MessageSquare size={16} />
+              <span>{activity.commentsCount || 0}</span>
+            </button>
+          )}
 
           {/* Share */}
           <button
@@ -582,52 +575,6 @@ export function ActivityPostCard({ activity, onShare, onDelete }: ActivityPostCa
           <Bookmark size={16} fill={isSaved ? 'currentColor' : 'none'} />
         </button>
       </div>
-
-      {/* Comments Drawer */}
-      <AnimatePresence>
-        {showComments && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="mt-3 pt-3 space-y-2"
-          >
-            {comments.map((comment: Comment) => (
-              <div key={comment.id} className="flex items-start gap-2.5 text-xs">
-                <img
-                  src={comment.userPhoto || getAvatarUrl(comment.userName, theme, 64)}
-                  className="w-6 h-6 rounded-full shadow-[2px_2px_4px_rgba(0,0,0,0.1),-2px_-2px_4px_rgba(255,255,255,1)] object-cover shrink-0 mt-0.5"
-                  alt=""
-                />
-                <div className="rounded-xl bg-[#fdfbfb] shadow-[inset_2px_2px_5px_rgba(0,0,0,0.05),inset_-2px_-2px_5px_rgba(255,255,255,1)] px-3 py-2 flex-1">
-                  <span className="font-bold text-[#17191c]">{comment.userName}</span>
-                  <p className="text-[#777b86] mt-0.5 leading-relaxed">{comment.text}</p>
-                </div>
-              </div>
-            ))}
-
-            {/* Comment Input */}
-            <div className="flex gap-2 pt-1">
-              <input
-                value={commentText}
-                onChange={e => setCommentText(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' && commentText.trim()) commentMutation.mutate();
-                }}
-                placeholder="Say something encouraging…"
-                className="flex-1 bg-[#fdfbfb] shadow-[inset_3px_3px_6px_rgba(0,0,0,0.05),inset_-3px_-3px_6px_rgba(255,255,255,1)] rounded-xl px-3 py-2 text-xs text-[#17191c] outline-none font-sans"
-              />
-              <button
-                disabled={!commentText.trim() || commentMutation.isPending}
-                onClick={() => commentMutation.mutate()}
-                className="px-3 py-2 rounded-xl bg-[#17191c] text-white shadow-[4px_4px_8px_rgba(0,0,0,0.15),-4px_-4px_8px_rgba(255,255,255,1)] font-medium hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center shrink-0"
-              >
-                <Send size={14} />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.article>
   );
 }

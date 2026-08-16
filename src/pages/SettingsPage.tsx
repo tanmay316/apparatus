@@ -40,7 +40,7 @@ export function SettingsPage() {
 
 function SettingsForm({ profile }: { profile: any }) {
   const { user, updateProfile, signOut } = useAuthStore();
-  const { showToast, theme, setTheme, units, setUnits, language, setLanguage } = useUIStore();
+  const { showToast, confirm, theme, setTheme, units, setUnits, language, setLanguage } = useUIStore();
   const navigate = useNavigate();
 
   const [displayName, setDisplayName] = useState(profile.displayName || '');
@@ -135,7 +135,13 @@ function SettingsForm({ profile }: { profile: any }) {
       return;
     }
 
-    const confirmed = confirm('This permanently deletes your workouts, plans, measurements, social activity, profile, and login. This cannot be undone. Continue?');
+    const confirmed = await confirm({
+      title: 'Delete Account',
+      message: 'This permanently deletes your workouts, plans, measurements, social activity, profile, and login credentials. This cannot be undone. Are you sure you want to proceed?',
+      confirmText: 'Delete Account',
+      type: 'danger',
+      icon: 'trash',
+    });
     if (!confirmed) return;
     setDeleting(true);
     setDeleteProgressMsg('Starting deletion...');
@@ -169,7 +175,13 @@ function SettingsForm({ profile }: { profile: any }) {
 
   const handleResetData = async () => {
     if (!user || !profile) return;
-    const confirmed = confirm('Reset ALL your data: workouts, plans, measurements, skills, social activity, followers, notifications, clan memberships, event registrations, challenge participations, cardio activities, custom exercises, and profile details? Your login account and username will remain. This cannot be undone.');
+    const confirmed = await confirm({
+      title: 'Reset All Data',
+      message: 'Reset ALL your data: workouts, plans, measurements, skills, social activity, followers, notifications, clan memberships, event registrations, challenge participations, cardio activities, custom exercises, and profile details? Your login account and username will remain. This cannot be undone.',
+      confirmText: 'Reset Data',
+      type: 'danger',
+      icon: 'alert',
+    });
     if (!confirmed) return;
     setResetting(true);
     setResetProgressMsg('Starting data reset...');
@@ -196,7 +208,14 @@ function SettingsForm({ profile }: { profile: any }) {
   };
 
   const handleLogout = async () => {
-    if (confirm('Are you sure you want to log out?')) {
+    const confirmed = await confirm({
+      title: 'Sign Out',
+      message: 'Are you sure you want to sign out of your account?',
+      confirmText: 'Sign Out',
+      type: 'warning',
+      icon: 'logout',
+    });
+    if (confirmed) {
       await signOut();
       navigate('/auth');
     }

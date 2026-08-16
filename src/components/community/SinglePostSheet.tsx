@@ -2,9 +2,8 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  X, Heart, MessageSquare, CornerDownRight, Trash2, Bookmark,
-  Share2, ThumbsUp, ThumbsDown, Send, CornerDownLeft, Check,
-  ChevronDown, ChevronUp, Loader2, Sparkles
+  X, Heart, MessageSquare, Trash2, Bookmark,
+  Share2, ThumbsUp, ThumbsDown, Send, CornerDownLeft, CornerDownRight, Loader2, ImagePlus, Sparkles
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -13,6 +12,8 @@ import {
   getPostComments, createPostComment, deleteClanPost,
   toggleLikeClanPost, toggleLikePostComment, toggleDislikePostComment, deletePostComment
 } from '@/services/community';
+import { compressImageFile } from '@/utils/image-compression';
+import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { CommunityPost, PostComment } from '@/types';
 import { useNavigate } from 'react-router-dom';
 
@@ -40,14 +41,43 @@ function timeAgo(date: any): string {
 export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps) {
   const { user, profile } = useAuthStore();
   const isAdmin = !!profile?.isAdmin;
-  const { showToast } = useUIStore();
+  const { showToast, confirm } = useUIStore();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
   const [commentText, setCommentText] = useState('');
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; userName: string; userId: string } | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [commentImages, setCommentImages] = useState<string[]>([]);
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
   const commentInputRef = useRef<HTMLInputElement>(null);
+  const commentImageInputRef = useRef<HTMLInputElement>(null);
+  
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
+
+  const toggleReplies = (commentId: string) => {
+    setExpandedReplies(prev => {
+      const next = new Set(prev);
+      if (next.has(commentId)) next.delete(commentId);
+      else next.add(commentId);
+      return next;
+    });
+  };
+
+  // Optimistic Live Post Likes & Bookmark States
+  const [localLiked, setLocalLiked] = useState<boolean>(false);
+  const [localLikesCount, setLocalLikesCount] = useState<number>(0);
+  const [localSaved, setLocalSaved] = useState<boolean>(false);
+
+  const bookmarks = profile?.bookmarks || [];
+
+  useEffect(() => {
+    if (post) {
+      setLocalLiked((post.likedUserIds || []).includes(user?.uid || ''));
+      setLocalLikesCount(post.likesCount || 0);
+      setLocalSaved(bookmarks.includes(post.id || ''));
+    }
+  }, [post?.id, post?.likedUserIds, post?.likesCount, bookmarks, user?.uid]);
 
   useEffect(() => {
     if (isOpen) {
@@ -62,16 +92,6 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
     enabled: !!post && isOpen,
   });
 
-  // Check if post is liked by current user
-  const isPostLiked = useMemo(() => {
-    if (!post || !user) return false;
-    return (post.likedUserIds || []).includes(user.uid);
-  }, [post?.likedUserIds, user?.uid]);
-
-  // Check if post is bookmarked by current user
-  const bookmarks = profile?.bookmarks || [];
-  const isPostSaved = post?.id ? bookmarks.includes(post.id) : false;
-
   // Images to display (multi-image support + backward compatibility)
   const postImages = useMemo(() => {
     if (!post) return [];
@@ -80,33 +100,42 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
     return [];
   }, [post?.images, post?.imageUrl]);
 
-  // Like Post Mutation
-  const likePostMutation = useMutation({
-    mutationFn: async () => {
-      if (!user || !post?.id) return;
+  // Like Post Handler with 0ms Instant Optimistic Feedback
+  const handleTogglePostLike = async () => {
+    if (!user || !post?.id) {
+      showToast('Please log in to like posts', 'info');
+      return;
+    }
+    const nextLiked = !localLiked;
+    setLocalLiked(nextLiked);
+    setLocalLikesCount(prev => nextLiked ? prev + 1 : Math.max(0, prev - 1));
+
+    try {
       await toggleLikeClanPost(post.id, user.uid);
-    },
-    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clanPosts'] });
-    },
-    onError: () => {
+    } catch {
+      setLocalLiked(!nextLiked);
+      setLocalLikesCount(prev => !nextLiked ? prev + 1 : Math.max(0, prev - 1));
       showToast('Could not update like', 'error');
     }
-  });
+  };
 
-  // Bookmark / Save Post Mutation
+  // Bookmark / Save Post Handler
   const handleToggleBookmark = async () => {
     if (!user || !post?.id) return;
     try {
-      const isCurrentlySaved = bookmarks.includes(post.id);
-      const newBookmarks = isCurrentlySaved
-        ? bookmarks.filter((id: string) => id !== post.id)
-        : [...bookmarks, post.id];
+      const nextSaved = !localSaved;
+      setLocalSaved(nextSaved);
+
+      const newBookmarks = nextSaved
+        ? [...bookmarks.filter((id: string) => id !== post.id), post.id]
+        : bookmarks.filter((id: string) => id !== post.id);
 
       await useAuthStore.getState().updateProfile({ bookmarks: newBookmarks });
-      showToast(isCurrentlySaved ? 'Removed from bookmarks' : 'Saved to bookmarks', 'info');
+      showToast(nextSaved ? 'Saved to bookmarks' : 'Removed from bookmarks', 'info');
       queryClient.invalidateQueries({ queryKey: ['bookmarkedPosts'] });
     } catch {
+      setLocalSaved(prev => !prev);
       showToast('Could not update bookmark', 'error');
     }
   };
@@ -139,36 +168,40 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
     }
   };
 
-  // Delete Post Mutation
-  const deletePostMutation = useMutation({
-    mutationFn: async () => {
-      if (!post?.id) return;
-      if (window.confirm('Are you sure you want to permanently delete this post and its attachments?')) {
-        await deleteClanPost(post.id);
-        return true;
-      }
-      return false;
-    },
-    onSuccess: (didDelete) => {
-      if (didDelete) {
-        queryClient.invalidateQueries({ queryKey: ['clanPosts'] });
-        showToast('Post deleted successfully');
-        onClose();
-      }
-    },
-    onError: (err: any) => showToast(err?.message || 'Failed to delete post', 'error')
-  });
+  // Delete Post with custom Confirmation Modal & Storage cleanup
+  const handleDeletePost = async () => {
+    if (!post?.id) return;
+    const confirmed = await confirm({
+      title: 'Delete Post',
+      message: 'Are you sure you want to permanently delete this post and all its images? This cannot be undone.',
+      confirmText: 'Delete Post',
+      cancelText: 'Cancel',
+      type: 'danger',
+      icon: 'trash',
+    });
+    if (!confirmed) return;
+
+    try {
+      await deleteClanPost(post.id);
+      queryClient.invalidateQueries({ queryKey: ['clanPosts'] });
+      showToast('Post deleted successfully');
+      onClose();
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete post', 'error');
+    }
+  };
 
   // Create Comment Mutation
   const commentMutation = useMutation({
     mutationFn: async () => {
-      if (!user || !commentText.trim() || !post?.id) return;
+      if (!user || (!commentText.trim() && commentImages.length === 0) || !post?.id) return;
       await createPostComment({
         postId: post.id,
         userId: user.uid,
         userName: user.displayName || 'Athlete',
         userPhoto: user.photoURL || '',
         text: commentText.trim(),
+        images: commentImages.length > 0 ? commentImages : undefined,
         parentId: replyingTo?.commentId || null,
         replyToUserId: replyingTo?.userId || undefined,
         replyToUserName: replyingTo?.userName || undefined,
@@ -176,6 +209,7 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
     },
     onSuccess: () => {
       setCommentText('');
+      setCommentImages([]);
       setReplyingTo(null);
       queryClient.invalidateQueries({ queryKey: ['postComments', post?.id] });
       queryClient.invalidateQueries({ queryKey: ['clanPosts'] });
@@ -183,50 +217,124 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
     onError: (err: any) => showToast(err?.message || 'Failed to post comment', 'error')
   });
 
-  // Like Comment Mutation
-  const likeCommentMutation = useMutation({
-    mutationFn: async (commentId: string) => {
-      if (!user) return;
-      await toggleLikePostComment(commentId, user.uid);
-    },
-    onSuccess: () => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    if (commentImages.length + files.length > 4) {
+      showToast('Maximum 4 images allowed per comment', 'error');
+      return;
+    }
+
+    setIsProcessingImage(true);
+    try {
+      const processed: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.size > 25 * 1024 * 1024) {
+          showToast(`File ${file.name} is too large (>25MB).`, 'error');
+          continue;
+        }
+        const compressed = await compressImageFile(file, 800, 800, 0.6);
+        processed.push(compressed);
+      }
+      setCommentImages(prev => [...prev, ...processed].slice(0, 4));
+    } catch (err: any) {
+      showToast('Failed to process image', 'error');
+    } finally {
+      setIsProcessingImage(false);
+      if (commentImageInputRef.current) commentImageInputRef.current.value = '';
+    }
+  };
+
+  const removeCommentImage = (index: number) => {
+    setCommentImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Like Comment Handler with 0ms Instant Optimistic Feedback
+  const handleToggleCommentLike = async (comment: PostComment) => {
+    if (!user || !comment.id) return;
+
+    queryClient.setQueryData(['postComments', post?.id], (old: PostComment[] = []) => {
+      return old.map(c => {
+        if (c.id !== comment.id) return c;
+        const likedUserIds = c.likedUserIds || [];
+        const dislikedUserIds = c.dislikedUserIds || [];
+        const isLiked = likedUserIds.includes(user.uid);
+        const nextLiked = isLiked ? likedUserIds.filter(id => id !== user.uid) : [...likedUserIds, user.uid];
+        const nextDisliked = dislikedUserIds.filter(id => id !== user.uid);
+        return {
+          ...c,
+          likedUserIds: nextLiked,
+          likesCount: nextLiked.length,
+          dislikedUserIds: nextDisliked,
+          dislikesCount: nextDisliked.length
+        };
+      });
+    });
+
+    try {
+      await toggleLikePostComment(comment.id, user.uid);
+    } catch {
       queryClient.invalidateQueries({ queryKey: ['postComments', post?.id] });
     }
-  });
+  };
 
-  // Dislike Comment Mutation
-  const dislikeCommentMutation = useMutation({
-    mutationFn: async (commentId: string) => {
-      if (!user) return;
-      await toggleDislikePostComment(commentId, user.uid);
-    },
-    onSuccess: () => {
+  // Dislike Comment Handler with 0ms Instant Optimistic Feedback
+  const handleToggleCommentDislike = async (comment: PostComment) => {
+    if (!user || !comment.id) return;
+
+    queryClient.setQueryData(['postComments', post?.id], (old: PostComment[] = []) => {
+      return old.map(c => {
+        if (c.id !== comment.id) return c;
+        const likedUserIds = c.likedUserIds || [];
+        const dislikedUserIds = c.dislikedUserIds || [];
+        const isDisliked = dislikedUserIds.includes(user.uid);
+        const nextDisliked = isDisliked ? dislikedUserIds.filter(id => id !== user.uid) : [...dislikedUserIds, user.uid];
+        const nextLiked = likedUserIds.filter(id => id !== user.uid);
+        return {
+          ...c,
+          dislikedUserIds: nextDisliked,
+          dislikesCount: nextDisliked.length,
+          likedUserIds: nextLiked,
+          likesCount: nextLiked.length
+        };
+      });
+    });
+
+    try {
+      await toggleDislikePostComment(comment.id, user.uid);
+    } catch {
       queryClient.invalidateQueries({ queryKey: ['postComments', post?.id] });
     }
-  });
+  };
 
-  // Delete Comment Mutation
-  const deleteCommentMutation = useMutation({
-    mutationFn: async (commentId: string) => {
-      if (!post?.id) return;
-      if (window.confirm('Delete this comment?')) {
-        await deletePostComment(commentId, post.id);
-        return true;
-      }
-      return false;
-    },
-    onSuccess: (didDelete) => {
-      if (didDelete) {
-        queryClient.invalidateQueries({ queryKey: ['postComments', post?.id] });
-        queryClient.invalidateQueries({ queryKey: ['clanPosts'] });
-        showToast('Comment deleted');
-      }
+  // Delete Comment with custom Confirmation Modal
+  const handleDeleteComment = async (commentId: string) => {
+    if (!post?.id) return;
+    const confirmed = await confirm({
+      title: 'Delete Comment',
+      message: 'Are you sure you want to delete this comment and its replies?',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      type: 'danger',
+      icon: 'trash',
+    });
+    if (!confirmed) return;
+
+    try {
+      await deletePostComment(commentId, post.id);
+      queryClient.invalidateQueries({ queryKey: ['postComments', post?.id] });
+      queryClient.invalidateQueries({ queryKey: ['clanPosts'] });
+      showToast('Comment deleted');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to delete comment', 'error');
     }
-  });
+  };
 
   const handleStartReply = (c: PostComment) => {
     setReplyingTo({
-      commentId: c.parentId || c.id!, // Thread under root if already in a thread
+      commentId: c.parentId || c.id!,
       userName: c.userName,
       userId: c.userId,
     });
@@ -255,122 +363,119 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
 
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!commentText.trim() || commentMutation.isPending) return;
+    if ((!commentText.trim() && commentImages.length === 0) || commentMutation.isPending || isProcessingImage) return;
     commentMutation.mutate();
   };
 
   return createPortal(
     <AnimatePresence>
       {isOpen && post && (
-        <div className="fixed inset-0 z-[600] flex flex-col justify-end sm:justify-center sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-[600] flex flex-col justify-end sm:justify-center sm:items-center sm:p-3">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/75 backdrop-blur-md"
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
           />
 
-          {/* Modal Content */}
+          {/* Modal Container (Sleek Mobile Frame) */}
           <motion.div
             initial={{ y: '100%', opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: '100%', opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-            className="bg-ink w-full max-w-2xl h-[92vh] sm:h-[88vh] rounded-t-[32px] sm:rounded-[32px] relative z-10 flex flex-col shadow-2xl overflow-hidden border-t sm:border border-line/20"
+            transition={{ type: 'spring', damping: 25, stiffness: 240 }}
+            className="bg-ink w-full max-w-xl h-[94vh] sm:h-[88vh] rounded-t-[28px] sm:rounded-[28px] relative z-10 flex flex-col shadow-2xl overflow-hidden border-t sm:border border-line/20"
           >
-            {/* Mobile Drag Bar */}
-            <div className="w-12 h-1.5 bg-line/40 rounded-full mx-auto mt-3 mb-1 sm:hidden" />
+            {/* Mobile Drag Indicator */}
+            <div className="w-10 h-1 bg-line/30 rounded-full mx-auto mt-2.5 mb-0.5 sm:hidden" />
 
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3.5 border-b border-line/20 bg-ink/90 backdrop-blur-md sticky top-0 z-20">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-sienna/20 border border-sienna/40 flex items-center justify-center text-sienna font-bold text-xs">
+            {/* Top Bar Header */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-line/15 bg-ink/95 backdrop-blur-md sticky top-0 z-20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-full bg-sienna/20 border border-sienna/30 flex items-center justify-center text-sienna font-bold text-xs">
                   {post.authorName?.charAt(0)?.toUpperCase() || 'P'}
                 </div>
-                <div>
-                  <h2 className="text-base font-bold text-bone leading-tight">Post</h2>
-                  <span className="text-[11px] text-bone-dim font-mono">{timeAgo(post.createdAt)}</span>
+                <div className="leading-tight">
+                  <h2 className="text-sm font-bold text-bone">Post</h2>
+                  <span className="text-[10px] text-bone-dim font-mono">{timeAgo(post.createdAt)}</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {(isAdmin || user?.uid === post.authorId) && (
                   <button
-                    onClick={() => deletePostMutation.mutate()}
-                    disabled={deletePostMutation.isPending}
-                    className="p-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors text-xs font-mono flex items-center gap-1.5 border border-red-500/20"
+                    onClick={handleDeletePost}
+                    className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors text-xs font-mono flex items-center gap-1 border border-red-500/20"
                     title="Delete Post"
                   >
-                    <Trash2 size={15} />
-                    <span className="hidden sm:inline">Delete</span>
+                    <Trash2 size={13} />
+                    <span className="hidden sm:inline text-[11px]">Delete</span>
                   </button>
                 )}
                 <button
                   onClick={onClose}
-                  className="p-2 bg-ink-2 rounded-full text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors"
+                  className="p-1.5 bg-ink-2 rounded-full text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors"
                 >
-                  <X size={18} />
+                  <X size={16} />
                 </button>
               </div>
             </div>
 
-            {/* Body Scroll Area */}
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-6">
-              {/* Main Post Card */}
-              <div className="bg-ink-2/80 rounded-3xl p-5 border border-line/20 shadow-sm space-y-4">
-                {/* Author Info */}
-                <div className="flex items-center justify-between">
-                  <div
-                    onClick={() => {
-                      if (post.authorId === user?.uid) navigate('/profile');
-                      else navigate(`/profile/${post.authorId}`);
-                      onClose();
-                    }}
-                    className="flex items-center gap-3 cursor-pointer group"
-                  >
-                    <div className="w-11 h-11 rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold text-base overflow-hidden group-hover:border-sienna/50 transition-colors">
-                      {post.authorPhoto ? (
-                        <img src={post.authorPhoto} alt={post.authorName} className="w-full h-full object-cover" />
-                      ) : (
-                        post.authorName?.charAt(0)?.toUpperCase() || '?'
-                      )}
+            {/* Scrollable Body Content */}
+            <div className="flex-1 overflow-y-auto px-3.5 sm:px-4 py-3.5 space-y-4">
+              {/* Main Post Card (Sleek Compact View) */}
+              <div className="bg-ink-2/70 rounded-2xl p-3.5 sm:p-4 border border-line/20 shadow-sm space-y-3">
+                {/* Author Row */}
+                <div
+                  onClick={() => {
+                    if (post.authorId === user?.uid) navigate('/profile');
+                    else navigate(`/profile/${post.authorId}`);
+                    onClose();
+                  }}
+                  className="flex items-center gap-2.5 cursor-pointer group"
+                >
+                  <div className="w-9 h-9 rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold text-sm overflow-hidden group-hover:border-sienna/50 transition-colors shrink-0">
+                    {post.authorPhoto ? (
+                      <img src={post.authorPhoto} alt={post.authorName} className="w-full h-full object-cover" />
+                    ) : (
+                      post.authorName?.charAt(0)?.toUpperCase() || '?'
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-bone font-bold text-sm truncate group-hover:text-sienna transition-colors">
+                      {post.authorName}
                     </div>
-                    <div>
-                      <div className="text-bone font-bold text-sm sm:text-base group-hover:text-sienna transition-colors">
-                        {post.authorName}
-                      </div>
-                      <div className="text-xs text-bone-dim font-mono">{timeAgo(post.createdAt)}</div>
-                    </div>
+                    <div className="text-[11px] text-bone-dim font-mono">{timeAgo(post.createdAt)}</div>
                   </div>
                 </div>
 
                 {/* Post Title */}
                 {post.title && (
-                  <h1 className="text-lg sm:text-xl font-bold font-display text-bone leading-snug tracking-tight">
+                  <h1 className="text-base sm:text-lg font-bold font-display text-bone leading-snug tracking-tight">
                     {post.title}
                   </h1>
                 )}
 
                 {/* Post Body */}
                 {post.text && (
-                  <p className="text-bone/90 text-sm sm:text-base whitespace-pre-wrap leading-relaxed">
+                  <p className="text-bone/90 text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">
                     {post.text}
                   </p>
                 )}
 
-                {/* Post Images Grid (Twitter / X Style) */}
+                {/* Post Images Grid */}
                 {postImages.length > 0 && (
                   <div
-                    className={`rounded-2xl overflow-hidden border border-line/20 gap-2 ${
+                    className={`rounded-xl overflow-hidden border border-line/15 gap-1.5 ${
                       postImages.length === 1
-                        ? 'flex'
+                        ? 'flex max-h-[320px]'
                         : postImages.length === 2
-                        ? 'grid grid-cols-2 aspect-[16/9]'
+                        ? 'grid grid-cols-2 h-44'
                         : postImages.length === 3
-                        ? 'grid grid-cols-2 aspect-[16/9]'
-                        : 'grid grid-cols-2 aspect-square'
+                        ? 'grid grid-cols-2 h-48'
+                        : 'grid grid-cols-2 h-52'
                     }`}
                   >
                     {postImages.map((img, idx) => (
@@ -384,7 +489,7 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                         <img
                           src={img}
                           alt="Post attachment"
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 max-h-[480px]"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         />
                       </div>
                     ))}
@@ -392,76 +497,76 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                 )}
 
                 {/* Action Bar (Like, Comment, Save, Share) */}
-                <div className="flex items-center justify-between pt-3 border-t border-line/20 text-xs font-mono text-bone-dim">
+                <div className="flex items-center justify-between pt-2.5 border-t border-line/15 text-xs font-mono text-bone-dim">
                   {/* Like Button */}
                   <button
-                    onClick={() => likePostMutation.mutate()}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all ${
-                      isPostLiked
+                    onClick={handleTogglePostLike}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all active:scale-95 ${
+                      localLiked
                         ? 'text-red-500 bg-red-500/10 font-bold'
                         : 'hover:text-red-400 hover:bg-red-500/5'
                     }`}
                   >
-                    <Heart size={16} className={isPostLiked ? 'fill-current' : ''} />
-                    <span>{post.likesCount || 0}</span>
+                    <AnimatedHeart isLiked={localLiked} size={16} />
+                    <span>{localLikesCount}</span>
                   </button>
 
                   {/* Comment Focus Button */}
                   <button
                     onClick={() => commentInputRef.current?.focus()}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:text-bone hover:bg-ink-3 transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:text-bone hover:bg-ink-3 transition-colors"
                   >
-                    <MessageSquare size={16} />
+                    <MessageSquare size={15} />
                     <span>{post.commentsCount || 0}</span>
                   </button>
 
                   {/* Bookmark Button */}
                   <button
                     onClick={handleToggleBookmark}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-colors ${
-                      isPostSaved
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-colors ${
+                      localSaved
                         ? 'text-sienna bg-sienna/10 font-bold'
                         : 'hover:text-sienna hover:bg-sienna/5'
                     }`}
-                    title={isPostSaved ? 'Saved' : 'Save Bookmark'}
+                    title={localSaved ? 'Saved' : 'Save Bookmark'}
                   >
-                    <Bookmark size={16} className={isPostSaved ? 'fill-current' : ''} />
-                    <span className="hidden sm:inline">{isPostSaved ? 'Saved' : 'Save'}</span>
+                    <Bookmark size={15} className={localSaved ? 'fill-current' : ''} />
+                    <span className="hidden sm:inline text-[11px]">{localSaved ? 'Saved' : 'Save'}</span>
                   </button>
 
                   {/* Share Button */}
                   <button
                     onClick={handleShare}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-xl hover:text-blue-400 hover:bg-blue-500/5 transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:text-blue-400 hover:bg-blue-500/5 transition-colors"
                     title="Share Post"
                   >
-                    <Share2 size={16} />
-                    <span className="hidden sm:inline">Share</span>
+                    <Share2 size={15} />
+                    <span className="hidden sm:inline text-[11px]">Share</span>
                   </button>
                 </div>
               </div>
 
               {/* Twitter (X)-Style Threaded Comments */}
-              <div className="space-y-4">
+              <div className="space-y-3 pt-1">
                 <div className="flex items-center justify-between px-1">
-                  <h3 className="text-xs font-mono uppercase tracking-widest text-bone-dim">
+                  <h3 className="text-[11px] font-mono uppercase tracking-widest text-bone-dim">
                     Replies ({comments.length})
                   </h3>
                 </div>
 
                 {loadingComments ? (
-                  <div className="text-center py-10 text-bone-dim flex items-center justify-center gap-2 font-mono text-sm">
-                    <Loader2 size={18} className="animate-spin text-sienna" />
+                  <div className="text-center py-8 text-bone-dim flex items-center justify-center gap-2 font-mono text-xs">
+                    <Loader2 size={16} className="animate-spin text-sienna" />
                     <span>Loading replies...</span>
                   </div>
                 ) : rootComments.length === 0 ? (
-                  <div className="text-center py-12 bg-ink-2/40 rounded-3xl border border-dashed border-line/20">
-                    <MessageSquare size={36} className="mx-auto mb-2 text-bone-dim/40" />
-                    <p className="text-sm text-bone-dim">No replies yet.</p>
-                    <p className="text-xs text-bone-dim/60 mt-1">Be the first to join the conversation!</p>
+                  <div className="text-center py-10 bg-ink-2/30 rounded-2xl border border-dashed border-line/15">
+                    <MessageSquare size={28} className="mx-auto mb-1.5 text-bone-dim/40" />
+                    <p className="text-xs text-bone-dim">No replies yet.</p>
+                    <p className="text-[11px] text-bone-dim/60 mt-0.5">Be the first to reply!</p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {rootComments.map(rootComment => {
                       const replies = replyMap.get(rootComment.id!) || [];
                       const isRootLiked = (rootComment.likedUserIds || []).includes(user?.uid || '');
@@ -469,15 +574,15 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
 
                       return (
                         <div key={rootComment.id} className="relative group">
-                          {/* Root Comment Container */}
-                          <div className="flex gap-3 relative">
-                            {/* Thread Line Connector */}
+                          {/* Root Comment Row */}
+                          <div className="flex gap-2.5 relative">
+                            {/* Thread Connector Line */}
                             {replies.length > 0 && (
-                              <div className="absolute left-4 top-10 bottom-0 w-[2px] bg-line/30 rounded-full z-0" />
+                              <div className="absolute left-[13px] top-8 bottom-0 w-[1.5px] bg-line/30 rounded-full z-0" />
                             )}
 
-                            {/* Avatar */}
-                            <div className="w-8 h-8 rounded-full bg-ink-3 border border-line/20 flex items-center justify-center text-bone font-bold text-xs shrink-0 overflow-hidden z-10">
+                            {/* Root Avatar */}
+                            <div className="w-7 h-7 rounded-full bg-ink-3 border border-line/20 flex items-center justify-center text-bone font-bold text-[10px] shrink-0 overflow-hidden z-10 mt-0.5">
                               {rootComment.userPhoto ? (
                                 <img src={rootComment.userPhoto} alt={rootComment.userName} className="w-full h-full object-cover" />
                               ) : (
@@ -485,8 +590,8 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                               )}
                             </div>
 
-                            {/* Comment Card */}
-                            <div className="flex-1 bg-ink-2/60 border border-line/20 rounded-2xl p-3.5 shadow-sm space-y-2">
+                            {/* Comment Bubble */}
+                            <div className="flex-1 bg-ink-2/60 border border-line/15 rounded-2xl p-2.5 sm:p-3 shadow-sm space-y-1.5">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-bold text-bone">{rootComment.userName}</span>
@@ -495,11 +600,11 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
 
                                 {(isAdmin || user?.uid === rootComment.userId) && (
                                   <button
-                                    onClick={() => deleteCommentMutation.mutate(rootComment.id!)}
-                                    className="text-bone-dim hover:text-red-400 p-1 transition-colors"
-                                    title="Delete comment"
+                                    onClick={() => handleDeleteComment(rootComment.id!)}
+                                    className="text-bone-dim/70 hover:text-red-400 p-0.5 transition-colors"
+                                    title="Delete reply"
                                   >
-                                    <Trash2 size={13} />
+                                    <Trash2 size={12} />
                                   </button>
                                 )}
                               </div>
@@ -508,27 +613,38 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                                 {rootComment.text}
                               </p>
 
+                              {/* Comment Images */}
+                              {(rootComment.images || (rootComment.imageUrl ? [rootComment.imageUrl] : [])).length > 0 && (
+                                <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1 max-w-[280px] scrollbar-hide">
+                                  {(rootComment.images || [rootComment.imageUrl!]).map((img, idx) => (
+                                    <div key={idx} onClick={() => setPreviewImage(img)} className="w-16 h-16 shrink-0 rounded-lg overflow-hidden bg-ink-3 border border-line/20 cursor-pointer">
+                                      <img src={img} alt="Comment attachment" className="w-full h-full object-cover" />
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
                               {/* Comment Action Row */}
-                              <div className="flex items-center gap-4 pt-1.5 border-t border-line/10 text-[11px] font-mono text-bone-dim">
+                              <div className="flex items-center gap-3 pt-1 border-t border-line/10 text-[10px] font-mono text-bone-dim">
                                 {/* Like */}
                                 <button
-                                  onClick={() => likeCommentMutation.mutate(rootComment.id!)}
-                                  className={`flex items-center gap-1 hover:text-sienna transition-colors ${
-                                    isRootLiked ? 'text-sienna font-bold' : ''
+                                  onClick={() => handleToggleCommentLike(rootComment)}
+                                  className={`flex items-center gap-1 hover:text-red-400 transition-colors ${
+                                    isRootLiked ? 'text-red-500 font-bold' : ''
                                   }`}
                                 >
-                                  <ThumbsUp size={13} className={isRootLiked ? 'fill-current' : ''} />
+                                  <AnimatedHeart isLiked={isRootLiked} size={12} />
                                   <span>{rootComment.likesCount || 0}</span>
                                 </button>
 
                                 {/* Dislike */}
                                 <button
-                                  onClick={() => dislikeCommentMutation.mutate(rootComment.id!)}
-                                  className={`flex items-center gap-1 hover:text-red-400 transition-colors ${
-                                    isRootDisliked ? 'text-red-400 font-bold' : ''
+                                  onClick={() => handleToggleCommentDislike(rootComment)}
+                                  className={`flex items-center gap-1 hover:text-indigo-400 transition-colors ${
+                                    isRootDisliked ? 'text-indigo-400 font-bold' : ''
                                   }`}
                                 >
-                                  <ThumbsDown size={13} className={isRootDisliked ? 'fill-current' : ''} />
+                                  <ThumbsDown size={12} className={isRootDisliked ? 'fill-current' : ''} />
                                   <span>{rootComment.dislikesCount || 0}</span>
                                 </button>
 
@@ -537,23 +653,36 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                                   onClick={() => handleStartReply(rootComment)}
                                   className="flex items-center gap-1 hover:text-bone text-bone-dim transition-colors ml-auto"
                                 >
-                                  <CornerDownLeft size={13} />
+                                  <CornerDownLeft size={12} />
                                   <span>Reply</span>
                                 </button>
                               </div>
                             </div>
                           </div>
 
+                          {/* "See X Replies" Button */}
+                          {replies.length > 0 && !expandedReplies.has(rootComment.id!) && (
+                            <div className="ml-5 sm:ml-6 mt-1.5 pl-3">
+                              <button 
+                                onClick={() => toggleReplies(rootComment.id!)}
+                                className="text-sienna text-[11px] sm:text-xs font-bold hover:underline flex items-center gap-1.5 py-1"
+                              >
+                                <div className="w-4 h-[1.5px] bg-line/40 rounded-full" />
+                                See {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
+                              </button>
+                            </div>
+                          )}
+
                           {/* Nested Replies (X / Twitter Style) */}
-                          {replies.length > 0 && (
-                            <div className="ml-5 sm:ml-7 mt-2 space-y-2 border-l-2 border-line/30 pl-4 py-1">
+                          {replies.length > 0 && expandedReplies.has(rootComment.id!) && (
+                            <div className="ml-4 sm:ml-5 mt-1.5 space-y-1.5 border-l-[1.5px] border-line/30 pl-3 py-0.5">
                               {replies.map(reply => {
                                 const isReplyLiked = (reply.likedUserIds || []).includes(user?.uid || '');
                                 const isReplyDisliked = (reply.dislikedUserIds || []).includes(user?.uid || '');
 
                                 return (
-                                  <div key={reply.id} className="flex gap-2.5">
-                                    <div className="w-7 h-7 rounded-full bg-ink-3 border border-line/20 flex items-center justify-center text-bone font-bold text-[10px] shrink-0 overflow-hidden">
+                                  <div key={reply.id} className="flex gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-ink-3 border border-line/20 flex items-center justify-center text-bone font-bold text-[9px] shrink-0 overflow-hidden mt-0.5">
                                       {reply.userPhoto ? (
                                         <img src={reply.userPhoto} alt={reply.userName} className="w-full h-full object-cover" />
                                       ) : (
@@ -561,51 +690,62 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                                       )}
                                     </div>
 
-                                    <div className="flex-1 bg-ink-2/40 border border-line/20 rounded-2xl p-3 shadow-sm space-y-1.5">
+                                    <div className="flex-1 bg-ink-2/40 border border-line/15 rounded-2xl p-2.5 shadow-sm space-y-1">
                                       <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xs font-bold text-bone">{reply.userName}</span>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[11px] font-bold text-bone">{reply.userName}</span>
                                           {reply.replyToUserName && (
                                             <span className="text-[10px] text-sienna font-mono">
                                               @{reply.replyToUserName}
                                             </span>
                                           )}
-                                          <span className="text-[10px] text-bone-dim font-mono">{timeAgo(reply.createdAt)}</span>
+                                          <span className="text-[9px] text-bone-dim font-mono">{timeAgo(reply.createdAt)}</span>
                                         </div>
 
                                         {(isAdmin || user?.uid === reply.userId) && (
                                           <button
-                                            onClick={() => deleteCommentMutation.mutate(reply.id!)}
-                                            className="text-bone-dim hover:text-red-400 p-1 transition-colors"
+                                            onClick={() => handleDeleteComment(reply.id!)}
+                                            className="text-bone-dim/70 hover:text-red-400 p-0.5 transition-colors"
                                             title="Delete reply"
                                           >
-                                            <Trash2 size={12} />
+                                            <Trash2 size={11} />
                                           </button>
                                         )}
                                       </div>
 
-                                      <p className="text-xs sm:text-sm text-bone/90 leading-relaxed whitespace-pre-wrap">
+                                      <p className="text-xs text-bone/90 leading-relaxed whitespace-pre-wrap">
                                         {reply.text}
                                       </p>
 
-                                      <div className="flex items-center gap-4 pt-1 border-t border-line/10 text-[11px] font-mono text-bone-dim">
+                                      {/* Nested Reply Images */}
+                                      {(reply.images || (reply.imageUrl ? [reply.imageUrl] : [])).length > 0 && (
+                                        <div className="mt-1.5 flex gap-1.5 overflow-x-auto pb-1 max-w-[260px] scrollbar-hide">
+                                          {(reply.images || [reply.imageUrl!]).map((img, idx) => (
+                                            <div key={idx} onClick={() => setPreviewImage(img)} className="w-14 h-14 shrink-0 rounded-lg overflow-hidden bg-ink-3 border border-line/20 cursor-pointer">
+                                              <img src={img} alt="Reply attachment" className="w-full h-full object-cover" />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      <div className="flex items-center gap-3 pt-0.5 border-t border-line/10 text-[10px] font-mono text-bone-dim">
                                         <button
-                                          onClick={() => likeCommentMutation.mutate(reply.id!)}
-                                          className={`flex items-center gap-1 hover:text-sienna transition-colors ${
-                                            isReplyLiked ? 'text-sienna font-bold' : ''
+                                          onClick={() => handleToggleCommentLike(reply)}
+                                          className={`flex items-center gap-1 hover:text-red-400 transition-colors ${
+                                            isReplyLiked ? 'text-red-500 font-bold' : ''
                                           }`}
                                         >
-                                          <ThumbsUp size={12} className={isReplyLiked ? 'fill-current' : ''} />
+                                          <AnimatedHeart isLiked={isReplyLiked} size={11} />
                                           <span>{reply.likesCount || 0}</span>
                                         </button>
 
                                         <button
-                                          onClick={() => dislikeCommentMutation.mutate(reply.id!)}
-                                          className={`flex items-center gap-1 hover:text-red-400 transition-colors ${
-                                            isReplyDisliked ? 'text-red-400 font-bold' : ''
+                                          onClick={() => handleToggleCommentDislike(reply)}
+                                          className={`flex items-center gap-1 hover:text-indigo-400 transition-colors ${
+                                            isReplyDisliked ? 'text-indigo-400 font-bold' : ''
                                           }`}
                                         >
-                                          <ThumbsDown size={12} className={isReplyDisliked ? 'fill-current' : ''} />
+                                          <ThumbsDown size={11} className={isReplyDisliked ? 'fill-current' : ''} />
                                           <span>{reply.dislikesCount || 0}</span>
                                         </button>
 
@@ -613,7 +753,7 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                                           onClick={() => handleStartReply(reply)}
                                           className="flex items-center gap-1 hover:text-bone text-bone-dim transition-colors ml-auto"
                                         >
-                                          <CornerDownLeft size={12} />
+                                          <CornerDownLeft size={11} />
                                           <span>Reply</span>
                                         </button>
                                       </div>
@@ -631,28 +771,51 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
               </div>
             </div>
 
-            {/* Bottom Sticky Comment Composer */}
-            <div className="p-3.5 sm:p-4 bg-ink/95 border-t border-line/20 sticky bottom-0 z-20 backdrop-blur-md space-y-2">
+            {/* Bottom Sticky Composer Bar (Ultra Sleek) */}
+            <div className="p-2.5 sm:p-3 bg-ink/98 border-t border-line/20 sticky bottom-0 z-20 backdrop-blur-md space-y-1.5">
               {/* Replying To Banner */}
               {replyingTo && (
-                <div className="flex items-center justify-between bg-sienna/10 border border-sienna/30 px-3 py-1.5 rounded-xl text-xs">
-                  <div className="flex items-center gap-1.5 text-sienna font-mono">
-                    <CornerDownLeft size={13} />
+                <div className="flex items-center justify-between bg-sienna/10 border border-sienna/30 px-3 py-1 rounded-xl text-xs">
+                  <div className="flex items-center gap-1.5 text-sienna font-mono text-[11px]">
+                    <CornerDownLeft size={12} />
                     <span>Replying to <strong className="text-bone">@{replyingTo.userName}</strong></span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setReplyingTo(null)}
-                    className="p-1 hover:bg-sienna/20 rounded-full text-sienna transition-colors"
+                    className="p-0.5 hover:bg-sienna/20 rounded-full text-sienna transition-colors"
                   >
-                    <X size={13} />
+                    <X size={12} />
                   </button>
                 </div>
               )}
 
-              {/* Composer Form */}
+              {/* Image Previews inside composer */}
+              {commentImages.length > 0 && (
+                <div className="flex gap-2 pb-1.5 px-2 overflow-x-auto scrollbar-hide">
+                  {commentImages.map((img, idx) => (
+                    <div key={idx} className="relative w-12 h-12 rounded-lg bg-ink-3 border border-line/20 shrink-0 overflow-hidden group">
+                      <img src={img} alt="Upload preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeCommentImage(idx)}
+                        className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={14} className="text-white" />
+                      </button>
+                    </div>
+                  ))}
+                  {isProcessingImage && (
+                    <div className="w-12 h-12 rounded-lg bg-ink-2 border border-dashed border-line/30 flex items-center justify-center shrink-0">
+                      <Loader2 size={16} className="animate-spin text-bone-dim" />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Composer Input Row */}
               <form onSubmit={handleCommentSubmit} className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold text-xs shrink-0 overflow-hidden">
+                <div className="w-7 h-7 rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold text-xs shrink-0 overflow-hidden">
                   {user?.photoURL ? (
                     <img src={user.photoURL} alt="Me" className="w-full h-full object-cover" />
                   ) : (
@@ -660,26 +823,45 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                   )}
                 </div>
 
+                {/* Upload Image Button */}
+                <input 
+                  type="file" 
+                  ref={commentImageInputRef} 
+                  className="hidden" 
+                  accept="image/*" 
+                  multiple 
+                  onChange={handleImageSelect} 
+                />
+                <button
+                  type="button"
+                  onClick={() => commentImageInputRef.current?.click()}
+                  className="p-1.5 rounded-full text-bone-dim hover:text-sienna hover:bg-sienna/10 transition-colors shrink-0"
+                  title="Attach image"
+                  disabled={commentImages.length >= 4 || isProcessingImage}
+                >
+                  <ImagePlus size={18} />
+                </button>
+
                 <input
                   ref={commentInputRef}
                   type="text"
                   value={commentText}
                   onChange={e => setCommentText(e.target.value)}
                   placeholder={replyingTo ? `Reply to @${replyingTo.userName}...` : 'Post your reply...'}
-                  className="flex-1 bg-ink-2 border border-line/20 rounded-xl px-4 py-2.5 text-sm text-bone placeholder:text-bone-dim/40 focus:outline-none focus:border-sienna transition-colors shadow-inner"
+                  className="flex-1 bg-ink-2 border border-line/20 rounded-full px-3.5 py-2 text-xs sm:text-sm text-bone placeholder:text-bone-dim/40 focus:outline-none focus:border-sienna transition-colors shadow-inner min-w-0"
                 />
 
                 <button
                   type="submit"
-                  disabled={!commentText.trim() || commentMutation.isPending}
-                  className="bg-sienna text-bg px-4 py-2.5 rounded-xl font-bold text-sm disabled:opacity-40 flex items-center gap-1.5 hover:bg-sienna/90 shadow-md shadow-sienna/20 transition-all shrink-0"
+                  disabled={(!commentText.trim() && commentImages.length === 0) || commentMutation.isPending || isProcessingImage}
+                  className="w-8 h-8 rounded-full bg-sienna hover:bg-sienna/90 text-bg flex items-center justify-center disabled:opacity-40 shadow-sm transition-all shrink-0 active:scale-95"
+                  title="Send reply"
                 >
                   {commentMutation.isPending ? (
-                    <Loader2 size={15} className="animate-spin" />
+                    <Loader2 size={14} className="animate-spin" />
                   ) : (
-                    <Send size={15} />
+                    <Send size={13} />
                   )}
-                  <span className="hidden sm:inline">Reply</span>
                 </button>
               </form>
             </div>

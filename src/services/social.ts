@@ -1,9 +1,11 @@
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch, onSnapshot, documentId } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { validateComment } from '@/lib/validation';
-import type { Activity, Comment, Notification as AppNotification, UserProfile } from '@/types';
+import type { Activity, Comment, Notification as AppNotification, UserProfile, CommunityPost } from '@/types';
 
-async function notify(receiverId: string, notification: Omit<AppNotification, 'id' | 'createdAt' | 'receiverId'>) {
+export type FeedItem = Activity | (CommunityPost & { feedType: 'clan_post' });
+
+export async function notify(receiverId: string, notification: Omit<AppNotification, 'id' | 'createdAt' | 'receiverId'>) {
   if (!receiverId || receiverId === notification.senderId) return;
   await addDoc(collection(db, 'notifications'), {
     ...notification,
@@ -309,12 +311,10 @@ export async function getPublicActivities(limitCount = 100): Promise<Activity[]>
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity));
 }
 
-export async function getFeed(userId: string, followingUids: string[]): Promise<Activity[]> {
-  // Keep each query scoped to one owner so Firestore can prove the followers-only
-  // rule. A server-side fan-out worker can materialize a feed later without
-  // changing the client contract.
+export async function getFeed(userId: string, followingUids: string[]): Promise<FeedItem[]> {
+  // 1. Fetch activities
   const ownerIds = [...new Set([userId, ...followingUids])].slice(0, 31);
-  const snapshots = await Promise.all(ownerIds.flatMap(uid => {
+  const activitySnapshots = await Promise.all(ownerIds.flatMap(uid => {
     if (uid === userId) {
       return [getDocs(query(collection(db, 'activities'), where('userId', '==', uid)))];
     }
@@ -324,28 +324,54 @@ export async function getFeed(userId: string, followingUids: string[]): Promise<
     ];
   }));
   
-  let allDocs = snapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity)));
+  let activities = activitySnapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity)));
+
+  // 2. Fetch user's clan posts
+  let clanPosts: (CommunityPost & { feedType: 'clan_post' })[] = [];
+  try {
+    const memSnap = await getDocs(query(collection(db, 'clan_memberships'), where('userId', '==', userId), where('status', '==', 'active')));
+    const clanIds = memSnap.docs.map(d => d.data().clanId);
+    
+    if (clanIds.length > 0) {
+      // split into chunks of 10 for 'in' query
+      const chunks = [];
+      for (let i = 0; i < clanIds.length; i += 10) chunks.push(clanIds.slice(i, i + 10));
+      
+      const postSnaps = await Promise.all(
+        chunks.map(chunk => getDocs(query(collection(db, 'community_posts'), where('communityId', 'in', chunk))))
+      );
+      clanPosts = postSnaps.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data(), feedType: 'clan_post' } as CommunityPost & { feedType: 'clan_post' })));
+    }
+  } catch (err) {
+    console.error('Error fetching clan posts for feed:', err);
+  }
+
+  // 3. Merge and sort
+  const allDocs: FeedItem[] = [...activities, ...clanPosts];
   return allDocs
     .sort((a, b) => {
-      const va = a.createdAt?.seconds || 0;
-      const vb = b.createdAt?.seconds || 0;
-      return vb - va;
+      const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : ((a.createdAt as any)?.seconds ? (a.createdAt as any).seconds * 1000 : 0);
+      const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : ((b.createdAt as any)?.seconds ? (b.createdAt as any).seconds * 1000 : 0);
+      return timeB - timeA;
     })
     .slice(0, 50);
 }
 
-export async function getPublicFeed(): Promise<Activity[]> {
+export async function getPublicFeed(): Promise<FeedItem[]> {
   const q = query(
     collection(db, 'activities'),
-    where('visibility', '==', 'public')
+    where('visibility', '==', 'public'),
+    limit(50)
   );
   const snap = await getDocs(q);
-  return snap.docs
-    .map(d => ({ id: d.id, ...d.data() } as Activity))
+  const activities = snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity));
+  
+  const allDocs: FeedItem[] = [...activities];
+  return allDocs
     .sort((a, b) => {
-      const va = a.createdAt?.seconds || 0;
-      const vb = b.createdAt?.seconds || 0;
-      return vb - va;
+      const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : ((a.createdAt as any)?.seconds ? (a.createdAt as any).seconds * 1000 : 0);
+      const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : ((b.createdAt as any)?.seconds ? (b.createdAt as any).seconds * 1000 : 0);
+      return timeB - timeA;
     })
     .slice(0, 50);
 }

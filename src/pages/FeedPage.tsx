@@ -4,11 +4,14 @@ import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users } from 'lucide-react';
 import { ActivityPostCard, ActivityPostCardSkeleton } from '@/components/social/ActivityPostCard';
+import { ClanPostItem } from '@/components/community/ClanPostItem';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
+import { SinglePostSheet } from '@/components/community/SinglePostSheet';
+import { SingleActivitySheet } from '@/components/social/SingleActivitySheet';
 import { useAuthStore } from '@/stores/auth-store';
 import { getActivity, getFeed, getFollowing, getPublicFeed, getBookmarkedActivities } from '@/services/social';
-import type { Activity } from '@/types';
+import type { Activity, CommunityPost } from '@/types';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -20,6 +23,8 @@ export function FeedPage() {
   const activityId = searchParams.get('activity');
   const [shareData, setShareData] = useState<ShareCardData | null>(null);
   const [cardioShareData, setCardioShareData] = useState<CardioShareData | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
+  const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
 
   const { data: followingUids = [] } = useQuery({
     queryKey: ['following', user?.uid],
@@ -139,14 +144,24 @@ export function FeedPage() {
         </motion.div>
       ) : (
         <div className="space-y-4">
-          {visibleFeedItems.map(activity => (
-            <div id={`activity-${activity.id}`} key={activity.id}>
-              <ActivityPostCard
-                activity={activity}
-                onShare={handleShareActivity}
-              />
-            </div>
-          ))}
+          {visibleFeedItems.map(item => {
+            if ('feedType' in item && item.feedType === 'clan_post') {
+              return (
+                <div id={`activity-${item.id}`} key={item.id}>
+                  <ClanPostItem post={item as any} onClick={() => setSelectedPost(item as any)} />
+                </div>
+              );
+            }
+            return (
+              <div id={`activity-${item.id}`} key={item.id}>
+                <ActivityPostCard
+                  activity={item as any}
+                  onShare={handleShareActivity}
+                  onCommentClick={() => setSelectedActivity(item as any)}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -165,6 +180,9 @@ export function FeedPage() {
           onClose={() => setCardioShareData(null)}
         />
       )}
+
+      <SinglePostSheet post={selectedPost} isOpen={!!selectedPost} onClose={() => setSelectedPost(null)} />
+      <SingleActivitySheet activity={selectedActivity} isOpen={!!selectedActivity} onClose={() => setSelectedActivity(null)} />
     </motion.div>
   );
 }

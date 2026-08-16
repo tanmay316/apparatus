@@ -425,6 +425,8 @@ export interface CommunityChallenge {
 export interface CommunityPost {
   id?: string;
   communityId: string;
+  clanId?: string;
+  clanName?: string;
   authorId: string;
   authorName: string;
   authorPhoto?: string;
@@ -445,6 +447,8 @@ export interface PostComment {
   userName: string;
   userPhoto?: string;
   text: string;
+  images?: string[];
+  imageUrl?: string;
   createdAt: Timestamp | null;
   parentId?: string | null;
   replyToUserId?: string;

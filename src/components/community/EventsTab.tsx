@@ -46,12 +46,19 @@ export function EventsTab() {
 
   const { user, profile } = useAuthStore();
   const isAdmin = !!profile?.isAdmin;
-  const { showToast } = useUIStore();
+  const { showToast, confirm } = useUIStore();
   const queryClient = useQueryClient();
 
   const deleteEventMutation = useMutation({
     mutationFn: async (id: string) => {
-      if (confirm('Are you sure you want to delete this event?')) {
+      const ok = await confirm({
+        title: 'Delete Event',
+        message: 'Are you sure you want to delete this event?',
+        confirmText: 'Delete',
+        type: 'danger',
+        icon: 'trash',
+      });
+      if (ok) {
         await deleteSimpleEvent(id);
         return true;
       }

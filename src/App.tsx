@@ -5,6 +5,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { Layout } from '@/components/layout/Layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Toast } from '@/components/ui/Toast';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { requestNotificationPermission, scheduleDailyReminders } from '@/utils/notifications';
 import { UpdatePopup } from '@/components/ui/UpdatePopup';
 import { useUIStore } from '@/stores/ui-store';
@@ -236,6 +237,7 @@ export function App() {
           </Routes>
         </Suspense>
         <Toast />
+        <ConfirmModal />
         <UpdatePopup />
         <MedalCelebrationModal />
       </BrowserRouter>
