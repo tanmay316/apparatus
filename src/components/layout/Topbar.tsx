@@ -13,7 +13,7 @@ import { COMPACT_LIBRARY } from '@/services/library';
 import { getSamplePlans } from '@/services/plans';
 
 export function Topbar() {
-  const { profile, stats, signOut } = useAuthStore();
+  const { user, profile, stats, signOut } = useAuthStore();
   const { toggleSidebar, theme } = useUIStore();
   const navigate = useNavigate();
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -204,10 +204,13 @@ export function Topbar() {
               {/* Avatar */}
               <Link to={`/profile/${profile.username}`}>
                 <img
-                  src={profile.photoURL || getAvatarUrl(profile.displayName, theme)}
+                  src={profile.photoURL || user?.photoURL || getAvatarUrl(profile.displayName, theme)}
                   alt={profile.displayName}
                   className="w-8 h-8 rounded-full border-2 border-line hover:border-bone/40 transition-all duration-200 object-cover"
                   referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = getAvatarUrl(profile.displayName, theme);
+                  }}
                 />
               </Link>
             </>

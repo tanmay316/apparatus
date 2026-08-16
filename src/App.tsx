@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, lazy, Suspense } from 'react';
+import { useEffect, useRef, lazy, Suspense } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { Layout } from '@/components/layout/Layout';
@@ -183,10 +183,15 @@ function PreferencesSync() {
 function ActiveSessionRestorer() {
   const navigate = useNavigate();
   const location = useLocation();
+  const hasRestoredRef = useRef(false);
 
+  // Only auto-redirect on initial cold-start / first mount, not on subsequent navigations.
+  // This prevents the flash-back loop when the user intentionally leaves the tracking page.
   useEffect(() => {
+    if (hasRestoredRef.current) return;
     const cardio = useCardioStore.getState();
     if (cardio.isTracking && location.pathname === '/') {
+      hasRestoredRef.current = true;
       navigate('/cardio', { replace: true });
     }
   }, [navigate, location.pathname]);

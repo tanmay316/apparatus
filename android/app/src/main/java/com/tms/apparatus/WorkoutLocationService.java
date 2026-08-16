@@ -70,6 +70,12 @@ public final class WorkoutLocationService extends Service implements LocationLis
     private static final float MIN_MOVEMENT_SPEED_MS = 0.6f; // ~2.16 km/h
     private static final float MIN_DISTANCE_DELTA_M = 2.0f;
 
+    // GPS settling phase — suppress distance for first few seconds to prevent jitter drift
+    private static final long GPS_SETTLING_DURATION_MS = 5000L;
+    private static final float SETTLING_MIN_DISTANCE_M = 8.0f;
+    private static final float SETTLING_MAX_SPEED_KMH = 3.0f;
+    private long sessionSettleUntil = 0L;
+
     private LocationManager locationManager;
     private WorkoutLocationDatabase database;
     private PowerManager.WakeLock wakeLock;
@@ -122,6 +128,7 @@ public final class WorkoutLocationService extends Service implements LocationLis
             database.beginNewSession();
             altBuffer.clear();
             lastElevationAnchor = null;
+            sessionSettleUntil = System.currentTimeMillis() + GPS_SETTLING_DURATION_MS;
 
             prefs.edit()
                     .putString(KEY_STATE, "TRACKING")
@@ -291,8 +298,11 @@ public final class WorkoutLocationService extends Service implements LocationLis
                     currentSpeedKmh = (derivedSpeedKmh < 0.6f && deltaM < 1.5f) ? 0f : derivedSpeedKmh;
                 }
 
-                // Distance acceptance gate
-                if (hasStrictAccuracy && deltaM >= MIN_DISTANCE_DELTA_M) {
+                // Distance acceptance gate with settling logic
+                boolean isSettling = sessionSettleUntil > 0L && location.getTime() < sessionSettleUntil;
+                float requiredDistance = isSettling ? SETTLING_MIN_DISTANCE_M : MIN_DISTANCE_DELTA_M;
+                boolean settlingSpeedOk = !isSettling || derivedSpeedKmh <= SETTLING_MAX_SPEED_KMH;
+                if (hasStrictAccuracy && deltaM >= requiredDistance && settlingSpeedOk) {
                     addedDistanceM = deltaM;
                     distanceMeters += addedDistanceM;
                 }
@@ -327,7 +337,9 @@ public final class WorkoutLocationService extends Service implements LocationLis
             movingDurationSec += dtSec;
         }
 
-        if (currentSpeedKmh > 1.5f && currentSpeedKmh <= maxSpeedLimitKmh) {
+        // Don't update max speed during GPS settling (jitter causes phantom speeds)
+        boolean isSettlingForMax = sessionSettleUntil > 0L && location.getTime() < sessionSettleUntil;
+        if (!isSettlingForMax && currentSpeedKmh > 1.5f && currentSpeedKmh <= maxSpeedLimitKmh) {
             maxSpeedKmh = Math.max(maxSpeedKmh, currentSpeedKmh);
         }
 

@@ -75,6 +75,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
           if (profileSnap.exists()) {
             profile = { uid: firebaseUser.uid, ...profileSnap.data() } as UserProfile;
+            // If the user has a photoURL from Google/Auth, but not yet in Firestore profile, sync it
+            if (firebaseUser.photoURL && (!profile.photoURL || profile.photoURL === '')) {
+              profile.photoURL = firebaseUser.photoURL;
+              setDoc(profileRef, { photoURL: firebaseUser.photoURL }, { merge: true }).catch(() => {});
+            }
           } else {
             // First sign-in: create profile
             const usernameBase = sanitizeUsername(
@@ -263,7 +268,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const profileRef = doc(db, 'users', user.uid);
     const profileSnap = await getDoc(profileRef);
     if (profileSnap.exists()) {
-      set({ profile: { uid: user.uid, ...profileSnap.data() } as UserProfile });
+      const pData = { uid: user.uid, ...profileSnap.data() } as UserProfile;
+      if (user.photoURL && (!pData.photoURL || pData.photoURL === '')) {
+        pData.photoURL = user.photoURL;
+        setDoc(profileRef, { photoURL: user.photoURL }, { merge: true }).catch(() => {});
+      }
+      set({ profile: pData });
     }
 
     const statsRef = doc(db, 'users', user.uid, 'stats', 'current');

@@ -434,10 +434,13 @@ export function ProfilePage() {
                 />
               </svg>
               <img
-                src={p.photoURL || getAvatarUrl(p.displayName, theme, 96)}
+                src={p.photoURL || (isOwnProfile ? currentUser?.photoURL : '') || getAvatarUrl(p.displayName, theme, 96)}
                 alt={p.displayName}
                 className="w-20 h-20 rounded-full object-cover relative z-10 border-2 border-[var(--card)]"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = getAvatarUrl(p.displayName, theme, 96);
+                }}
               />
               <span className="absolute bottom-1 right-3 w-4.5 h-4.5 rounded-full bg-emerald-500 border-2 border-[var(--card)] z-20" title="Online" />
               <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[var(--amber)] text-ink text-[10px] font-bold px-2 py-0.5 rounded-full z-20 shadow">
@@ -1294,6 +1297,10 @@ function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'f
                             src={u.photoURL || getAvatarUrl(u.displayName, theme)}
                             alt={u.displayName}
                             className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = getAvatarUrl(u.displayName, theme);
+                            }}
                           />
                         </Link>
                         <div className="flex-1 min-w-0">
@@ -1324,6 +1331,10 @@ function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'f
                           src={u.photoURL || getAvatarUrl(u.displayName, theme)}
                           alt={u.displayName}
                           className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = getAvatarUrl(u.displayName, theme);
+                          }}
                         />
                         <div className="flex-1 min-w-0">
                           <div className="font-bold text-[14px] truncate text-[var(--text)] group-hover:underline">{u.displayName}</div>

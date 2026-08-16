@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Share2, Crown, Trophy, Award, Sparkles, Check, Shield } from 'lucide-react';
 import { toCanvas } from 'html-to-image';
+import appLogo from '@/assets/logo.png';
 import type { EarnedCommunityBadge } from '@/types';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -160,10 +161,47 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
 
   const getCanvas = async () => {
     if (!cardRef.current) return null;
-    return await toCanvas(cardRef.current, {
+
+    // Get the background color from the card's computed style
+    const bgColor = (() => {
+      const t = theme;
+      if (t === 'dark-gold') return '#0d0a04';
+      if (t === 'cyber-noir') return '#09090b';
+      if (t === 'peach') return '#fca58c';
+      if (t === 'light-gold') return '#f7f2e9';
+      if (t === 'crimson') return '#140202';
+      return '#0d0a04';
+    })();
+
+    const raw = await toCanvas(cardRef.current, {
       pixelRatio: 2.5,
       cacheBust: false,
+      backgroundColor: bgColor,
     });
+
+    // Apply clipping to match the card's rounded-[32px] corners
+    const radius = 32 * 2.5; // scaled by pixelRatio
+    const final = document.createElement('canvas');
+    final.width = raw.width;
+    final.height = raw.height;
+    const ctx = final.getContext('2d')!;
+
+    // Create a rounded-rectangle clipping path
+    ctx.beginPath();
+    ctx.moveTo(radius, 0);
+    ctx.lineTo(final.width - radius, 0);
+    ctx.quadraticCurveTo(final.width, 0, final.width, radius);
+    ctx.lineTo(final.width, final.height - radius);
+    ctx.quadraticCurveTo(final.width, final.height, final.width - radius, final.height);
+    ctx.lineTo(radius, final.height);
+    ctx.quadraticCurveTo(0, final.height, 0, final.height - radius);
+    ctx.lineTo(0, radius);
+    ctx.quadraticCurveTo(0, 0, radius, 0);
+    ctx.closePath();
+    ctx.clip();
+
+    ctx.drawImage(raw, 0, 0);
+    return final;
   };
 
   const handleShare = async () => {
@@ -337,9 +375,12 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
             <div className="relative z-10 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <img
-                  src="/logo.png"
+                  src={appLogo}
                   alt="Apparatus"
                   className={`${aspectRatio === '1/1' ? 'h-5' : 'h-6'} w-auto object-contain shrink-0 drop-shadow-sm`}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = '/logo.png';
+                  }}
                 />
                 <span
                   className={`font-sans tracking-[0.28em] ${

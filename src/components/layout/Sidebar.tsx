@@ -34,7 +34,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const { profile } = useAuthStore();
+  const { user, profile } = useAuthStore();
   const { sidebarOpen, closeSidebar, theme } = useUIStore();
   const location = useLocation();
 
@@ -98,10 +98,13 @@ export function Sidebar() {
         {profile && (
           <Link to={`/profile/${profile.username}`} className="flex items-center gap-3 px-5 py-3.5 border-b border-line hover:bg-white/[0.02] transition-colors" onClick={closeSidebar}>
             <img
-              src={profile.photoURL || getAvatarUrl(profile.displayName, theme)}
+              src={profile.photoURL || user?.photoURL || getAvatarUrl(profile.displayName, theme)}
               alt={profile.displayName}
               className="w-9 h-9 rounded-full border border-line flex-shrink-0 object-cover"
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = getAvatarUrl(profile.displayName, theme);
+              }}
             />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-semibold truncate text-bone">{profile.displayName}</div>

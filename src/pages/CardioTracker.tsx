@@ -282,22 +282,47 @@ export function CardioTracker() {
     if (!store.isTracking || !store.startedAt) return;
     const interval = setInterval(() => {
       if (!store.isPaused && store.autoPauseStatus !== 'PAUSED') {
-        const totalPause = store.totalPausedMs;
-        const raw = Date.now() - store.startedAt! - totalPause;
-        const currentSec = Math.max(0, Math.floor(raw / 1000));
-        setElapsedSec(currentSec);
+        // Prefer native movingDurationSec when available for accuracy
+        if (store.movingDurationSec > 0) {
+          setElapsedSec(store.movingDurationSec);
+        } else {
+          const totalPause = store.totalPausedMs;
+          const raw = Date.now() - store.startedAt! - totalPause;
+          const currentSec = Math.max(0, Math.floor(raw / 1000));
+          setElapsedSec(currentSec);
+        }
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [store.isTracking, store.startedAt, store.isPaused, store.autoPauseStatus, store.totalPausedMs, store.autoPausedAt]);
+  }, [store.isTracking, store.startedAt, store.isPaused, store.autoPauseStatus, store.totalPausedMs, store.autoPausedAt, store.movingDurationSec]);
+
+  // Re-sync elapsed timer when app returns to foreground (Bug 1 fix)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && store.isTracking && store.startedAt) {
+        // Immediately update elapsed from the store's latest synced values
+        if (store.movingDurationSec > 0) {
+          setElapsedSec(store.movingDurationSec);
+        } else {
+          const raw = Date.now() - store.startedAt - store.totalPausedMs;
+          setElapsedSec(Math.max(0, Math.floor(raw / 1000)));
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [store.isTracking, store.startedAt, store.totalPausedMs, store.movingDurationSec]);
 
   const handleBackgroundSave = async () => {
     if (!store.isTracking || !store.activityType) return;
     const finalStore = await finishTracking();
     const startedAt = finalStore.startedAt;
-    const durationSec = startedAt
-      ? Math.max(0, Math.floor((Date.now() - startedAt - finalStore.totalPausedMs) / 1000))
-      : elapsedSec;
+    // Prefer native movingDurationSec (accurate, accounts for auto-pause)
+    const durationSec = finalStore.movingDurationSec > 0
+      ? finalStore.movingDurationSec
+      : (startedAt
+        ? Math.max(0, Math.floor((Date.now() - startedAt - finalStore.totalPausedMs) / 1000))
+        : elapsedSec);
     const dist = finalStore.distanceKm;
     const type = finalStore.activityType;
     if (!type) return;
@@ -416,9 +441,11 @@ export function CardioTracker() {
       endActiveSession(user.uid).catch(console.error);
     }
 
-    const movingDurationSec = finalStore.startedAt
-      ? Math.max(0, Math.floor((Date.now() - finalStore.startedAt - finalStore.totalPausedMs) / 1000))
-      : elapsedSec;
+    const movingDurationSec = finalStore.movingDurationSec > 0
+      ? finalStore.movingDurationSec
+      : (finalStore.startedAt
+        ? Math.max(0, Math.floor((Date.now() - finalStore.startedAt - finalStore.totalPausedMs) / 1000))
+        : elapsedSec);
     const elapsedDurationSec = Math.max(0, Math.floor((Date.now() - (finalStore.startedAt || Date.now())) / 1000));
     const pausedDurationSec = Math.floor(finalStore.totalPausedMs / 1000);
     const durationMin = movingDurationSec / 60;
@@ -883,11 +910,21 @@ export function CardioTracker() {
         {/* Top Header */}
         <div className="absolute top-6 left-4 right-4 z-20 safe-top pointer-events-none flex justify-between items-start">
           <div className="flex items-center gap-3">
-            {/* Back Button */}
+            {/* Back Button — safe navigation with confirmation during active tracking */}
             <button 
               onClick={() => {
-                setSearchParams({});
-                navigate('/');
+                if (store.isTracking) {
+                  const choice = window.confirm(
+                    'Your session is still tracking in the background.\n\nPress OK to go home (session continues), or Cancel to stay here.'
+                  );
+                  if (choice) {
+                    setSearchParams({});
+                    navigate('/');
+                  }
+                } else {
+                  setSearchParams({});
+                  navigate('/');
+                }
               }}
               className="w-11 h-11 flex items-center justify-center rounded-2xl bg-[#1a100d]/90 backdrop-blur-md shadow-md border border-[#42241b] text-white pointer-events-auto transition-transform active:scale-95"
             >

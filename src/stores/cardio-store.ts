@@ -51,6 +51,10 @@ const ALTITUDE_BUFFER_SIZE = 5;
 let altitudeBuffer: number[] = [];
 let lastElevationAnchorAlt: number | null = null;
 
+// GPS settling phase — suppress distance for first few seconds after warm-up
+const GPS_SETTLING_DURATION_MS = 5000;
+let gpsSettledAt = 0; // timestamp when settling ended (0 = not yet settled)
+
 function getSmoothedAltitude(alt: number): number {
   altitudeBuffer.push(alt);
   if (altitudeBuffer.length > ALTITUDE_BUFFER_SIZE) altitudeBuffer.shift();
@@ -65,6 +69,7 @@ function resetTrackingSegmentState() {
   lastMovementPoint = null;
   altitudeBuffer = [];
   lastElevationAnchorAlt = null;
+  gpsSettledAt = 0;
 }
 
 function pushSpeed(raw: number): number {
@@ -96,15 +101,45 @@ function resetSpeedEngine() {
 
 let visibilityListenerAttached = false;
 
+/**
+ * Re-attach native event listeners that were lost when the WebView was suspended.
+ * This does NOT restart the native service — it only re-subscribes to its broadcasts.
+ */
+async function reattachNativeListeners() {
+  // Clean up any stale listener handles
+  if (nativeLocationListener) {
+    try { await nativeLocationListener.remove(); } catch {}
+    nativeLocationListener = null;
+  }
+  if (nativeStateListener) {
+    try { await nativeStateListener.remove(); } catch {}
+    nativeStateListener = null;
+  }
+
+  try {
+    nativeLocationListener = await NativeWorkoutLocation.addListener('location', handleNativeLocation);
+    nativeStateListener = await NativeWorkoutLocation.addListener('stateChange', (ev) => {
+      if (ev.state === 'PAUSED') useCardioStore.setState({ isPaused: true });
+      else if (ev.state === 'TRACKING') useCardioStore.setState({ isPaused: false });
+    });
+    watchIdRef = 'native-workout-location';
+  } catch (e) {
+    console.warn('[CardioStore] Failed to reattach native listeners:', e);
+  }
+}
+
 function attachVisibilityListener() {
   if (visibilityListenerAttached) return;
   visibilityListenerAttached = true;
 
-  document.addEventListener('visibilitychange', () => {
+  document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible') {
       const state = useCardioStore.getState();
       if (Capacitor.isNativePlatform() && state.isTracking) {
-        useCardioStore.getState().syncWithNativeSession();
+        // Re-attach native listeners that were killed during background suspension
+        await reattachNativeListeners();
+        // Sync full session state from native SharedPreferences
+        await syncWithNativeSession();
       }
     }
   });
@@ -536,6 +571,8 @@ export const useCardioStore = create<CardioState>()(
            const targetAccuracy = Capacitor.isNativePlatform() ? 30 : 50;
            if (accuracy && accuracy <= targetAccuracy) {
              gpsStatus = 'active';
+             // Start GPS settling period — suppress distance for first few seconds
+             gpsSettledAt = now + GPS_SETTLING_DURATION_MS;
              lastRawGpsPoint = rawPt;
              lastAcceptedDistancePoint = rawPt;
              lastRoutePoint = rawPt;
@@ -583,9 +620,15 @@ export const useCardioStore = create<CardioState>()(
 
           const isAccurate = !accuracy || accuracy <= 20;
           const isReasonableSpeed = candidateSpeedKmh <= limits.maxSpeed * 1.25;
-          const hasMovedThreshold = distanceCandidateM >= 2.0;
+          // During GPS settling, require larger movement threshold to suppress jitter
+          const isSettling = gpsSettledAt > 0 && now < gpsSettledAt;
+          const movementThreshold = isSettling ? 8.0 : 2.0;
+          const hasMovedThreshold = distanceCandidateM >= movementThreshold;
 
-          if (isAccurate && isReasonableSpeed && hasMovedThreshold) {
+          // Suppress distance during settling if speed seems unreasonable for a stationary start
+          const settlingSpeedGate = !isSettling || candidateSpeedKmh <= 3.0;
+
+          if (isAccurate && isReasonableSpeed && hasMovedThreshold && settlingSpeedGate) {
             addedDistance = distanceCandidateKm;
             lastAcceptedDistancePoint = rawPt;
             lastMovementTs = now;
@@ -680,7 +723,9 @@ export const useCardioStore = create<CardioState>()(
           nextRoutePoints = nextRoutePoints.filter((_, i) => i >= half || i % 2 === 0);
         }
 
-        const newMaxSpeed = currentSpeed >= 1.5 && currentSpeed <= limits.maxSpeed
+        // Don't update max speed during GPS settling (jitter causes phantom 2-3 km/h)
+        const isSettlingNow = gpsSettledAt > 0 && now < gpsSettledAt;
+        const newMaxSpeed = !isSettlingNow && currentSpeed >= 1.5 && currentSpeed <= limits.maxSpeed
           ? Math.max(state.maxSpeedKmh, currentSpeed)
           : state.maxSpeedKmh;
 
