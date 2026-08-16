@@ -13,7 +13,7 @@ from app.core.config import settings
 class GroqLLMProvider(BaseLLMProvider):
     provider_name = "groq"
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "llama-3.3-70b-versatile"):
+    def __init__(self, api_key: Optional[str] = None, model: str = "qwen/qwen3.6-27b"):
         self.api_key = api_key or settings.GROQ_API_KEY
         self.base_url = "https://api.groq.com/openai/v1"
         self.model = model
@@ -74,10 +74,10 @@ class GroqLLMProvider(BaseLLMProvider):
                 latency_ms=latency,
             )
         except Exception as e:
-            # Fallback to llama-3.3-70b-versatile if requested model fails/404s
-            if model_to_use != "llama-3.3-70b-versatile":
+            # Fallback to qwen/qwen3.6-27b if requested model fails/404s
+            if model_to_use != "qwen/qwen3.6-27b":
                 try:
-                    fallback_model = "llama-3.3-70b-versatile"
+                    fallback_model = "qwen/qwen3.6-27b"
                     payload["model"] = fallback_model
                     async with httpx.AsyncClient(timeout=30.0) as client:
                         resp = await client.post(

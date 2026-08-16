@@ -13,7 +13,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 # Edit these models to test different ones
-GROQ_MODEL = "qwen"
+GROQ_MODEL = "qwen/qwen3.6-27b"
 NVIDIA_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning" 
 GEMINI_MODEL = "gemini-2.0-flash-lite"
 OPENROUTER_MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
