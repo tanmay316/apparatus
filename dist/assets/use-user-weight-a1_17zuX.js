@@ -1,1 +1,0 @@
-import{In as e}from"./vendor-react-BGsYXlma.js";import{lt as t}from"./index-DI8kegD0.js";import{r as n}from"./measurements-DZGBoE6i.js";function r(r,i){let{user:a,profile:o}=t(),s=r||a?.uid,c=!r||r===a?.uid,{data:l=[]}=e({queryKey:[`measurements`,s],queryFn:()=>n(s),enabled:!!s&&c});return c?l.find(e=>e.weight!=null)?.weight||o?.weight:i}export{r as t};

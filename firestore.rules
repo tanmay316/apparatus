@@ -328,13 +328,14 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
       allow update: if isOwner(resource.data.authorId) || isAdmin()
         || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'likedUserIds']));
-      allow delete: if isOwner(resource.data.authorId) || isAdmin();
+      allow delete: if resource == null || isOwner(resource.data.authorId) || isAdmin();
     }
 
     match /community_post_comments/{commentId} {
       allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isOwner(resource.data.userId) || isAdmin();
+      allow update: if isOwner(resource.data.userId) || isAdmin()
+        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'likedUserIds', 'dislikesCount', 'dislikedUserIds']));
       allow delete: if resource == null || isOwner(resource.data.userId) || isAdmin();
     }
 

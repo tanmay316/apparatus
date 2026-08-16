@@ -965,20 +965,22 @@ export async function leaveEvent(eventId: string, userId: string): Promise<void>
 
 // ─── CLAN POSTS & COMMENTS ───────────────────────────────────────
 
-export interface PostComment {
-  id?: string;
-  postId: string;
-  userId: string;
-  userName: string;
-  userPhoto?: string;
-  text: string;
-  createdAt: Timestamp | null;
-}
+import { storage } from '@/lib/firebase';
+import { ref as storageRef, deleteObject } from 'firebase/storage';
+import type { PostComment } from '@/types';
+export type { PostComment };
 
-export const createClanPost = async (postData: Omit<CommunityPost, 'id' | 'likesCount' | 'commentsCount' | 'createdAt' | 'likedUserIds'> & { imageUrl?: string }) => {
+export const createClanPost = async (postData: Omit<CommunityPost, 'id' | 'likesCount' | 'commentsCount' | 'createdAt' | 'likedUserIds'> & { imageUrl?: string; images?: string[] }) => {
+  const images = postData.images && postData.images.length > 0
+    ? postData.images
+    : (postData.imageUrl ? [postData.imageUrl] : []);
+
   const docRef = await addDoc(collection(db, 'community_posts'), {
     ...postData,
-    imageUrl: postData.imageUrl || null,
+    title: (postData.title || '').trim(),
+    text: (postData.text || '').trim(),
+    imageUrl: images[0] || null,
+    images: images,
     likesCount: 0,
     commentsCount: 0,
     likedUserIds: [],
@@ -987,15 +989,25 @@ export const createClanPost = async (postData: Omit<CommunityPost, 'id' | 'likes
   return docRef.id;
 };
 
-export async function getClanPosts(clanId: string, limitCount = 20): Promise<CommunityPost[]> {
-  const q = query(
-    collection(db, 'community_posts'),
-    where('communityId', '==', clanId),
-    orderBy('createdAt', 'desc'),
-    limit(limitCount)
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as CommunityPost));
+export async function getClanPosts(clanId: string, limitCount = 50): Promise<CommunityPost[]> {
+  try {
+    const q = query(
+      collection(db, 'community_posts'),
+      where('communityId', '==', clanId)
+    );
+    const snap = await getDocs(q);
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as CommunityPost))
+      .sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : ((a.createdAt as any)?.seconds ? (a.createdAt as any).seconds * 1000 : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : ((b.createdAt as any)?.seconds ? (b.createdAt as any).seconds * 1000 : 0);
+        return timeB - timeA;
+      })
+      .slice(0, limitCount);
+  } catch (err) {
+    console.error('Error fetching clan posts:', err);
+    return [];
+  }
 }
 
 export async function likeClanPost(postId: string, isLiking: boolean): Promise<void> {
@@ -1007,33 +1019,154 @@ export async function likeClanPost(postId: string, isLiking: boolean): Promise<v
   }
 }
 
+export async function toggleLikeClanPost(postId: string, userId: string): Promise<boolean> {
+  const postRef = doc(db, 'community_posts', postId);
+  const snap = await getDoc(postRef);
+  if (!snap.exists()) return false;
+  const data = snap.data() as CommunityPost;
+  const likedUserIds = Array.isArray(data.likedUserIds) ? data.likedUserIds : [];
+  const isLiked = likedUserIds.includes(userId);
+  const updatedLikes = isLiked
+    ? likedUserIds.filter(id => id !== userId)
+    : [...likedUserIds, userId];
+  
+  await updateDoc(postRef, {
+    likedUserIds: updatedLikes,
+    likesCount: updatedLikes.length
+  });
+  return !isLiked;
+}
+
 export async function createPostComment(comment: Omit<PostComment, 'id' | 'createdAt'>): Promise<string> {
   const docRef = await addDoc(collection(db, 'community_post_comments'), {
     ...comment,
+    parentId: comment.parentId || null,
+    replyToUserId: comment.replyToUserId || null,
+    replyToUserName: comment.replyToUserName || null,
+    likesCount: 0,
+    likedUserIds: [],
+    dislikesCount: 0,
+    dislikedUserIds: [],
     createdAt: serverTimestamp(),
   });
   
   await updateDoc(doc(db, 'community_posts', comment.postId), {
     commentsCount: increment(1)
-  });
+  }).catch(() => {});
   
   return docRef.id;
 }
 
-export async function getPostComments(postId: string, limitCount = 50): Promise<PostComment[]> {
-  const q = query(
-    collection(db, 'community_post_comments'),
-    where('postId', '==', postId),
-    orderBy('createdAt', 'asc'),
-    limit(limitCount)
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as PostComment));
+export async function getPostComments(postId: string, limitCount = 100): Promise<PostComment[]> {
+  try {
+    const q = query(
+      collection(db, 'community_post_comments'),
+      where('postId', '==', postId)
+    );
+    const snap = await getDocs(q);
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as PostComment))
+      .sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : ((a.createdAt as any)?.seconds ? (a.createdAt as any).seconds * 1000 : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : ((b.createdAt as any)?.seconds ? (b.createdAt as any).seconds * 1000 : 0);
+        return timeA - timeB;
+      })
+      .slice(0, limitCount);
+  } catch (err) {
+    console.error('Error fetching post comments:', err);
+    return [];
+  }
+}
+
+export async function toggleLikePostComment(commentId: string, userId: string): Promise<void> {
+  const commentRef = doc(db, 'community_post_comments', commentId);
+  const snap = await getDoc(commentRef);
+  if (!snap.exists()) return;
+  const data = snap.data() as PostComment;
+  const likedUserIds = Array.isArray(data.likedUserIds) ? data.likedUserIds : [];
+  const dislikedUserIds = Array.isArray(data.dislikedUserIds) ? data.dislikedUserIds : [];
+  
+  const isLiked = likedUserIds.includes(userId);
+  const newLikes = isLiked ? likedUserIds.filter(id => id !== userId) : [...likedUserIds, userId];
+  const newDislikes = dislikedUserIds.filter(id => id !== userId);
+  
+  await updateDoc(commentRef, {
+    likedUserIds: newLikes,
+    likesCount: newLikes.length,
+    dislikedUserIds: newDislikes,
+    dislikesCount: newDislikes.length
+  });
+}
+
+export async function toggleDislikePostComment(commentId: string, userId: string): Promise<void> {
+  const commentRef = doc(db, 'community_post_comments', commentId);
+  const snap = await getDoc(commentRef);
+  if (!snap.exists()) return;
+  const data = snap.data() as PostComment;
+  const likedUserIds = Array.isArray(data.likedUserIds) ? data.likedUserIds : [];
+  const dislikedUserIds = Array.isArray(data.dislikedUserIds) ? data.dislikedUserIds : [];
+  
+  const isDisliked = dislikedUserIds.includes(userId);
+  const newDislikes = isDisliked ? dislikedUserIds.filter(id => id !== userId) : [...dislikedUserIds, userId];
+  const newLikes = likedUserIds.filter(id => id !== userId);
+  
+  await updateDoc(commentRef, {
+    dislikedUserIds: newDislikes,
+    dislikesCount: newDislikes.length,
+    likedUserIds: newLikes,
+    likesCount: newLikes.length
+  });
+}
+
+export async function deletePostComment(commentId: string, postId: string): Promise<void> {
+  // 1. Delete the comment
+  await deleteDoc(doc(db, 'community_post_comments', commentId));
+  
+  // 2. Also delete any nested child replies
+  const repliesSnap = await getDocs(query(collection(db, 'community_post_comments'), where('parentId', '==', commentId)));
+  const batch = writeBatch(db);
+  repliesSnap.docs.forEach(d => batch.delete(d.ref));
+  await batch.commit().catch(() => {});
+  
+  const totalDeleted = 1 + repliesSnap.size;
+  
+  // 3. Decrement commentsCount on the post
+  const postRef = doc(db, 'community_posts', postId);
+  await updateDoc(postRef, {
+    commentsCount: increment(-totalDeleted)
+  }).catch(() => {});
 }
 
 export async function deleteClanPost(postId: string): Promise<void> {
+  const postRef = doc(db, 'community_posts', postId);
+  const snap = await getDoc(postRef);
+  const data = snap.exists() ? (snap.data() as CommunityPost) : null;
+  
+  // 1. Clean up images from Firebase Storage if stored there
+  if (data) {
+    const imagesToDelete = [
+      ...(data.images || []),
+      ...(data.imageUrl ? [data.imageUrl] : [])
+    ];
+    for (const url of imagesToDelete) {
+      if (url && typeof url === 'string' && (url.includes('firebasestorage.googleapis.com') || url.includes('appspot.com'))) {
+        try {
+          const decoded = decodeURIComponent(url.split('?')[0]);
+          const pathIndex = decoded.indexOf('/o/');
+          if (pathIndex !== -1) {
+            const fullPath = decoded.substring(pathIndex + 3);
+            await deleteObject(storageRef(storage, fullPath)).catch(() => {});
+          }
+        } catch (e) {
+          console.warn('Could not delete storage image:', e);
+        }
+      }
+    }
+  }
+
+  // 2. Delete the post and all comments/replies
   const batch = writeBatch(db);
-  batch.delete(doc(db, 'community_posts', postId));
+  batch.delete(postRef);
   const commentsSnap = await getDocs(query(collection(db, 'community_post_comments'), where('postId', '==', postId)));
   commentsSnap.docs.forEach(d => batch.delete(d.ref));
   await batch.commit();

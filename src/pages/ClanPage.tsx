@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Shield, Users, MapPin, Search, Plus, Target, CalendarDays, MessageSquare, Heart, CornerDownRight, Trophy, Sparkles } from 'lucide-react';
+import { ChevronLeft, Shield, Users, MapPin, Search, Plus, Target, CalendarDays, MessageSquare, Heart, CornerDownRight, Trophy, Sparkles, Bookmark, Share2 } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useAuthStore } from '@/stores/auth-store';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   getClan, joinClan, leaveClan, getClanMembers, updateClanMemberRole, transferLeadership,
-  getClanPosts, createClanPost, likeClanPost, getPostComments, createPostComment,
+  getClanPosts, createClanPost, toggleLikeClanPost, getPostComments, createPostComment,
   getClanChallenges, getClanEvents, deleteChallenge, deleteSimpleEvent, deleteClan
 } from '@/services/community';
 import { ClanMembership, ClanV2, CommunityPost, ChallengeV2, SimpleEvent } from '@/types';
@@ -26,45 +26,183 @@ import { EditEventSheet } from '@/components/community/EditEventSheet';
 const nmBtn = "bg-ink shadow-sm border border-line/20 hover:border-line/40 transition-colors";
 const nmInset = "bg-ink-2 shadow-inner border border-line/10";
 
+function timeAgo(date: any): string {
+  if (!date) return 'Just now';
+  const millis = typeof date?.toMillis === 'function' 
+    ? date.toMillis() 
+    : (date?.seconds ? date.seconds * 1000 : (date instanceof Date ? date.getTime() : 0));
+  
+  if (!millis) return 'Just now';
+  const diffSec = Math.max(0, Math.floor((Date.now() - millis) / 1000));
+  if (diffSec < 60) return 'Just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+  return new Date(millis).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
 // A component for a single post card in the feed
 function ClanPostItem({ post, onClick }: { post: CommunityPost, onClick: () => void }) {
+  const { user, profile } = useAuthStore();
+  const { showToast } = useUIStore();
   const queryClient = useQueryClient();
+
+  const isLiked = post.likedUserIds?.includes(user?.uid || '') || false;
+  const bookmarks = profile?.bookmarks || [];
+  const isSaved = post.id ? bookmarks.includes(post.id) : false;
+
+  const images = post.images && post.images.length > 0
+    ? post.images
+    : (post.imageUrl ? [post.imageUrl] : []);
+
   const likeMutation = useMutation({
     mutationFn: async (e: React.MouseEvent) => {
       e.stopPropagation();
-      await likeClanPost(post.id!, true);
+      if (!user || !post.id) return;
+      await toggleLikeClanPost(post.id, user.uid);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clanPosts'] })
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clanPosts'] });
+    }
   });
 
+  const handleSave = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!user || !post.id) return;
+    try {
+      const isCurrentlySaved = bookmarks.includes(post.id);
+      const newBookmarks = isCurrentlySaved
+        ? bookmarks.filter((id: string) => id !== post.id)
+        : [...bookmarks, post.id];
+
+      await useAuthStore.getState().updateProfile({ bookmarks: newBookmarks });
+      showToast(isCurrentlySaved ? 'Removed from bookmarks' : 'Saved to bookmarks', 'info');
+      queryClient.invalidateQueries({ queryKey: ['bookmarkedPosts'] });
+    } catch {
+      showToast('Could not update bookmark', 'error');
+    }
+  };
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const shareUrl = window.location.href;
+    const shareTitle = post.title || `Post by ${post.authorName}`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: shareTitle,
+          text: post.text.slice(0, 100),
+          url: shareUrl,
+        });
+        return;
+      } catch (err: any) {
+        if (err.name === 'AbortError') return;
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      showToast('Post link copied to clipboard!', 'success');
+    } catch {
+      showToast('Could not copy link', 'error');
+    }
+  };
+
   return (
-    <div onClick={onClick} className={`p-5 rounded-3xl ${nmBtn} mb-4 cursor-pointer hover:border-sienna/50`}>
-      <div className="flex items-center gap-3 mb-3">
-        <div className="w-8 h-8 rounded-full bg-ink-3 flex items-center justify-center text-bone font-bold text-sm">
-          {post.authorName?.charAt(0) || '?'}
+    <div onClick={onClick} className={`p-5 rounded-3xl ${nmBtn} mb-4 cursor-pointer hover:border-sienna/50 transition-all space-y-3`}>
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full bg-ink-3 border border-line/20 flex items-center justify-center text-bone font-bold text-sm overflow-hidden shrink-0">
+          {post.authorPhoto ? (
+            <img src={post.authorPhoto} alt={post.authorName} className="w-full h-full object-cover" />
+          ) : (
+            post.authorName?.charAt(0)?.toUpperCase() || '?'
+          )}
         </div>
-        <div>
-          <div className="text-bone text-sm font-bold">{post.authorName}</div>
-          <div className="text-[10px] text-bone-dim font-mono">
-            {typeof post.createdAt?.toDate === 'function' ? post.createdAt.toDate().toLocaleDateString() : 'Just now'}
-          </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-bone text-sm font-bold truncate">{post.authorName}</div>
+          <div className="text-[10px] text-bone-dim font-mono">{timeAgo(post.createdAt)}</div>
         </div>
       </div>
       
-      <p className="text-bone whitespace-pre-wrap text-sm mb-4 line-clamp-3">{post.text}</p>
+      {/* Title */}
+      {post.title && (
+        <h3 className="font-display font-bold text-base sm:text-lg text-bone leading-snug">
+          {post.title}
+        </h3>
+      )}
+
+      {/* Body */}
+      {post.text && (
+        <p className="text-bone/90 whitespace-pre-wrap text-sm leading-relaxed line-clamp-4">
+          {post.text}
+        </p>
+      )}
       
-      {post.imageUrl && (
-        <div className="mb-4 rounded-xl overflow-hidden border border-line/10 h-32">
-          <img src={post.imageUrl} alt="Post attachment" className="w-full h-full object-cover" />
+      {/* Multi-Image Display */}
+      {images.length > 0 && (
+        <div className={`rounded-2xl overflow-hidden border border-line/10 gap-1.5 ${
+          images.length === 1
+            ? 'h-48 sm:h-56'
+            : images.length === 2
+            ? 'grid grid-cols-2 h-40'
+            : images.length === 3
+            ? 'grid grid-cols-2 h-44'
+            : 'grid grid-cols-2 h-48'
+        }`}>
+          {images.slice(0, 4).map((img, idx) => (
+            <div key={idx} className={`relative bg-ink-3 overflow-hidden ${images.length === 3 && idx === 0 ? 'row-span-2' : ''}`}>
+              <img src={img} alt="Post attachment" className="w-full h-full object-cover" />
+            </div>
+          ))}
         </div>
       )}
       
-      <div className="flex items-center gap-4 text-xs font-mono text-bone-dim border-t border-line/20 pt-3">
-        <button onClick={(e) => likeMutation.mutate(e)} className="flex items-center gap-1.5 hover:text-sienna transition-colors">
-          <Heart size={14} /> {post.likesCount}
-        </button>
-        <div className="flex items-center gap-1.5 hover:text-bone transition-colors">
-          <MessageSquare size={14} /> {post.commentsCount}
+      {/* Action Row */}
+      <div className="flex items-center justify-between text-xs font-mono text-bone-dim border-t border-line/20 pt-3">
+        <div className="flex items-center gap-4">
+          {/* Like */}
+          <button 
+            onClick={(e) => likeMutation.mutate(e)} 
+            className={`flex items-center gap-1.5 transition-colors ${
+              isLiked ? 'text-red-500 font-bold' : 'hover:text-red-400'
+            }`}
+          >
+            <Heart size={15} className={isLiked ? 'fill-current' : ''} /> 
+            <span>{post.likesCount || 0}</span>
+          </button>
+
+          {/* Comment */}
+          <button 
+            onClick={onClick}
+            className="flex items-center gap-1.5 hover:text-bone transition-colors"
+          >
+            <MessageSquare size={15} /> 
+            <span>{post.commentsCount || 0}</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Save / Bookmark */}
+          <button
+            onClick={handleSave}
+            className={`p-1.5 rounded-lg transition-colors ${
+              isSaved ? 'text-sienna bg-sienna/10' : 'hover:text-sienna hover:bg-ink-2'
+            }`}
+            title={isSaved ? 'Saved' : 'Save bookmark'}
+          >
+            <Bookmark size={15} className={isSaved ? 'fill-current' : ''} />
+          </button>
+
+          {/* Share */}
+          <button
+            onClick={handleShare}
+            className="p-1.5 rounded-lg hover:text-blue-400 hover:bg-ink-2 transition-colors"
+            title="Share post"
+          >
+            <Share2 size={15} />
+          </button>
         </div>
       </div>
     </div>

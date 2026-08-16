@@ -428,13 +428,31 @@ export interface CommunityPost {
   authorId: string;
   authorName: string;
   authorPhoto?: string;
-  title: string;
+  title?: string;
   text: string;
   likesCount: number;
   likedUserIds?: string[];
   commentsCount: number;
   imageUrl?: string;
+  images?: string[];
   createdAt: Timestamp | null;
+}
+
+export interface PostComment {
+  id?: string;
+  postId: string;
+  userId: string;
+  userName: string;
+  userPhoto?: string;
+  text: string;
+  createdAt: Timestamp | null;
+  parentId?: string | null;
+  replyToUserId?: string;
+  replyToUserName?: string;
+  likesCount?: number;
+  likedUserIds?: string[];
+  dislikesCount?: number;
+  dislikedUserIds?: string[];
 }
 
 export type AppNotificationType = 
