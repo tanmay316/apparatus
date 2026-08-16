@@ -16,6 +16,7 @@ import { compressImageFile } from '@/utils/image-compression';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { CommunityPost, PostComment } from '@/types';
 import { useNavigate } from 'react-router-dom';
+import { CelebrationPodiumCard } from './CelebrationPodiumCard';
 
 interface SinglePostSheetProps {
   post: CommunityPost | null;
@@ -451,18 +452,31 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                   </div>
                 </div>
 
-                {/* Post Title */}
-                {post.title && (
-                  <h1 className="text-base sm:text-lg font-bold font-display text-bone leading-snug tracking-tight">
-                    {post.title}
-                  </h1>
-                )}
+                {/* Post Content / Celebration Podium */}
+                {post.sourceType === 'challenge' || post.sourceType === 'event' || post.title?.includes('Concluded') || post.text?.includes('🥇') ? (
+                  <CelebrationPodiumCard
+                    title={post.title}
+                    rawText={post.text}
+                    winners={(post as any).winners}
+                    sourceType={post.sourceType as any}
+                    clanName={post.clanName}
+                  />
+                ) : (
+                  <>
+                    {/* Post Title */}
+                    {post.title && (
+                      <h1 className="text-base sm:text-lg font-bold font-display text-bone leading-snug tracking-tight">
+                        {post.title}
+                      </h1>
+                    )}
 
-                {/* Post Body */}
-                {post.text && (
-                  <p className="text-bone/90 text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">
-                    {post.text}
-                  </p>
+                    {/* Post Body */}
+                    {post.text && (
+                      <p className="text-bone/90 text-xs sm:text-sm whitespace-pre-wrap leading-relaxed">
+                        {post.text}
+                      </p>
+                    )}
+                  </>
                 )}
 
                 {/* Post Images Grid */}

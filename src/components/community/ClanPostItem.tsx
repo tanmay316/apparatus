@@ -8,6 +8,7 @@ import { CommunityPost } from '@/types';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { getAvatarUrl } from '@/lib/avatar';
 import { AnimatePresence, motion } from 'framer-motion';
+import { CelebrationPodiumCard } from './CelebrationPodiumCard';
 
 const nmBtn = "bg-ink shadow-sm border border-line/20 hover:border-line/40 transition-colors";
 
@@ -169,18 +170,31 @@ export function ClanPostItem({ post, onClick }: { post: CommunityPost, onClick: 
         </div>
       </div>
       
-      {/* Title */}
-      {post.title && (
-        <h3 className="font-display font-bold text-sm sm:text-base text-bone leading-snug">
-          {post.title}
-        </h3>
-      )}
+      {/* Post Content / Celebration Podium */}
+      {post.sourceType === 'challenge' || post.sourceType === 'event' || post.title?.includes('Concluded') || post.text?.includes('🥇') ? (
+        <CelebrationPodiumCard
+          title={post.title}
+          rawText={post.text}
+          winners={(post as any).winners}
+          sourceType={post.sourceType as any}
+          clanName={post.clanName}
+        />
+      ) : (
+        <>
+          {/* Title */}
+          {post.title && (
+            <h3 className="font-display font-bold text-sm sm:text-base text-bone leading-snug">
+              {post.title}
+            </h3>
+          )}
 
-      {/* Body */}
-      {post.text && (
-        <p className="text-bone/90 whitespace-pre-wrap text-xs sm:text-sm leading-relaxed line-clamp-3">
-          {post.text}
-        </p>
+          {/* Body */}
+          {post.text && (
+            <p className="text-bone/90 whitespace-pre-wrap text-xs sm:text-sm leading-relaxed line-clamp-3">
+              {post.text}
+            </p>
+          )}
+        </>
       )}
       
       {/* Multi-Image Display */}

@@ -199,9 +199,17 @@ export interface Comment {
   id?: string;
   userId: string;
   userName: string;
-  userPhoto: string;
+  userPhoto?: string;
   text: string;
-  createdAt: Timestamp;
+  likesCount?: number;
+  likedUserIds?: string[];
+  dislikesCount?: number;
+  dislikedUserIds?: string[];
+  parentId?: string | null;
+  replyToUserId?: string;
+  replyToUserName?: string;
+  images?: string[];
+  createdAt: any;
 }
 
 export interface Notification {
@@ -437,6 +445,9 @@ export interface CommunityPost {
   commentsCount: number;
   imageUrl?: string;
   images?: string[];
+  sourceType?: 'challenge' | 'event' | string;
+  sourceId?: string;
+  winners?: any[];
   createdAt: Timestamp | null;
 }
 

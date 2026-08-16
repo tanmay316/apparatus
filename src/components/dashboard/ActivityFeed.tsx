@@ -15,8 +15,8 @@ interface ActivityFeedProps {
 }
 
 export function ActivityFeed({ activities, onShare }: ActivityFeedProps) {
-  // Limit dashboard feed preview to 2 posts
-  const displayActivities = activities.slice(0, 2);
+  // Limit dashboard feed preview to top 5 posts
+  const displayActivities = activities.slice(0, 5);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
 

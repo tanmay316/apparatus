@@ -155,16 +155,17 @@ service cloud.firestore {
     // ─── Activity Feed ──────────────────────────────────────────
     match /activities/{activityId} {
       allow read: if isAdmin() || resource.data.visibility == 'public'
+        || resource.data.userId == 'system'
         || isOwner(resource.data.userId)
         || (resource.data.visibility == 'followers' && isAuthenticated());
-      allow create: if isOwner(request.resource.data.userId)
+      allow create: if (isOwner(request.resource.data.userId) || isAdmin() || (isAuthenticated() && request.resource.data.userId == 'system'))
         && request.resource.data.visibility in ['public', 'followers', 'private'];
       // Fix: explicit parentheses for operator precedence (owner OR counter update)
-      allow update: if (isOwner(resource.data.userId)
-          && request.resource.data.userId == resource.data.userId)
+      allow update: if isAdmin()
+        || (isOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId)
         || (isAuthenticated() && canReadActivity(activityId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount']));
-      allow delete: if resource == null || isOwner(resource.data.userId);
+      allow delete: if isAdmin() || resource == null || isOwner(resource.data.userId) || resource.data.userId == 'system';
 
       match /likes/{userId} {
         allow read: if canReadActivity(activityId);
@@ -325,10 +326,10 @@ service cloud.firestore {
 
     match /community_posts/{postId} {
       allow read: if true;
-      allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
-      allow update: if isOwner(resource.data.authorId) || isAdmin()
+      allow create: if isAuthenticated() && (request.resource.data.authorId == request.auth.uid || request.resource.data.authorId == 'system' || isAdmin());
+      allow update: if isOwner(resource.data.authorId) || isAdmin() || resource.data.authorId == 'system'
         || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'likedUserIds']));
-      allow delete: if resource == null || isOwner(resource.data.authorId) || isAdmin();
+      allow delete: if resource == null || isOwner(resource.data.authorId) || isAdmin() || resource.data.authorId == 'system';
     }
 
     match /community_post_comments/{commentId} {

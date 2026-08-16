@@ -18,6 +18,7 @@ import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { getAvatarUrl } from '@/lib/avatar';
 import { RouteMap } from '@/components/cardio/RouteMap';
+import { CelebrationPodiumCard } from '@/components/community/CelebrationPodiumCard';
 
 function timeAgo(seconds?: number): string {
   if (!seconds) return 'just now';
@@ -256,7 +257,7 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
         </div>
       </div>
 
-      {/* ─── SECTION 2: WORKOUT HERO ───────────────────────────────────── */}
+      {/* ─── SECTION 2: WORKOUT / ACHIEVEMENT HERO ─────────────────────── */}
       <div
         className="relative overflow-hidden rounded-[20px] p-6 mb-5 bg-[#fdfbfb] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.05),inset_-3px_-3px_8px_rgba(255,255,255,1)] flex flex-col justify-between min-h-[130px]"
       >
@@ -268,6 +269,13 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
               Going to {details.eventTitle || 'an event'}
             </p>
           </div>
+        ) : activity.type === 'achievement' || details.text ? (
+          <CelebrationPodiumCard
+            title={activity.summary || (details.title as string) || (details.challengeTitle as string)}
+            rawText={(details.text as string) || activity.summary}
+            winners={(details.winners as any)}
+            sourceType={details.eventId ? 'event' : 'challenge'}
+          />
         ) : isCardio ? (
           <div className="relative w-full h-[150px] rounded-xl overflow-hidden mt-1 shadow-md">
             {details.route && details.route.length > 0 ? (
@@ -347,7 +355,7 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
         )}
       </div>
 
-      {activity.type !== 'event_join' && (
+      {activity.type !== 'event_join' && activity.type !== 'achievement' && !details.text && (
         <>
           {/* ─── SECTION 3: METRICS ROW ────────────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">

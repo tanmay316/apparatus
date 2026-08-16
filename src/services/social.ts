@@ -312,10 +312,10 @@ export async function getPublicActivities(limitCount = 100): Promise<Activity[]>
 }
 
 export async function getFeed(userId: string, followingUids: string[]): Promise<FeedItem[]> {
-  // 1. Fetch activities
-  const ownerIds = [...new Set([userId, ...followingUids])].slice(0, 31);
+  // 1. Fetch activities (include user, following athletes, and system celebration posts)
+  const ownerIds = [...new Set([userId, 'system', ...followingUids])].slice(0, 31);
   const activitySnapshots = await Promise.all(ownerIds.flatMap(uid => {
-    if (uid === userId) {
+    if (uid === userId || uid === 'system') {
       return [getDocs(query(collection(db, 'activities'), where('userId', '==', uid)))];
     }
     return [
@@ -423,22 +423,110 @@ export async function addComment(activityId: string, comment: Omit<Comment, 'id'
   const safeComment = { ...comment, text: validateComment(comment.text) };
   const docRef = await addDoc(collection(db, `activities/${activityId}/comments`), {
     ...safeComment,
+    likesCount: 0,
+    likedUserIds: [],
+    dislikesCount: 0,
+    dislikedUserIds: [],
     createdAt: serverTimestamp(),
   });
   await updateDoc(doc(db, 'activities', activityId), { commentsCount: increment(1) });
+  
+  // Notification to Post Owner
   const activitySnap = await getDoc(doc(db, 'activities', activityId));
   if (activitySnap.exists()) {
-    await notify(activitySnap.data().userId, {
+    const ownerId = activitySnap.data().userId;
+    if (ownerId !== comment.userId) {
+      await notify(ownerId, {
+        type: 'comment',
+        senderId: comment.userId,
+        senderName: comment.userName,
+        senderPhoto: comment.userPhoto || '',
+        message: `${comment.userName} commented on your activity`,
+        targetId: activityId,
+        read: false,
+      });
+    }
+  }
+
+  // Notification to Parent Comment Owner if it's a reply
+  if (comment.parentId && comment.replyToUserId && comment.replyToUserId !== comment.userId) {
+    await notify(comment.replyToUserId, {
       type: 'comment',
       senderId: comment.userId,
       senderName: comment.userName,
-      senderPhoto: comment.userPhoto,
-      message: `${comment.userName} commented on your activity`,
+      senderPhoto: comment.userPhoto || '',
+      message: `${comment.userName} replied to your comment`,
       targetId: activityId,
       read: false,
     });
   }
+
   return docRef.id;
+}
+
+export async function deleteActivityComment(activityId: string, commentId: string): Promise<void> {
+  const commentRef = doc(db, `activities/${activityId}/comments`, commentId);
+  await deleteDoc(commentRef);
+  const actRef = doc(db, 'activities', activityId);
+  try {
+    await updateDoc(actRef, { commentsCount: increment(-1) });
+  } catch {
+    // Ignore error if activity was already deleted
+  }
+}
+
+export async function toggleLikeActivityComment(activityId: string, commentId: string, userId: string): Promise<void> {
+  const commentRef = doc(db, `activities/${activityId}/comments`, commentId);
+  const snap = await getDoc(commentRef);
+  if (!snap.exists()) return;
+  const data = snap.data() as Comment;
+  const likedUserIds = Array.isArray(data.likedUserIds) ? data.likedUserIds : [];
+  const dislikedUserIds = Array.isArray(data.dislikedUserIds) ? data.dislikedUserIds : [];
+  
+  const isLiked = likedUserIds.includes(userId);
+  const newLikes = isLiked ? likedUserIds.filter(id => id !== userId) : [...likedUserIds, userId];
+  const newDislikes = dislikedUserIds.filter(id => id !== userId);
+  
+  await updateDoc(commentRef, {
+    likedUserIds: newLikes,
+    likesCount: newLikes.length,
+    dislikedUserIds: newDislikes,
+    dislikesCount: newDislikes.length
+  });
+
+  if (!isLiked && data.userId !== userId) {
+    const userSnap = await getDoc(doc(db, 'users', userId));
+    const uData = userSnap.exists() ? userSnap.data() : {};
+    await notify(data.userId, {
+      type: 'like',
+      senderId: userId,
+      senderName: uData.displayName || 'An athlete',
+      senderPhoto: uData.photoURL || '',
+      message: `${uData.displayName || 'An athlete'} liked your comment`,
+      targetId: activityId,
+      read: false,
+    });
+  }
+}
+
+export async function toggleDislikeActivityComment(activityId: string, commentId: string, userId: string): Promise<void> {
+  const commentRef = doc(db, `activities/${activityId}/comments`, commentId);
+  const snap = await getDoc(commentRef);
+  if (!snap.exists()) return;
+  const data = snap.data() as Comment;
+  const likedUserIds = Array.isArray(data.likedUserIds) ? data.likedUserIds : [];
+  const dislikedUserIds = Array.isArray(data.dislikedUserIds) ? data.dislikedUserIds : [];
+  
+  const isDisliked = dislikedUserIds.includes(userId);
+  const newDislikes = isDisliked ? dislikedUserIds.filter(id => id !== userId) : [...dislikedUserIds, userId];
+  const newLikes = likedUserIds.filter(id => id !== userId);
+  
+  await updateDoc(commentRef, {
+    likedUserIds: newLikes,
+    likesCount: newLikes.length,
+    dislikedUserIds: newDislikes,
+    dislikesCount: newDislikes.length
+  });
 }
 
 export async function getComments(activityId: string): Promise<Comment[]> {

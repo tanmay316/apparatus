@@ -652,6 +652,120 @@ export async function updateLeaderboardRanks(
       topWinner: topWinner
     }, { merge: true }).catch(() => {});
   }
+
+  // ── STEP 4: Automatically create or update the celebration post for this challenge ──
+  try {
+    const sortedWinners = [...updatedRanks]
+      .filter(r => r.rank >= 1 && r.rank <= 3)
+      .sort((a, b) => a.rank - b.rank);
+
+    if (sortedWinners.length > 0) {
+      const top3Data = await Promise.all(
+        sortedWinners.slice(0, 3).map(async (w) => {
+          let name = 'Athlete';
+          let photo = '';
+          try {
+            const uSnap = await getDoc(doc(db, 'users', w.userId));
+            if (uSnap.exists()) {
+              const ud = uSnap.data();
+              name = ud.displayName || name;
+              photo = ud.photoURL || '';
+            }
+          } catch {}
+          const score = formatCleanScore(w, challengeData?.unit);
+          return {
+            rank: w.rank as 1 | 2 | 3,
+            name,
+            score,
+            userPhoto: photo,
+          };
+        })
+      );
+
+      const rankEmojis = ['🥇', '🥈', '🥉'];
+      const podiumText = top3Data.map((w, i) => {
+        const emoji = rankEmojis[i] || '🎖️';
+        const scoreStr = w.score ? ` • ${w.score}` : '';
+        return `${emoji} ${w.rank}${w.rank === 1 ? 'st' : w.rank === 2 ? 'nd' : 'rd'}: ${w.name}${scoreStr}`;
+      }).join('\n');
+
+      const postCreatedAt = challengeData?.endDate || now;
+
+      if (challengeData?.clanId) {
+        // Clan-specific challenge -> community_posts
+        const existingPostsSnap = await getDocs(
+          query(collection(db, 'community_posts'), where('sourceId', '==', challengeId))
+        );
+
+        if (!existingPostsSnap.empty) {
+          await updateDoc(existingPostsSnap.docs[0].ref, {
+            title: `🏆 Challenge Concluded: ${challengeTitle}`,
+            text: `The challenge has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+            winners: top3Data,
+            sourceType: 'challenge',
+            sourceId: challengeId,
+            clanName: challengeData?.clanName || 'Clan',
+            updatedAt: now
+          });
+        } else {
+          await addDoc(collection(db, 'community_posts'), {
+            communityId: challengeData.clanId,
+            clanName: challengeData?.clanName || 'Clan',
+            title: `🏆 Challenge Concluded: ${challengeTitle}`,
+            text: `The challenge has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+            winners: top3Data,
+            authorId: 'system',
+            authorName: 'Apparatus Arena',
+            authorPhoto: '',
+            likesCount: 0,
+            likedUserIds: [],
+            commentsCount: 0,
+            sourceType: 'challenge',
+            sourceId: challengeId,
+            createdAt: postCreatedAt,
+          });
+        }
+      } else {
+        // Public challenge -> activities
+        const existingActsSnap = await getDocs(
+          query(collection(db, 'activities'), where('details.challengeId', '==', challengeId))
+        );
+
+        if (!existingActsSnap.empty) {
+          await updateDoc(existingActsSnap.docs[0].ref, {
+            summary: `🏆 Challenge Concluded: ${challengeTitle}`,
+            details: {
+              text: `The challenge has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+              challengeId: challengeId,
+              challengeTitle: challengeTitle,
+              winners: top3Data,
+            },
+            updatedAt: now
+          });
+        } else {
+          await addDoc(collection(db, 'activities'), {
+            userId: 'system',
+            userName: 'Apparatus Arena',
+            userPhoto: '',
+            type: 'achievement',
+            summary: `🏆 Challenge Concluded: ${challengeTitle}`,
+            details: {
+              text: `The challenge has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+              challengeId: challengeId,
+              challengeTitle: challengeTitle,
+              winners: top3Data,
+            },
+            visibility: 'public',
+            likesCount: 0,
+            commentsCount: 0,
+            createdAt: postCreatedAt,
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[updateLeaderboardRanks] Failed to create/update celebration post:', err);
+  }
 }
 
 export async function updateEventLeaderboardRanks(
@@ -767,6 +881,56 @@ export async function updateEventLeaderboardRanks(
     await setDoc(doc(db, 'simple_events', eventId), {
       topWinner: topWinner
     }, { merge: true }).catch(() => {});
+  }
+
+  // ── STEP 4: Create celebration post in feed ──
+  try {
+    const top3 = updatedRanks.filter(r => r.rank >= 1 && r.rank <= 3).sort((a, b) => a.rank - b.rank);
+    if (top3.length > 0) {
+      const rankEmojis = ['🥇', '🥈', '🥉'];
+      const podiumText = top3.map((w, i) => {
+        const emoji = rankEmojis[i] || '🎖️';
+        const resStr = w.customResult ? ` • ${w.customResult}` : '';
+        return `${emoji} ${w.rank}${w.rank === 1 ? 'st' : w.rank === 2 ? 'nd' : 'rd'}: Athlete${resStr}`;
+      }).join('\n');
+
+      if (eventData?.clanId) {
+        await addDoc(collection(db, 'community_posts'), {
+          communityId: eventData.clanId,
+          clanName: eventData.clanName || 'Clan',
+          title: `🏆 Event Concluded: ${eventTitle}`,
+          text: `Congratulations to our champions for their outstanding performance in "${eventTitle}"!\n\n${podiumText}`,
+          authorId: 'system',
+          authorName: 'Apparatus Arena',
+          authorPhoto: '',
+          likesCount: 0,
+          likedUserIds: [],
+          commentsCount: 0,
+          sourceType: 'event',
+          sourceId: eventId,
+          createdAt: now
+        });
+      } else {
+        await addDoc(collection(db, 'activities'), {
+          userId: 'system',
+          userName: 'Apparatus Arena',
+          userPhoto: '',
+          type: 'achievement',
+          summary: `🏆 Event Concluded: ${eventTitle}`,
+          details: {
+            text: `Congratulations to our champions for their outstanding performance in "${eventTitle}"!\n\n${podiumText}`,
+            eventId,
+            eventTitle
+          },
+          visibility: 'public',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: now
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[updateEventLeaderboardRanks] Failed to create celebration feed post', err);
   }
 }
 
@@ -1462,4 +1626,337 @@ export async function getUserCommunityBadges(userId: string): Promise<EarnedComm
   const allBadges = Array.from(badgeMap.values());
   allBadges.sort((a, b) => (a.rank || 3) - (b.rank || 3));
   return allBadges;
+}
+
+function formatCleanScore(w: any, unit?: string): string {
+  if (w.customResult && String(w.customResult).trim()) {
+    let res = String(w.customResult).trim();
+    if (res.startsWith('0 ') && res.length > 2 && !res.startsWith('0.')) {
+      res = res.slice(2).trim();
+    }
+    return res;
+  }
+  const cleanUnit = (unit || '').trim();
+  const rawProg = w.progress !== undefined && w.progress !== null ? w.progress : '';
+  const progNum = Number(rawProg);
+  if (rawProg !== '' && !isNaN(progNum) && progNum > 0) {
+    if (cleanUnit.startsWith(`${rawProg} `) || cleanUnit === `${rawProg}`) {
+      return cleanUnit;
+    }
+    return `${rawProg} ${cleanUnit}`.trim();
+  }
+  if (cleanUnit && cleanUnit !== '0') {
+    if (cleanUnit.startsWith('0 ') && cleanUnit.length > 2 && !cleanUnit.startsWith('0.')) {
+      return cleanUnit.slice(2).trim();
+    }
+    return cleanUnit;
+  }
+  return '';
+}
+
+/**
+ * BACKFILL SCRIPT: Retroactively generates celebration posts for past concluded events and challenges.
+ */
+export async function backfillCelebrationPosts(): Promise<{ events: number; challenges: number; success: boolean; details?: string }> {
+  let createdEvents = 0;
+  let createdChallenges = 0;
+
+  try {
+    const nowMs = Date.now();
+    console.log('[Backfill] Starting celebration post backfill...');
+
+    // Pre-fetch all existing community posts and activities to avoid duplicate creation
+    const existingClanPostsSnap = await getDocs(collection(db, 'community_posts'));
+    const existingActivitiesSnap = await getDocs(collection(db, 'activities'));
+
+    // ────────────────────────────────────────────────────────────────
+    // 1. BACKFILL CHALLENGES (challenges_v2)
+    // ────────────────────────────────────────────────────────────────
+    const chalSnap = await getDocs(collection(db, 'challenges_v2'));
+    console.log(`[Backfill] Found ${chalSnap.docs.length} challenges in challenges_v2`);
+
+    for (const d of chalSnap.docs) {
+      const challenge = { id: d.id, ...d.data() } as ChallengeV2;
+      const endMs = challenge.endDate?.toMillis ? challenge.endDate.toMillis() : (challenge.endDate as any)?.seconds ? (challenge.endDate as any).seconds * 1000 : 0;
+      
+      const isConcluded = challenge.status === 'completed' || challenge.badgesAwarded || (endMs > 0 && endMs <= nowMs);
+      if (!isConcluded) {
+        console.log(`[Backfill] Challenge "${challenge.title}" (${challenge.id}) is not concluded yet. Skipping.`);
+        continue;
+      }
+
+      // Fetch participants for this challenge
+      const partSnap = await getDocs(
+        query(collection(db, 'challenge_participants'), where('challengeId', '==', challenge.id))
+      );
+
+      if (partSnap.empty) {
+        console.log(`[Backfill] No participants for challenge "${challenge.title}".`);
+        continue;
+      }
+
+      const participants = partSnap.docs.map(doc => doc.data() as ChallengeParticipant);
+      participants.sort((a, b) => {
+        const rankA = (typeof a.rank === 'number' && a.rank > 0 && a.rank < 9999) ? a.rank : 9999;
+        const rankB = (typeof b.rank === 'number' && b.rank > 0 && b.rank < 9999) ? b.rank : 9999;
+        if (rankA !== rankB) return rankA - rankB;
+        const progA = typeof a.progress === 'number' ? a.progress : Number(a.progress) || 0;
+        const progB = typeof b.progress === 'number' ? b.progress : Number(b.progress) || 0;
+        return progB - progA;
+      });
+
+      const top3 = participants.slice(0, 3);
+      const rankEmojis = ['🥇', '🥈', '🥉'];
+      const podiumText = top3.map((w, i) => {
+        const emoji = rankEmojis[i] || '🎖️';
+        const score = formatCleanScore(w, challenge.unit);
+        const scoreStr = score ? ` • ${score}` : '';
+        return `${emoji} ${i + 1}${i === 0 ? 'st' : i === 1 ? 'nd' : 'rd'}: ${w.userName || 'Athlete'}${scoreStr}`;
+      }).join('\n');
+
+      const top3Cleaned = top3.map((w, i) => ({
+        rank: (i + 1) as 1 | 2 | 3,
+        name: w.userName || 'Athlete',
+        score: formatCleanScore(w, challenge.unit),
+        userPhoto: w.userPhoto || ''
+      }));
+
+      const postCreatedAt = challenge.endDate || Timestamp.now();
+
+      // Check if existing post exists
+      const existingClanPostDoc = existingClanPostsSnap.docs.find(doc => {
+        const p = doc.data();
+        return (p.sourceId === challenge.id || p.title?.includes(challenge.title)) &&
+          (challenge.clanId ? p.communityId === challenge.clanId : true);
+      });
+
+      const existingActivityDoc = existingActivitiesSnap.docs.find(doc => {
+        const a = doc.data();
+        return a.details?.challengeId === challenge.id || a.summary?.includes(challenge.title) || a.title?.includes(challenge.title);
+      });
+
+      if (existingClanPostDoc) {
+        // Update existing clan post with clean text & structured winners
+        await updateDoc(existingClanPostDoc.ref, {
+          title: `🏆 Challenge Concluded: ${challenge.title}`,
+          text: `The challenge has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+          winners: top3Cleaned,
+          sourceType: 'challenge',
+          sourceId: challenge.id,
+        });
+        createdChallenges++;
+        console.log(`[Backfill] Updated existing clan celebration post for challenge "${challenge.title}"`);
+        continue;
+      }
+
+      if (existingActivityDoc) {
+        // Update existing activity with clean text & structured winners
+        await updateDoc(existingActivityDoc.ref, {
+          summary: `🏆 Challenge Concluded: ${challenge.title}`,
+          details: {
+            text: `The challenge has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+            challengeId: challenge.id,
+            challengeTitle: challenge.title,
+            winners: top3Cleaned,
+          }
+        });
+        createdChallenges++;
+        console.log(`[Backfill] Updated existing public celebration activity for challenge "${challenge.title}"`);
+        continue;
+      }
+
+      if (challenge.clanId) {
+        // Clan-specific challenge -> post to community_posts
+        await addDoc(collection(db, 'community_posts'), {
+          communityId: challenge.clanId,
+          clanName: challenge.clanName || 'Clan',
+          title: `🏆 Challenge Concluded: ${challenge.title}`,
+          text: `The challenge has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+          winners: top3Cleaned,
+          authorId: 'system',
+          authorName: 'Apparatus Arena',
+          authorPhoto: '',
+          likesCount: 0,
+          likedUserIds: [],
+          commentsCount: 0,
+          sourceType: 'challenge',
+          sourceId: challenge.id,
+          createdAt: postCreatedAt,
+        });
+        createdChallenges++;
+        console.log(`[Backfill] Created clan celebration post for challenge "${challenge.title}" in clan ${challenge.clanId}`);
+      } else {
+        // Public challenge -> post to activities
+        await addDoc(collection(db, 'activities'), {
+          userId: 'system',
+          userName: 'Apparatus Arena',
+          userPhoto: '',
+          type: 'achievement',
+          summary: `🏆 Challenge Concluded: ${challenge.title}`,
+          details: {
+            text: `The challenge has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+            challengeId: challenge.id,
+            challengeTitle: challenge.title,
+            winners: top3Cleaned,
+          },
+          visibility: 'public',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: postCreatedAt,
+        });
+        createdChallenges++;
+        console.log(`[Backfill] Created public celebration post for challenge "${challenge.title}"`);
+      }
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // 2. BACKFILL EVENTS (simple_events)
+    // ────────────────────────────────────────────────────────────────
+    const simpleEventsSnap = await getDocs(collection(db, 'simple_events'));
+    console.log(`[Backfill] Found ${simpleEventsSnap.docs.length} events in simple_events`);
+
+    for (const d of simpleEventsSnap.docs) {
+      const event = { id: d.id, ...d.data() } as SimpleEvent;
+      const endMs = event.endTime?.toMillis ? event.endTime.toMillis() : (event.endTime as any)?.seconds ? (event.endTime as any).seconds * 1000 : 0;
+
+      const isConcluded = event.status === 'completed' || event.badgesAwarded || !!event.topWinner || (endMs > 0 && endMs <= nowMs);
+      if (!isConcluded) {
+        console.log(`[Backfill] Event "${event.title}" (${event.id}) is not concluded yet. Skipping.`);
+        continue;
+      }
+
+      // Fetch participants for this event
+      const partSnap = await getDocs(
+        query(collection(db, 'simple_event_participants'), where('eventId', '==', event.id))
+      );
+
+      let winnersList: { userName: string; result?: string; rank?: number }[] = [];
+
+      if (!partSnap.empty) {
+        const parts = partSnap.docs.map(doc => doc.data() as EventParticipant);
+        parts.sort((a, b) => (a.rank || 999) - (b.rank || 999));
+        winnersList = parts.slice(0, 3).map((p, idx) => ({
+          userName: p.userName || 'Athlete',
+          result: formatCleanScore(p, ''),
+          rank: p.rank || (idx + 1)
+        }));
+      } else if (event.topWinner) {
+        winnersList = [{
+          userName: event.topWinner.userName || 'Athlete',
+          result: formatCleanScore(event.topWinner, ''),
+          rank: 1
+        }];
+      }
+
+      if (winnersList.length === 0) {
+        console.log(`[Backfill] No participants or winners found for event "${event.title}".`);
+        continue;
+      }
+
+      const rankEmojis = ['🥇', '🥈', '🥉'];
+      const podiumText = winnersList.map((w, i) => {
+        const emoji = rankEmojis[i] || '🎖️';
+        const resStr = w.result ? ` • ${w.result}` : '';
+        return `${emoji} ${i + 1}${i === 0 ? 'st' : i === 1 ? 'nd' : 'rd'}: ${w.userName}${resStr}`;
+      }).join('\n');
+
+      const top3Cleaned = winnersList.map((w, i) => ({
+        rank: (i + 1) as 1 | 2 | 3,
+        name: w.userName,
+        score: w.result || '',
+        userPhoto: ''
+      }));
+
+      const postCreatedAt = event.endTime || Timestamp.now();
+
+      // Check if existing post exists
+      const existingClanPostDoc = existingClanPostsSnap.docs.find(doc => {
+        const p = doc.data();
+        return (p.sourceId === event.id || p.title?.includes(event.title)) &&
+          (event.clanId ? p.communityId === event.clanId : true);
+      });
+
+      const existingActivityDoc = existingActivitiesSnap.docs.find(doc => {
+        const a = doc.data();
+        return a.details?.eventId === event.id || a.summary?.includes(event.title) || a.title?.includes(event.title);
+      });
+
+      if (existingClanPostDoc) {
+        await updateDoc(existingClanPostDoc.ref, {
+          title: `🏆 Event Concluded: ${event.title}`,
+          text: `The event has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+          winners: top3Cleaned,
+          sourceType: 'event',
+          sourceId: event.id,
+        });
+        createdEvents++;
+        console.log(`[Backfill] Updated existing clan celebration post for event "${event.title}"`);
+        continue;
+      }
+
+      if (existingActivityDoc) {
+        await updateDoc(existingActivityDoc.ref, {
+          summary: `🏆 Event Concluded: ${event.title}`,
+          details: {
+            text: `The event has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+            eventId: event.id,
+            eventTitle: event.title,
+            winners: top3Cleaned,
+          }
+        });
+        createdEvents++;
+        console.log(`[Backfill] Updated existing public celebration activity for event "${event.title}"`);
+        continue;
+      }
+
+      if (event.clanId) {
+        // Clan-specific event -> post to community_posts
+        await addDoc(collection(db, 'community_posts'), {
+          communityId: event.clanId,
+          clanName: event.clanName || 'Clan',
+          title: `🏆 Event Concluded: ${event.title}`,
+          text: `The event has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+          winners: top3Cleaned,
+          authorId: 'system',
+          authorName: 'Apparatus Arena',
+          authorPhoto: '',
+          likesCount: 0,
+          likedUserIds: [],
+          commentsCount: 0,
+          sourceType: 'event',
+          sourceId: event.id,
+          createdAt: postCreatedAt,
+        });
+        createdEvents++;
+        console.log(`[Backfill] Created clan celebration post for event "${event.title}" in clan ${event.clanId}`);
+      } else {
+        // Public event -> post to activities
+        await addDoc(collection(db, 'activities'), {
+          userId: 'system',
+          userName: 'Apparatus Arena',
+          userPhoto: '',
+          type: 'achievement',
+          summary: `🏆 Event Concluded: ${event.title}`,
+          details: {
+            text: `The event has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
+            eventId: event.id,
+            eventTitle: event.title,
+            winners: top3Cleaned,
+          },
+          visibility: 'public',
+          likesCount: 0,
+          commentsCount: 0,
+          createdAt: postCreatedAt,
+        });
+        createdEvents++;
+        console.log(`[Backfill] Created public celebration post for event "${event.title}"`);
+      }
+    }
+
+    console.log(`[Backfill] Completed! Created/Updated ${createdEvents} events, ${createdChallenges} challenges.`);
+    return { events: createdEvents, challenges: createdChallenges, success: true };
+  } catch (error: any) {
+    console.error('[Backfill] Error backfilling celebration posts:', error);
+    return { events: createdEvents, challenges: createdChallenges, success: false, details: error?.message };
+  }
 }
