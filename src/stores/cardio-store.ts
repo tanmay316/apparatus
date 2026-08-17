@@ -273,6 +273,30 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
     currentPaceMs = 0;
   }
 
+  // 5. Auto-Pause State Machine
+  let autoPauseStatus = store.autoPauseStatus;
+  let autoPausedAt = store.autoPausedAt;
+  let totalPausedMs = store.totalPausedMs;
+
+  const isPointMoving = point.isMoving === true || currentSpeedKmh >= 2.0;
+  if (isPointMoving) {
+    if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
+      totalPausedMs += (now - autoPausedAt);
+    }
+    autoPauseStatus = 'MOVING';
+    autoPausedAt = null;
+    lastMovementTs = now;
+  } else {
+    // Stationary candidate
+    const stationaryTimeMs = lastMovementTs > 0 ? (now - lastMovementTs) : 4000;
+    if (point.isAutoPaused || stationaryTimeMs >= 3000) {
+      if (autoPauseStatus !== 'PAUSED') {
+        autoPauseStatus = 'PAUSED';
+        autoPausedAt = now;
+      }
+    }
+  }
+
   useCardioStore.setState({
     currentLocation,
     routePoints: nextRoutePoints,
@@ -285,6 +309,9 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
     gpsStatus: 'active',
     paceWindow: newPaceWindow,
     currentPaceMs,
+    autoPauseStatus,
+    autoPausedAt,
+    totalPausedMs,
     lastGpsTimestamp: now,
   });
 }
@@ -501,6 +528,7 @@ export const useCardioStore = create<CardioState>()(
       startTracking: (type) => {
         resetWebGpsEngine();
         lastMovementTs = Date.now();
+        const prevLocation = get().currentLocation;
 
         set({
           isTracking: true,
@@ -521,6 +549,7 @@ export const useCardioStore = create<CardioState>()(
           elevationGainM: 0,
           gpsStatus: 'waiting',
           gpsAccuracy: get().gpsAccuracy || 0,
+          currentLocation: prevLocation,
           lastGpsTimestamp: 0,
           isRecovering: false,
         });

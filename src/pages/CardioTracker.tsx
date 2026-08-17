@@ -280,41 +280,37 @@ export function CardioTracker() {
     };
   }, [recentActivities]);
 
-  // Timer — pauses when manually paused OR auto-paused
+  // Timer — counts up continuously when active, halts cleanly when manually paused or auto-paused
   useEffect(() => {
     if (!store.isTracking || !store.startedAt) return;
     const interval = setInterval(() => {
-      if (!store.isPaused && store.autoPauseStatus !== 'PAUSED') {
-        // Prefer native movingDurationSec when available for accuracy
-        if (store.movingDurationSec > 0) {
-          setElapsedSec(store.movingDurationSec);
-        } else {
-          const totalPause = store.totalPausedMs;
-          const raw = Date.now() - store.startedAt! - totalPause;
-          const currentSec = Math.max(0, Math.floor(raw / 1000));
-          setElapsedSec(currentSec);
-        }
+      const st = useCardioStore.getState();
+      if (!st.isPaused && st.autoPauseStatus !== 'PAUSED') {
+        const autoPauseAdd = st.autoPausedAt ? (Date.now() - st.autoPausedAt) : 0;
+        const totalPause = st.totalPausedMs + autoPauseAdd;
+        const raw = Date.now() - st.startedAt! - totalPause;
+        setElapsedSec(Math.max(0, Math.floor(raw / 1000)));
       }
-    }, 1000);
+    }, 500);
     return () => clearInterval(interval);
-  }, [store.isTracking, store.startedAt, store.isPaused, store.autoPauseStatus, store.totalPausedMs, store.autoPausedAt, store.movingDurationSec]);
+  }, [store.isTracking, store.startedAt, store.isPaused, store.autoPauseStatus]);
 
-  // Re-sync elapsed timer when app returns to foreground (Bug 1 fix)
+  // Re-sync elapsed timer when app returns to foreground
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && store.isTracking && store.startedAt) {
-        // Immediately update elapsed from the store's latest synced values
-        if (store.movingDurationSec > 0) {
-          setElapsedSec(store.movingDurationSec);
-        } else {
-          const raw = Date.now() - store.startedAt - store.totalPausedMs;
+      if (document.visibilityState === 'visible') {
+        const st = useCardioStore.getState();
+        if (st.isTracking && st.startedAt) {
+          const autoPauseAdd = (st.autoPauseStatus === 'PAUSED' && st.autoPausedAt) ? (Date.now() - st.autoPausedAt) : 0;
+          const totalPause = st.totalPausedMs + autoPauseAdd;
+          const raw = Date.now() - st.startedAt - totalPause;
           setElapsedSec(Math.max(0, Math.floor(raw / 1000)));
         }
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [store.isTracking, store.startedAt, store.totalPausedMs, store.movingDurationSec]);
+  }, []);
 
   const handleBackgroundSave = async () => {
     if (!store.isTracking || !store.activityType) return;
@@ -970,6 +966,36 @@ export function CardioTracker() {
           </div>
         </div>
 
+        {/* Dynamic Island Style Floating Auto-Pause Notification Banner */}
+        <AnimatePresence>
+          {store.autoPauseStatus === 'PAUSED' && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+              className="absolute top-20 left-4 right-4 z-20 pointer-events-auto flex justify-center"
+            >
+              <div className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-[#1c120c]/95 backdrop-blur-xl border border-amber-500/40 shadow-[0_8px_30px_rgba(245,158,11,0.25)] text-white">
+                <div className="relative flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 text-amber-400">
+                  <span className="absolute inset-0 rounded-full bg-amber-500/40 animate-ping" />
+                  <Pause size={12} className="relative z-10 fill-amber-400" />
+                </div>
+                <div className="flex items-baseline gap-1.5 text-xs font-bold tracking-tight">
+                  <span className="text-amber-400">AUTO-PAUSED</span>
+                  <span className="text-white/60 text-[11px] font-medium hidden sm:inline">• Standing still</span>
+                </div>
+                <button
+                  onClick={handleResume}
+                  className="ml-1 px-3 py-1 rounded-full bg-amber-500 hover:bg-amber-400 active:scale-95 text-black font-extrabold text-[11px] tracking-wide shadow transition-all"
+                >
+                  RESUME
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Floating Actions */}
         <div className="absolute right-4 bottom-[230px] z-10 pointer-events-auto flex flex-col gap-3 transition-all" style={{ transform: isExpanded ? 'translateY(-290px)' : 'translateY(0)' }}>
           {/* True North-Pointing Compass Rose Widget */}
@@ -1037,30 +1063,30 @@ export function CardioTracker() {
               </div>
             </button>
 
-            {/* Auto-Pause & Status Indicator */}
+            {/* Auto-Pause & Status Indicator Banner */}
             <AnimatePresence>
               {store.autoPauseStatus === 'PAUSED' && (
                 <motion.div 
                   initial={{ opacity: 0, height: 0, marginBottom: 0 }}
                   animate={{ opacity: 1, height: 'auto', marginBottom: 8 }}
                   exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                  className="mx-5 px-3.5 py-2 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-between shadow-sm overflow-hidden"
+                  className="mx-5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border border-amber-500/35 flex items-center justify-between shadow-lg shadow-amber-500/10 overflow-hidden"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className="relative w-7 h-7 rounded-full bg-amber-500/25 text-amber-500 flex items-center justify-center shrink-0">
-                      <Pause size={13} className="animate-pulse" />
-                      <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                  <div className="flex items-center gap-3">
+                    <div className="relative w-8 h-8 rounded-full bg-amber-500/25 border border-amber-500/50 text-amber-400 flex items-center justify-center shrink-0">
+                      <Pause size={14} className="fill-amber-400" />
+                      <span className="absolute inset-0 rounded-full bg-amber-400/30 animate-ping" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-amber-600 dark:text-amber-300 tracking-wide uppercase flex items-center gap-1.5">
-                        Auto-Paused <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                      <div className="text-xs font-extrabold text-amber-500 dark:text-amber-300 tracking-wide uppercase flex items-center gap-1.5">
+                        Auto-Paused <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
                       </div>
-                      <div className="text-[10px] text-[var(--muted)] font-medium">Standing still • Resumes when you move</div>
+                      <div className="text-[10.5px] text-[var(--muted)] font-medium">Standing still • Resumes automatically when moving</div>
                     </div>
                   </div>
                   <button 
                     onClick={handleResume}
-                    className="px-2.5 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold text-[11px] shadow-sm transition-all"
+                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-95 text-white font-bold text-xs shadow-md shadow-amber-500/25 transition-all cursor-pointer"
                   >
                     Resume
                   </button>
@@ -1072,20 +1098,20 @@ export function CardioTracker() {
                   initial={{ opacity: 0, height: 0, marginBottom: 0 }}
                   animate={{ opacity: 1, height: 'auto', marginBottom: 8 }}
                   exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                  className="mx-5 px-3.5 py-2 rounded-2xl bg-sienna/15 border border-sienna/30 flex items-center justify-between shadow-sm overflow-hidden"
+                  className="mx-5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-sienna/20 via-sienna/10 to-transparent border border-sienna/35 flex items-center justify-between shadow-lg shadow-sienna/10 overflow-hidden"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-full bg-sienna/25 text-sienna flex items-center justify-center shrink-0">
-                      <Pause size={13} />
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-sienna/25 border border-sienna/50 text-sienna flex items-center justify-center shrink-0">
+                      <Pause size={14} className="fill-sienna" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-sienna tracking-wide uppercase">Session Paused</div>
-                      <div className="text-[10px] text-[var(--muted)] font-medium">Timer & tracking temporarily halted</div>
+                      <div className="text-xs font-extrabold text-sienna tracking-wide uppercase">Session Paused</div>
+                      <div className="text-[10.5px] text-[var(--muted)] font-medium">Timer & tracking temporarily halted</div>
                     </div>
                   </div>
                   <button 
                     onClick={handleResume}
-                    className="px-2.5 py-1 rounded-xl bg-sienna hover:bg-sienna/90 active:scale-95 text-white font-bold text-[11px] shadow-sm transition-all"
+                    className="px-3.5 py-1.5 rounded-xl bg-sienna hover:bg-sienna/90 active:scale-95 text-white font-bold text-xs shadow-md shadow-sienna/25 transition-all cursor-pointer"
                   >
                     Resume
                   </button>
@@ -1098,10 +1124,10 @@ export function CardioTracker() {
               <div className="grid grid-cols-3 gap-2 sm:gap-4 items-center">
                 {/* Timer */}
                 <div className="flex flex-col min-w-0 pr-1">
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] truncate">
-                    Time
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] truncate flex items-center gap-1.5">
+                    Time {store.autoPauseStatus === 'PAUSED' && <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-extrabold bg-amber-500/20 text-amber-500 border border-amber-500/30">PAUSED</span>}
                   </div>
-                  <div className={`font-mono text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight mt-0.5 tabular-nums truncate ${store.autoPauseStatus === 'PAUSED' || store.isPaused ? 'text-amber-500/70' : 'text-[var(--text)]'}`}>
+                  <div className={`font-mono text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight mt-0.5 tabular-nums truncate transition-colors ${store.autoPauseStatus === 'PAUSED' ? 'text-amber-500 animate-pulse' : store.isPaused ? 'text-sienna' : 'text-[var(--text)]'}`}>
                     {formatDuration(elapsedSec)}
                   </div>
                 </div>

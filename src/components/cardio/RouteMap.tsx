@@ -113,27 +113,29 @@ function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive, mapRot
       isFollowing.current = true; // Re-enable following
     }
     
-    // Automatically flag for centering if we get new points, but only if we are following
+    // Automatically flag for centering if we get new points or location updates while following
     if (route.length > lastLen.current && route.length > 0 && isFollowing.current) {
       shouldCenter = true;
     }
 
-    if (shouldCenter && currentLocation) {
+    if (currentLocation && isFollowing.current) {
       const currentCenter = map.getCenter();
       const dist = currentCenter.distanceTo([currentLocation.lat, currentLocation.lng]);
+      const currentZoom = map.getZoom();
       
-      // If map is rotating, we MUST stay perfectly centered and disable animation to prevent swinging
-      if (mapRotationMode) {
+      // If map is zoomed out (e.g. default country overview at zoom 5) or first fix
+      if (currentZoom < 14 || !initialized.current) {
+        map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: false });
+        initialized.current = true;
+      }
+      // If map is rotating, stay centered without animation
+      else if (mapRotationMode) {
         map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: false });
       } 
-      // Otherwise, only pan if we moved more than 12 meters from center (smooth follow)
-      else if (dist > 12 || recenterTrigger !== lastRecenter.current) {
+      // Smooth follow if moved more than 12m or recenter button tapped
+      else if (dist > 12 || shouldCenter) {
         map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: true });
       }
-    } else if (currentLocation && !initialized.current) {
-      // First time getting location
-      map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: false });
-      initialized.current = true;
     }
 
     lastLen.current = route.length;

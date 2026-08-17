@@ -21,6 +21,7 @@ export interface NativeWorkoutPoint {
   elevationGainM?: number;
   isMoving?: boolean;
   isAccepted?: boolean;
+  isAutoPaused?: boolean;
 }
 
 export interface NativeWorkoutSessionSummary {
