@@ -78,10 +78,11 @@ function getLiveSteps(
 ): number | undefined {
   if (type !== 'walk' && type !== 'run') return undefined;
   
-  if (pedStore.isSessionActive && (pedStore.stepSource === 'native' || pedStore.stepSource === 'motion_estimate') && pedStore.sessionSteps > 0) {
+  if (pedStore.isSessionActive && (pedStore.stepSource === 'native' || pedStore.stepSource === 'motion_estimate')) {
     return pedStore.sessionSteps;
   }
   
+  if (distKm < 0.01) return 0;
   const estSteps = Math.round(distKm * 1000 / (type === 'run' ? 1.0 : 0.762));
   return estSteps;
 }
@@ -1092,40 +1093,40 @@ export function CardioTracker() {
               )}
             </AnimatePresence>
 
-            {/* Core Stats Hero Row (Clean Text Without Icons) */}
-            <div className="px-6 pt-1 pb-3 shrink-0" onClick={() => !isExpanded && setIsExpanded(true)}>
-              <div className="grid grid-cols-3 gap-3 items-center">
+            {/* Core Stats Hero Row (Clean Text Without Icons, Responsive Spacing) */}
+            <div className="px-4 sm:px-6 pt-1 pb-3 shrink-0" onClick={() => !isExpanded && setIsExpanded(true)}>
+              <div className="grid grid-cols-3 gap-2 sm:gap-4 items-center">
                 {/* Timer */}
-                <div className="flex flex-col">
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)]">
+                <div className="flex flex-col min-w-0 pr-1">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] truncate">
                     Time
                   </div>
-                  <div className={`font-mono text-3xl sm:text-4xl font-extrabold tracking-tight mt-0.5 ${store.autoPauseStatus === 'PAUSED' || store.isPaused ? 'text-amber-500/70' : 'text-[var(--text)]'}`}>
+                  <div className={`font-mono text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight mt-0.5 tabular-nums truncate ${store.autoPauseStatus === 'PAUSED' || store.isPaused ? 'text-amber-500/70' : 'text-[var(--text)]'}`}>
                     {formatDuration(elapsedSec)}
                   </div>
                 </div>
 
                 {/* Distance */}
-                <div className="flex flex-col items-center">
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)]">
+                <div className="flex flex-col items-center min-w-0 px-1">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] truncate">
                     Distance
                   </div>
-                  <div className="flex items-baseline gap-1 mt-0.5">
-                    <span className="font-mono text-3xl sm:text-4xl font-extrabold tracking-tight text-[var(--text)]">
+                  <div className="flex items-baseline gap-0.5 sm:gap-1 mt-0.5 truncate">
+                    <span className="font-mono text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-[var(--text)] tabular-nums">
                       {store.distanceKm.toFixed(2)}
                     </span>
-                    <span className="text-xs font-mono font-bold text-[var(--muted)]">km</span>
+                    <span className="text-[10px] sm:text-xs font-mono font-bold text-[var(--muted)]">km</span>
                   </div>
                 </div>
 
                 {/* Pace / Speed */}
-                <div className="flex flex-col items-end">
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)]">
+                <div className="flex flex-col items-end min-w-0 pl-1">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] truncate">
                     {activityType === 'cycle' ? 'Speed' : 'Pace'}
                   </div>
-                  <div className="font-mono text-2xl sm:text-3xl font-extrabold tracking-tight text-[var(--text)] mt-0.5">
+                  <div className="font-mono text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-[var(--text)] mt-0.5 tabular-nums truncate">
                     {activityType === 'cycle' ? `${store.currentSpeedKmh.toFixed(1)}` : currentPace}
-                    <span className="text-[11px] font-sans font-normal text-[var(--muted)] ml-1">
+                    <span className="text-[9px] sm:text-[11px] font-sans font-normal text-[var(--muted)] ml-0.5">
                       {activityType === 'cycle' ? 'km/h' : '/km'}
                     </span>
                   </div>
