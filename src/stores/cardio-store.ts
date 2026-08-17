@@ -579,12 +579,23 @@ export const useCardioStore = create<CardioState>()(
         resetWebGpsEngine();
         lastMovementTs = Date.now();
 
-        const { pausedAt, totalPausedMs } = get();
-        const addedPause = pausedAt ? Date.now() - pausedAt : 0;
+        const { pausedAt, totalPausedMs, autoPauseStatus, autoPausedAt } = get();
+        
+        let newTotalPausedMs = totalPausedMs;
+        const now = Date.now();
+        
+        if (pausedAt) {
+          newTotalPausedMs += (now - pausedAt);
+        } else if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
+          newTotalPausedMs += (now - autoPausedAt);
+        }
+
         set({
           isPaused: false,
           pausedAt: null,
-          totalPausedMs: totalPausedMs + addedPause,
+          autoPauseStatus: 'MOVING',
+          autoPausedAt: null,
+          totalPausedMs: newTotalPausedMs,
         });
       },
 

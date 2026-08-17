@@ -461,7 +461,7 @@ export function RouteMap({
         >
           <InjectGradient />
           {showZoomControls && <ShareZoomControls />}
-          {!hideMap && <TileLayer url={themeData.url} crossOrigin="anonymous" />}
+          {!hideMap && <TileLayer key={themeData.url} url={themeData.url} crossOrigin="anonymous" />}
 
           {positions.length > 1 && (
             <>

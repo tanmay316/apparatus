@@ -13,6 +13,9 @@ import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.location.Location;
 import android.os.Build;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.os.Process;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -87,12 +90,23 @@ public final class WorkoutLocationService extends Service {
     private long sessionSettleUntil = 0L;
     private float emaSpeedKmh = 0f;
     private Location lastAcceptedLocation = null;
+    private Location lastRawLocation = null;
+    private boolean isCurrentlyMoving = false;
     private final List<Double> altBuffer = new ArrayList<>();
     private Double lastElevationAnchor = null;
+    private long lastMovementTimeMs = 0L;
+
+    private HandlerThread locationThread;
+    private Handler locationHandler;
 
     @Override
     public void onCreate() {
         super.onCreate();
+        
+        locationThread = new HandlerThread("WorkoutLocationThread", Process.THREAD_PRIORITY_BACKGROUND);
+        locationThread.start();
+        locationHandler = new Handler(locationThread.getLooper());
+
         fusedClient = LocationServices.getFusedLocationProviderClient(this);
         database = new WorkoutLocationDatabase(this);
         createNotificationChannel();
@@ -151,7 +165,10 @@ public final class WorkoutLocationService extends Service {
             altBuffer.clear();
             lastElevationAnchor = null;
             lastAcceptedLocation = null;
+            lastRawLocation = null;
+            isCurrentlyMoving = false;
             emaSpeedKmh = 0f;
+            lastMovementTimeMs = 0L;
             sessionSettleUntil = System.currentTimeMillis() + GPS_SETTLING_DURATION_MS;
 
             prefs.edit()
@@ -242,16 +259,17 @@ public final class WorkoutLocationService extends Service {
         try {
             LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
                     .setMinUpdateIntervalMillis(1000L)
+                    .setMaxUpdateDelayMillis(0) // Ensure delivery is not batched in the background
                     .setMinUpdateDistanceMeters(0f)
                     .setWaitForAccurateLocation(false)
                     .build();
 
-            fusedClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
+            fusedClient.requestLocationUpdates(locationRequest, locationCallback, locationHandler.getLooper());
 
             // Instantly acquire and broadcast last known fix to center map with 0s latency
             fusedClient.getLastLocation().addOnSuccessListener(loc -> {
                 if (loc != null) {
-                    handleNewLocation(loc);
+                    locationHandler.post(() -> handleNewLocation(loc));
                 }
             });
         } catch (Exception ignored) {}
@@ -322,14 +340,21 @@ public final class WorkoutLocationService extends Service {
         float currentSpeedKmh = 0f;
         boolean isMoving = false;
 
+        float rawDeltaDistanceM = 0f;
+        float rawDtSec = 1f;
+        if (lastRawLocation != null) {
+            rawDeltaDistanceM = lastRawLocation.distanceTo(location);
+            rawDtSec = Math.max(0.1f, (location.getTime() - lastRawLocation.getTime()) / 1000f);
+        }
+
         if (lastAcceptedLocation != null) {
             float deltaDistanceM = lastAcceptedLocation.distanceTo(location);
             float dtSec = Math.max(0.1f, (location.getTime() - lastAcceptedLocation.getTime()) / 1000f);
-            float derivedSpeedKmh = (deltaDistanceM / dtSec) * 3.6f;
+            float derivedSpeedKmh = (rawDeltaDistanceM / rawDtSec) * 3.6f;
 
             // Spike Detection: Validate gradual acceleration/deceleration.
-            float maxAllowedDeltaSpeedKmh = Math.max(30.0f, emaSpeedKmh * 0.8f + 25.0f) * Math.min(3.0f, dtSec);
-            boolean isSuddenSpike = Math.abs(derivedSpeedKmh - emaSpeedKmh) > maxAllowedDeltaSpeedKmh && deltaDistanceM > 20.0f;
+            float maxAllowedDeltaSpeedKmh = Math.max(30.0f, emaSpeedKmh * 0.8f + 25.0f) * Math.min(3.0f, rawDtSec);
+            boolean isSuddenSpike = Math.abs(derivedSpeedKmh - emaSpeedKmh) > maxAllowedDeltaSpeedKmh && rawDeltaDistanceM > 20.0f;
             boolean isAbsurdTeleport = derivedSpeedKmh > 180.0f; // >180 km/h is impossible ground workout speed
 
             if ((isSuddenSpike && !hasHighConfidenceSpeed) || isAbsurdTeleport) {
@@ -339,14 +364,9 @@ public final class WorkoutLocationService extends Service {
                 return;
             }
 
-            // Dynamic noise threshold based on GPS accuracy
-            float dynamicNoiseThreshold = Math.max(baseNoiseFloorM, accuracy * 0.45f);
-
-            // Speed estimation: strictly 0 when displacement is within stationary bubble
+            // Speed estimation
             float candidateSpeedKmh;
-            if (deltaDistanceM < dynamicNoiseThreshold) {
-                candidateSpeedKmh = 0f;
-            } else if (nativeSpeedKmh >= 2.0f) {
+            if (nativeSpeedKmh >= 2.0f) {
                 candidateSpeedKmh = nativeSpeedKmh;
             } else {
                 candidateSpeedKmh = derivedSpeedKmh;
@@ -357,7 +377,8 @@ public final class WorkoutLocationService extends Service {
             }
 
             // Feed EMA speed filter
-            if (candidateSpeedKmh == 0f) {
+            if (candidateSpeedKmh < 1.0f && rawDeltaDistanceM < 2.0f) {
+                // If moving very slowly or barely any displacement, decay speed
                 emaSpeedKmh = (1f - SPEED_EMA_ALPHA) * emaSpeedKmh;
                 if (emaSpeedKmh < 0.4f) emaSpeedKmh = 0f;
             } else if (emaSpeedKmh == 0f) {
@@ -366,23 +387,33 @@ public final class WorkoutLocationService extends Service {
                 emaSpeedKmh = (SPEED_EMA_ALPHA * candidateSpeedKmh) + ((1f - SPEED_EMA_ALPHA) * emaSpeedKmh);
             }
 
-            // Stationary Filter
-            boolean isStationary = (emaSpeedKmh < 1.5f || deltaDistanceM < dynamicNoiseThreshold);
+            // Stationary Filter (determine movement state)
+            boolean isStationary = (emaSpeedKmh < 1.5f);
             if (isStationary || isSettling) {
                 currentSpeedKmh = 0f;
+                isCurrentlyMoving = false;
             } else {
                 currentSpeedKmh = emaSpeedKmh;
+                isCurrentlyMoving = true;
             }
 
-            // Acceptance Gate: Must be outside settling, not stationary, and have sufficient displacement
+            isMoving = isCurrentlyMoving;
+
+            // Dynamic noise threshold based on GPS accuracy for DISTANCE accumulation
+            float dynamicNoiseThreshold = Math.max(baseNoiseFloorM, accuracy * 0.45f);
+            if (isMoving) {
+                dynamicNoiseThreshold = 1.0f; // Accept almost every point when moving for super smooth curves!
+            }
+            if (nativeSpeedKmh >= 2.0f) {
+                dynamicNoiseThreshold = 0f; // Disable spatial noise filter if we have high-confidence hardware speed
+            }
+
+            // Acceptance Gate: Must be outside settling, currently moving, and have sufficient displacement from last anchor
             boolean hasMovedThreshold = deltaDistanceM >= dynamicNoiseThreshold;
-            boolean movementConfirmed = !isSettling && !isStationary && hasMovedThreshold && (
-                    emaSpeedKmh >= 1.5f || derivedSpeedKmh >= 2.0f
-            );
+            boolean movementConfirmed = !isSettling && isMoving && hasMovedThreshold;
 
             if (movementConfirmed) {
                 isAccepted = true;
-                isMoving = true;
                 addedDistanceM = deltaDistanceM;
                 distanceMeters += addedDistanceM;
                 lastAcceptedLocation = location;
@@ -407,17 +438,17 @@ public final class WorkoutLocationService extends Service {
                         lastElevationAnchor = smoothedAlt;
                     }
                 }
-
-                // Max Speed calculation
-                if (currentSpeedKmh > 2.0f && currentSpeedKmh <= 180.0f) {
-                    maxSpeedKmh = Math.max(maxSpeedKmh, currentSpeedKmh);
-                }
             } else if (isSettling) {
                 // During settling, update anchor without distance accumulation
                 lastAcceptedLocation = location;
                 if (location.hasAltitude()) {
                     lastElevationAnchor = smoothAltitude(location.getAltitude());
                 }
+            }
+            
+            // Max Speed calculation
+            if (currentSpeedKmh > 2.0f && currentSpeedKmh <= 180.0f) {
+                maxSpeedKmh = Math.max(maxSpeedKmh, currentSpeedKmh);
             }
         } else {
             // First accepted location of the session
@@ -426,13 +457,28 @@ public final class WorkoutLocationService extends Service {
             if (nativeSpeedKmh >= 2.0f) {
                 emaSpeedKmh = nativeSpeedKmh;
                 currentSpeedKmh = emaSpeedKmh;
+                isCurrentlyMoving = true;
+            } else {
+                emaSpeedKmh = 0f;
+                currentSpeedKmh = 0f;
+                isCurrentlyMoving = false;
             }
+            isMoving = isCurrentlyMoving;
             if (location.hasAltitude()) {
                 lastElevationAnchor = smoothAltitude(location.getAltitude());
             }
         }
 
-        boolean isAutoPaused = !isMoving && currentSpeedKmh < 1.0f;
+        lastRawLocation = location;
+
+        if (isMoving) {
+            lastMovementTimeMs = location.getTime();
+            sessionSettleUntil = 0L;
+        } else if (lastMovementTimeMs == 0L) {
+            lastMovementTimeMs = location.getTime();
+        }
+
+        boolean isAutoPaused = !isMoving && (location.getTime() - lastMovementTimeMs >= 4000L);
 
         try {
             JSONObject pointJson = locationToJson(location, accuracy, distanceMeters, movingDurationSec, currentSpeedKmh, maxSpeedKmh, elevationGainM, isMoving, isAccepted, isAutoPaused);
@@ -559,8 +605,8 @@ public final class WorkoutLocationService extends Service {
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        // User explicitly swiped app from recents — stop tracking cleanly
-        stopTracking();
+        // User explicitly swiped app from recents — pause tracking instead of stopping
+        pauseTracking();
         super.onTaskRemoved(rootIntent);
     }
 
@@ -568,6 +614,9 @@ public final class WorkoutLocationService extends Service {
     public void onDestroy() {
         removeFusedLocationUpdates();
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        if (locationThread != null) {
+            locationThread.quitSafely();
+        }
         super.onDestroy();
     }
 

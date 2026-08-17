@@ -1065,34 +1065,6 @@ export function CardioTracker() {
 
             {/* Auto-Pause & Status Indicator Banner */}
             <AnimatePresence>
-              {store.autoPauseStatus === 'PAUSED' && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-                  animate={{ opacity: 1, height: 'auto', marginBottom: 8 }}
-                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                  className="mx-5 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border border-amber-500/35 flex items-center justify-between shadow-lg shadow-amber-500/10 overflow-hidden"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="relative w-8 h-8 rounded-full bg-amber-500/25 border border-amber-500/50 text-amber-400 flex items-center justify-center shrink-0">
-                      <Pause size={14} className="fill-amber-400" />
-                      <span className="absolute inset-0 rounded-full bg-amber-400/30 animate-ping" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-extrabold text-amber-500 dark:text-amber-300 tracking-wide uppercase flex items-center gap-1.5">
-                        Auto-Paused <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-                      </div>
-                      <div className="text-[10.5px] text-[var(--muted)] font-medium">Standing still • Resumes automatically when moving</div>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={handleResume}
-                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 active:scale-95 text-white font-bold text-xs shadow-md shadow-amber-500/25 transition-all cursor-pointer"
-                  >
-                    Resume
-                  </button>
-                </motion.div>
-              )}
-
               {store.isPaused && store.autoPauseStatus !== 'PAUSED' && (
                 <motion.div 
                   initial={{ opacity: 0, height: 0, marginBottom: 0 }}
