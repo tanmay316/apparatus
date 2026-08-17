@@ -63,6 +63,9 @@ public final class WorkoutLocationService extends Service implements LocationLis
     public static final String KEY_LAST_BEARING = "last_bearing";
     public static final String KEY_LAST_ACCURACY = "last_accuracy";
     public static final String KEY_LAST_TIMESTAMP = "last_timestamp";
+    public static final String KEY_LAST_ACCEPTED_LAT = "last_accepted_lat";
+    public static final String KEY_LAST_ACCEPTED_LNG = "last_accepted_lng";
+    public static final String KEY_LAST_ACCEPTED_TIMESTAMP = "last_accepted_timestamp";
 
     // Quality constants
     private static final float MAX_ACCEPTED_ACCURACY_M = 40.0f;
@@ -155,6 +158,9 @@ public final class WorkoutLocationService extends Service implements LocationLis
                     .remove(KEY_LAST_BEARING)
                     .remove(KEY_LAST_ACCURACY)
                     .remove(KEY_LAST_TIMESTAMP)
+                    .remove(KEY_LAST_ACCEPTED_LAT)
+                    .remove(KEY_LAST_ACCEPTED_LNG)
+                    .remove(KEY_LAST_ACCEPTED_TIMESTAMP)
                     .apply();
         } else {
             prefs.edit().putString(KEY_STATE, "TRACKING").apply();
@@ -273,7 +279,7 @@ public final class WorkoutLocationService extends Service implements LocationLis
         float recentMax = sorted.get(sorted.size() - 1);
 
         // Allow generous acceleration envelope from current trend
-        // If median is low (< 5 km/h), allow up to median + 25 km/h (covers starting to bike/drive)
+        // If median is low (< 2 km/h), allow up to 30 km/h (covers starting to bike/drive)
         // If median is higher, allow up to 3x median or median + 40, whichever is larger
         float allowedCeiling;
         if (median < 2.0f) {
@@ -319,6 +325,8 @@ public final class WorkoutLocationService extends Service implements LocationLis
             }
         }
 
+        SharedPreferences.Editor editor = prefs.edit();
+
         if (prefs.contains(KEY_LAST_LAT) && lastTimestamp > 0L) {
             double prevLat = Double.longBitsToDouble(prefs.getLong(KEY_LAST_LAT, 0L));
             double prevLng = Double.longBitsToDouble(prefs.getLong(KEY_LAST_LNG, 0L));
@@ -335,21 +343,34 @@ public final class WorkoutLocationService extends Service implements LocationLis
                 currentSpeedKmh = (derivedSpeedKmh < 0.8f && deltaM < 2.5f) ? 0f : derivedSpeedKmh;
             }
 
-            // Spike detection: reject if speed is wildly inconsistent with recent trend
+            // Spike detection: reject if instantaneous speed is wildly inconsistent with recent trend
             boolean isSpiked = isSpeedSpike(currentSpeedKmh);
             if (isSpiked) {
-                // This is a glitch point — don't accumulate distance or update position anchor
-                // Still update timestamp so next delta calculation is correct
-                prefs.edit()
-                    .putFloat(KEY_LAST_ACCURACY, accuracy)
-                    .putLong(KEY_LAST_TIMESTAMP, location.getTime())
-                    .putFloat(KEY_CURRENT_SPEED_KMH, 0f)
-                    .apply();
+                editor.putFloat(KEY_LAST_ACCURACY, accuracy)
+                      .putLong(KEY_LAST_TIMESTAMP, location.getTime())
+                      .apply();
                 return;
             }
 
+            // Distance candidate calculation relative to LAST ACCEPTED ANCHOR
+            double anchorLat = prefs.contains(KEY_LAST_ACCEPTED_LAT)
+                    ? Double.longBitsToDouble(prefs.getLong(KEY_LAST_ACCEPTED_LAT, 0L))
+                    : prevLat;
+            double anchorLng = prefs.contains(KEY_LAST_ACCEPTED_LNG)
+                    ? Double.longBitsToDouble(prefs.getLong(KEY_LAST_ACCEPTED_LNG, 0L))
+                    : prevLng;
+            long anchorTs = prefs.getLong(KEY_LAST_ACCEPTED_TIMESTAMP, lastTimestamp);
+
+            Location anchorLoc = new Location("anchor");
+            anchorLoc.setLatitude(anchorLat);
+            anchorLoc.setLongitude(anchorLng);
+
+            float distanceCandidateM = anchorLoc.distanceTo(location);
+            float anchorDtSec = Math.max(0.1f, (location.getTime() - anchorTs) / 1000f);
+            float candidateSpeedKmh = (distanceCandidateM / anchorDtSec) * 3.6f;
+
             // Stationary jitter filter
-            boolean isStationary = (currentSpeedKmh < MIN_MOVEMENT_SPEED_KMH && deltaM < MIN_DISTANCE_DELTA_M);
+            boolean isStationary = (currentSpeedKmh < MIN_MOVEMENT_SPEED_KMH && distanceCandidateM < MIN_DISTANCE_DELTA_M);
             if (isStationary) {
                 currentSpeedKmh = 0f;
             }
@@ -357,12 +378,19 @@ public final class WorkoutLocationService extends Service implements LocationLis
             // Distance acceptance gate with settling logic
             boolean isSettling = sessionSettleUntil > 0L && location.getTime() < sessionSettleUntil;
             float requiredDistance = isSettling ? SETTLING_MIN_DISTANCE_M : Math.max(MIN_DISTANCE_DELTA_M, accuracy * 0.25f);
-            boolean settlingSpeedOk = !isSettling || derivedSpeedKmh <= SETTLING_MAX_SPEED_KMH;
-            boolean movementConfirmed = !isStationary && (currentSpeedKmh >= MIN_MOVEMENT_SPEED_KMH || deltaM >= requiredDistance);
+            boolean settlingSpeedOk = !isSettling || candidateSpeedKmh <= SETTLING_MAX_SPEED_KMH;
+            boolean hasMovedThreshold = distanceCandidateM >= requiredDistance;
+            boolean isCandidateSpike = isSpeedSpike(candidateSpeedKmh);
+            boolean movementConfirmed = !isStationary && (currentSpeedKmh >= MIN_MOVEMENT_SPEED_KMH || candidateSpeedKmh >= 1.5f || hasMovedThreshold);
 
-            if (hasStrictAccuracy && deltaM >= requiredDistance && settlingSpeedOk && movementConfirmed) {
-                addedDistanceM = deltaM;
+            if (hasStrictAccuracy && !isCandidateSpike && hasMovedThreshold && settlingSpeedOk && movementConfirmed) {
+                addedDistanceM = distanceCandidateM;
                 distanceMeters += addedDistanceM;
+
+                // Advance the distance anchor ONLY upon distance acceptance
+                editor.putLong(KEY_LAST_ACCEPTED_LAT, Double.doubleToRawLongBits(location.getLatitude()));
+                editor.putLong(KEY_LAST_ACCEPTED_LNG, Double.doubleToRawLongBits(location.getLongitude()));
+                editor.putLong(KEY_LAST_ACCEPTED_TIMESTAMP, location.getTime());
             }
 
             // Elevation filtering & gain calculation
@@ -381,6 +409,11 @@ public final class WorkoutLocationService extends Service implements LocationLis
                 }
             }
         } else {
+            if (hasStrictAccuracy) {
+                editor.putLong(KEY_LAST_ACCEPTED_LAT, Double.doubleToRawLongBits(location.getLatitude()));
+                editor.putLong(KEY_LAST_ACCEPTED_LNG, Double.doubleToRawLongBits(location.getLongitude()));
+                editor.putLong(KEY_LAST_ACCEPTED_TIMESTAMP, location.getTime());
+            }
             if (location.hasAltitude()) {
                 lastElevationAnchor = smoothAltitude(location.getAltitude());
             }
@@ -404,7 +437,6 @@ public final class WorkoutLocationService extends Service implements LocationLis
             maxSpeedKmh = Math.max(maxSpeedKmh, currentSpeedKmh);
         }
 
-        SharedPreferences.Editor editor = prefs.edit();
         if (hasStrictAccuracy) {
             editor.putLong(KEY_LAST_LAT, Double.doubleToRawLongBits(location.getLatitude()));
             editor.putLong(KEY_LAST_LNG, Double.doubleToRawLongBits(location.getLongitude()));
@@ -427,12 +459,6 @@ public final class WorkoutLocationService extends Service implements LocationLis
         List<Double> sorted = new ArrayList<>(altBuffer);
         Collections.sort(sorted);
         return sorted.get(sorted.size() / 2);
-    }
-
-    private float getMaxSpeedLimit(String activityType) {
-        if ("cycle".equals(activityType)) return 140f;
-        if ("run".equals(activityType)) return 90f;
-        return 80f;
     }
 
     private void startForegroundNotification() {

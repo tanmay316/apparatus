@@ -194,6 +194,14 @@ export const syncWithNativeSession = async (): Promise<boolean> => {
         speed: p.speed ?? undefined,
       }));
 
+      const currentStore = useCardioStore.getState();
+      const nativeDistKm = summary.distanceMeters / 1000;
+      const finalDistKm = Math.max(currentStore.distanceKm, nativeDistKm);
+      const finalMovingSec = Math.max(currentStore.movingDurationSec, summary.movingDurationSec);
+      const finalMaxSpeed = Math.max(currentStore.maxSpeedKmh, summary.maxSpeedKmh);
+      const finalElevation = Math.max(currentStore.elevationGainM, summary.elevationGainM);
+      const finalRoute = pts.length >= currentStore.routePoints.length ? pts : currentStore.routePoints;
+
       useCardioStore.setState({
         isTracking: true,
         isPaused: summary.state === 'PAUSED',
@@ -201,20 +209,20 @@ export const syncWithNativeSession = async (): Promise<boolean> => {
         startedAt: summary.startedAt,
         pausedAt: summary.pausedAt > 0 ? summary.pausedAt : null,
         totalPausedMs: summary.totalPausedMs,
-        movingDurationSec: summary.movingDurationSec,
-        distanceKm: summary.distanceMeters / 1000,
+        movingDurationSec: finalMovingSec,
+        distanceKm: finalDistKm,
         currentSpeedKmh: summary.currentSpeedKmh,
-        maxSpeedKmh: summary.maxSpeedKmh,
-        elevationGainM: summary.elevationGainM,
+        maxSpeedKmh: finalMaxSpeed,
+        elevationGainM: finalElevation,
         currentLocation: summary.lastLat && summary.lastLng ? {
           lat: summary.lastLat,
           lng: summary.lastLng,
           heading: summary.lastBearing ?? undefined,
-        } : null,
+        } : currentStore.currentLocation,
         gpsAccuracy: summary.lastAccuracy,
         gpsStatus: 'active',
         lastGpsTimestamp: summary.lastTimestamp,
-        routePoints: pts,
+        routePoints: finalRoute,
         isRecovering: false,
       });
       return true;

@@ -40,7 +40,7 @@
             android:name=".WorkoutLocationService"
             android:foregroundServiceType="location"
             android:exported="false"
-            android:stopWithTask="true"
+            android:stopWithTask="false"
         />
     </application>
 
