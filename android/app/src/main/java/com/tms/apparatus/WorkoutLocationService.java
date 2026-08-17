@@ -12,29 +12,37 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.ServiceCompat;
 import androidx.core.content.ContextCompat;
+
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.Priority;
 
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Production-grade Android Foreground Location Service.
- * Owns workout session state, metrics calculation, and durable journaling independently of the WebView.
+ * Single Authoritative Source of Truth for GPS tracking, metric calculation,
+ * durable SQLite journaling, and real-time state synchronization.
  */
-public final class WorkoutLocationService extends Service implements LocationListener {
+public final class WorkoutLocationService extends Service {
     public static final String ACTION_START = "com.tms.apparatus.workout.START";
     public static final String ACTION_STOP = "com.tms.apparatus.workout.STOP";
     public static final String ACTION_PAUSE = "com.tms.apparatus.workout.PAUSE";
@@ -46,7 +54,7 @@ public final class WorkoutLocationService extends Service implements LocationLis
     private static final int NOTIFICATION_ID = 4101;
     public static final String PREFS = "workout_location_session";
 
-    // State keys
+    // SharedPreferences State Keys
     public static final String KEY_STATE = "state"; // "IDLE", "TRACKING", "PAUSED", "STOPPED"
     public static final String KEY_ACTIVITY_TYPE = "activity_type";
     public static final String KEY_STARTED_AT = "started_at";
@@ -63,37 +71,29 @@ public final class WorkoutLocationService extends Service implements LocationLis
     public static final String KEY_LAST_BEARING = "last_bearing";
     public static final String KEY_LAST_ACCURACY = "last_accuracy";
     public static final String KEY_LAST_TIMESTAMP = "last_timestamp";
-    public static final String KEY_LAST_ACCEPTED_LAT = "last_accepted_lat";
-    public static final String KEY_LAST_ACCEPTED_LNG = "last_accepted_lng";
-    public static final String KEY_LAST_ACCEPTED_TIMESTAMP = "last_accepted_timestamp";
 
-    // Quality constants
-    private static final float MAX_ACCEPTED_ACCURACY_M = 40.0f;
-    private static final float STRICT_MATH_ACCURACY_M = 25.0f;
-    private static final float MIN_MOVEMENT_SPEED_KMH = 1.0f; // ~0.28 m/s
-    private static final float MIN_DISTANCE_DELTA_M = 4.5f; // 4.5m minimum displacement to filter stationary GPS drift
+    // Quality Constants
+    private static final float MAX_ACCEPTED_ACCURACY_M = 35.0f;
+    private static final long GPS_SETTLING_DURATION_MS = 6000L; // First 6s suppresses noise while anchor settles
+    private static final float SPEED_EMA_ALPHA = 0.25f;
 
-    // GPS settling phase — suppress distance for first few seconds to prevent jitter drift
-    private static final long GPS_SETTLING_DURATION_MS = 4000L;
-    private static final float SETTLING_MIN_DISTANCE_M = 7.0f;
-    private static final float SETTLING_MAX_SPEED_KMH = 3.5f;
-    private long sessionSettleUntil = 0L;
-
-    // Spike detection — rolling speed history instead of artificial caps
-    private static final int SPEED_HISTORY_SIZE = 7;
-    private final List<Float> speedHistory = new ArrayList<>();
-
-    private LocationManager locationManager;
+    // Fused Location & System handles
+    private FusedLocationProviderClient fusedClient;
+    private LocationCallback locationCallback;
     private WorkoutLocationDatabase database;
     private PowerManager.WakeLock wakeLock;
 
-    // Altitude smoothing buffer
+    // In-memory Metric Engine State
+    private long sessionSettleUntil = 0L;
+    private float emaSpeedKmh = 0f;
+    private Location lastAcceptedLocation = null;
     private final List<Double> altBuffer = new ArrayList<>();
     private Double lastElevationAnchor = null;
 
-    @Override public void onCreate() {
+    @Override
+    public void onCreate() {
         super.onCreate();
-        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        fusedClient = LocationServices.getFusedLocationProviderClient(this);
         database = new WorkoutLocationDatabase(this);
         createNotificationChannel();
 
@@ -102,9 +102,21 @@ public final class WorkoutLocationService extends Service implements LocationLis
             wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Apparatus:WorkoutLocation");
             wakeLock.setReferenceCounted(false);
         }
+
+        locationCallback = new LocationCallback() {
+            @Override
+            public void onLocationResult(@NonNull LocationResult locationResult) {
+                for (Location location : locationResult.getLocations()) {
+                    if (location != null) {
+                        handleNewLocation(location);
+                    }
+                }
+            }
+        };
     }
 
-    @Override public int onStartCommand(Intent intent, int flags, int startId) {
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent == null) return START_STICKY;
 
         String action = intent.getAction();
@@ -131,17 +143,15 @@ public final class WorkoutLocationService extends Service implements LocationLis
         String safeType = "run".equals(activityType) || "cycle".equals(activityType) ? activityType : "walk";
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
 
-        boolean hasActiveSession = prefs.getLong(KEY_STARTED_AT, 0L) > 0L 
+        boolean hasActiveSession = prefs.getLong(KEY_STARTED_AT, 0L) > 0L
                 && ("TRACKING".equals(prefs.getString(KEY_STATE, "IDLE")) || "PAUSED".equals(prefs.getString(KEY_STATE, "IDLE")));
 
         if (reset || (!hasActiveSession && prefs.getLong(KEY_STARTED_AT, 0L) == 0L)) {
             database.beginNewSession();
             altBuffer.clear();
             lastElevationAnchor = null;
-            speedHistory.clear();
-            speedHistory.add(0f);
-            speedHistory.add(0f);
-            speedHistory.add(0f);
+            lastAcceptedLocation = null;
+            emaSpeedKmh = 0f;
             sessionSettleUntil = System.currentTimeMillis() + GPS_SETTLING_DURATION_MS;
 
             prefs.edit()
@@ -161,19 +171,23 @@ public final class WorkoutLocationService extends Service implements LocationLis
                     .remove(KEY_LAST_BEARING)
                     .remove(KEY_LAST_ACCURACY)
                     .remove(KEY_LAST_TIMESTAMP)
-                    .remove(KEY_LAST_ACCEPTED_LAT)
-                    .remove(KEY_LAST_ACCEPTED_LNG)
-                    .remove(KEY_LAST_ACCEPTED_TIMESTAMP)
                     .apply();
         } else {
             prefs.edit().putString(KEY_STATE, "TRACKING").apply();
+            // Restore last accepted location if available
+            if (prefs.contains(KEY_LAST_LAT) && prefs.contains(KEY_LAST_LNG)) {
+                lastAcceptedLocation = new Location("restored");
+                lastAcceptedLocation.setLatitude(Double.longBitsToDouble(prefs.getLong(KEY_LAST_LAT, 0L)));
+                lastAcceptedLocation.setLongitude(Double.longBitsToDouble(prefs.getLong(KEY_LAST_LNG, 0L)));
+                lastAcceptedLocation.setTime(prefs.getLong(KEY_LAST_TIMESTAMP, System.currentTimeMillis()));
+            }
         }
 
         startForegroundNotification();
         if (wakeLock != null && !wakeLock.isHeld()) {
             wakeLock.acquire(12 * 60 * 60 * 1000L); // 12hr safety timeout
         }
-        requestLocationUpdates();
+        requestFusedLocationUpdates();
         broadcastStateChange("TRACKING");
     }
 
@@ -184,6 +198,7 @@ public final class WorkoutLocationService extends Service implements LocationLis
                 .putLong(KEY_PAUSED_AT, System.currentTimeMillis())
                 .putFloat(KEY_CURRENT_SPEED_KMH, 0f)
                 .apply();
+        emaSpeedKmh = 0f;
         updateNotification();
         broadcastStateChange("PAUSED");
     }
@@ -200,6 +215,7 @@ public final class WorkoutLocationService extends Service implements LocationLis
                 .putLong(KEY_PAUSED_AT, 0L)
                 .putLong(KEY_TOTAL_PAUSED_MS, totalPaused)
                 .apply();
+        emaSpeedKmh = 0f;
         updateNotification();
         broadcastStateChange("TRACKING");
     }
@@ -208,7 +224,7 @@ public final class WorkoutLocationService extends Service implements LocationLis
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putString(KEY_STATE, "STOPPED")
                 .apply();
-        if (locationManager != null) locationManager.removeUpdates(this);
+        removeFusedLocationUpdates();
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         stopForeground(STOP_FOREGROUND_REMOVE);
         NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
@@ -217,253 +233,245 @@ public final class WorkoutLocationService extends Service implements LocationLis
         stopSelf();
     }
 
-    private void requestLocationUpdates() {
+    private void requestFusedLocationUpdates() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
-                && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
+                && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
         try {
-            if (locationManager != null) {
-                if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                    locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, this);
-                }
-                if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                    locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 2000L, 2f, this);
-                }
-            }
+            LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
+                    .setMinUpdateIntervalMillis(1000L)
+                    .setMinUpdateDistanceMeters(0f)
+                    .setWaitForAccurateLocation(false)
+                    .build();
+
+            fusedClient.requestLocationUpdates(locationRequest, locationCallback, Looper.getMainLooper());
         } catch (Exception ignored) {}
     }
 
-    @Override public void onLocationChanged(Location location) {
-        if (location == null) return;
-
-        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-        String currentState = prefs.getString(KEY_STATE, "IDLE");
-        if (!"TRACKING".equals(currentState)) return;
-
-        // 1. Pipeline Gate: Timestamp validity (reject stale / out-of-order points)
-        long lastTs = prefs.getLong(KEY_LAST_TIMESTAMP, 0L);
-        if (location.getTime() <= lastTs && lastTs > 0L) return;
-
-        // 2. Pipeline Gate: Accuracy limit
-        float accuracy = location.hasAccuracy() ? location.getAccuracy() : 999f;
-        if (accuracy > MAX_ACCEPTED_ACCURACY_M) return;
-
+    private void removeFusedLocationUpdates() {
         try {
-            // Append to durable SQLite log
-            JSONObject pointJson = locationToJson(location);
-            database.append(pointJson);
-
-            // Process live stats metrics
-            processLocationMetrics(location, prefs);
-
-            // Update live notification
-            updateNotification();
-
-            // Broadcast to WebView client
-            Intent update = new Intent(ACTION_LOCATION).setPackage(getPackageName());
-            update.putExtra("point", pointJson.toString());
-            sendBroadcast(update);
+            if (fusedClient != null && locationCallback != null) {
+                fusedClient.removeLocationUpdates(locationCallback);
+            }
         } catch (Exception ignored) {}
     }
 
     /**
-     * Spike detection: checks if a candidate speed is consistent with the recent
-     * speed history. A speed is a "spike" if it jumps far above the recent trend
-     * and then would presumably drop back down — like GPS glitch patterns
-     * (e.g. 5→50→4 km/h). Genuine acceleration (5→8→12→18→25) passes through
-     * because each step is close to the previous trend.
+     * Primary GPS Ingestion & Single Source of Truth Metric Engine.
      */
-    private boolean isSpeedSpike(float candidateSpeedKmh) {
-        if (speedHistory.size() < 3) return false;
+    private void handleNewLocation(@NonNull Location location) {
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String currentState = prefs.getString(KEY_STATE, "IDLE");
+        if (!"TRACKING".equals(currentState)) return;
 
-        // Get median of recent speeds
-        List<Float> sorted = new ArrayList<>(speedHistory);
-        Collections.sort(sorted);
-        float median = sorted.get(sorted.size() / 2);
-        float recentMax = sorted.get(sorted.size() - 1);
-
-        float allowedCeiling;
-        if (median < 2.0f) {
-            // When stationary / starting, cap allowed sudden jump at 15 km/h
-            allowedCeiling = 15.0f;
-        } else {
-            allowedCeiling = Math.max(median * 3.0f, Math.max(recentMax * 2.0f, median + 40.0f));
+        // 1. Quality Gate: Coordinate Validity
+        double lat = location.getLatitude();
+        double lng = location.getLongitude();
+        if (Double.isNaN(lat) || Double.isNaN(lng) || (lat == 0.0 && lng == 0.0) || Math.abs(lat) > 90.0 || Math.abs(lng) > 180.0) {
+            return;
         }
 
-        return candidateSpeedKmh > allowedCeiling;
-    }
+        // 2. Quality Gate: Timestamp Monotonicity
+        long lastTs = prefs.getLong(KEY_LAST_TIMESTAMP, 0L);
+        if (location.getTime() <= lastTs && lastTs > 0L) {
+            return;
+        }
 
-    private void acceptSpeed(float speedKmh) {
-        speedHistory.add(speedKmh);
-        if (speedHistory.size() > SPEED_HISTORY_SIZE) speedHistory.remove(0);
-    }
-
-    private void processLocationMetrics(Location location, SharedPreferences prefs) {
+        // 3. Quality Gate: Strict Accuracy Limit
         float accuracy = location.hasAccuracy() ? location.getAccuracy() : 999f;
-        boolean hasStrictAccuracy = accuracy <= STRICT_MATH_ACCURACY_M;
+        if (accuracy > MAX_ACCEPTED_ACCURACY_M) {
+            return;
+        }
 
-        float maxSpeedKmh = prefs.getFloat(KEY_MAX_SPEED_KMH, 0f);
-        float distanceMeters = prefs.getFloat(KEY_DISTANCE_METERS, 0f);
-        long movingDurationSec = prefs.getLong(KEY_MOVING_DURATION_SEC, 0L);
-        float elevationGainM = prefs.getFloat(KEY_ELEVATION_GAIN_M, 0f);
-        long lastTimestamp = prefs.getLong(KEY_LAST_TIMESTAMP, 0L);
-
-        float currentSpeedKmh = 0f;
-        float addedDistanceM = 0f;
-        boolean isMoving = false;
-
+        // Base noise floor
+        float baseNoiseFloorM = 5.0f;
         boolean isSettling = sessionSettleUntil > 0L && location.getTime() < sessionSettleUntil;
 
-        // Speed calculation: Validate native speed vs derived speed
-        boolean hasGoodNativeSpeed = false;
-        if (location.hasSpeed()) {
-            float speedMs = location.getSpeed();
+        // Hardware Doppler speed confidence
+        float nativeSpeedKmh = -1f;
+        boolean hasHighConfidenceSpeed = false;
+        if (location.hasSpeed() && location.getSpeed() >= 0f) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasSpeedAccuracy()) {
-                hasGoodNativeSpeed = location.getSpeedAccuracyMetersPerSecond() <= 3.0f;
+                hasHighConfidenceSpeed = location.getSpeedAccuracyMetersPerSecond() <= 1.5f;
             } else {
-                hasGoodNativeSpeed = speedMs >= 0f && hasStrictAccuracy;
+                hasHighConfidenceSpeed = accuracy <= 20.0f;
             }
-            if (hasGoodNativeSpeed && speedMs > 0f) {
-                currentSpeedKmh = (speedMs * 3.6f < 0.8f) ? 0f : (speedMs * 3.6f);
+            if (hasHighConfidenceSpeed) {
+                nativeSpeedKmh = location.getSpeed() * 3.6f;
             }
         }
 
-        SharedPreferences.Editor editor = prefs.edit();
+        float distanceMeters = prefs.getFloat(KEY_DISTANCE_METERS, 0f);
+        long movingDurationSec = prefs.getLong(KEY_MOVING_DURATION_SEC, 0L);
+        float maxSpeedKmh = prefs.getFloat(KEY_MAX_SPEED_KMH, 0f);
+        float elevationGainM = prefs.getFloat(KEY_ELEVATION_GAIN_M, 0f);
 
-        if (prefs.contains(KEY_LAST_LAT) && lastTimestamp > 0L) {
-            double prevLat = Double.longBitsToDouble(prefs.getLong(KEY_LAST_LAT, 0L));
-            double prevLng = Double.longBitsToDouble(prefs.getLong(KEY_LAST_LNG, 0L));
-            Location prevLoc = new Location("prev");
-            prevLoc.setLatitude(prevLat);
-            prevLoc.setLongitude(prevLng);
+        boolean isAccepted = false;
+        float addedDistanceM = 0f;
+        float currentSpeedKmh = 0f;
 
-            float deltaM = prevLoc.distanceTo(location);
-            float deltaSec = Math.max(0.1f, (location.getTime() - lastTimestamp) / 1000f);
+        if (lastAcceptedLocation != null) {
+            float deltaDistanceM = lastAcceptedLocation.distanceTo(location);
+            float dtSec = Math.max(0.1f, (location.getTime() - lastAcceptedLocation.getTime()) / 1000f);
+            float derivedSpeedKmh = (deltaDistanceM / dtSec) * 3.6f;
 
-            // Distance candidate calculation relative to LAST ACCEPTED ANCHOR
-            double anchorLat = prefs.contains(KEY_LAST_ACCEPTED_LAT)
-                    ? Double.longBitsToDouble(prefs.getLong(KEY_LAST_ACCEPTED_LAT, 0L))
-                    : prevLat;
-            double anchorLng = prefs.contains(KEY_LAST_ACCEPTED_LNG)
-                    ? Double.longBitsToDouble(prefs.getLong(KEY_LAST_ACCEPTED_LNG, 0L))
-                    : prevLng;
-            long anchorTs = prefs.getLong(KEY_LAST_ACCEPTED_TIMESTAMP, lastTimestamp);
+            // Spike Detection: Validate gradual acceleration/deceleration.
+            // No hard speed cap (user can walk -> board motorbike/car).
+            // Reject sudden impossible instantaneous jumps (e.g. 5 km/h -> 90 km/h in 1 sec).
+            float maxAllowedDeltaSpeedKmh = Math.max(30.0f, emaSpeedKmh * 0.8f + 25.0f) * Math.min(3.0f, dtSec);
+            boolean isSuddenSpike = Math.abs(derivedSpeedKmh - emaSpeedKmh) > maxAllowedDeltaSpeedKmh && deltaDistanceM > 20.0f;
+            boolean isAbsurdTeleport = derivedSpeedKmh > 180.0f; // >180 km/h is impossible ground workout speed
 
-            Location anchorLoc = new Location("anchor");
-            anchorLoc.setLatitude(anchorLat);
-            anchorLoc.setLongitude(anchorLng);
-
-            float distanceCandidateM = anchorLoc.distanceTo(location);
-            float anchorDtSec = Math.max(0.1f, (location.getTime() - anchorTs) / 1000f);
-            float candidateSpeedKmh = (distanceCandidateM / anchorDtSec) * 3.6f;
-
-            // Use derived speed fallback only when displacement is outside stationary jitter
-            if (!hasGoodNativeSpeed) {
-                if (distanceCandidateM < 4.5f) {
-                    currentSpeedKmh = 0f;
-                } else {
-                    currentSpeedKmh = candidateSpeedKmh;
-                }
-            }
-
-            // During GPS settling (first 4 seconds), anchor is continually refreshed to latest fix
-            if (isSettling) {
-                currentSpeedKmh = 0f;
-                editor.putLong(KEY_LAST_ACCEPTED_LAT, Double.doubleToRawLongBits(location.getLatitude()));
-                editor.putLong(KEY_LAST_ACCEPTED_LNG, Double.doubleToRawLongBits(location.getLongitude()));
-                editor.putLong(KEY_LAST_ACCEPTED_TIMESTAMP, location.getTime());
-            }
-
-            // Spike detection: reject if instantaneous speed is wildly inconsistent with recent trend
-            boolean isSpiked = isSpeedSpike(currentSpeedKmh);
-            if (isSpiked) {
-                editor.putFloat(KEY_LAST_ACCURACY, accuracy)
-                      .putLong(KEY_LAST_TIMESTAMP, location.getTime())
-                      .apply();
+            if ((isSuddenSpike && !hasHighConfidenceSpeed) || isAbsurdTeleport) {
+                // Reject glitch point from distance/route accumulation
+                saveLiveLocationPrefs(prefs, location, accuracy, distanceMeters, movingDurationSec, 0f, maxSpeedKmh, elevationGainM);
+                broadcastLocation(location, accuracy, distanceMeters, movingDurationSec, 0f, maxSpeedKmh, elevationGainM, false, false);
                 return;
             }
 
-            // Stationary jitter filter
-            boolean isStationary = (currentSpeedKmh < MIN_MOVEMENT_SPEED_KMH && distanceCandidateM < MIN_DISTANCE_DELTA_M);
-            if (isStationary) {
+            // Dynamic noise threshold based on GPS accuracy
+            float dynamicNoiseThreshold = Math.max(baseNoiseFloorM, accuracy * 0.35f);
+
+            // Speed estimation
+            float candidateSpeedKmh;
+            if (nativeSpeedKmh >= 0f) {
+                candidateSpeedKmh = nativeSpeedKmh < 1.0f ? 0f : nativeSpeedKmh;
+            } else {
+                candidateSpeedKmh = deltaDistanceM < dynamicNoiseThreshold ? 0f : derivedSpeedKmh;
+            }
+
+            if (isSettling) {
+                candidateSpeedKmh = 0f;
+            }
+
+            // Feed EMA speed filter
+            if (emaSpeedKmh == 0f && candidateSpeedKmh > 0f) {
+                emaSpeedKmh = candidateSpeedKmh;
+            } else {
+                emaSpeedKmh = (SPEED_EMA_ALPHA * candidateSpeedKmh) + ((1f - SPEED_EMA_ALPHA) * emaSpeedKmh);
+            }
+
+            // Stationary Filter: EMA speed < 1.2 km/h and displacement under noise threshold
+            boolean isStationary = (emaSpeedKmh < 1.2f && deltaDistanceM < dynamicNoiseThreshold);
+            if (isStationary || isSettling) {
                 currentSpeedKmh = 0f;
+            } else {
+                currentSpeedKmh = emaSpeedKmh;
             }
 
-            // Distance acceptance gate with settling logic
-            float requiredDistance = isSettling ? SETTLING_MIN_DISTANCE_M : Math.max(MIN_DISTANCE_DELTA_M, accuracy * 0.25f);
-            boolean settlingSpeedOk = !isSettling || candidateSpeedKmh <= SETTLING_MAX_SPEED_KMH;
-            boolean hasMovedThreshold = distanceCandidateM >= requiredDistance;
-            boolean isCandidateSpike = isSpeedSpike(candidateSpeedKmh);
-            boolean movementConfirmed = !isStationary && !isSettling && (currentSpeedKmh >= MIN_MOVEMENT_SPEED_KMH || (hasMovedThreshold && candidateSpeedKmh >= 1.5f));
+            // Acceptance Gate: Must be outside settling, not stationary, and have sufficient displacement
+            boolean hasMovedThreshold = deltaDistanceM >= dynamicNoiseThreshold;
+            boolean movementConfirmed = !isSettling && !isStationary && (
+                    (emaSpeedKmh >= 1.2f && hasMovedThreshold) ||
+                    (hasMovedThreshold && derivedSpeedKmh >= 2.0f)
+            );
 
-            if (hasStrictAccuracy && !isCandidateSpike && !isSettling && hasMovedThreshold && settlingSpeedOk && movementConfirmed) {
-                addedDistanceM = distanceCandidateM;
+            if (movementConfirmed) {
+                isAccepted = true;
+                addedDistanceM = deltaDistanceM;
                 distanceMeters += addedDistanceM;
+                lastAcceptedLocation = location;
 
-                // Advance the distance anchor ONLY upon distance acceptance
-                editor.putLong(KEY_LAST_ACCEPTED_LAT, Double.doubleToRawLongBits(location.getLatitude()));
-                editor.putLong(KEY_LAST_ACCEPTED_LNG, Double.doubleToRawLongBits(location.getLongitude()));
-                editor.putLong(KEY_LAST_ACCEPTED_TIMESTAMP, location.getTime());
-            }
+                // Moving Time Accumulation (cap burst when waking from background)
+                if (dtSec < 30f) {
+                    movingDurationSec += Math.round(dtSec);
+                }
 
-            // Elevation filtering & gain calculation — only when real movement has occurred
-            if (location.hasAltitude() && hasStrictAccuracy && !isSettling && (addedDistanceM > 0f || currentSpeedKmh >= 1.5f)) {
-                double smoothedAlt = smoothAltitude(location.getAltitude());
-                if (lastElevationAnchor != null) {
-                    double altDiff = smoothedAlt - lastElevationAnchor;
-                    if (altDiff >= 1.5 && altDiff < 80.0) {
-                        elevationGainM += (float) altDiff;
-                        lastElevationAnchor = smoothedAlt;
-                    } else if (altDiff <= -1.5 && altDiff > -80.0) {
+                // Elevation Gain Accumulation
+                if (location.hasAltitude()) {
+                    double smoothedAlt = smoothAltitude(location.getAltitude());
+                    if (lastElevationAnchor != null) {
+                        double altDiff = smoothedAlt - lastElevationAnchor;
+                        if (altDiff >= 1.5 && altDiff < 80.0) {
+                            elevationGainM += (float) altDiff;
+                            lastElevationAnchor = smoothedAlt;
+                        } else if (altDiff <= -1.5 && altDiff > -80.0) {
+                            lastElevationAnchor = smoothedAlt;
+                        }
+                    } else {
                         lastElevationAnchor = smoothedAlt;
                     }
-                } else {
-                    lastElevationAnchor = smoothedAlt;
+                }
+
+                // Max Speed calculation
+                if (currentSpeedKmh > 1.5f && currentSpeedKmh <= 180.0f) {
+                    maxSpeedKmh = Math.max(maxSpeedKmh, currentSpeedKmh);
+                }
+            } else if (isSettling) {
+                // During settling, update anchor without distance accumulation
+                lastAcceptedLocation = location;
+                if (location.hasAltitude()) {
+                    lastElevationAnchor = smoothAltitude(location.getAltitude());
                 }
             }
         } else {
-            if (hasStrictAccuracy) {
-                editor.putLong(KEY_LAST_ACCEPTED_LAT, Double.doubleToRawLongBits(location.getLatitude()));
-                editor.putLong(KEY_LAST_ACCEPTED_LNG, Double.doubleToRawLongBits(location.getLongitude()));
-                editor.putLong(KEY_LAST_ACCEPTED_TIMESTAMP, location.getTime());
+            // First accepted location of the session
+            isAccepted = true;
+            lastAcceptedLocation = location;
+            if (nativeSpeedKmh >= 0f) {
+                emaSpeedKmh = nativeSpeedKmh < 1.0f ? 0f : nativeSpeedKmh;
+                currentSpeedKmh = emaSpeedKmh;
             }
             if (location.hasAltitude()) {
                 lastElevationAnchor = smoothAltitude(location.getAltitude());
             }
         }
 
-        // Accept this speed into the rolling history
-        if (!isSettling) {
-            acceptSpeed(currentSpeedKmh);
-        }
+        try {
+            JSONObject pointJson = locationToJson(location, accuracy, distanceMeters, movingDurationSec, currentSpeedKmh, maxSpeedKmh, elevationGainM, emaSpeedKmh >= 1.2f, isAccepted);
 
-        // Movement State Machine — Never auto-stop when moving at speed!
-        isMoving = currentSpeedKmh >= MIN_MOVEMENT_SPEED_KMH || addedDistanceM > 0f;
-        if (isMoving && lastTimestamp > 0L) {
-            long dtSec = Math.max(1L, (location.getTime() - lastTimestamp) / 1000L);
-            if (dtSec < 30L) { // Cap burst when waking from background
-                movingDurationSec += dtSec;
+            // Persist ONLY accepted route points to durable SQLite journal
+            if (isAccepted) {
+                database.append(pointJson);
             }
-        }
 
-        // Don't update max speed during GPS settling or when stationary
-        if (!isSettling && addedDistanceM > 0f && currentSpeedKmh > 1.5f && !isSpeedSpike(currentSpeedKmh)) {
-            maxSpeedKmh = Math.max(maxSpeedKmh, currentSpeedKmh);
-        }
+            // Update SharedPreferences
+            saveLiveLocationPrefs(prefs, location, accuracy, distanceMeters, movingDurationSec, currentSpeedKmh, maxSpeedKmh, elevationGainM);
 
-        if (hasStrictAccuracy) {
-            editor.putLong(KEY_LAST_LAT, Double.doubleToRawLongBits(location.getLatitude()));
-            editor.putLong(KEY_LAST_LNG, Double.doubleToRawLongBits(location.getLongitude()));
-            if (location.hasAltitude()) editor.putLong(KEY_LAST_ALT, Double.doubleToRawLongBits(location.getAltitude()));
-            if (location.hasBearing() && isMoving) editor.putFloat(KEY_LAST_BEARING, location.getBearing());
+            // Update Ongoing Foreground Notification
+            updateNotification();
+
+            // Broadcast to WebView
+            Intent update = new Intent(ACTION_LOCATION).setPackage(getPackageName());
+            update.putExtra("point", pointJson.toString());
+            sendBroadcast(update);
+        } catch (Exception ignored) {}
+    }
+
+    private void saveLiveLocationPrefs(SharedPreferences prefs, Location location, float accuracy,
+                                      float distanceMeters, long movingDurationSec, float currentSpeedKmh,
+                                      float maxSpeedKmh, float elevationGainM) {
+        SharedPreferences.Editor editor = prefs.edit();
+        editor.putLong(KEY_LAST_LAT, Double.doubleToRawLongBits(location.getLatitude()))
+              .putLong(KEY_LAST_LNG, Double.doubleToRawLongBits(location.getLongitude()))
+              .putFloat(KEY_LAST_ACCURACY, accuracy)
+              .putLong(KEY_LAST_TIMESTAMP, location.getTime())
+              .putFloat(KEY_DISTANCE_METERS, distanceMeters)
+              .putLong(KEY_MOVING_DURATION_SEC, movingDurationSec)
+              .putFloat(KEY_CURRENT_SPEED_KMH, currentSpeedKmh)
+              .putFloat(KEY_MAX_SPEED_KMH, maxSpeedKmh)
+              .putFloat(KEY_ELEVATION_GAIN_M, elevationGainM);
+
+        if (location.hasAltitude()) {
+            editor.putLong(KEY_LAST_ALT, Double.doubleToRawLongBits(location.getAltitude()));
         }
-        editor.putFloat(KEY_LAST_ACCURACY, accuracy);
-        editor.putLong(KEY_LAST_TIMESTAMP, location.getTime());
-        editor.putFloat(KEY_DISTANCE_METERS, distanceMeters);
-        editor.putLong(KEY_MOVING_DURATION_SEC, movingDurationSec);
-        editor.putFloat(KEY_CURRENT_SPEED_KMH, currentSpeedKmh);
-        editor.putFloat(KEY_MAX_SPEED_KMH, maxSpeedKmh);
-        editor.putFloat(KEY_ELEVATION_GAIN_M, elevationGainM);
+        if (location.hasBearing()) {
+            editor.putFloat(KEY_LAST_BEARING, location.getBearing());
+        }
         editor.apply();
+    }
+
+    private void broadcastLocation(Location location, float accuracy, float distanceMeters,
+                                  long movingDurationSec, float currentSpeedKmh, float maxSpeedKmh,
+                                  float elevationGainM, boolean isMoving, boolean isAccepted) {
+        try {
+            JSONObject pointJson = locationToJson(location, accuracy, distanceMeters, movingDurationSec, currentSpeedKmh, maxSpeedKmh, elevationGainM, isMoving, isAccepted);
+            Intent update = new Intent(ACTION_LOCATION).setPackage(getPackageName());
+            update.putExtra("point", pointJson.toString());
+            sendBroadcast(update);
+        } catch (Exception ignored) {}
     }
 
     private double smoothAltitude(double alt) {
@@ -487,7 +495,6 @@ public final class WorkoutLocationService extends Service implements LocationLis
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         String state = prefs.getString(KEY_STATE, "IDLE");
         boolean isPaused = "PAUSED".equals(state);
-        long startedAt = prefs.getLong(KEY_STARTED_AT, System.currentTimeMillis());
         long movingDurationSec = prefs.getLong(KEY_MOVING_DURATION_SEC, 0L);
         float distanceMeters = prefs.getFloat(KEY_DISTANCE_METERS, 0f);
         float speedKmh = prefs.getFloat(KEY_CURRENT_SPEED_KMH, 0f);
@@ -495,8 +502,8 @@ public final class WorkoutLocationService extends Service implements LocationLis
 
         String title = isPaused ? activity + " (Paused)" : "Apparatus • " + activity;
         String paceStr = formatPace(distanceMeters, movingDurationSec);
-        String line1 = formatDuration(movingDurationSec) + "  •  " + String.format(java.util.Locale.US, "%.2f km", distanceMeters / 1000f) + "  •  " + paceStr + (paceStr.equals("--:--") ? "" : " /km");
-        String line2 = "Speed: " + String.format(java.util.Locale.US, "%.1f km/h", speedKmh);
+        String line1 = formatDuration(movingDurationSec) + "  •  " + String.format(Locale.US, "%.2f km", distanceMeters / 1000f) + "  •  " + paceStr + (paceStr.equals("--:--") ? "" : " /km");
+        String line2 = "Speed: " + String.format(Locale.US, "%.1f km/h", speedKmh);
 
         Intent openAppIntent = new Intent(this, MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, openAppIntent,
@@ -535,22 +542,24 @@ public final class WorkoutLocationService extends Service implements LocationLis
         sendBroadcast(intent);
     }
 
-    @Override public void onTaskRemoved(Intent rootIntent) {
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
         // User explicitly swiped app from recents — stop tracking cleanly
         stopTracking();
         super.onTaskRemoved(rootIntent);
     }
 
-    @Override public void onDestroy() {
-        if (locationManager != null) locationManager.removeUpdates(this);
+    @Override
+    public void onDestroy() {
+        removeFusedLocationUpdates();
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         super.onDestroy();
     }
 
-    @Override public void onProviderDisabled(String provider) {}
-    @Override public void onProviderEnabled(String provider) {}
-    @Override public void onStatusChanged(String provider, int status, Bundle extras) {}
-    @Override public @Nullable IBinder onBind(Intent intent) { return null; }
+    @Override
+    public @Nullable IBinder onBind(Intent intent) {
+        return null;
+    }
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -575,18 +584,20 @@ public final class WorkoutLocationService extends Service implements LocationLis
         long h = seconds / 3600L;
         long m = (seconds % 3600L) / 60L;
         long s = seconds % 60L;
-        return h > 0L ? String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, s)
-                : String.format(java.util.Locale.US, "%02d:%02d", m, s);
+        return h > 0L ? String.format(Locale.US, "%d:%02d:%02d", h, m, s)
+                : String.format(Locale.US, "%02d:%02d", m, s);
     }
 
     private static String formatPace(float distanceMeters, long movingSec) {
         if (distanceMeters < 10f || movingSec <= 0L) return "--:--";
         long secPerKm = Math.round((movingSec * 1000f) / distanceMeters);
         if (secPerKm > 3600L) return ">60:00";
-        return String.format(java.util.Locale.US, "%d:%02d", secPerKm / 60L, secPerKm % 60L);
+        return String.format(Locale.US, "%d:%02d", secPerKm / 60L, secPerKm % 60L);
     }
 
-    private static JSONObject locationToJson(Location location) throws Exception {
+    private static JSONObject locationToJson(Location location, float accuracy, float distanceMeters,
+                                             long movingDurationSec, float currentSpeedKmh, float maxSpeedKmh,
+                                             float elevationGainM, boolean isMoving, boolean isAccepted) throws Exception {
         JSONObject point = new JSONObject();
         point.put("lat", location.getLatitude());
         point.put("lng", location.getLongitude());
@@ -610,6 +621,16 @@ public final class WorkoutLocationService extends Service implements LocationLis
             point.put("bearingAccuracy", JSONObject.NULL);
         }
         point.put("timestamp", location.getTime());
+
+        // Computed Authoritative Metrics
+        point.put("distanceMeters", (double) distanceMeters);
+        point.put("movingDurationSec", movingDurationSec);
+        point.put("currentSpeedKmh", (double) currentSpeedKmh);
+        point.put("maxSpeedKmh", (double) maxSpeedKmh);
+        point.put("elevationGainM", (double) elevationGainM);
+        point.put("isMoving", isMoving);
+        point.put("isAccepted", isAccepted);
+
         return point;
     }
 }

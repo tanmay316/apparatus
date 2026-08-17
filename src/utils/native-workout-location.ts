@@ -12,6 +12,15 @@ export interface NativeWorkoutPoint {
   bearing?: number | null;
   bearingAccuracy?: number | null;
   timestamp: number;
+
+  // Authoritative metrics calculated by native service
+  distanceMeters?: number;
+  movingDurationSec?: number;
+  currentSpeedKmh?: number;
+  maxSpeedKmh?: number;
+  elevationGainM?: number;
+  isMoving?: boolean;
+  isAccepted?: boolean;
 }
 
 export interface NativeWorkoutSessionSummary {

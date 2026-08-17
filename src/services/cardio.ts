@@ -1,15 +1,83 @@
-import { collection, doc, setDoc, getDocs, deleteDoc, query, where, orderBy, limit as firestoreLimit, Timestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, getDocs, deleteDoc, query, where, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { CardioActivity } from '@/types';
+import type { CardioActivity, RoutePoint } from '@/types';
+
+/**
+ * Perpendicular distance from a point to a line segment in lat/lng degrees.
+ */
+function perpendicularDistance(pt: RoutePoint, lineStart: RoutePoint, lineEnd: RoutePoint): number {
+  const dx = lineEnd.lng - lineStart.lng;
+  const dy = lineEnd.lat - lineStart.lat;
+
+  if (dx === 0 && dy === 0) {
+    const dLat = pt.lat - lineStart.lat;
+    const dLng = pt.lng - lineStart.lng;
+    return Math.sqrt(dLat * dLat + dLng * dLng);
+  }
+
+  const num = Math.abs(dy * pt.lng - dx * pt.lat + lineEnd.lat * lineStart.lng - lineEnd.lng * lineStart.lat);
+  const den = Math.sqrt(dy * dy + dx * dx);
+  return num / den;
+}
+
+/**
+ * Ramer-Douglas-Peucker (RDP) polyline simplification.
+ * Preserves corner turns, sharp elevation curves, and start/end coordinates.
+ */
+function ramerDouglasPeucker(points: RoutePoint[], epsilon: number): RoutePoint[] {
+  if (points.length <= 2) return points;
+
+  let maxDist = 0;
+  let index = 0;
+  const end = points.length - 1;
+
+  for (let i = 1; i < end; i++) {
+    const d = perpendicularDistance(points[i], points[0], points[end]);
+    if (d > maxDist) {
+      maxDist = d;
+      index = i;
+    }
+  }
+
+  if (maxDist > epsilon) {
+    const left = ramerDouglasPeucker(points.slice(0, index + 1), epsilon);
+    const right = ramerDouglasPeucker(points.slice(index), epsilon);
+    return [...left.slice(0, -1), ...right];
+  } else {
+    return [points[0], points[end]];
+  }
+}
+
+/**
+ * Compresses route to at most `maxPoints` using geometry-preserving RDP simplification.
+ */
+export function simplifyRoute(points: RoutePoint[], maxPoints = 500): RoutePoint[] {
+  if (!points || points.length <= maxPoints) return points || [];
+
+  let minEps = 0.000005; // ~0.5m
+  let maxEps = 0.001;    // ~100m
+  let best = points;
+
+  for (let iter = 0; iter < 10; iter++) {
+    const midEps = (minEps + maxEps) / 2;
+    const simplified = ramerDouglasPeucker(points, midEps);
+    if (simplified.length <= maxPoints) {
+      best = simplified;
+      maxEps = midEps; // try tighter tolerance
+    } else {
+      minEps = midEps; // need looser tolerance to reduce points
+    }
+  }
+
+  return best.length <= maxPoints ? best : best.slice(0, maxPoints);
+}
 
 export const saveCardioActivity = async (userId: string, activity: Omit<CardioActivity, 'id'>): Promise<string> => {
   const ref = doc(collection(db, 'cardioActivities'));
   const id = ref.id;
 
-  // Compress route for storage — keep at most 500 points
-  const route = activity.route.length > 500
-    ? activity.route.filter((_, i) => i % Math.ceil(activity.route.length / 500) === 0)
-    : activity.route;
+  // Geometry-aware compression — keeps sharp turns and road intersections crisp
+  const route = simplifyRoute(activity.route, 500);
 
   const dataToSave = {
     ...activity,

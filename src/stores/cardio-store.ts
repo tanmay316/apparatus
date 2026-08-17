@@ -21,81 +21,29 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 }
 
 // ────────────────────────────────────────────────────────────
-// 1. Spike Detection & Speed Engine
+// Web Fallback GPS Engine (Used only when not running on native Android)
 // ────────────────────────────────────────────────────────────
 
-// No artificial speed caps — instead we detect sudden spikes
-// that are inconsistent with the rolling speed trend.
-// Genuine gradual acceleration (walk → motorbike) passes through.
-
-const EMA_ALPHA = 0.25; 
+const EMA_ALPHA = 0.25;
 const SPEED_BUFFER_SIZE = 5;
-const SPIKE_HISTORY_SIZE = 7;
 let rawSpeedBuffer: number[] = [];
 let emaSpeed = 0;
-let spikeSpeedHistory: number[] = [0, 0, 0];
 
-let lastRawGpsPoint: RoutePoint | null = null;
-let lastAcceptedDistancePoint: RoutePoint | null = null;
-let lastRoutePoint: RoutePoint | null = null;
-let lastMovementPoint: RoutePoint | null = null;
+let lastAcceptedWebPoint: RoutePoint | null = null;
 let lastMovementTs = 0;
 
-// Elevation smoothing buffer
 const ALTITUDE_BUFFER_SIZE = 5;
 let altitudeBuffer: number[] = [];
 let lastElevationAnchorAlt: number | null = null;
 
-// GPS settling phase — suppress distance for first few seconds after warm-up
-const GPS_SETTLING_DURATION_MS = 5000;
-let gpsSettledAt = 0; // timestamp when settling ended (0 = not yet settled)
+const GPS_SETTLING_DURATION_MS = 6000;
+let gpsSettledAt = 0;
 
 function getSmoothedAltitude(alt: number): number {
   altitudeBuffer.push(alt);
   if (altitudeBuffer.length > ALTITUDE_BUFFER_SIZE) altitudeBuffer.shift();
   const sorted = [...altitudeBuffer].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
-}
-
-/**
- * Spike detection: checks if a candidate speed is consistent with
- * the recent speed history. Rejects sudden jumps that look like
- * GPS glitches (e.g. 5→80→3 km/h). Allows genuine gradual
- * acceleration (5→8→12→18→25) because each step is close to
- * the previous trend.
- */
-function isSpeedSpike(candidateSpeedKmh: number): boolean {
-  if (spikeSpeedHistory.length < 3) return false;
-
-  const sorted = [...spikeSpeedHistory].sort((a, b) => a - b);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  const recentMax = sorted[sorted.length - 1];
-
-  let allowedCeiling: number;
-  if (median < 2.0) {
-    // When standing still / starting, cap allowed sudden jump at 15 km/h
-    allowedCeiling = 15.0;
-  } else {
-    // Allow generous envelope: 3x median, or 2x recent max, or median+40
-    allowedCeiling = Math.max(median * 3.0, Math.max(recentMax * 2.0, median + 40.0));
-  }
-
-  return candidateSpeedKmh > allowedCeiling;
-}
-
-function acceptSpeedToHistory(speedKmh: number) {
-  spikeSpeedHistory.push(speedKmh);
-  if (spikeSpeedHistory.length > SPIKE_HISTORY_SIZE) spikeSpeedHistory.shift();
-}
-
-function resetTrackingSegmentState() {
-  lastRawGpsPoint = null;
-  lastAcceptedDistancePoint = null;
-  lastRoutePoint = null;
-  lastMovementPoint = null;
-  altitudeBuffer = [];
-  lastElevationAnchorAlt = null;
-  gpsSettledAt = 0;
 }
 
 function pushSpeed(raw: number): number {
@@ -114,12 +62,14 @@ function pushSpeed(raw: number): number {
   return emaSpeed;
 }
 
-function resetSpeedEngine() {
+function resetWebGpsEngine() {
   rawSpeedBuffer = [];
   emaSpeed = 0;
-  spikeSpeedHistory = [0, 0, 0];
+  lastAcceptedWebPoint = null;
   altitudeBuffer = [];
   lastElevationAnchorAlt = null;
+  gpsSettledAt = 0;
+  lastMovementTs = 0;
 }
 
 // ────────────────────────────────────────────────────────────
@@ -127,13 +77,14 @@ function resetSpeedEngine() {
 // ────────────────────────────────────────────────────────────
 
 let visibilityListenerAttached = false;
+let watchIdRef: string | number | null = null;
+let nativeLocationListener: PluginListenerHandle | null = null;
+let nativeStateListener: PluginListenerHandle | null = null;
 
 /**
  * Re-attach native event listeners that were lost when the WebView was suspended.
- * This does NOT restart the native service — it only re-subscribes to its broadcasts.
  */
 async function reattachNativeListeners() {
-  // Clean up any stale listener handles
   if (nativeLocationListener) {
     try { await nativeLocationListener.remove(); } catch {}
     nativeLocationListener = null;
@@ -163,18 +114,12 @@ function attachVisibilityListener() {
     if (document.visibilityState === 'visible') {
       const state = useCardioStore.getState();
       if (Capacitor.isNativePlatform() && state.isTracking) {
-        // Re-attach native listeners that were killed during background suspension
         await reattachNativeListeners();
-        // Sync full session state from native SharedPreferences
         await syncWithNativeSession();
       }
     }
   });
 }
-
-let watchIdRef: string | number | null = null;
-let nativeLocationListener: PluginListenerHandle | null = null;
-let nativeStateListener: PluginListenerHandle | null = null;
 
 /**
  * Replays or syncs the native service's state directly into the store.
@@ -265,21 +210,83 @@ export const finishTracking = async () => {
   return useCardioStore.getState();
 };
 
+// ────────────────────────────────────────────────────────────
+// Native Android Ingestion Handler (Single Source of Truth Adapter)
+// ────────────────────────────────────────────────────────────
+
 function handleNativeLocation(point: NativeWorkoutPoint) {
-  handleGpsPosition({
-    coords: {
-      latitude: point.lat,
-      longitude: point.lng,
-      accuracy: point.accuracy ?? 999,
-      altitude: point.altitude,
-      altitudeAccuracy: point.verticalAccuracy ?? null,
-      heading: point.bearing ?? null,
-      speed: point.speed,
-      toJSON: () => ({}),
-    },
-    timestamp: point.timestamp || Date.now(),
-    toJSON: () => ({}),
-  } as unknown as GeolocationPosition);
+  const store = useCardioStore.getState();
+  if (!store.isTracking || store.isPaused) return;
+
+  const now = point.timestamp || Date.now();
+  const newLat = point.lat;
+  const newLng = point.lng;
+  const heading = point.bearing != null && !Number.isNaN(point.bearing) ? point.bearing : undefined;
+
+  // 1. Live Map Marker Position Update
+  const currentLocation = { lat: newLat, lng: newLng, heading };
+
+  // 2. Authoritative Metrics from Native Service
+  const nativeDistKm = point.distanceMeters != null ? point.distanceMeters / 1000 : store.distanceKm;
+  const movingDurationSec = point.movingDurationSec != null ? point.movingDurationSec : store.movingDurationSec;
+  const currentSpeedKmh = point.currentSpeedKmh != null ? point.currentSpeedKmh : 0;
+  const maxSpeedKmh = point.maxSpeedKmh != null ? point.maxSpeedKmh : store.maxSpeedKmh;
+  const elevationGainM = point.elevationGainM != null ? point.elevationGainM : store.elevationGainM;
+
+  // 3. Route Point Append (Only when native engine confirms point was accepted)
+  let nextRoutePoints = store.routePoints;
+  if (point.isAccepted) {
+    const acceptedPt: RoutePoint = {
+      lat: newLat,
+      lng: newLng,
+      ts: now,
+      alt: point.altitude ?? undefined,
+      speed: point.speed ?? undefined,
+    };
+    nextRoutePoints = [...store.routePoints, acceptedPt];
+
+    if (nextRoutePoints.length > MAX_DISPLAY_POINTS) {
+      const half = Math.floor(nextRoutePoints.length / 2);
+      nextRoutePoints = nextRoutePoints.filter((_, i) => i >= half || i % 2 === 0);
+    }
+  }
+
+  // 4. Rolling Moving-Pace Window from Native Distance Deltas
+  let newPaceWindow = [...store.paceWindow];
+  const deltaDistKm = nativeDistKm - store.distanceKm;
+  const deltaSec = movingDurationSec - store.movingDurationSec;
+  if (deltaDistKm > 0 && deltaSec > 0) {
+    newPaceWindow.push({ dist: deltaDistKm, dt: deltaSec, ts: now });
+  }
+
+  const LIVE_PACE_WINDOW_MS = 45_000;
+  newPaceWindow = newPaceWindow.filter(p => now - p.ts < LIVE_PACE_WINDOW_MS);
+
+  let currentPaceMs = store.currentPaceMs;
+  if (newPaceWindow.length > 0) {
+    const sumDist = newPaceWindow.reduce((a, b) => a + b.dist, 0);
+    const sumDt = newPaceWindow.reduce((a, b) => a + b.dt, 0);
+    if (sumDist >= 0.005) {
+      currentPaceMs = (sumDt * 1000) / sumDist;
+    }
+  } else if (currentSpeedKmh < 1.0) {
+    currentPaceMs = 0;
+  }
+
+  useCardioStore.setState({
+    currentLocation,
+    routePoints: nextRoutePoints,
+    distanceKm: nativeDistKm,
+    movingDurationSec,
+    currentSpeedKmh: Math.round(currentSpeedKmh * 10) / 10,
+    maxSpeedKmh: Math.round(maxSpeedKmh * 10) / 10,
+    elevationGainM: Math.round(elevationGainM * 10) / 10,
+    gpsAccuracy: point.accuracy ?? store.gpsAccuracy,
+    gpsStatus: 'active',
+    paceWindow: newPaceWindow,
+    currentPaceMs,
+    lastGpsTimestamp: now,
+  });
 }
 
 const checkPermissionsNative = async () => {
@@ -290,64 +297,32 @@ const checkPermissionsNative = async () => {
     }
     return perm.location === 'granted';
   } catch (err) {
-    return true; 
+    return true;
   }
 };
 
-/** Central GPS point handler */
-function handleGpsPosition(pos: GeolocationPosition) {
-  const storeState = useCardioStore.getState();
+/** Central GPS handler for Web/Browser fallback */
+function handleWebGpsPosition(pos: GeolocationPosition) {
+  const store = useCardioStore.getState();
   const accuracy = pos.coords.accuracy;
   const newLat = pos.coords.latitude;
   const newLng = pos.coords.longitude;
   const rawHeading = pos.coords.heading;
-  const hasValidHeading = rawHeading != null && !Number.isNaN(rawHeading);
-  
-  if (!storeState.currentLocation) {
-    useCardioStore.setState({ 
-      currentLocation: { 
-        lat: newLat, 
-        lng: newLng,
-        heading: hasValidHeading ? rawHeading : undefined
-      }
-    });
-  } else if ((Number.isFinite(accuracy) && accuracy <= 40) || Capacitor.isNativePlatform() === false) {
-    const cur = storeState.currentLocation;
-    const distM = haversineKm(cur.lat, cur.lng, newLat, newLng) * 1000;
-    const isStationary = storeState.currentSpeedKmh < 0.8 && distM < 4;
-    
-    let lat = newLat;
-    let lng = newLng;
-    let heading = hasValidHeading ? rawHeading : cur.heading;
+  const heading = rawHeading != null && !Number.isNaN(rawHeading) ? rawHeading : undefined;
+  const now = pos.timestamp || Date.now();
 
-    if (isStationary) {
-      lat = cur.lat * 0.8 + newLat * 0.2;
-      lng = cur.lng * 0.8 + newLng * 0.2;
-      heading = cur.heading;
-    }
+  if (!Number.isFinite(accuracy) || accuracy > 35) return;
 
-    useCardioStore.setState({ 
-      currentLocation: { 
-        lat, 
-        lng,
-        heading
-      }
-    });
-  }
-
-  // Reject inaccurate fixes
-  if (!Number.isFinite(accuracy) || accuracy > 60) return;
-
-  const pt = {
-    lat: pos.coords.latitude,
-    lng: pos.coords.longitude,
-    ts: pos.timestamp || Date.now(),
+  const pt: RoutePoint & { accuracy?: number } = {
+    lat: newLat,
+    lng: newLng,
+    ts: now,
     accuracy,
-  } as RoutePoint & { accuracy?: number };
-  if (pos.coords.altitude != null) pt.alt = pos.coords.altitude;
-  if (pos.coords.speed != null) pt.speed = pos.coords.speed;
+    alt: pos.coords.altitude ?? undefined,
+    speed: pos.coords.speed ?? undefined,
+  };
 
-  storeState.addPoint(pt);
+  store.addPoint(pt);
 }
 
 export const startGpsWatch = async (newSession = false) => {
@@ -361,7 +336,7 @@ export const startGpsWatch = async (newSession = false) => {
       return;
     }
   }
-  
+
   attachVisibilityListener();
 
   if (Capacitor.isNativePlatform()) {
@@ -376,7 +351,20 @@ export const startGpsWatch = async (newSession = false) => {
       if (!useCardioStore.getState().isTracking) {
         watchIdRef = await Geolocation.watchPosition(
           { enableHighAccuracy: true, maximumAge: 1000 },
-          (pos) => { if (pos) handleGpsPosition(pos as unknown as GeolocationPosition); }
+          (pos) => {
+            if (pos) {
+              const coords = pos.coords;
+              useCardioStore.setState({
+                currentLocation: {
+                  lat: coords.latitude,
+                  lng: coords.longitude,
+                  heading: coords.heading ?? undefined,
+                },
+                gpsAccuracy: coords.accuracy || 0,
+                gpsStatus: 'active',
+              });
+            }
+          }
         );
         return;
       }
@@ -402,10 +390,10 @@ export const startGpsWatch = async (newSession = false) => {
       useCardioStore.setState({ gpsStatus: 'error' });
       return;
     }
-    
+
     useCardioStore.setState({ gpsStatus: 'waiting' });
     watchIdRef = navigator.geolocation.watchPosition(
-      handleGpsPosition,
+      handleWebGpsPosition,
       (err) => {
         console.warn('[CardioStore] Web GPS error:', err.code, err.message);
         if (err.code === 1) {
@@ -437,7 +425,7 @@ export const stopGpsWatch = async () => {
 };
 
 // ────────────────────────────────────────────────────────────
-// Store
+// Store Definitions
 // ────────────────────────────────────────────────────────────
 
 type GpsStatus = 'off' | 'waiting' | 'warming_up' | 'active' | 'degraded' | 'error' | 'denied';
@@ -511,8 +499,7 @@ export const useCardioStore = create<CardioState>()(
       },
 
       startTracking: (type) => {
-        resetSpeedEngine();
-        resetTrackingSegmentState();
+        resetWebGpsEngine();
         lastMovementTs = Date.now();
 
         set({
@@ -547,18 +534,10 @@ export const useCardioStore = create<CardioState>()(
         } else {
           stopGpsWatch();
         }
-        resetTrackingSegmentState();
-        const { autoPauseStatus, autoPausedAt } = get();
-        let extraAutoPause = 0;
-        if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
-          extraAutoPause = Date.now() - autoPausedAt;
-        }
         set({
           isPaused: true,
           pausedAt: Date.now(),
-          autoPauseStatus: 'MOVING',
-          autoPausedAt: null,
-          totalPausedMs: get().totalPausedMs + extraAutoPause,
+          currentSpeedKmh: 0,
         });
       },
 
@@ -568,8 +547,7 @@ export const useCardioStore = create<CardioState>()(
         } else {
           startGpsWatch();
         }
-        resetSpeedEngine();
-        resetTrackingSegmentState();
+        resetWebGpsEngine();
         lastMovementTs = Date.now();
 
         const { pausedAt, totalPausedMs } = get();
@@ -577,12 +555,14 @@ export const useCardioStore = create<CardioState>()(
         set({
           isPaused: false,
           pausedAt: null,
-          autoPauseStatus: 'MOVING',
-          autoPausedAt: null,
           totalPausedMs: totalPausedMs + addedPause,
         });
       },
 
+      /**
+       * Web/Browser Fallback point processor.
+       * (On native Android, handleNativeLocation is used directly).
+       */
       addPoint: (point) => {
         const state = get();
         if (!state.isTracking || state.isPaused) return;
@@ -595,242 +575,124 @@ export const useCardioStore = create<CardioState>()(
         if (point.alt !== undefined) rawPt.alt = point.alt;
         if (point.speed !== undefined) rawPt.speed = point.speed;
 
-        let { gpsStatus, autoPauseStatus, autoPausedAt, totalPausedMs, movingDurationSec } = state;
-        
+        let { gpsStatus, movingDurationSec, distanceKm, elevationGainM, maxSpeedKmh } = state;
+
         if (gpsStatus === 'waiting' || gpsStatus === 'off') {
-           gpsStatus = 'warming_up';
+          gpsStatus = 'warming_up';
         }
-        
+
         if (gpsStatus === 'warming_up') {
-           const targetAccuracy = Capacitor.isNativePlatform() ? 30 : 50;
-           if (accuracy && accuracy <= targetAccuracy) {
-             gpsStatus = 'active';
-             // Start GPS settling period — suppress distance for first few seconds
-             gpsSettledAt = now + GPS_SETTLING_DURATION_MS;
-             lastRawGpsPoint = rawPt;
-             lastAcceptedDistancePoint = rawPt;
-             lastRoutePoint = rawPt;
-             lastMovementPoint = rawPt;
-             lastMovementTs = now;
-             if (rawPt.alt !== undefined) {
-               lastElevationAnchorAlt = rawPt.alt;
-               altitudeBuffer = [rawPt.alt];
-             }
-           }
-           set({ gpsStatus, gpsAccuracy: accuracy || 0, lastGpsTimestamp: now });
-           return;
+          if (accuracy && accuracy <= 35) {
+            gpsStatus = 'active';
+            gpsSettledAt = now + GPS_SETTLING_DURATION_MS;
+            lastAcceptedWebPoint = rawPt;
+            if (rawPt.alt !== undefined) {
+              lastElevationAnchorAlt = rawPt.alt;
+              altitudeBuffer = [rawPt.alt];
+            }
+          }
+          set({ gpsStatus, gpsAccuracy: accuracy || 0, lastGpsTimestamp: now, currentLocation: rawPt });
+          return;
         }
 
-        const prev = lastRawGpsPoint;
-        lastRawGpsPoint = rawPt;
-
-        let addedDistance = 0;
-        let addedElevation = 0;
-        let dtSec = 0;
-
-        const nativeSpeedKmh = point.speed != null && point.speed >= 0 ? point.speed * 3.6 : null;
+        const prev = lastAcceptedWebPoint;
+        let addedDistanceKm = 0;
+        let addedElevationM = 0;
         let currentSpeed = 0;
-
         const isSettling = gpsSettledAt > 0 && now < gpsSettledAt;
 
         if (prev) {
-          dtSec = Math.max(0.1, (now - prev.ts) / 1000);
-          const rawDistanceKm = haversineKm(prev.lat, prev.lng, rawPt.lat, rawPt.lng);
-          const rawDistanceM = rawDistanceKm * 1000;
+          const dtSec = Math.max(0.1, (now - prev.ts) / 1000);
+          const deltaDistanceKm = haversineKm(prev.lat, prev.lng, rawPt.lat, rawPt.lng);
+          const deltaDistanceM = deltaDistanceKm * 1000;
+          const derivedSpeedKmh = (deltaDistanceKm / dtSec) * 3600;
 
-          const distanceAnchor = lastAcceptedDistancePoint ?? prev;
-          const distanceCandidateKm = haversineKm(distanceAnchor.lat, distanceAnchor.lng, rawPt.lat, rawPt.lng);
-          const distanceCandidateM = distanceCandidateKm * 1000;
-          const anchorDtSec = Math.max(0.1, (now - distanceAnchor.ts) / 1000);
-          const candidateSpeedKmh = (distanceCandidateKm / anchorDtSec) * 3600;
+          const nativeSpeedKmh = point.speed != null && point.speed >= 0 ? point.speed * 3.6 : null;
+          const candidateSpeed = nativeSpeedKmh != null ? nativeSpeedKmh : (deltaDistanceM < 6.0 ? 0 : derivedSpeedKmh);
 
-          // Speed determination: prioritize hardware native Doppler speed
-          if (nativeSpeedKmh !== null && nativeSpeedKmh >= 0) {
-            currentSpeed = nativeSpeedKmh < 0.8 ? 0 : nativeSpeedKmh;
-          } else {
-            // When without native speed, displacement within 4.5m is stationary noise
-            if (distanceCandidateM < 4.5) {
-              currentSpeed = 0;
-            } else {
-              currentSpeed = candidateSpeedKmh;
-            }
-          }
+          // Single EMA speed smoothing pass
+          const smoothedSpeed = pushSpeed(isSettling ? 0 : candidateSpeed);
+          const dynamicNoiseThreshold = Math.max(5.0, (accuracy || 20) * 0.35);
 
-          // During GPS settling (first 5 seconds), anchor is continually refreshed to latest fix
-          if (isSettling) {
-            currentSpeed = 0;
-            lastAcceptedDistancePoint = rawPt;
-            if (rawPt.alt !== undefined) lastElevationAnchorAlt = rawPt.alt;
-          }
+          const isStationary = smoothedSpeed < 1.2 && deltaDistanceM < dynamicNoiseThreshold;
+          currentSpeed = isStationary || isSettling ? 0 : smoothedSpeed;
 
-          // Spike detection: reject if speed is wildly inconsistent with recent trend
-          if (isSpeedSpike(currentSpeed)) {
-            // Glitch point — skip it entirely, don't accumulate anything
-            set({ lastGpsTimestamp: now });
-            return;
-          }
+          const hasMovedThreshold = deltaDistanceM >= dynamicNoiseThreshold;
+          const isMovementConfirmed = !isSettling && !isStationary && (
+            (smoothedSpeed >= 1.2 && hasMovedThreshold) ||
+            (hasMovedThreshold && derivedSpeedKmh >= 2.0)
+          );
 
-          const isAccurate = !accuracy || accuracy <= 30;
-          const isDistanceSpike = isSpeedSpike(candidateSpeedKmh);
-
-          // Stationary jitter suppression
-          const isStationaryCandidate = currentSpeed < 1.0 && distanceCandidateM < 4.5;
-          if (isStationaryCandidate) {
-            currentSpeed = 0;
-          }
-
-          const movementThreshold = isSettling ? 10.0 : Math.max(4.5, (accuracy || 20) * 0.25);
-          const hasMovedThreshold = distanceCandidateM >= movementThreshold;
-          const isMovementConfirmed = !isStationaryCandidate && !isSettling && (currentSpeed >= 1.0 || (hasMovedThreshold && candidateSpeedKmh >= 1.5));
-
-          if (isAccurate && !isDistanceSpike && !isSettling && hasMovedThreshold && isMovementConfirmed) {
-            addedDistance = distanceCandidateKm;
-            lastAcceptedDistancePoint = rawPt;
+          if (isMovementConfirmed) {
+            addedDistanceKm = deltaDistanceKm;
+            lastAcceptedWebPoint = rawPt;
             lastMovementTs = now;
-            lastMovementPoint = rawPt;
-          }
+            if (dtSec < 30) movingDurationSec += Math.round(dtSec);
 
-          // Elevation filtering — ONLY accumulate elevation if real movement has occurred
-          if (rawPt.alt !== undefined && (!accuracy || accuracy <= 25) && !isSettling && (addedDistance > 0 || currentSpeed >= 1.5)) {
-            const smoothedAlt = getSmoothedAltitude(rawPt.alt);
-            if (lastElevationAnchorAlt !== null) {
-              const diff = smoothedAlt - lastElevationAnchorAlt;
-              if (diff >= 1.5 && diff < 80) {
-                addedElevation = diff;
-                lastElevationAnchorAlt = smoothedAlt;
-              } else if (diff <= -1.5 && diff > -80) {
+            if (rawPt.alt !== undefined && (!accuracy || accuracy <= 25)) {
+              const smoothedAlt = getSmoothedAltitude(rawPt.alt);
+              if (lastElevationAnchorAlt !== null) {
+                const diff = smoothedAlt - lastElevationAnchorAlt;
+                if (diff >= 1.5 && diff < 80) {
+                  addedElevationM = diff;
+                  lastElevationAnchorAlt = smoothedAlt;
+                } else if (diff <= -1.5 && diff > -80) {
+                  lastElevationAnchorAlt = smoothedAlt;
+                }
+              } else {
                 lastElevationAnchorAlt = smoothedAlt;
               }
-            } else {
-              lastElevationAnchorAlt = smoothedAlt;
             }
+
+            if (currentSpeed > 1.5 && currentSpeed <= 180) {
+              maxSpeedKmh = Math.max(maxSpeedKmh, currentSpeed);
+            }
+          } else if (isSettling) {
+            lastAcceptedWebPoint = rawPt;
+            if (rawPt.alt !== undefined) lastElevationAnchorAlt = rawPt.alt;
           }
         } else {
-          lastAcceptedDistancePoint = rawPt;
-          lastRoutePoint = rawPt;
-          lastMovementPoint = rawPt;
+          lastAcceptedWebPoint = rawPt;
           lastMovementTs = now;
-          if (nativeSpeedKmh !== null) currentSpeed = nativeSpeedKmh < 0.8 ? 0 : nativeSpeedKmh;
           if (rawPt.alt !== undefined) {
             lastElevationAnchorAlt = rawPt.alt;
             altitudeBuffer = [rawPt.alt];
           }
         }
 
-        // Accept this speed into the spike detection history
-        if (!isSettling) {
-          acceptSpeedToHistory(currentSpeed);
-        }
-
-        const smoothedSpeed = pushSpeed(currentSpeed);
-        const displaySpeed = Math.round(smoothedSpeed * 10) / 10;
-
-        // Auto-pause & Moving Time Accumulator — Never auto-stop when user is moving at speed!
-        const isMoving = currentSpeed >= 1.0 || addedDistance > 0;
-        const isStationaryNow = !isMoving;
-
-        if (isStationaryNow) {
-          if (autoPauseStatus === 'MOVING') {
-            autoPauseStatus = 'CANDIDATE_STOP';
-            lastMovementTs = now;
-          } else if (autoPauseStatus === 'CANDIDATE_STOP') {
-            if (now - lastMovementTs > 6_000) {
-              autoPauseStatus = 'PAUSED';
-              autoPausedAt = now;
-            }
-          }
-        } else {
-          if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
-            totalPausedMs += (now - autoPausedAt);
-          }
-          autoPauseStatus = 'MOVING';
-          autoPausedAt = null;
-          lastMovementTs = now;
-          if (dtSec > 0 && dtSec < 30) movingDurationSec += Math.round(dtSec);
-        }
-
-        // Rolling Moving-Pace Window
-        let newPaceWindow = [...state.paceWindow];
-        if (addedDistance > 0 && dtSec > 0) {
-          newPaceWindow.push({ dist: addedDistance, dt: dtSec, ts: now });
-        }
-        
-        const LIVE_PACE_WINDOW_MS = 45_000;
-        newPaceWindow = newPaceWindow.filter(p => now - p.ts < LIVE_PACE_WINDOW_MS);
-
-        let currentPaceMs = state.currentPaceMs;
-        if (newPaceWindow.length > 0) {
-          const sumDist = newPaceWindow.reduce((a, b) => a + b.dist, 0);
-          const sumDt = newPaceWindow.reduce((a, b) => a + b.dt, 0);
-          if (sumDist >= 0.005) {
-            currentPaceMs = (sumDt * 1000) / sumDist;
-          }
-        } else if (autoPauseStatus === 'PAUSED' || isStationaryNow) {
-          if (now - lastMovementTs > 5_000) {
-            currentPaceMs = 0;
-          }
-        }
-
-        // Route Point addition — Filter stationary jitter from drawing noisy spiderwebs
-        const routeDistM = lastRoutePoint
-          ? haversineKm(lastRoutePoint.lat, lastRoutePoint.lng, rawPt.lat, rawPt.lng) * 1000
-          : Infinity;
-        const shouldAddRoutePoint = (routeDistM >= 5.0 && addedDistance > 0) || state.routePoints.length === 0;
-        if (shouldAddRoutePoint) lastRoutePoint = rawPt;
-        let nextRoutePoints = shouldAddRoutePoint ? [...state.routePoints, rawPt] : state.routePoints;
-
-        if (nextRoutePoints.length > MAX_DISPLAY_POINTS) {
-          const half = Math.floor(nextRoutePoints.length / 2);
-          nextRoutePoints = nextRoutePoints.filter((_, i) => i >= half || i % 2 === 0);
-        }
-
-        // Don't update max speed during GPS settling or when stationary
-        const newMaxSpeed = !isSettling && addedDistance > 0 && currentSpeed >= 1.5 && !isSpeedSpike(currentSpeed)
-          ? Math.max(state.maxSpeedKmh, currentSpeed)
-          : state.maxSpeedKmh;
+        const nextRoutePoints = addedDistanceKm > 0 || state.routePoints.length === 0
+          ? [...state.routePoints, rawPt]
+          : state.routePoints;
 
         set({
           routePoints: nextRoutePoints,
           currentLocation: rawPt,
-          distanceKm: state.distanceKm + addedDistance,
+          distanceKm: distanceKm + addedDistanceKm,
           movingDurationSec,
-          currentSpeedKmh: autoPauseStatus === 'PAUSED' || isStationaryNow ? 0 : displaySpeed,
-          maxSpeedKmh: newMaxSpeed,
-          elevationGainM: state.elevationGainM + addedElevation,
+          currentSpeedKmh: Math.round(currentSpeed * 10) / 10,
+          maxSpeedKmh: Math.round(maxSpeedKmh * 10) / 10,
+          elevationGainM: Math.round((elevationGainM + addedElevationM) * 10) / 10,
           gpsAccuracy: accuracy || 0,
           gpsStatus: 'active',
-          autoPauseStatus,
-          autoPausedAt,
-          totalPausedMs,
-          paceWindow: newPaceWindow,
-          currentPaceMs,
           lastGpsTimestamp: now,
         });
       },
 
       stopTracking: () => {
         stopGpsWatch();
-        resetTrackingSegmentState();
-        const { autoPauseStatus, autoPausedAt, totalPausedMs } = get();
-        let finalPausedMs = totalPausedMs;
-        if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
-          finalPausedMs += Date.now() - autoPausedAt;
-        }
+        resetWebGpsEngine();
         set({
           isTracking: false,
           isPaused: false,
           autoPauseStatus: 'MOVING',
           autoPausedAt: null,
-          totalPausedMs: finalPausedMs,
           gpsStatus: 'off' as GpsStatus,
         });
       },
 
       reset: () => {
         stopGpsWatch();
-        resetSpeedEngine();
-        resetTrackingSegmentState();
-        lastMovementTs = 0;
+        resetWebGpsEngine();
         set({ ...(IDLE as CardioState) });
       },
     }),
