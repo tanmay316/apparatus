@@ -174,8 +174,8 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
                 value={visibility}
                 onChange={(val) => setVisibility(val as ClanVisibility)}
                 options={[
-                  { value: 'public', label: 'Public (Anyone can join)' },
-                  { value: 'private', label: 'Private (Invite only)' },
+                  { value: 'public', label: 'Public (Anyone can join directly)' },
+                  { value: 'private', label: 'Private (Request to join)' },
                 ]}
               />
             </div>

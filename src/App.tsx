@@ -6,7 +6,9 @@ import { Layout } from '@/components/layout/Layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Toast } from '@/components/ui/Toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { requestNotificationPermission, scheduleDailyReminders } from '@/utils/notifications';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { requestNotificationPermission, scheduleDailyReminders, showNotification } from '@/utils/notifications';
 import { UpdatePopup } from '@/components/ui/UpdatePopup';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
@@ -18,6 +20,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { OTAUpdater } from '@/components/ui/OTAUpdater';
 import { MedalCelebrationModal } from '@/components/community/MedalCelebrationModal';
+import type { AppNotificationItem } from '@/types';
 
 const AuthPage = lazy(() => import('@/pages/AuthPage').then(m => ({ default: m.AuthPage })));
 const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -140,7 +143,11 @@ function PreferencesSync() {
         LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
           const data = action.notification?.extra;
           const id = action.notification?.id;
-          if (data?.type === 'cardio' || id === 101 || data?.session === 'cardio') {
+          if (data?.link) {
+            window.location.href = data.link;
+          } else if (data?.clanId) {
+            window.location.href = `/clan/${data.clanId}`;
+          } else if (data?.type === 'cardio' || id === 101 || data?.session === 'cardio') {
             window.location.href = '/cardio';
           } else if (data?.type === 'gym' || id === 1001 || id === 102 || data?.session === 'gym') {
             const { planId, dayId } = useWorkoutStore.getState();
@@ -177,6 +184,40 @@ function PreferencesSync() {
       backListener.then(l => l.remove());
     };
   }, []);
+
+  // Real-time notification listener for in-app & mobile push delivery
+  useEffect(() => {
+    if (!user) return;
+    const mountedAt = Date.now();
+    const q = query(
+      collection(db, 'app_notifications'),
+      where('userId', '==', user.uid),
+      where('read', '==', false)
+    );
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      snap.docChanges().forEach((change) => {
+        if (change.type === 'added') {
+          const notif = change.doc.data() as AppNotificationItem;
+          const createdAtMillis = notif.createdAt && typeof (notif.createdAt as any).toMillis === 'function'
+            ? (notif.createdAt as any).toMillis()
+            : ((notif.createdAt as any)?.seconds ? (notif.createdAt as any).seconds * 1000 : 0);
+
+          // Push local notification for any new message/poll/announcement arriving in real-time
+          if (createdAtMillis >= mountedAt - 30000 || !createdAtMillis) {
+            const notifId = (Date.now() % 2147483647);
+            showNotification(notifId, notif.title, notif.body, {
+              ...notif,
+              id: change.doc.id,
+              link: notif.link,
+            });
+          }
+        }
+      });
+    }, (err) => console.warn('Notification watcher subscription error:', err));
+
+    return () => unsubscribe();
+  }, [user]);
 
   return null;
 }

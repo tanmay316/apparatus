@@ -12,6 +12,7 @@ import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CelebrationPodiumCard } from './CelebrationPodiumCard';
 import { EditPostSheet } from './EditPostSheet';
+import { ClanPollCard } from './ClanPollCard';
 import { getAppShareUrl, shareContent } from '@/lib/share';
 
 function timeAgo(date: any): string {
@@ -327,6 +328,17 @@ export function ClanPostItem({ post, onClick }: { post: CommunityPost, onClick: 
               ))}
             </div>
           </div>
+        )}
+
+        {/* ─── ATTACHED POLL ─── */}
+        {!isCelebration && currentPost.poll && (
+          <ClanPollCard
+            postId={currentPost.id!}
+            poll={currentPost.poll}
+            onPollUpdated={(updatedPoll) => {
+              setCurrentPost(prev => ({ ...prev, poll: updatedPoll }));
+            }}
+          />
         )}
 
         {/* ─── SOCIAL ACTIONS BAR ─── */}

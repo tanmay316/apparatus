@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Image as ImageIcon, Save, Loader2, Plus } from 'lucide-react';
+import { X, Image as ImageIcon, Save, Loader2, Plus, BarChart2, Edit2, Trash2, CheckCircle2, Lock, Clock } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { updateClanPost } from '@/services/community';
-import type { CommunityPost } from '@/types';
+import { CreatePollSheet } from './CreatePollSheet';
+import type { CommunityPost, ClanPoll } from '@/types';
 
 interface EditPostSheetProps {
   post: CommunityPost;
@@ -82,6 +83,8 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
     if (post.imageUrl) return [post.imageUrl];
     return [];
   });
+  const [poll, setPoll] = useState<ClanPoll | null>(post.poll || null);
+  const [isPollSheetOpen, setIsPollSheetOpen] = useState(false);
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -91,6 +94,7 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
       setTitle(post.title || '');
       setPostText(post.text || '');
       setImages(post.images && post.images.length > 0 ? post.images : (post.imageUrl ? [post.imageUrl] : []));
+      setPoll(post.poll || null);
       document.body.classList.add('community-create-open');
       return () => document.body.classList.remove('community-create-open');
     }
@@ -134,7 +138,7 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
     mutationFn: async () => {
       if (!user) throw new Error('You must be logged in to edit posts');
       if (!post?.id) throw new Error('Post ID is missing');
-      if (!postText.trim() && !title.trim() && images.length === 0) {
+      if (!postText.trim() && !title.trim() && images.length === 0 && !poll) {
         throw new Error('Post cannot be completely empty');
       }
 
@@ -143,6 +147,7 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
         text: postText.trim(),
         images: images,
         imageUrl: images[0] || null,
+        poll: poll || null,
       });
     },
     onSuccess: () => {
@@ -158,6 +163,7 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
         text: postText.trim(),
         images,
         imageUrl: images[0] || undefined,
+        poll: poll || undefined,
       });
 
       showToast('Post updated successfully!', 'success');
@@ -174,167 +180,265 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
     updateMutation.mutate();
   };
 
-  return createPortal(
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-[650] flex flex-col justify-end sm:justify-center sm:items-center sm:p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0 bg-black/75 backdrop-blur-md"
-          />
+  const hasContent = Boolean(postText.trim() || title.trim() || images.length > 0 || poll);
 
-          <motion.div
-            initial={{ y: '100%', opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: '100%', opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-            className="bg-ink w-full max-w-xl rounded-t-[32px] sm:rounded-[28px] relative z-10 flex flex-col shadow-2xl p-5 sm:p-6 border-t sm:border border-line/20 max-h-[92vh] overflow-y-auto"
-          >
-            {/* Drag Handle on Mobile */}
-            <div className="w-12 h-1.5 bg-line/40 rounded-full mx-auto mb-4 sm:hidden" />
-
-            {/* Header */}
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-line/20">
-              <div>
-                <h2 className="text-lg font-bold text-bone tracking-wide">Edit Post</h2>
-                <p className="text-xs text-bone-dim">Modify your post title, text, and photos</p>
-              </div>
-              <button
+  return (
+    <>
+      {createPortal(
+        <AnimatePresence>
+          {isOpen && (
+            <div className="fixed inset-0 z-[650] flex flex-col justify-end sm:justify-center sm:items-center sm:p-4">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
                 onClick={onClose}
-                className="p-2 bg-ink-2 rounded-full text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors"
+                className="absolute inset-0 bg-black/75 backdrop-blur-md"
+              />
+
+              <motion.div
+                initial={{ y: '100%', opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: '100%', opacity: 0 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+                className="bg-ink w-full max-w-xl rounded-t-[32px] sm:rounded-[28px] relative z-10 flex flex-col shadow-2xl p-5 sm:p-6 border-t sm:border border-line/20 max-h-[92vh] overflow-y-auto"
               >
-                <X size={18} />
-              </button>
-            </div>
+                {/* Drag Handle on Mobile */}
+                <div className="w-12 h-1.5 bg-line/40 rounded-full mx-auto mb-4 sm:hidden" />
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
-              {/* Title Field */}
-              <div>
-                <label className="block text-[11px] font-mono uppercase text-bone-dim mb-1.5 tracking-wider">
-                  Title (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  placeholder="Give your post a title..."
-                  maxLength={100}
-                  className="w-full bg-ink-2 border border-line/20 rounded-xl px-4 py-3 text-sm text-bone placeholder:text-bone-dim/40 font-semibold focus:outline-none focus:border-sienna/80 transition-colors shadow-inner"
-                />
-              </div>
-
-              {/* Body Textarea */}
-              <div>
-                <label className="block text-[11px] font-mono uppercase text-bone-dim mb-1.5 tracking-wider">
-                  Post Content
-                </label>
-                <textarea
-                  value={postText}
-                  onChange={e => setPostText(e.target.value)}
-                  placeholder="What's on your mind? Share a workout, question, tip, or achievement..."
-                  rows={4}
-                  className="w-full bg-ink-2 border border-line/20 rounded-xl p-4 text-sm text-bone placeholder:text-bone-dim/40 resize-none focus:outline-none focus:border-sienna/80 transition-colors leading-relaxed shadow-inner"
-                />
-              </div>
-
-              {/* Image Previews */}
-              {images.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-mono uppercase text-bone-dim">
-                      Attached Images ({images.length}/4)
-                    </span>
+                {/* Header */}
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-line/20">
+                  <div>
+                    <h2 className="text-lg font-bold text-bone tracking-wide">Edit Post</h2>
+                    <p className="text-xs text-bone-dim">Modify your post title, text, poll, and photos</p>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                    {images.map((img, idx) => (
-                      <div key={idx} className="relative group aspect-square rounded-xl overflow-hidden bg-ink-3 border border-line/20">
-                        <img src={img} alt={`Attachment ${idx + 1}`} className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => removeImage(idx)}
-                          className="absolute top-1.5 right-1.5 p-1 bg-black/70 rounded-full text-white hover:bg-red-500 transition-colors shadow-sm"
-                          title="Remove image"
-                        >
-                          <X size={14} />
-                        </button>
+                  <button
+                    onClick={onClose}
+                    className="p-2 bg-ink-2 rounded-full text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+                  {/* Title Field */}
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-bone-dim mb-1.5 tracking-wider">
+                      Title (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      placeholder="Give your post a title..."
+                      maxLength={100}
+                      className="w-full bg-ink-2 border border-line/20 rounded-xl px-4 py-3 text-sm text-bone placeholder:text-bone-dim/40 font-semibold focus:outline-none focus:border-sienna/80 transition-colors shadow-inner"
+                    />
+                  </div>
+
+                  {/* Body Textarea */}
+                  <div>
+                    <label className="block text-[11px] font-mono uppercase text-bone-dim mb-1.5 tracking-wider">
+                      Post Content
+                    </label>
+                    <textarea
+                      value={postText}
+                      onChange={e => setPostText(e.target.value)}
+                      placeholder="What's on your mind? Share a workout, question, tip, or achievement..."
+                      rows={3}
+                      className="w-full bg-ink-2 border border-line/20 rounded-xl p-4 text-sm text-bone placeholder:text-bone-dim/40 resize-none focus:outline-none focus:border-sienna/80 transition-colors leading-relaxed shadow-inner"
+                    />
+                  </div>
+
+                  {/* Attached Poll Section */}
+                  {poll && (
+                    <div className="bg-ink-2 border border-sienna/30 rounded-2xl p-4 relative space-y-2.5 shadow-sm">
+                      <div className="flex items-center justify-between border-b border-line/20 pb-2.5">
+                        <div className="flex items-center gap-2">
+                          <BarChart2 size={16} className="text-sienna" />
+                          <span className="text-xs font-mono font-bold uppercase text-sienna tracking-wider">
+                            Attached Poll
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setIsPollSheetOpen(true)}
+                            className="p-1.5 rounded-lg bg-ink-3 hover:bg-ink text-bone-dim hover:text-bone transition-colors text-xs font-mono flex items-center gap-1"
+                            title="Edit Poll"
+                          >
+                            <Edit2 size={13} />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPoll(null)}
+                            className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 transition-colors text-xs font-mono flex items-center gap-1"
+                            title="Delete Poll"
+                          >
+                            <Trash2 size={13} />
+                            <span>Delete Poll</span>
+                          </button>
+                        </div>
                       </div>
-                    ))}
-                    {images.length < 4 && (
+
+                      <div>
+                        <h4 className="text-sm font-bold text-bone mb-2">{poll.question}</h4>
+                        <div className="space-y-1.5">
+                          {poll.options.map((opt, i) => (
+                            <div
+                              key={opt.id || i}
+                              className="bg-ink-3 border border-line/20 rounded-xl px-3.5 py-2 text-xs text-bone/90 font-medium flex items-center justify-between gap-2"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-sienna/60 shrink-0" />
+                                <span className="truncate">{opt.text}</span>
+                              </div>
+                              <span className="text-[11px] font-mono text-bone-dim">{opt.votesCount} votes</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 mt-3 text-[11px] text-bone-dim font-mono">
+                          <span className="flex items-center gap-1 bg-ink-3 px-2 py-0.5 rounded-md border border-line/15">
+                            <CheckCircle2 size={12} className="text-emerald-400" />
+                            {poll.isMultipleChoice ? 'Multiple Choice' : 'Single Choice'}
+                          </span>
+                          <span className="flex items-center gap-1 bg-ink-3 px-2 py-0.5 rounded-md border border-line/15">
+                            <Lock size={12} className="text-indigo-400" />
+                            {poll.isAnonymous ? 'Anonymous' : 'Public'}
+                          </span>
+                          {poll.hasExpiration && poll.expiresAt && (
+                            <span className="flex items-center gap-1 bg-ink-3 px-2 py-0.5 rounded-md border border-line/15 text-amber-400">
+                              <Clock size={12} />
+                              Expires {new Date(poll.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Image Previews */}
+                  {images.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-mono uppercase text-bone-dim">
+                          Attached Images ({images.length}/4)
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {images.map((img, idx) => (
+                          <div key={idx} className="relative group aspect-square rounded-xl overflow-hidden bg-ink-3 border border-line/20">
+                            <img src={img} alt={`Attachment ${idx + 1}`} className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => removeImage(idx)}
+                              className="absolute top-1.5 right-1.5 p-1 bg-black/70 rounded-full text-white hover:bg-red-500 transition-colors shadow-sm"
+                              title="Remove image"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                        {images.length < 4 && (
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="aspect-square rounded-xl border border-dashed border-line/30 hover:border-sienna/50 bg-ink-2/50 flex flex-col items-center justify-center gap-1 text-bone-dim hover:text-sienna transition-colors"
+                          >
+                            <Plus size={20} />
+                            <span className="text-[11px] font-mono">Add More</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Bar */}
+                  <div className="flex items-center justify-between pt-3 border-t border-line/20 mt-2">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="aspect-square rounded-xl border border-dashed border-line/30 hover:border-sienna/50 bg-ink-2/50 flex flex-col items-center justify-center gap-1 text-bone-dim hover:text-sienna transition-colors"
+                        disabled={images.length >= 4 || isProcessingImage}
+                        className="px-3 py-2.5 bg-ink-2 rounded-xl text-bone-dim hover:text-sienna hover:bg-sienna/10 transition-colors flex items-center gap-1.5 text-xs font-mono disabled:opacity-50 border border-line/20 hover:border-sienna/30"
                       >
-                        <Plus size={20} />
-                        <span className="text-[11px] font-mono">Add More</span>
+                        {isProcessingImage ? (
+                          <Loader2 size={15} className="animate-spin text-sienna" />
+                        ) : (
+                          <ImageIcon size={15} />
+                        )}
+                        <span>{images.length > 0 ? 'Image' : 'Photo'}</span>
                       </button>
-                    )}
+
+                      {/* Poll Button */}
+                      <button
+                        type="button"
+                        onClick={() => setIsPollSheetOpen(true)}
+                        className={`px-3 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-mono border ${
+                          poll
+                            ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                            : 'bg-ink-2 text-bone-dim hover:text-indigo-400 hover:bg-indigo-500/10 border-line/20 hover:border-indigo-500/30'
+                        }`}
+                      >
+                        <BarChart2 size={15} />
+                        <span>{poll ? 'Edit Poll' : 'Add Poll'}</span>
+                      </button>
+
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleImageSelect}
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="px-4 py-2.5 text-xs font-bold text-bone-dim hover:text-bone transition-colors"
+                      >
+                        Cancel
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={!hasContent || updateMutation.isPending || isProcessingImage}
+                        className="bg-sienna hover:bg-sienna/90 text-bg px-6 py-2.5 rounded-xl font-bold text-sm disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-sienna/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                      >
+                        {updateMutation.isPending ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save size={15} />
+                            <span>Save Changes</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-
-              {/* Action Bar */}
-              <div className="flex items-center justify-between pt-3 border-t border-line/20 mt-2">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={images.length >= 4 || isProcessingImage}
-                    className="px-3.5 py-2.5 bg-ink-2 rounded-xl text-bone-dim hover:text-sienna hover:bg-sienna/10 transition-colors flex items-center gap-2 text-xs font-mono disabled:opacity-50 border border-line/20 hover:border-sienna/30"
-                  >
-                    {isProcessingImage ? (
-                      <Loader2 size={16} className="animate-spin text-sienna" />
-                    ) : (
-                      <ImageIcon size={16} />
-                    )}
-                    <span>{images.length > 0 ? 'Add Image' : 'Attach Image'}</span>
-                  </button>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleImageSelect}
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                  />
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="px-4 py-2.5 text-xs font-bold text-bone-dim hover:text-bone transition-colors"
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={(!postText.trim() && !title.trim() && images.length === 0) || updateMutation.isPending || isProcessingImage}
-                    className="bg-sienna hover:bg-sienna/90 text-bg px-6 py-2.5 rounded-xl font-bold text-sm disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-sienna/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
-                  >
-                    {updateMutation.isPending ? (
-                      <>
-                        <Loader2 size={16} className="animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save size={15} />
-                        <span>Save Changes</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-            </form>
-          </motion.div>
-        </div>
+                </form>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
       )}
-    </AnimatePresence>,
-    document.body
+
+      {/* Create / Edit Poll Sheet */}
+      <CreatePollSheet
+        isOpen={isPollSheetOpen}
+        onClose={() => setIsPollSheetOpen(false)}
+        onPollCreated={p => setPoll(p)}
+        initialPoll={poll}
+      />
+    </>
   );
 }

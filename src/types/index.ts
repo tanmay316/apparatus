@@ -214,7 +214,7 @@ export interface Comment {
 
 export interface Notification {
   id?: string;
-  type: 'follow' | 'follow_request' | 'unfollow' | 'like' | 'comment' | 'activity' | 'achievement' | 'reminder';
+  type: 'follow' | 'follow_request' | 'unfollow' | 'like' | 'comment' | 'activity' | 'achievement' | 'reminder' | 'clan_poll' | 'clan_announcement' | 'clan_message' | 'clan_join_request' | 'clan_join_accepted';
   receiverId: string;
   senderId: string;
   senderName: string;
@@ -390,12 +390,16 @@ export interface EventReview {
 export interface CommunityAnnouncement {
   id?: string;
   communityId: string;
+  clanId?: string;
   title: string;
   content: string;
   authorId: string;
   authorName: string;
+  authorPhoto?: string;
+  authorRole?: 'leader' | 'co_leader' | 'admin' | string;
   isPinned: boolean;
-  createdAt: Timestamp | null;
+  createdAt: Timestamp | string | null;
+  updatedAt?: Timestamp | string | null;
 }
 
 export interface CommunityPollOption {
@@ -430,6 +434,59 @@ export interface CommunityChallenge {
   createdAt: Timestamp | null;
 }
 
+export interface ClanMessageReplyTo {
+  messageId: string;
+  userId: string;
+  userName: string;
+  text: string;
+  imageUrl?: string;
+}
+
+export interface ClanMessage {
+  id?: string;
+  clanId: string;
+  userId: string;
+  userName: string;
+  userPhoto?: string;
+  userRole?: 'leader' | 'co_leader' | 'admin' | 'member';
+  text: string;
+  imageUrl?: string;
+  images?: string[];
+  replyTo?: ClanMessageReplyTo | null;
+  reactions?: Record<string, string[]>; // emoji -> array of userIds
+  isEdited?: boolean;
+  isDeleted?: boolean;
+  createdAt: Timestamp | string | null;
+  updatedAt?: Timestamp | string | null;
+}
+
+export interface ClanPollVoter {
+  userId: string;
+  userName: string;
+  userPhoto?: string;
+}
+
+export interface ClanPollOption {
+  id: string;
+  text: string;
+  votesCount: number;
+  voterIds?: string[];
+  voters?: ClanPollVoter[];
+}
+
+export interface ClanPoll {
+  question: string;
+  options: ClanPollOption[];
+  isMultipleChoice: boolean;
+  isAnonymous: boolean;
+  hasExpiration: boolean;
+  expiresAt?: string | null;
+  totalVotes: number;
+  votedUserIds: string[];
+  userVotes?: Record<string, string[]>;
+  createdAt?: Timestamp | string | null;
+}
+
 export interface CommunityPost {
   id?: string;
   communityId: string;
@@ -445,6 +502,7 @@ export interface CommunityPost {
   commentsCount: number;
   imageUrl?: string;
   images?: string[];
+  poll?: ClanPoll;
   sourceType?: 'challenge' | 'event' | string;
   sourceId?: string;
   winners?: any[];
@@ -477,7 +535,12 @@ export type AppNotificationType =
   | 'registration_approved' 
   | 'ticket_confirmed' 
   | 'event_cancelled'
-  | 'community_announcement';
+  | 'community_announcement'
+  | 'clan_poll'
+  | 'clan_announcement'
+  | 'clan_message'
+  | 'clan_join_request'
+  | 'clan_join_accepted';
 
 export interface AppNotificationItem {
   id?: string;
@@ -561,6 +624,19 @@ export interface ClanMembership {
   role: ClanRole;
   joinedAt: Timestamp | null;
   status: 'active' | 'removed' | 'left';
+}
+
+export interface ClanJoinRequest {
+  id?: string;
+  clanId: string;
+  clanName: string;
+  userId: string;
+  userName: string;
+  userPhoto?: string;
+  message?: string;
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: Timestamp | string | null;
+  updatedAt?: Timestamp | string | null;
 }
 
 // ─── Challenge System (V2) ───────────────────────────────────

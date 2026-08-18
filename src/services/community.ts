@@ -1,9 +1,35 @@
-import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, increment, setDoc, writeBatch, Timestamp, documentId } from 'firebase/firestore';
+import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, increment, setDoc, writeBatch, Timestamp, documentId, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, SimpleEventStatus, CommunityPost, EarnedCommunityBadge } from '@/types';
+import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, SimpleEventStatus, CommunityPost, EarnedCommunityBadge, ClanPoll, ClanPollOption, ClanPollVoter, CommunityAnnouncement, ClanMessage, AppNotificationType, ClanJoinRequest } from '@/types';
 import { notify } from '@/services/social';
 
 // ─── UTILS ────────────────────────────────────────────────────────
+export function cleanDoc<T extends Record<string, any>>(obj: T): T {
+  const result: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (
+        value !== null &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        !(value instanceof Date) &&
+        typeof (value as any).toMillis !== 'function'
+      ) {
+        result[key] = cleanDoc(value);
+      } else if (Array.isArray(value)) {
+        result[key] = value.map(item =>
+          item !== null && typeof item === 'object' && !(item instanceof Date) && typeof (item as any).toMillis !== 'function'
+            ? cleanDoc(item)
+            : (item === undefined ? null : item)
+        );
+      } else {
+        result[key] = value;
+      }
+    }
+  }
+  return result;
+}
+
 export function formatChallengeGoal(target?: number, unit?: string, metric?: string): string {
   const trimmedUnit = (unit || '').trim();
   const trimmedMetric = (metric || '').trim();
@@ -22,13 +48,13 @@ export function formatChallengeGoal(target?: number, unit?: string, metric?: str
 // ─── CLANS (V2) ──────────────────────────────────────────────────
 
 export async function createClan(clan: Omit<ClanV2, 'id' | 'memberCount' | 'status' | 'createdAt' | 'updatedAt'>): Promise<string> {
-  const docRef = await addDoc(collection(db, 'clans_v2'), {
+  const docRef = await addDoc(collection(db, 'clans_v2'), cleanDoc({
     ...clan,
     memberCount: 1,
     status: 'active',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
+  }));
   
   // Add creator as leader
   const memberId = `${docRef.id}_${clan.leaderId}`;
@@ -1219,22 +1245,38 @@ import { ref as storageRef, deleteObject } from 'firebase/storage';
 import type { PostComment } from '@/types';
 export type { PostComment };
 
-export const createClanPost = async (postData: Omit<CommunityPost, 'id' | 'likesCount' | 'commentsCount' | 'createdAt' | 'likedUserIds'> & { imageUrl?: string; images?: string[] }) => {
+export const createClanPost = async (postData: Omit<CommunityPost, 'id' | 'likesCount' | 'commentsCount' | 'createdAt' | 'likedUserIds'> & { imageUrl?: string; images?: string[]; poll?: ClanPoll }) => {
   const images = postData.images && postData.images.length > 0
     ? postData.images
     : (postData.imageUrl ? [postData.imageUrl] : []);
 
-  const docRef = await addDoc(collection(db, 'community_posts'), {
+  const docRef = await addDoc(collection(db, 'community_posts'), cleanDoc({
     ...postData,
     title: (postData.title || '').trim(),
     text: (postData.text || '').trim(),
     imageUrl: images[0] || null,
     images: images,
+    poll: postData.poll || null,
     likesCount: 0,
     commentsCount: 0,
     likedUserIds: [],
     createdAt: serverTimestamp()
-  });
+  }));
+
+  // If this post includes a poll, notify clan members
+  if (postData.poll && postData.clanId) {
+    notifyClanMembers({
+      clanId: postData.clanId,
+      senderId: postData.authorId,
+      senderName: postData.authorName,
+      title: `📊 New Poll in Clan`,
+      body: `${postData.authorName}: "${postData.poll.question}" — Tap to vote!`,
+      type: 'clan_poll',
+      link: `/clan/${postData.clanId}`,
+      extraData: { postId: docRef.id, clanId: postData.clanId }
+    }).catch(err => console.warn('Failed to notify clan members for poll:', err));
+  }
+
   return docRef.id;
 };
 
@@ -1256,6 +1298,7 @@ export async function updateClanPost(
     text?: string;
     images?: string[];
     imageUrl?: string | null;
+    poll?: ClanPoll | null;
   }
 ): Promise<void> {
   const postRef = doc(db, 'community_posts', postId);
@@ -1272,8 +1315,115 @@ export async function updateClanPost(
     updates.images = images;
     updates.imageUrl = images[0] || null;
   }
+  if (data.poll !== undefined) {
+    updates.poll = data.poll;
+  }
 
   await updateDoc(postRef, updates);
+}
+
+export async function voteOnClanPoll(
+  postId: string,
+  optionId: string,
+  user: { uid: string; displayName?: string | null; photoURL?: string | null }
+): Promise<ClanPoll> {
+  const postRef = doc(db, 'community_posts', postId);
+  const snap = await getDoc(postRef);
+  if (!snap.exists()) throw new Error('Post not found');
+  const postData = snap.data() as CommunityPost;
+  const poll = postData.poll;
+  if (!poll) throw new Error('Poll not found on this post');
+
+  // Expiration check
+  if (poll.hasExpiration && poll.expiresAt) {
+    const expTime = new Date(poll.expiresAt).getTime();
+    if (!isNaN(expTime) && Date.now() > expTime) {
+      throw new Error('This poll has expired and is no longer accepting votes.');
+    }
+  }
+
+  const userId = user.uid;
+  const isMultiple = Boolean(poll.isMultipleChoice);
+  const userVotes = { ...(poll.userVotes || {}) };
+  const currentUserSelectedOptionIds: string[] = userVotes[userId] || [];
+
+  let nextUserSelectedOptionIds: string[] = [];
+
+  if (isMultiple) {
+    if (currentUserSelectedOptionIds.includes(optionId)) {
+      nextUserSelectedOptionIds = currentUserSelectedOptionIds.filter(id => id !== optionId);
+    } else {
+      nextUserSelectedOptionIds = [...currentUserSelectedOptionIds, optionId];
+    }
+  } else {
+    if (currentUserSelectedOptionIds.includes(optionId)) {
+      nextUserSelectedOptionIds = [];
+    } else {
+      nextUserSelectedOptionIds = [optionId];
+    }
+  }
+
+  if (nextUserSelectedOptionIds.length === 0) {
+    delete userVotes[userId];
+  } else {
+    userVotes[userId] = nextUserSelectedOptionIds;
+  }
+
+  const voterInfo: ClanPollVoter = {
+    userId: user.uid,
+    userName: user.displayName || 'Clan Member',
+    userPhoto: user.photoURL || '',
+  };
+
+  const updatedOptions: ClanPollOption[] = poll.options.map(opt => {
+    let voterIds = [...(opt.voterIds || [])];
+    let voters = [...(opt.voters || [])];
+
+    const wasVoted = currentUserSelectedOptionIds.includes(opt.id);
+    const isNowVoted = nextUserSelectedOptionIds.includes(opt.id);
+
+    if (wasVoted && !isNowVoted) {
+      voterIds = voterIds.filter(id => id !== userId);
+      voters = voters.filter(v => v.userId !== userId);
+    } else if (!wasVoted && isNowVoted) {
+      if (!voterIds.includes(userId)) voterIds.push(userId);
+      if (!poll.isAnonymous) {
+        if (!voters.some(v => v.userId === userId)) voters.push(voterInfo);
+      }
+    }
+
+    return {
+      ...opt,
+      votesCount: voterIds.length,
+      voterIds,
+      voters: poll.isAnonymous ? [] : voters,
+    };
+  });
+
+  const allVotedUsers = Object.keys(userVotes);
+  const totalVotesCount = updatedOptions.reduce((acc, curr) => acc + curr.votesCount, 0);
+
+  const updatedPoll: ClanPoll = {
+    ...poll,
+    options: updatedOptions,
+    totalVotes: totalVotesCount,
+    votedUserIds: allVotedUsers,
+    userVotes,
+  };
+
+  await updateDoc(postRef, {
+    poll: cleanDoc(updatedPoll),
+  });
+
+  return updatedPoll;
+}
+
+export async function removePollFromClanPost(postId: string): Promise<void> {
+  const postRef = doc(db, 'community_posts', postId);
+  await updateDoc(postRef, {
+    poll: null,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function getClanMembership(clanId: string, userId: string): Promise<ClanMembership | null> {
@@ -2062,4 +2212,412 @@ export async function backfillCelebrationPosts(): Promise<{ events: number; chal
     console.error('[Backfill] Error backfilling celebration posts:', error);
     return { events: createdEvents, challenges: createdChallenges, success: false, details: error?.message };
   }
+}
+
+// ─── CLAN NOTIFICATIONS ───────────────────────────────────────────
+
+export async function notifyClanMembers(params: {
+  clanId: string;
+  senderId: string;
+  senderName: string;
+  title: string;
+  body: string;
+  type: AppNotificationType;
+  link?: string;
+  extraData?: any;
+}): Promise<void> {
+  try {
+    const { clanId, senderId, senderName, title, body, type, link, extraData } = params;
+    const members = await getClanMembers(clanId);
+    if (!members || members.length === 0) return;
+
+    const notifPromises = members
+      .filter(m => m.userId && m.userId !== senderId)
+      .map(m =>
+        addDoc(collection(db, 'app_notifications'), cleanDoc({
+          userId: m.userId,
+          title,
+          body,
+          type,
+          link: link || `/clan/${clanId}`,
+          read: false,
+          createdAt: serverTimestamp(),
+          extra: {
+            clanId,
+            senderId,
+            senderName,
+            ...(extraData || {})
+          }
+        })).catch(err => console.warn('Failed to send notification to member:', m.userId, err))
+      );
+
+    await Promise.allSettled(notifPromises);
+  } catch (err) {
+    console.error('Error notifying clan members:', err);
+  }
+}
+
+// ─── CLAN ANNOUNCEMENTS ───────────────────────────────────────────
+
+export async function createClanAnnouncement(
+  announcement: Omit<CommunityAnnouncement, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<string> {
+  const clanId = announcement.clanId || announcement.communityId;
+  const docRef = await addDoc(collection(db, 'community_announcements'), cleanDoc({
+    ...announcement,
+    clanId,
+    communityId: clanId,
+    title: (announcement.title || '').trim(),
+    content: (announcement.content || '').trim(),
+    isPinned: Boolean(announcement.isPinned),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+
+  // Notify all clan members of the announcement
+  const snippet = announcement.title
+    ? `${announcement.title}: ${announcement.content.slice(0, 100)}`
+    : announcement.content.slice(0, 120);
+
+  notifyClanMembers({
+    clanId,
+    senderId: announcement.authorId,
+    senderName: announcement.authorName,
+    title: `📢 Announcement from ${announcement.authorName}`,
+    body: snippet,
+    type: 'clan_announcement',
+    link: `/clan/${clanId}`,
+    extraData: { announcementId: docRef.id, clanId }
+  }).catch(err => console.warn('Failed to notify clan members for announcement:', err));
+
+  return docRef.id;
+}
+
+export async function getClanAnnouncements(clanId: string): Promise<CommunityAnnouncement[]> {
+  try {
+    const q = query(
+      collection(db, 'community_announcements'),
+      where('communityId', '==', clanId)
+    );
+    const snap = await getDocs(q);
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as CommunityAnnouncement))
+      .sort((a, b) => {
+        // Pinned first, then newest by date
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        const timeA = a.createdAt && typeof (a.createdAt as any).toMillis === 'function'
+          ? (a.createdAt as any).toMillis()
+          : ((a.createdAt as any)?.seconds ? (a.createdAt as any).seconds * 1000 : 0);
+        const timeB = b.createdAt && typeof (b.createdAt as any).toMillis === 'function'
+          ? (b.createdAt as any).toMillis()
+          : ((b.createdAt as any)?.seconds ? (b.createdAt as any).seconds * 1000 : 0);
+        return timeB - timeA;
+      });
+  } catch (err) {
+    console.error('Error fetching clan announcements:', err);
+    return [];
+  }
+}
+
+export async function updateClanAnnouncement(
+  announcementId: string,
+  data: Partial<CommunityAnnouncement>
+): Promise<void> {
+  const ref = doc(db, 'community_announcements', announcementId);
+  const updates: Record<string, any> = {
+    updatedAt: serverTimestamp(),
+  };
+  if (data.title !== undefined) updates.title = data.title.trim();
+  if (data.content !== undefined) updates.content = data.content.trim();
+  if (data.isPinned !== undefined) updates.isPinned = data.isPinned;
+
+  await updateDoc(ref, updates);
+}
+
+export async function deleteClanAnnouncement(announcementId: string): Promise<void> {
+  await deleteDoc(doc(db, 'community_announcements', announcementId));
+}
+
+// ─── CLAN DISCUSSION & CHAT ──────────────────────────────────────
+
+export function subscribeClanMessages(
+  clanId: string,
+  onMessages: (messages: ClanMessage[]) => void,
+  onError?: (error: any) => void
+): () => void {
+  const q = query(
+    collection(db, 'clan_messages'),
+    where('clanId', '==', clanId),
+    limit(150)
+  );
+
+  return onSnapshot(
+    q,
+    (snap) => {
+      const msgs = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as ClanMessage))
+        .sort((a, b) => {
+          const timeA = a.createdAt && typeof (a.createdAt as any).toMillis === 'function'
+            ? (a.createdAt as any).toMillis()
+            : ((a.createdAt as any)?.seconds ? (a.createdAt as any).seconds * 1000 : 0);
+          const timeB = b.createdAt && typeof (b.createdAt as any).toMillis === 'function'
+            ? (b.createdAt as any).toMillis()
+            : ((b.createdAt as any)?.seconds ? (b.createdAt as any).seconds * 1000 : 0);
+          return timeA - timeB;
+        });
+      onMessages(msgs);
+    },
+    (err) => {
+      console.error('Error in clan chat subscription:', err);
+      onError?.(err);
+    }
+  );
+}
+
+export async function sendClanMessage(
+  data: Omit<ClanMessage, 'id' | 'createdAt' | 'updatedAt' | 'reactions' | 'isEdited' | 'isDeleted'>
+): Promise<string> {
+  const docRef = await addDoc(collection(db, 'clan_messages'), cleanDoc({
+    ...data,
+    text: (data.text || '').trim(),
+    imageUrl: data.imageUrl || null,
+    images: data.images || (data.imageUrl ? [data.imageUrl] : []),
+    replyTo: data.replyTo ? cleanDoc(data.replyTo) : null,
+    reactions: {},
+    isEdited: false,
+    isDeleted: false,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+
+  // Notify all clan members of the chat message (WhatsApp style)
+  let preview = data.text ? data.text.slice(0, 140) : (data.imageUrl ? '📷 Photo' : 'New message');
+  if (data.replyTo) {
+    preview = `↩️ ${data.replyTo.userName}: ${preview}`;
+  }
+
+  notifyClanMembers({
+    clanId: data.clanId,
+    senderId: data.userId,
+    senderName: data.userName,
+    title: `💬 ${data.userName}`,
+    body: preview,
+    type: 'clan_message',
+    link: `/clan/${data.clanId}`,
+    extraData: { messageId: docRef.id, clanId: data.clanId }
+  }).catch(err => console.warn('Failed to notify clan members for chat message:', err));
+
+  return docRef.id;
+}
+
+export async function editClanMessage(
+  messageId: string,
+  newText: string
+): Promise<void> {
+  const ref = doc(db, 'clan_messages', messageId);
+  await updateDoc(ref, {
+    text: newText.trim(),
+    isEdited: true,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function deleteClanMessage(
+  messageId: string
+): Promise<void> {
+  const ref = doc(db, 'clan_messages', messageId);
+  await updateDoc(ref, {
+    text: 'This message was deleted',
+    imageUrl: null,
+    images: [],
+    isDeleted: true,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function toggleClanMessageReaction(
+  messageId: string,
+  emoji: string,
+  userId: string
+): Promise<void> {
+  const ref = doc(db, 'clan_messages', messageId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return;
+  const msg = snap.data() as ClanMessage;
+  const reactions = { ...(msg.reactions || {}) };
+  const currentUsers = reactions[emoji] || [];
+
+  if (currentUsers.includes(userId)) {
+    reactions[emoji] = currentUsers.filter(uid => uid !== userId);
+    if (reactions[emoji].length === 0) {
+      delete reactions[emoji];
+    }
+  } else {
+    reactions[emoji] = [...currentUsers, userId];
+  }
+
+  await updateDoc(ref, { reactions });
+}
+
+// ─── CLAN JOIN REQUESTS (PRIVATE CLANS) ───────────────────────────
+
+export async function requestToJoinClan(
+  clanId: string,
+  clanName: string,
+  user: { uid: string; displayName?: string | null; photoURL?: string | null },
+  message?: string
+): Promise<string> {
+  // Check if there is already a pending request
+  const existingReq = await getUserClanJoinRequest(clanId, user.uid);
+  if (existingReq) {
+    return existingReq.id!;
+  }
+
+  const docRef = await addDoc(collection(db, 'clan_join_requests'), cleanDoc({
+    clanId,
+    clanName,
+    userId: user.uid,
+    userName: user.displayName || 'Athlete',
+    userPhoto: user.photoURL || '',
+    message: (message || '').trim(),
+    status: 'pending',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }));
+
+  // Notify clan leaders and co-leaders
+  try {
+    const members = await getClanMembers(clanId);
+    const leadership = members.filter(m => (m.role === 'leader' || m.role === 'co_leader') && m.userId !== user.uid);
+    const requesterName = user.displayName || 'Athlete';
+    const trimmedMsg = (message || '').trim();
+
+    const notifPromises = leadership.map(leader =>
+      addDoc(collection(db, 'app_notifications'), cleanDoc({
+        userId: leader.userId,
+        title: `🛡️ Join Request: ${clanName}`,
+        body: `${requesterName} requested to join your clan${trimmedMsg ? `: "${trimmedMsg}"` : '.'} Tap to review.`,
+        type: 'clan_join_request',
+        link: `/clan/${clanId}?requests=true`,
+        read: false,
+        createdAt: serverTimestamp(),
+        extra: {
+          clanId,
+          requestId: docRef.id,
+          requesterId: user.uid,
+          requesterName,
+        }
+      })).catch(err => console.warn('Failed to notify leader for join request:', leader.userId, err))
+    );
+
+    await Promise.allSettled(notifPromises);
+  } catch (err) {
+    console.error('Error notifying leaders of join request:', err);
+  }
+
+  return docRef.id;
+}
+
+export async function getClanJoinRequests(clanId: string): Promise<ClanJoinRequest[]> {
+  try {
+    const q = query(
+      collection(db, 'clan_join_requests'),
+      where('clanId', '==', clanId),
+      where('status', '==', 'pending'),
+      limit(50)
+    );
+    const snap = await getDocs(q);
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() } as ClanJoinRequest))
+      .sort((a, b) => {
+        const timeA = a.createdAt && typeof (a.createdAt as any).toMillis === 'function'
+          ? (a.createdAt as any).toMillis()
+          : ((a.createdAt as any)?.seconds ? (a.createdAt as any).seconds * 1000 : 0);
+        const timeB = b.createdAt && typeof (b.createdAt as any).toMillis === 'function'
+          ? (b.createdAt as any).toMillis()
+          : ((b.createdAt as any)?.seconds ? (b.createdAt as any).seconds * 1000 : 0);
+        return timeB - timeA;
+      });
+  } catch (err) {
+    console.error('Error fetching clan join requests:', err);
+    return [];
+  }
+}
+
+export async function getUserClanJoinRequest(clanId: string, userId: string): Promise<ClanJoinRequest | null> {
+  try {
+    const q = query(
+      collection(db, 'clan_join_requests'),
+      where('clanId', '==', clanId),
+      where('userId', '==', userId),
+      where('status', '==', 'pending'),
+      limit(1)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    return { id: snap.docs[0].id, ...snap.docs[0].data() } as ClanJoinRequest;
+  } catch (err) {
+    console.error('Error fetching user clan join request:', err);
+    return null;
+  }
+}
+
+export async function cancelClanJoinRequest(requestId: string): Promise<void> {
+  await deleteDoc(doc(db, 'clan_join_requests', requestId));
+}
+
+export async function acceptClanJoinRequest(
+  requestId: string,
+  clanId: string,
+  clanName: string,
+  requester: { userId: string; userName: string; userPhoto: string }
+): Promise<void> {
+  // 1. Update request status to accepted
+  const reqRef = doc(db, 'clan_join_requests', requestId);
+  await updateDoc(reqRef, {
+    status: 'accepted',
+    updatedAt: serverTimestamp(),
+  });
+
+  // 2. Add as active clan member
+  await joinClan(requester.userId, requester.userName, requester.userPhoto, clanId);
+
+  // 3. Notify the requester
+  await addDoc(collection(db, 'app_notifications'), {
+    userId: requester.userId,
+    title: `🎉 Clan Request Accepted!`,
+    body: `You are now a member of ${clanName}! Welcome to the clan.`,
+    type: 'clan_join_accepted',
+    link: `/clan/${clanId}`,
+    read: false,
+    createdAt: serverTimestamp(),
+    extra: { clanId, clanName }
+  }).catch(err => console.warn('Failed to notify accepted requester:', err));
+}
+
+export async function declineClanJoinRequest(
+  requestId: string,
+  clanId: string,
+  clanName: string,
+  requesterId: string
+): Promise<void> {
+  // 1. Update request status to declined
+  const reqRef = doc(db, 'clan_join_requests', requestId);
+  await updateDoc(reqRef, {
+    status: 'declined',
+    updatedAt: serverTimestamp(),
+  });
+
+  // 2. Notify the requester
+  await addDoc(collection(db, 'app_notifications'), {
+    userId: requesterId,
+    title: `Clan Request Update`,
+    body: `Your request to join ${clanName} was declined by the leadership.`,
+    type: 'clan_join_request',
+    link: `/clan/${clanId}`,
+    read: false,
+    createdAt: serverTimestamp(),
+    extra: { clanId, clanName }
+  }).catch(err => console.warn('Failed to notify declined requester:', err));
 }

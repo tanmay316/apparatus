@@ -5,8 +5,9 @@ import { X, Save, Upload } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { updateClan } from '@/services/community';
 import { useUIStore } from '@/stores/ui-store';
-import { ClanV2 } from '@/types';
+import { ClanV2, ClanVisibility } from '@/types';
 import { compressImageFile } from '@/utils/image-compression';
+import { CustomSelect } from '@/components/ui/CustomSelect';
 
 export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen: boolean, onClose: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -22,6 +23,7 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
 
   const [name, setName] = useState(clan.name);
   const [description, setDescription] = useState(clan.description);
+  const [visibility, setVisibility] = useState<ClanVisibility>(clan.visibility || 'public');
   const [tags, setTags] = useState(clan.tags.join(', '));
   const [coverUrl, setCoverUrl] = useState(clan.coverUrl || '');
   const [isCompressing, setIsCompressing] = useState(false);
@@ -47,6 +49,7 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
       await updateClan(clan.id!, {
         name: name.trim(),
         description: description.trim(),
+        visibility,
         tags: parsedTags,
         coverUrl: coverUrl || undefined
       });
@@ -99,6 +102,19 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
                 <textarea 
                   value={description} onChange={e => setDescription(e.target.value)}
                   className="input-field w-full h-24 resize-none text-bone"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-bone-dim mb-1 ml-1 uppercase">Visibility</label>
+                <CustomSelect
+                  className="w-full"
+                  value={visibility}
+                  onChange={(val) => setVisibility(val as ClanVisibility)}
+                  options={[
+                    { value: 'public', label: 'Public (Anyone can join directly)' },
+                    { value: 'private', label: 'Private (Request to join)' },
+                  ]}
                 />
               </div>
               

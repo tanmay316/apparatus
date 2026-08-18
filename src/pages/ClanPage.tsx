@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, Shield, Users, MapPin, Search, Plus, Target, CalendarDays, MessageSquare, Heart, CornerDownRight, Trophy, Sparkles, Bookmark, Share2 } from 'lucide-react';
+import { ChevronLeft, Shield, Users, MapPin, Search, Plus, Target, CalendarDays, MessageSquare, Heart, CornerDownRight, Trophy, Sparkles, Bookmark, Share2, Megaphone, MessageCircle, UserPlus, Clock, Lock } from 'lucide-react';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useAuthStore } from '@/stores/auth-store';
@@ -9,9 +9,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   getClan, joinClan, leaveClan, getClanMembers, updateClanMemberRole, transferLeadership,
   getClanPosts, createClanPost, toggleLikeClanPost, getPostComments, createPostComment,
-  getClanChallenges, getClanEvents, deleteChallenge, deleteSimpleEvent, deleteClan
+  getClanChallenges, getClanEvents, deleteChallenge, deleteSimpleEvent, deleteClan,
+  getClanAnnouncements, getUserClanJoinRequest, getClanJoinRequests, cancelClanJoinRequest
 } from '@/services/community';
-import { ClanMembership, ClanV2, CommunityPost, ChallengeV2, SimpleEvent } from '@/types';
+import { ClanMembership, ClanV2, CommunityPost, ChallengeV2, SimpleEvent, CommunityAnnouncement, ClanJoinRequest } from '@/types';
 import { useUIStore } from '@/stores/ui-store';
 import { CreateChallengeSheet } from '@/components/community/CreateChallengeSheet';
 import { CreateEventSheet } from '@/components/community/CreateEventSheet';
@@ -24,6 +25,11 @@ import { EditClanSheet } from '@/components/community/EditClanSheet';
 import { EditChallengeSheet } from '@/components/community/EditChallengeSheet';
 import { EditEventSheet } from '@/components/community/EditEventSheet';
 import { ClanPostItem } from '@/components/community/ClanPostItem';
+import { ClanAnnouncementsModal } from '@/components/community/ClanAnnouncementsModal';
+import { ClanAnnouncementBanner } from '@/components/community/ClanAnnouncementBanner';
+import { ClanDiscussionTab } from '@/components/community/ClanDiscussionTab';
+import { RequestJoinClanModal } from '@/components/community/RequestJoinClanModal';
+import { ClanJoinRequestsModal } from '@/components/community/ClanJoinRequestsModal';
 
 const nmBtn = "bg-ink shadow-sm border border-line/20 hover:border-line/40 transition-colors";
 const nmInset = "bg-ink-2 shadow-inner border border-line/10";
@@ -50,7 +56,8 @@ export function ClanPage() {
   const isAdmin = !!profile?.isAdmin;
   const { showToast, confirm } = useUIStore();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'posts' | 'about' | 'members' | 'challenges' | 'events'>('posts');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<'chat' | 'posts' | 'about' | 'members' | 'challenges' | 'events'>('chat');
   
   const [createChallengeOpen, setCreateChallengeOpen] = useState(false);
   const [createEventOpen, setCreateEventOpen] = useState(false);
@@ -61,6 +68,9 @@ export function ClanPage() {
   const [editClanOpen, setEditClanOpen] = useState(false);
   const [editingChallenge, setEditingChallenge] = useState<ChallengeV2 | null>(null);
   const [editingEvent, setEditingEvent] = useState<SimpleEvent | null>(null);
+  const [announcementsOpen, setAnnouncementsOpen] = useState(false);
+  const [requestJoinOpen, setRequestJoinOpen] = useState(false);
+  const [joinRequestsOpen, setJoinRequestsOpen] = useState(searchParams.get('requests') === 'true');
 
   const { data: clan, isLoading: loadingClan } = useQuery({
     queryKey: ['clan', clanId],
@@ -92,10 +102,49 @@ export function ClanPage() {
     enabled: !!clanId
   });
 
+  const { data: announcements = [] } = useQuery({
+    queryKey: ['clanAnnouncements', clanId],
+    queryFn: () => getClanAnnouncements(clanId!),
+    enabled: !!clanId
+  });
+
   const myMembership = members.find(m => m.userId === user?.uid);
   const isLeader = myMembership?.role === 'leader' || isAdmin;
   const isCoLeader = myMembership?.role === 'co_leader';
   const isMember = !!myMembership || isAdmin;
+  const canManage = isLeader || isCoLeader || isAdmin;
+
+  const { data: userJoinRequest } = useQuery({
+    queryKey: ['userClanJoinRequest', clanId, user?.uid],
+    queryFn: () => (clanId && user ? getUserClanJoinRequest(clanId, user.uid) : null),
+    enabled: !!clanId && !!user && !isMember
+  });
+
+  const { data: pendingRequests = [] } = useQuery({
+    queryKey: ['clanJoinRequests', clanId],
+    queryFn: () => (clanId ? getClanJoinRequests(clanId) : []),
+    enabled: !!clanId && canManage
+  });
+
+  const pinnedAnnouncement = announcements.find(a => a.isPinned) || announcements[0];
+
+  const cancelRequestMutation = useMutation({
+    mutationFn: async (reqId: string) => {
+      const ok = await confirm({
+        title: 'Cancel Request',
+        message: 'Cancel your request to join this clan?',
+        confirmText: 'Cancel Request',
+        type: 'danger',
+        icon: 'trash',
+      });
+      if (!ok) return;
+      await cancelClanJoinRequest(reqId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userClanJoinRequest', clanId, user?.uid] });
+      showToast('Join request cancelled', 'info');
+    }
+  });
 
   const joinMutation = useMutation({
     mutationFn: async () => {
@@ -248,7 +297,54 @@ export function ClanPage() {
           <ChevronLeft size={24} />
         </button>
         <span className="font-display tracking-widest text-bone uppercase line-clamp-1 max-w-[200px]">{clan.name}</span>
-        <div className="w-10" />
+        
+        <div className="flex items-center gap-1 -mr-2">
+          {/* Discussion Shortcut Button */}
+          <button
+            onClick={() => setActiveTab('chat')}
+            className={`p-2 rounded-full hover:bg-ink-2 transition-colors ${
+              activeTab === 'chat' ? 'text-sienna bg-sienna/10' : 'text-bone-dim hover:text-bone'
+            }`}
+            title="Clan Discussion"
+          >
+            <MessageCircle size={20} />
+          </button>
+
+          {/* Membership Requests Button for Leadership */}
+          {canManage && pendingRequests.length > 0 && (
+            <button
+              onClick={() => setJoinRequestsOpen(true)}
+              className="relative p-2 rounded-full hover:bg-ink-2 text-amber-400 transition-colors"
+              title="Membership Requests"
+            >
+              <UserPlus size={20} />
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-ink animate-pulse" />
+            </button>
+          )}
+
+          {/* Announcement Icon Button */}
+          <button
+            onClick={() => setAnnouncementsOpen(true)}
+            className="relative p-2 rounded-full hover:bg-ink-2 text-bone-dim hover:text-amber-400 transition-colors"
+            title="Clan Announcements"
+          >
+            <Megaphone size={20} />
+            {announcements.length > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-ink animate-pulse" />
+            )}
+          </button>
+
+          {/* Edit Clan Settings for Leader */}
+          {isLeader && (
+            <button
+              onClick={() => setEditClanOpen(true)}
+              className="p-2 rounded-full hover:bg-ink-2 text-bone-dim hover:text-bone transition-colors"
+              title="Clan Settings"
+            >
+              <Shield size={18} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Cover Image */}
@@ -274,12 +370,14 @@ export function ClanPage() {
               {clan.location?.city && (
                 <span className="flex items-center gap-1.5"><MapPin size={14} className="text-sienna" /> {clan.location.city}</span>
               )}
-              <span>• {clan.visibility}</span>
+              <span className="flex items-center gap-1">
+                • {clan.visibility === 'private' ? 'Private Clan' : 'Public Clan'}
+              </span>
             </div>
           </div>
         </div>
         
-        <div className="flex gap-3 mt-4">
+        <div className="flex flex-wrap items-center gap-3 mt-4">
           {isMember ? (
             <button 
               onClick={() => leaveMutation.mutate()}
@@ -288,31 +386,89 @@ export function ClanPage() {
             >
               {leaveMutation.isPending ? 'Leaving...' : 'Leave Clan'}
             </button>
+          ) : clan.visibility === 'private' ? (
+            userJoinRequest ? (
+              <button 
+                onClick={() => userJoinRequest.id && cancelRequestMutation.mutate(userJoinRequest.id)}
+                disabled={cancelRequestMutation.isPending}
+                className="px-6 py-2 rounded-xl text-sm font-bold text-amber-400 bg-amber-400/10 border border-amber-400/30 flex items-center gap-2 hover:bg-amber-400/20 transition-all active:scale-95"
+                title="Click to cancel join request"
+              >
+                <Clock size={15} />
+                <span>{cancelRequestMutation.isPending ? 'Cancelling...' : 'Request Pending'}</span>
+              </button>
+            ) : (
+              <button 
+                onClick={() => setRequestJoinOpen(true)}
+                className="px-7 py-2 rounded-xl text-sm font-bold bg-sienna text-bg shadow-[0_0_15px_rgba(205,111,72,0.3)] hover:shadow-[0_0_25px_rgba(205,111,72,0.5)] flex items-center gap-2 transition-all active:scale-95"
+              >
+                <Lock size={15} />
+                <span>Request to Join</span>
+              </button>
+            )
           ) : (
             <button 
               onClick={() => joinMutation.mutate()}
               disabled={joinMutation.isPending}
-              className="px-8 py-2 rounded-xl text-sm font-bold bg-sienna text-bg shadow-[0_0_15px_rgba(205,111,72,0.3)] hover:shadow-[0_0_25px_rgba(205,111,72,0.5)] transition-all"
+              className="px-8 py-2 rounded-xl text-sm font-bold bg-sienna text-bg shadow-[0_0_15px_rgba(205,111,72,0.3)] hover:shadow-[0_0_25px_rgba(205,111,72,0.5)] transition-all active:scale-95"
             >
               {joinMutation.isPending ? 'Joining...' : 'Join Clan'}
             </button>
           )}
+
+          {/* Pending Membership Requests for Leaders */}
+          {canManage && pendingRequests.length > 0 && (
+            <button
+              onClick={() => setJoinRequestsOpen(true)}
+              className="px-4 py-2 rounded-xl text-sm font-bold text-amber-400 bg-amber-400/10 border border-amber-400/30 hover:bg-amber-400/20 flex items-center gap-2 transition-all active:scale-95"
+            >
+              <UserPlus size={15} />
+              <span>Requests</span>
+              <span className="text-[10px] font-mono font-bold bg-amber-400 text-bg px-1.5 py-0.2 rounded-full">
+                {pendingRequests.length}
+              </span>
+            </button>
+          )}
+
+          {/* Announcements Button */}
+          <button
+            onClick={() => setAnnouncementsOpen(true)}
+            className={`px-4 py-2 rounded-xl text-sm font-bold text-bone flex items-center gap-2 ${nmBtn}`}
+          >
+            <Megaphone size={15} className="text-amber-400" />
+            <span>Announcements</span>
+            {announcements.length > 0 && (
+              <span className="text-[10px] font-mono font-bold bg-amber-400/20 text-amber-400 px-2 py-0.5 rounded-full border border-amber-400/30">
+                {announcements.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto mt-6">
         {/* Tabs */}
         <div className="px-6 border-b border-line shrink-0 flex gap-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {['posts', 'about', 'members', 'challenges', 'events'].map(tab => (
+          {[
+            { id: 'chat', label: 'Discussion' },
+            { id: 'posts', label: 'Posts' },
+            { id: 'about', label: 'About' },
+            { id: 'members', label: 'Members' },
+            { id: 'challenges', label: 'Challenges' },
+            { id: 'events', label: 'Events' },
+          ].map(tab => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab as any)}
-              className={`pb-4 relative font-display text-lg tracking-wide capitalize whitespace-nowrap transition-colors ${
-                activeTab === tab ? 'text-bone' : 'text-bone-dim hover:text-bone'
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`pb-4 relative font-display text-lg tracking-wide whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                activeTab === tab.id ? 'text-bone' : 'text-bone-dim hover:text-bone'
               }`}
             >
-              {tab}
-              {activeTab === tab && (
+              <span>{tab.label}</span>
+              {tab.id === 'chat' && isMember && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              )}
+              {activeTab === tab.id && (
                 <motion.div layoutId="clan_detail_tab" className="absolute bottom-0 left-0 right-0 h-1 bg-sienna rounded-t-full" />
               )}
             </button>
@@ -321,8 +477,28 @@ export function ClanPage() {
 
         {/* Tab Content Area */}
         <div className="p-6">
+          {activeTab === 'chat' && (
+            <div className="animate-in fade-in duration-300">
+              <ClanDiscussionTab
+                clanId={clanId!}
+                clanName={clan.name}
+                isMember={isMember}
+                userRole={myMembership?.role}
+                onJoinClan={() => joinMutation.mutate()}
+              />
+            </div>
+          )}
+
           {activeTab === 'posts' && (
             <div className="space-y-6 animate-in fade-in duration-500">
+              {/* Pinned Announcement Banner */}
+              {pinnedAnnouncement && (
+                <ClanAnnouncementBanner
+                  announcement={pinnedAnnouncement}
+                  onClick={() => setAnnouncementsOpen(true)}
+                />
+              )}
+
               {isMember ? (
                 <div className="space-y-4">
                   {posts.map(p => (
@@ -681,6 +857,35 @@ export function ClanPage() {
           />
         )}
       </AnimatePresence>
+
+      {/* Clan Announcements Sheet */}
+      <ClanAnnouncementsModal
+        clanId={clanId!}
+        clanName={clan?.name || 'Clan'}
+        canManage={canManage}
+        userRole={myMembership?.role}
+        isOpen={announcementsOpen}
+        onClose={() => setAnnouncementsOpen(false)}
+      />
+
+      {/* Private Clan Join Request Sheet (For prospective members) */}
+      <RequestJoinClanModal
+        clanId={clanId!}
+        clanName={clan?.name || 'Clan'}
+        isOpen={requestJoinOpen}
+        onClose={() => setRequestJoinOpen(false)}
+      />
+
+      {/* Clan Join Requests Review Sheet (For Leaders & Co-Leaders) */}
+      <ClanJoinRequestsModal
+        clanId={clanId!}
+        clanName={clan?.name || 'Clan'}
+        isOpen={joinRequestsOpen}
+        onClose={() => {
+          setJoinRequestsOpen(false);
+          setSearchParams({});
+        }}
+      />
 
       {/* FAB for Create Post */}
       {isMember && activeTab === 'posts' && (

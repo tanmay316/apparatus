@@ -49,20 +49,47 @@ export async function clearNotification(id: number) {
 }
 
 export async function showNotification(id: number, title: string, body: string, extraData?: any) {
+  const safeId = id || (Date.now() % 2147483647);
   if (Capacitor.isNativePlatform()) {
-    await LocalNotifications.schedule({
-      notifications: [
-        {
-          title,
+    try {
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            title,
+            body,
+            id: safeId,
+            extra: extraData,
+            autoCancel: true,
+            smallIcon: 'ic_stat_icon_config_sample',
+            sound: 'default',
+          }
+        ]
+      });
+    } catch (err) {
+      console.warn('Failed to schedule local notification:', err);
+    }
+  } else if ('Notification' in window) {
+    if (Notification.permission === 'granted') {
+      try {
+        new Notification(title, {
           body,
-          id,
-          extra: extraData,
-          autoCancel: true,
+          tag: safeId.toString(),
+          icon: '/favicon.ico',
+        });
+      } catch (err) {
+        console.warn('Web notification failed:', err);
+      }
+    } else if (Notification.permission !== 'denied') {
+      Notification.requestPermission().then((perm) => {
+        if (perm === 'granted') {
+          new Notification(title, {
+            body,
+            tag: safeId.toString(),
+            icon: '/favicon.ico',
+          });
         }
-      ]
-    });
-  } else if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, { body, tag: id.toString() });
+      });
+    }
   }
 }
 

@@ -18,6 +18,7 @@ import { CommunityPost, PostComment } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { CelebrationPodiumCard } from './CelebrationPodiumCard';
 import { EditPostSheet } from './EditPostSheet';
+import { ClanPollCard } from './ClanPollCard';
 import { getAppShareUrl, shareContent } from '@/lib/share';
 
 interface SinglePostSheetProps {
@@ -520,6 +521,17 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                       </div>
                     ))}
                   </div>
+                )}
+
+                {/* Attached Poll */}
+                {activePost?.poll && (
+                  <ClanPollCard
+                    postId={activePost.id!}
+                    poll={activePost.poll}
+                    onPollUpdated={(updatedPoll) => {
+                      setCurrentPost(prev => (prev ? { ...prev, poll: updatedPoll } : null));
+                    }}
+                  />
                 )}
 
                 {/* Action Bar (Like, Comment, Save, Share) */}

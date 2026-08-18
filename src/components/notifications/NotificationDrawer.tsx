@@ -1,12 +1,14 @@
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, X, Calendar, Ticket, CheckCircle2, AlertCircle, Sparkles, Megaphone, Check } from 'lucide-react';
+import { Bell, X, Calendar, Ticket, CheckCircle2, AlertCircle, Sparkles, Megaphone, Check, MessageCircle, CheckSquare, UserPlus } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { getUserNotifications, markNotificationAsRead } from '@/services/notifications';
 import type { AppNotificationItem, AppNotificationType } from '@/types';
 
 export function NotificationDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const { data: notifications = [], isLoading } = useQuery({
@@ -31,8 +33,23 @@ export function NotificationDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
       case 'ticket_confirmed': return <Ticket size={18} className="text-emerald-400" />;
       case 'registration_approved': return <CheckCircle2 size={18} className="text-emerald-400" />;
       case 'event_cancelled': return <AlertCircle size={18} className="text-rose-400" />;
-      case 'community_announcement': return <Megaphone size={18} className="text-sienna" />;
+      case 'community_announcement':
+      case 'clan_announcement': return <Megaphone size={18} className="text-amber-400" />;
+      case 'clan_poll': return <CheckSquare size={18} className="text-indigo-400" />;
+      case 'clan_message': return <MessageCircle size={18} className="text-sienna" />;
+      case 'clan_join_request': return <UserPlus size={18} className="text-amber-400" />;
+      case 'clan_join_accepted': return <CheckCircle2 size={18} className="text-emerald-400" />;
       default: return <Sparkles size={18} className="text-amber" />;
+    }
+  };
+
+  const handleNotificationClick = (n: AppNotificationItem) => {
+    if (n.id && !n.read) {
+      markReadMutation.mutate(n.id);
+    }
+    if (n.link) {
+      navigate(n.link);
+      onClose();
     }
   };
 
@@ -70,7 +87,7 @@ export function NotificationDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
                 notifications.map((n: AppNotificationItem) => (
                   <div 
                     key={n.id} 
-                    onClick={() => n.id && !n.read && markReadMutation.mutate(n.id)}
+                    onClick={() => handleNotificationClick(n)}
                     className={`p-3.5 rounded-xl border transition-colors cursor-pointer flex items-start gap-3 ${
                       n.read ? 'bg-ink-2/40 border-line/20 opacity-70' : 'bg-ink-2 border-sienna/40 shadow-sm'
                     }`}
