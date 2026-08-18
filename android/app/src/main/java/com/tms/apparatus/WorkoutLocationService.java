@@ -82,6 +82,15 @@ public final class WorkoutLocationService extends Service {
     private static final float MAX_ACCEPTED_ACCURACY_M = 55.0f;
     private static final long GPS_SETTLING_DURATION_MS = 6000L; // First 6s suppresses noise while anchor settles
     private static final float SPEED_EMA_ALPHA = 0.25f;
+    private static final float SPEED_EMA_ALPHA_CAUTIOUS = 0.12f; // Lower alpha when still, skeptical of initial noise
+
+    // Hysteresis thresholds for robust movement detection
+    private static final float MOVING_START_SPEED_KMH = 2.5f;   // Sustained speed above this to START moving
+    private static final float MOVING_STOP_SPEED_KMH = 0.8f;    // Sustained speed below this to STOP moving
+    private static final int CONSECUTIVE_MOVING_SAMPLES = 3;     // 3 consecutive "fast" samples to transition to moving
+    private static final int CONSECUTIVE_STILL_SAMPLES = 5;      // 5 consecutive "slow" samples to transition to still
+    private static final long AUTO_PAUSE_TIMEOUT_MS = 8000L;     // 8 seconds of stillness before auto-pause
+    private static final float MIN_DISTANCE_GATE_M = 3.0f;       // Minimum displacement to add distance even when moving
 
     // Fused Location & System handles
     private FusedLocationProviderClient fusedClient;
@@ -95,6 +104,8 @@ public final class WorkoutLocationService extends Service {
     private Location lastAcceptedLocation = null;
     private Location lastRawLocation = null;
     private boolean isCurrentlyMoving = false;
+    private int consecutiveMovingSamples = 0;
+    private int consecutiveStillSamples = 0;
     private final List<Double> altBuffer = new ArrayList<>();
     private Double lastElevationAnchor = null;
     private long lastMovementTimeMs = 0L;
@@ -214,6 +225,8 @@ public final class WorkoutLocationService extends Service {
             lastAcceptedLocation = null;
             lastRawLocation = null;
             isCurrentlyMoving = false;
+            consecutiveMovingSamples = 0;
+            consecutiveStillSamples = 0;
             emaSpeedKmh = 0f;
             lastMovementTimeMs = 0L;
             sessionSettleUntil = System.currentTimeMillis() + GPS_SETTLING_DURATION_MS;
@@ -260,7 +273,9 @@ public final class WorkoutLocationService extends Service {
         lastAcceptedLocation = null;
         lastRawLocation = null;
         emaSpeedKmh = prefs.getFloat(KEY_CURRENT_SPEED_KMH, 0f);
-        isCurrentlyMoving = emaSpeedKmh >= 1.5f;
+        isCurrentlyMoving = emaSpeedKmh >= MOVING_START_SPEED_KMH;
+        consecutiveMovingSamples = isCurrentlyMoving ? CONSECUTIVE_MOVING_SAMPLES : 0;
+        consecutiveStillSamples = isCurrentlyMoving ? 0 : CONSECUTIVE_STILL_SAMPLES;
         lastMovementTimeMs = prefs.getLong(KEY_LAST_TIMESTAMP, 0L);
 
         if (prefs.contains(KEY_LAST_LAT) && prefs.contains(KEY_LAST_LNG)) {
@@ -462,6 +477,10 @@ public final class WorkoutLocationService extends Service {
             float candidateSpeedKmh;
             if (nativeSpeedKmh >= 2.0f) {
                 candidateSpeedKmh = nativeSpeedKmh;
+            } else if (!isCurrentlyMoving && !hasHighConfidenceSpeed) {
+                // When stationary and no Doppler, clamp derived speed from position drift
+                // GPS jitter of 5m/1s = 18 km/h derived — must not poison EMA
+                candidateSpeedKmh = Math.min(derivedSpeedKmh, 1.5f);
             } else {
                 candidateSpeedKmh = derivedSpeedKmh;
             }
@@ -470,7 +489,8 @@ public final class WorkoutLocationService extends Service {
                 candidateSpeedKmh = 0f;
             }
 
-            // Feed EMA speed filter
+            // Feed EMA speed filter with adaptive alpha
+            float alpha = isCurrentlyMoving ? SPEED_EMA_ALPHA : SPEED_EMA_ALPHA_CAUTIOUS;
             if (candidateSpeedKmh < 0.8f && rawDeltaDistanceM < 1.5f) {
                 // If moving very slowly or barely any displacement, decay speed
                 emaSpeedKmh = (1f - SPEED_EMA_ALPHA) * emaSpeedKmh;
@@ -478,35 +498,68 @@ public final class WorkoutLocationService extends Service {
             } else if (emaSpeedKmh == 0f) {
                 emaSpeedKmh = candidateSpeedKmh;
             } else {
-                emaSpeedKmh = (SPEED_EMA_ALPHA * candidateSpeedKmh) + ((1f - SPEED_EMA_ALPHA) * emaSpeedKmh);
+                emaSpeedKmh = (alpha * candidateSpeedKmh) + ((1f - alpha) * emaSpeedKmh);
             }
 
             // Spatial displacement noise threshold based on GPS accuracy
             float dynamicNoiseThreshold = Math.max(5.0f, accuracy * 0.40f);
-            if (nativeSpeedKmh >= 1.8f) {
+            if (nativeSpeedKmh >= 2.5f) {
                 dynamicNoiseThreshold = 0f; // High confidence hardware doppler speed
             }
 
-            // True Movement Determination:
-            // Moving if EMA speed >= 1.0 km/h, hardware speed >= 1.0 km/h, or physical displacement >= noise threshold
-            boolean hasSpeedEvidence = (emaSpeedKmh >= 1.0f || nativeSpeedKmh >= 1.0f);
-            boolean hasSpatialEvidence = (deltaDistanceM >= dynamicNoiseThreshold);
+            // ─── Hysteresis-Based Movement Detection ───
+            // Requires CONSECUTIVE samples to transition states, preventing single-sample flicker.
+            boolean sampleLooksMoving = false;
+            if (!isSettling) {
+                boolean hasSpeedEvidence = (emaSpeedKmh >= (isCurrentlyMoving ? MOVING_STOP_SPEED_KMH : MOVING_START_SPEED_KMH))
+                        || (nativeSpeedKmh >= (isCurrentlyMoving ? 1.5f : 2.5f));
+                boolean hasSpatialEvidence = (deltaDistanceM >= dynamicNoiseThreshold) && dynamicNoiseThreshold > 0f;
+                sampleLooksMoving = hasSpeedEvidence || hasSpatialEvidence;
+            }
 
-            if (!isSettling && (hasSpeedEvidence || hasSpatialEvidence)) {
-                isCurrentlyMoving = true;
-                currentSpeedKmh = emaSpeedKmh > 0.5f ? emaSpeedKmh : Math.max(derivedSpeedKmh, 0.5f);
+            if (isCurrentlyMoving) {
+                // Currently MOVING — need consecutive still samples to stop
+                if (sampleLooksMoving) {
+                    consecutiveStillSamples = 0; // reset still counter
+                    currentSpeedKmh = emaSpeedKmh > 0.5f ? emaSpeedKmh : Math.max(derivedSpeedKmh, 0.5f);
+                } else {
+                    consecutiveStillSamples++;
+                    if (consecutiveStillSamples >= CONSECUTIVE_STILL_SAMPLES) {
+                        // Confirmed transition: MOVING → STILL
+                        isCurrentlyMoving = false;
+                        consecutiveMovingSamples = 0;
+                        currentSpeedKmh = 0f;
+                    } else {
+                        // Still in grace period — maintain moving but show decaying speed
+                        currentSpeedKmh = emaSpeedKmh > 0.3f ? emaSpeedKmh : 0f;
+                    }
+                }
             } else {
-                isCurrentlyMoving = false;
-                currentSpeedKmh = 0f;
+                // Currently STILL — need consecutive moving samples to start
+                if (sampleLooksMoving) {
+                    consecutiveMovingSamples++;
+                    if (consecutiveMovingSamples >= CONSECUTIVE_MOVING_SAMPLES) {
+                        // Confirmed transition: STILL → MOVING
+                        isCurrentlyMoving = true;
+                        consecutiveStillSamples = 0;
+                        currentSpeedKmh = emaSpeedKmh > 0.5f ? emaSpeedKmh : Math.max(derivedSpeedKmh, 0.5f);
+                    } else {
+                        // Not yet confirmed — stay still
+                        currentSpeedKmh = 0f;
+                    }
+                } else {
+                    consecutiveMovingSamples = 0; // reset moving counter
+                    currentSpeedKmh = 0f;
+                }
             }
 
             isMoving = isCurrentlyMoving;
 
             // Acceptance Gate:
-            // When moving: accept whenever displacement >= 1.0m for continuous, detailed curves.
+            // When moving: accept when displacement >= minimum gate AND >= accuracy-scaled floor
             // When stationary: accept only if physical displacement breaks past the noise threshold.
-            float requiredDisplacement = isMoving ? 1.0f : dynamicNoiseThreshold;
-            boolean movementConfirmed = !isSettling && isMoving && (deltaDistanceM >= requiredDisplacement);
+            float minDistGate = isMoving ? Math.max(MIN_DISTANCE_GATE_M, accuracy * 0.25f) : dynamicNoiseThreshold;
+            boolean movementConfirmed = !isSettling && isMoving && (deltaDistanceM >= minDistGate);
 
             if (movementConfirmed) {
                 isAccepted = true;
@@ -574,7 +627,7 @@ public final class WorkoutLocationService extends Service {
             lastMovementTimeMs = location.getTime();
         }
 
-        boolean isAutoPaused = !isMoving && (location.getTime() - lastMovementTimeMs >= 4000L);
+        boolean isAutoPaused = !isMoving && (location.getTime() - lastMovementTimeMs >= AUTO_PAUSE_TIMEOUT_MS);
 
         try {
             JSONObject pointJson = locationToJson(location, accuracy, distanceMeters, movingDurationSec, currentSpeedKmh, maxSpeedKmh, elevationGainM, isMoving, isAccepted, isAutoPaused);

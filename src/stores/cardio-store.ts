@@ -290,7 +290,7 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
   let autoPausedAt = store.autoPausedAt;
   let totalPausedMs = store.totalPausedMs;
 
-  const isPointMoving = point.isMoving === true || currentSpeedKmh >= 2.0;
+  const isPointMoving = point.isMoving === true || currentSpeedKmh >= 2.5;
   if (isPointMoving) {
     if (autoPauseStatus === 'PAUSED' && autoPausedAt) {
       totalPausedMs += (now - autoPausedAt);
@@ -299,9 +299,10 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
     autoPausedAt = null;
     lastMovementTs = now;
   } else {
-    // Stationary candidate
-    const stationaryTimeMs = lastMovementTs > 0 ? (now - lastMovementTs) : 4000;
-    if (point.isAutoPaused || stationaryTimeMs >= 3000) {
+    // Stationary candidate — trust native isAutoPaused as primary signal,
+    // fallback to 8s frontend timeout matching native AUTO_PAUSE_TIMEOUT_MS
+    const stationaryTimeMs = lastMovementTs > 0 ? (now - lastMovementTs) : 8000;
+    if (point.isAutoPaused || stationaryTimeMs >= 8000) {
       if (autoPauseStatus !== 'PAUSED') {
         autoPauseStatus = 'PAUSED';
         autoPausedAt = now;
@@ -309,12 +310,18 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
     }
   }
 
+  // Smooth displayed speed: below 3 km/h, snap to nearest 0.5 to prevent visual jitter
+  let displaySpeed = Math.round(currentSpeedKmh * 10) / 10;
+  if (displaySpeed < 3.0 && displaySpeed > 0) {
+    displaySpeed = Math.round(currentSpeedKmh * 2) / 2; // round to nearest 0.5
+  }
+
   useCardioStore.setState({
     currentLocation,
     routePoints: nextRoutePoints,
     distanceKm: nativeDistKm,
     movingDurationSec,
-    currentSpeedKmh: Math.round(currentSpeedKmh * 10) / 10,
+    currentSpeedKmh: displaySpeed,
     maxSpeedKmh: Math.round(maxSpeedKmh * 10) / 10,
     elevationGainM: Math.round(elevationGainM * 10) / 10,
     gpsAccuracy: point.accuracy ?? store.gpsAccuracy,
