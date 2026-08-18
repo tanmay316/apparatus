@@ -155,8 +155,9 @@ export function Dashboard() {
   // Session progress for TodayFocusCard
   let sessionProgress = 0;
   if (store.isActive) {
-    const completedEx = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed)).length;
-    const totalEx = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown].length;
+    const logs = store.logs || {};
+    const completedEx = Object.values(logs).filter(ex => (ex.sets || []).some(s => s.completed)).length;
+    const totalEx = [...(store.warmup || []), ...(store.skillWork || []), ...(store.strength || []), ...(store.cooldown || [])].length;
     sessionProgress = totalEx ? Math.round((completedEx / totalEx) * 100) : 0;
   }
 
@@ -245,7 +246,7 @@ export function Dashboard() {
 
       {/* 1. Hero */}
       <HeroDashboard
-        displayName={profile.displayName}
+        displayName={profile.displayName || 'Athlete'}
         streak={streak}
         xp={xp}
         completedCount={completedCount}

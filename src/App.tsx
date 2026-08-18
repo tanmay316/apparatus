@@ -8,7 +8,13 @@ import { Toast } from '@/components/ui/Toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { requestNotificationPermission, scheduleDailyReminders, showNotification } from '@/utils/notifications';
+import { 
+  requestNotificationPermission, 
+  scheduleDailyReminders, 
+  showNotification,
+  setupNotificationChannels,
+  initPushNotifications
+} from '@/utils/notifications';
 import { UpdatePopup } from '@/components/ui/UpdatePopup';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
@@ -37,6 +43,7 @@ const CalendarPage = lazy(() => import('@/pages/CalendarPage').then(m => ({ defa
 const FeedPage = lazy(() => import('@/pages/FeedPage').then(m => ({ default: m.FeedPage })));
 const CommunityPage = lazy(() => import('@/pages/CommunityPage').then(m => ({ default: m.CommunityPage })));
 const ClanPage = lazy(() => import('@/pages/ClanPage').then(m => ({ default: m.ClanPage })));
+const ClanChatPage = lazy(() => import('@/pages/ClanChatPage').then(m => ({ default: m.ClanChatPage })));
 const AchievementsPage = lazy(() => import('@/pages/AchievementsPage').then(m => ({ default: m.AchievementsPage })));
 const SkillsPage = lazy(() => import('@/pages/SkillsPage').then(m => ({ default: m.SkillsPage })));
 const MeasurementsPage = lazy(() => import('@/pages/MeasurementsPage').then(m => ({ default: m.MeasurementsPage })));
@@ -138,6 +145,9 @@ function PreferencesSync() {
       CapacitorUpdater.notifyAppReady().catch(() => {});
     }
 
+    // Setup Android notification channels
+    setupNotificationChannels();
+
     if (Capacitor.isNativePlatform()) {
       try {
         LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
@@ -146,7 +156,7 @@ function PreferencesSync() {
           if (data?.link) {
             window.location.href = data.link;
           } else if (data?.clanId) {
-            window.location.href = `/clan/${data.clanId}`;
+            window.location.href = `/clan/${data.clanId}/chat`;
           } else if (data?.type === 'cardio' || id === 101 || data?.session === 'cardio') {
             window.location.href = '/cardio';
           } else if (data?.type === 'gym' || id === 1001 || id === 102 || data?.session === 'gym') {
@@ -188,6 +198,10 @@ function PreferencesSync() {
   // Real-time notification listener for in-app & mobile push delivery
   useEffect(() => {
     if (!user) return;
+
+    // Register push notification token on mobile
+    initPushNotifications(user.uid);
+
     const mountedAt = Date.now();
     const q = query(
       collection(db, 'app_notifications'),
@@ -245,7 +259,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <PreferencesSync />
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ActiveSessionRestorer />
         <Suspense fallback={<PageLoader />}>
           <Routes>
@@ -268,6 +282,7 @@ export function App() {
               <Route path="post/:id" element={<SinglePostPage />} />
               <Route path="community" element={<CommunityPage />} />
               <Route path="clan/:id" element={<ErrorBoundary><ClanPage /></ErrorBoundary>} />
+              <Route path="clan/:id/chat" element={<ErrorBoundary><ClanChatPage /></ErrorBoundary>} />
               <Route path="nutrition" element={<NutritionDashboard />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="profile/:username" element={<ProfilePage />} />

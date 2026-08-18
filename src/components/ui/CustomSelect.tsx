@@ -8,6 +8,9 @@ export interface SelectOption {
 }
 
 interface CustomSelectProps {
+  id?: string;
+  name?: string;
+  ariaLabel?: string;
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
@@ -18,6 +21,9 @@ interface CustomSelectProps {
 }
 
 export function CustomSelect({
+  id,
+  name,
+  ariaLabel,
   value,
   onChange,
   options,
@@ -47,6 +53,9 @@ export function CustomSelect({
   return (
     <div className={`relative ${className}`} ref={containerRef}>
       <button
+        id={id}
+        name={name}
+        aria-label={ariaLabel || placeholder}
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}

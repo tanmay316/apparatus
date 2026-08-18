@@ -97,6 +97,54 @@
         { "fieldPath": "postId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "clan_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clanId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clan_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clanId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clan_memberships",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clanId", "order": "ASCENDING" },
+        { "fieldPath": "joinedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "clan_memberships",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "challenges_v2",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clanId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "simple_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clanId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

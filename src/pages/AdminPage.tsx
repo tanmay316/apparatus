@@ -9,14 +9,14 @@ import { useUIStore } from '@/stores/ui-store';
 import { db } from '@/lib/firebase';
 import { SAMPLE_PLANS } from '@/data/sample-plans';
 import { seedLibraryExercises } from '@/services/library';
-import { getAdminBans, getAdminOverview, getAdminReports, getAdminUsers, setUserBan, updateReportStatus, type AdminReport } from '@/services/admin';
+import { getAdminBans, getAdminOverview, getAdminReports, getAdminUsers, setUserBan, updateReportStatus, calculateStorageUsage, cleanupDatabaseStorage, type AdminReport, type StorageCleanupOptions, type StorageUsageResult } from '@/services/admin';
 import { deletePlan } from '@/services/plans';
 import { getSystemLogs, clearAllSystemLogs } from '@/services/logger';
 import { getPendingCommunities, approveCommunity, rejectCommunity, getPendingEvents, updateEventStatus } from '@/services/events';
 import { getAvatarUrl } from '@/lib/avatar';
 import AdminNutritionSettings from '../components/admin/AdminNutritionSettings';
 
-type AdminTab = 'overview' | 'users' | 'reports' | 'logs' | 'seed' | 'communities' | 'events' | 'updates';
+type AdminTab = 'overview' | 'users' | 'reports' | 'logs' | 'seed' | 'communities' | 'events' | 'updates' | 'storage';
 
 function Metric({ label, value, detail, icon: Icon, color = 'text-sienna' }: { label: string; value: number; detail: string; icon: typeof Users; color?: string }) {
   return <div className="card p-4"><div className="flex items-start justify-between"><div className="font-mono text-[10px] text-bone-dim tracking-wider">{label}</div><Icon size={17} className={color} /></div><div className="font-display text-3xl mt-3">{value.toLocaleString()}</div><div className="text-[11px] text-bone-dim mt-1">{detail}</div></div>;
@@ -36,6 +36,15 @@ export function AdminPage() {
   const [updateContent, setUpdateContent] = useState('');
   const [updateId, setUpdateId] = useState('');
   const [isPushingUpdate, setIsPushingUpdate] = useState(false);
+
+  const [storageOpts, setStorageOpts] = useState<StorageCleanupOptions>({
+    types: { images: true, gps: true, text: false },
+    collections: { feed: true, clan_posts: true, clan_messages: true, workouts: true },
+    olderThanDays: 30
+  });
+  const [storageResult, setStorageResult] = useState<StorageUsageResult | null>(null);
+  const [isCalculatingStorage, setIsCalculatingStorage] = useState(false);
+  const [isCleaningStorage, setIsCleaningStorage] = useState(false);
 
   const overview = useQuery({ queryKey: ['adminOverview'], queryFn: getAdminOverview, enabled: !!profile?.isAdmin });
   const users = useQuery({ queryKey: ['adminUsers'], queryFn: getAdminUsers, enabled: !!profile?.isAdmin });
@@ -175,6 +184,7 @@ export function AdminPage() {
     { id: 'logs', label: 'System Logs', icon: Terminal },
     { id: 'updates', label: 'App Updates', icon: Bell },
     { id: 'seed', label: 'Database', icon: Database },
+    { id: 'storage', label: 'Storage', icon: Database },
   ];
 
   return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -199,7 +209,7 @@ export function AdminPage() {
       </>}
     </div>}
 
-    {tab === 'users' && <section className="card p-5"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5"><div><h2 className="font-display text-xl">Users and bans</h2><p className="text-xs text-bone-dim mt-1">Showing up to 200 newest accounts. Bans prevent access on the next sign-in.</p></div><div className="relative w-full sm:w-72"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" /><input value={search} onChange={event => setSearch(event.target.value)} className="input-field pl-9" placeholder="Search name, handle, email" /></div></div>{users.isLoading ? <div className="py-10 text-center text-bone-dim">Loading users...</div> : <div className="space-y-2">{filteredUsers.map((user: any) => { const isBanned = banIds.has(user.uid); return <div key={user.uid} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-line/50 bg-ink-2"><img src={user.photoURL || getAvatarUrl(user.displayName, theme)} alt="" className="w-9 h-9 rounded-full object-cover" /><div className="flex-1 min-w-0"><div className="font-semibold text-sm truncate">{user.displayName || 'Athlete'} <span className="font-mono text-[10px] text-sienna ml-1">@{user.username}</span></div><div className="text-xs text-bone-dim truncate">{user.email || user.uid}</div></div><div className={`font-mono text-[10px] ${isBanned ? 'text-danger' : 'text-sienna'}`}>{isBanned ? 'BANNED' : 'ACTIVE'}</div><button onClick={() => banMutation.mutate({ uid: user.uid, banned: !isBanned })} disabled={banMutation.isPending || user.uid === profile.uid} className={`${isBanned ? 'btn-secondary hover:text-sienna' : 'btn-danger'} py-2 inline-flex items-center gap-2`}>{isBanned ? <><CheckCircle2 size={13} /> Lift ban</> : <><Ban size={13} /> Ban</>}</button></div>; })}</div>}</section>}
+    {tab === 'users' && <section className="card p-5"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5"><div><h2 className="font-display text-xl">Users and bans</h2><p className="text-xs text-bone-dim mt-1">Showing up to 200 newest accounts. Bans prevent access on the next sign-in.</p></div><div className="relative w-full sm:w-72"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" /><input id="admin-users-search" name="adminUsersSearch" autoComplete="off" value={search} onChange={event => setSearch(event.target.value)} className="input-field pl-9" placeholder="Search name, handle, email" /></div></div>{users.isLoading ? <div className="py-10 text-center text-bone-dim">Loading users...</div> : <div className="space-y-2">{filteredUsers.map((user: any) => { const isBanned = banIds.has(user.uid); return <div key={user.uid} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-line/50 bg-ink-2"><img src={user.photoURL || getAvatarUrl(user.displayName, theme)} alt="" className="w-9 h-9 rounded-full object-cover" /><div className="flex-1 min-w-0"><div className="font-semibold text-sm truncate">{user.displayName || 'Athlete'} <span className="font-mono text-[10px] text-sienna ml-1">@{user.username}</span></div><div className="text-xs text-bone-dim truncate">{user.email || user.uid}</div></div><div className={`font-mono text-[10px] ${isBanned ? 'text-danger' : 'text-sienna'}`}>{isBanned ? 'BANNED' : 'ACTIVE'}</div><button onClick={() => banMutation.mutate({ uid: user.uid, banned: !isBanned })} disabled={banMutation.isPending || user.uid === profile.uid} className={`${isBanned ? 'btn-secondary hover:text-sienna' : 'btn-danger'} py-2 inline-flex items-center gap-2`}>{isBanned ? <><CheckCircle2 size={13} /> Lift ban</> : <><Ban size={13} /> Ban</>}</button></div>; })}</div>}</section>}
 
     {tab === 'reports' && <section className="card p-5"><div className="mb-5"><h2 className="font-display text-xl">Reports</h2><p className="text-xs text-bone-dim mt-1">Review user-submitted reports and record a moderation decision.</p></div>{reports.isLoading ? <div className="py-10 text-center text-bone-dim">Loading reports...</div> : reports.data?.length ? <div className="space-y-3">{reports.data.map(report => <div key={report.id} className="border border-line/50 rounded-lg p-4 bg-ink-2"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><div className="font-mono text-[10px] text-amber uppercase">{report.status} · {report.reason}</div><div className="text-sm mt-2">Reported user: <span className="font-mono text-sienna">{report.reportedUserId || 'Not specified'}</span></div><div className="text-xs text-bone-dim mt-1">Reporter: {report.reporterId}</div>{report.details && <p className="text-sm text-bone-dim mt-3">{report.details}</p>}</div><div className="flex gap-2 shrink-0"><button onClick={() => report.id && reportMutation.mutate({ id: report.id, status: 'reviewing' })} className="btn-secondary py-2">Review</button><button onClick={() => report.id && reportMutation.mutate({ id: report.id, status: 'resolved' })} className="btn-primary py-2">Resolve</button><button onClick={() => report.id && reportMutation.mutate({ id: report.id, status: 'dismissed' })} className="btn-secondary py-2"><XCircle size={14} /></button></div></div></div>)}</div> : <div className="py-10 text-center text-bone-dim">No reports in the queue.</div>}</section>}
 
@@ -208,6 +218,125 @@ export function AdminPage() {
     {tab === 'events' && <section className="card p-5"><div className="mb-5"><h2 className="font-display text-xl">Pending Events</h2><p className="text-xs text-bone-dim mt-1">Review user requests to host events outside of a community.</p></div>{pendingEvents.isLoading ? <div className="py-10 text-center text-bone-dim">Loading events...</div> : pendingEvents.data?.length ? <div className="space-y-3">{pendingEvents.data.map((event: any) => <div key={event.id} className="border border-line/50 rounded-lg p-4 bg-ink-2"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><div className="font-semibold text-lg">{event.title} <span className="text-xs font-normal text-amber ml-2">{event.category}</span></div><div className="text-sm mt-1">{event.description}</div><div className="text-xs text-bone-dim mt-2">Organizer: {event.organizerName} | Date: {event.dateTime?.start?.toDate ? event.dateTime.start.toDate().toLocaleString() : 'TBD'}</div></div><div className="flex gap-2 shrink-0"><button onClick={() => event.id && approveEventMutation.mutate(event.id)} className="btn-primary py-2" disabled={approveEventMutation.isPending}>Approve</button><button onClick={() => { if (!event.id) return; const r = prompt('Reason for rejection (optional):'); if (r !== null) rejectEventMutation.mutate({ id: event.id, reason: r || undefined }); }} className="btn-secondary py-2 border-danger text-danger hover:bg-danger/10" disabled={rejectEventMutation.isPending}>Reject</button></div></div></div>)}</div> : <div className="py-10 text-center text-bone-dim">No pending events.</div>}</section>}
 
     {tab === 'seed' && <section className="card p-6 border-danger/30 space-y-6"><div><h2 className="font-display text-xl mb-2 flex items-center gap-2"><Database size={18} /> Database tools</h2><p className="text-sm text-bone-dim">Seeding is idempotent: it uses stable document IDs, overwrites the expected catalog, and removes stale duplicate sample-plan documents.</p></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><button onClick={handleSeedSamplePlans} disabled={seeding} className="btn-secondary border-sienna text-sienna hover:bg-sienna hover:text-bone inline-flex items-center justify-center gap-2">{seeding ? 'Processing...' : <><CheckCircle2 size={15} /> Seed sample plans</>}</button><button onClick={handleSeedExerciseLibrary} disabled={seedingLib} className="btn-secondary border-sienna text-sienna hover:bg-sienna hover:text-bone inline-flex items-center justify-center gap-2">{seedingLib ? 'Processing...' : <><CheckCircle2 size={15} /> Seed exercise library</>}</button><button onClick={async () => { showToast('Scanning for concluded competitions...', 'info'); const { backfillCelebrationPosts } = await import('@/services/community'); const res = await backfillCelebrationPosts(); if (res.success) { queryClient.invalidateQueries({ queryKey: ['feed'] }); queryClient.invalidateQueries({ queryKey: ['clanPosts'] }); queryClient.invalidateQueries({ queryKey: ['allCommunityChallenges'] }); queryClient.invalidateQueries({ queryKey: ['allCommunityEvents'] }); showToast(`Backfill complete: ${res.events} event(s), ${res.challenges} challenge(s) generated.`, 'success'); } else { showToast(res.details || 'Backfill failed. See console for logs.', 'error'); } }} className="btn-secondary border-emerald-500 text-emerald-500 hover:bg-emerald-500 hover:text-bone inline-flex items-center justify-center gap-2"><CheckCircle2 size={15} /> Backfill Celebration Posts</button></div><div className="border-t border-line/50 pt-5"><div className="flex items-center justify-between mb-3"><div><h3 className="font-display text-lg">All user plans</h3><p className="text-xs text-bone-dim mt-1">Admin deletion permanently removes the plan and its day documents.</p></div></div>{plans.isLoading ? <div className="text-sm text-bone-dim">Loading plans...</div> : <div className="space-y-2">{plans.data?.length ? plans.data.map((plan: any) => <div key={plan.id} className="flex items-center justify-between gap-3 rounded-lg border border-line/50 bg-ink-2 p-3"><div className="min-w-0"><div className="font-semibold text-sm truncate">{plan.title}</div><div className="text-xs text-bone-dim truncate">{plan.ownerName || plan.ownerId} · {plan.isArchived ? 'archived' : 'active'}</div></div><button onClick={() => handleDeletePlan(plan.id, plan.title)} disabled={deletingPlanId === plan.id} className="btn-danger py-2 inline-flex items-center gap-2 shrink-0"><Trash2 size={13} /> {deletingPlanId === plan.id ? 'Deleting...' : 'Delete'}</button></div>) : <div className="text-sm text-bone-dim">No user plans found.</div>}</div>}</div></section>}
+
+    {tab === 'storage' && (
+      <section className="card p-6 border-danger/30 space-y-6">
+        <div>
+          <h2 className="font-display text-xl mb-2 flex items-center gap-2">
+            <Database size={18} /> Storage Cleanup
+          </h2>
+          <p className="text-sm text-bone-dim leading-relaxed">
+            Scan and remove redundant data (Base64 images, GPS paths, text) from older records to free up Firestore database space. 
+            Removed images will be replaced with a placeholder text to avoid broken UI.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-ink-3 p-4 rounded-xl border border-line/30">
+          <div className="space-y-4">
+            <h3 className="font-bold text-sm text-sienna uppercase tracking-widest">Data to Remove</h3>
+            <label htmlFor="storage-clean-images" className="flex items-center gap-3 cursor-pointer">
+              <input id="storage-clean-images" name="storageCleanImages" type="checkbox" checked={storageOpts.types.images} onChange={(e) => setStorageOpts(prev => ({...prev, types: {...prev.types, images: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
+              <span className="text-sm text-bone">Base64 Images</span>
+            </label>
+            <label htmlFor="storage-clean-gps" className="flex items-center gap-3 cursor-pointer">
+              <input id="storage-clean-gps" name="storageCleanGps" type="checkbox" checked={storageOpts.types.gps} onChange={(e) => setStorageOpts(prev => ({...prev, types: {...prev.types, gps: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
+              <span className="text-sm text-bone">GPS Paths & Elevation Maps</span>
+            </label>
+            <label htmlFor="storage-clean-text" className="flex items-center gap-3 cursor-pointer">
+              <input id="storage-clean-text" name="storageCleanText" type="checkbox" checked={storageOpts.types.text} onChange={(e) => setStorageOpts(prev => ({...prev, types: {...prev.types, text: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
+              <span className="text-sm text-bone">Text Content & Descriptions</span>
+            </label>
+
+            <h3 className="font-bold text-sm text-sienna uppercase tracking-widest pt-2 border-t border-line/20">Target Collections</h3>
+            <label htmlFor="storage-coll-feed" className="flex items-center gap-3 cursor-pointer">
+              <input id="storage-coll-feed" name="storageCollFeed" type="checkbox" checked={storageOpts.collections.feed} onChange={(e) => setStorageOpts(prev => ({...prev, collections: {...prev.collections, feed: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
+              <span className="text-sm text-bone">Global Feed</span>
+            </label>
+            <label htmlFor="storage-coll-clan-posts" className="flex items-center gap-3 cursor-pointer">
+              <input id="storage-coll-clan-posts" name="storageCollClanPosts" type="checkbox" checked={storageOpts.collections.clan_posts} onChange={(e) => setStorageOpts(prev => ({...prev, collections: {...prev.collections, clan_posts: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
+              <span className="text-sm text-bone">Clan Posts</span>
+            </label>
+            <label htmlFor="storage-coll-clan-messages" className="flex items-center gap-3 cursor-pointer">
+              <input id="storage-coll-clan-messages" name="storageCollClanMessages" type="checkbox" checked={storageOpts.collections.clan_messages} onChange={(e) => setStorageOpts(prev => ({...prev, collections: {...prev.collections, clan_messages: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
+              <span className="text-sm text-bone">Clan Messages</span>
+            </label>
+            <label htmlFor="storage-coll-workouts" className="flex items-center gap-3 cursor-pointer">
+              <input id="storage-coll-workouts" name="storageCollWorkouts" type="checkbox" checked={storageOpts.collections.workouts} onChange={(e) => setStorageOpts(prev => ({...prev, collections: {...prev.collections, workouts: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
+              <span className="text-sm text-bone">Workouts</span>
+            </label>
+
+            <div className="pt-2 border-t border-line/20">
+              <label htmlFor="storage-older-than-days" className="block text-sm text-bone mb-2">Only remove from records older than:</label>
+              <select id="storage-older-than-days" name="storageOlderThanDays" value={storageOpts.olderThanDays} onChange={(e) => setStorageOpts(prev => ({...prev, olderThanDays: parseInt(e.target.value)}))} className="input-field max-w-[200px]">
+                <option value={7}>7 Days</option>
+                <option value={30}>30 Days</option>
+                <option value={90}>90 Days</option>
+                <option value={365}>1 Year</option>
+                <option value={0}>All Time (Careful!)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="bg-ink-2 p-4 rounded-lg border border-line/40 flex flex-col items-center justify-center text-center">
+            <h3 className="font-display text-lg mb-2">Storage Estimate</h3>
+            {storageResult ? (
+              <div className="w-full">
+                <div className="text-4xl font-display text-sienna mb-4">
+                  {(storageResult.totalBytes / 1024 / 1024).toFixed(2)} <span className="text-xl">MB</span>
+                </div>
+                <div className="text-xs font-mono text-bone-dim mb-4 space-y-1 bg-black/20 p-2 rounded">
+                  <div>Images: {(storageResult.imageBytes / 1024 / 1024).toFixed(2)} MB</div>
+                  <div>GPS Data: {(storageResult.gpsBytes / 1024 / 1024).toFixed(2)} MB</div>
+                  <div>Text Data: {(storageResult.textBytes / 1024 / 1024).toFixed(2)} MB</div>
+                  <div className="pt-1 mt-1 border-t border-line/20 text-bone">Scanned: {storageResult.scannedDocs} docs</div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-bone-dim mb-6">Click Calculate to scan the database and estimate space savings.</p>
+            )}
+            
+            <button
+              disabled={isCalculatingStorage || isCleaningStorage}
+              onClick={async () => {
+                setIsCalculatingStorage(true);
+                try {
+                  const res = await calculateStorageUsage(storageOpts);
+                  setStorageResult(res);
+                  showToast('Storage calculated successfully', 'success');
+                } catch (e: any) {
+                  showToast(e.message, 'error');
+                } finally {
+                  setIsCalculatingStorage(false);
+                }
+              }}
+              className="btn-secondary w-full mb-3 py-2.5"
+            >
+              {isCalculatingStorage ? 'Calculating...' : 'Calculate Space'}
+            </button>
+
+            <button
+              disabled={isCalculatingStorage || isCleaningStorage || !storageResult || storageResult.totalBytes === 0}
+              onClick={async () => {
+                if (!confirm(`Are you sure you want to permanently delete ~${(storageResult!.totalBytes / 1024 / 1024).toFixed(2)} MB of data from ${storageResult!.scannedDocs} documents? This cannot be undone.`)) return;
+                setIsCleaningStorage(true);
+                try {
+                  const processed = await cleanupDatabaseStorage(storageOpts);
+                  showToast(`Cleanup complete. Processed ${processed} documents.`, 'success');
+                  setStorageResult(null);
+                } catch (e: any) {
+                  showToast(e.message, 'error');
+                } finally {
+                  setIsCleaningStorage(false);
+                }
+              }}
+              className="btn-danger w-full py-2.5"
+            >
+              {isCleaningStorage ? 'Cleaning Database...' : 'Run Storage Cleanup'}
+            </button>
+          </div>
+        </div>
+      </section>
+    )}
 
     {tab === 'logs' && <section className="card p-5 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">

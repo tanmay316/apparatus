@@ -143,10 +143,9 @@ export const syncWithNativeSession = async (): Promise<boolean> => {
   try {
     const summary: NativeWorkoutSessionSummary = await NativeWorkoutLocation.getSessionSummary();
     if (summary.state === 'TRACKING' || summary.state === 'PAUSED') {
-      // Native SQLite is the durable source of truth. Never compare a 500/2000-point
-      // display route with stale WebView memory and refuse the native route.
-      const stored = await NativeWorkoutLocation.getLocationsAfter({ timestamp: 0 });
-      const fullRoute: RoutePoint[] = stored.points
+      // Use native SQLite downsampling (max 500 points) for instant UI hydration without bridge freezing
+      const stored = await NativeWorkoutLocation.getDownsampledPoints({ maxPoints: 500 });
+      const displayRoute: RoutePoint[] = stored.points
         .sort((a, b) => a.timestamp - b.timestamp)
         .map(p => ({
           lat: p.lat,
@@ -158,7 +157,6 @@ export const syncWithNativeSession = async (): Promise<boolean> => {
 
       const currentStore = useCardioStore.getState();
       const nativeDistKm = Math.max(0, summary.distanceMeters / 1000);
-      const displayRoute = resampleRoute(fullRoute, MAX_DISPLAY_POINTS);
 
       useCardioStore.setState({
         isTracking: true,
@@ -196,14 +194,16 @@ export const finishTracking = async () => {
   if (Capacitor.isNativePlatform()) {
     try {
       const summary = await NativeWorkoutLocation.getSessionSummary();
-      const allPoints = await NativeWorkoutLocation.getLocationsAfter({ timestamp: 0 });
-      const fullRoute: RoutePoint[] = allPoints.points.map(p => ({
-        lat: p.lat,
-        lng: p.lng,
-        ts: p.timestamp,
-        alt: p.altitude ?? undefined,
-        speed: p.speed ?? undefined,
-      }));
+      const allPoints = await NativeWorkoutLocation.getDownsampledPoints({ maxPoints: 1500 });
+      const fullRoute: RoutePoint[] = allPoints.points
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map(p => ({
+          lat: p.lat,
+          lng: p.lng,
+          ts: p.timestamp,
+          alt: p.altitude ?? undefined,
+          speed: p.speed ?? undefined,
+        }));
 
       useCardioStore.setState({
         distanceKm: summary.distanceMeters / 1000,

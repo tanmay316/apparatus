@@ -14,6 +14,11 @@ const config: CapacitorConfig = {
       showSpinner: false,
       androidSplashResourceName: 'splash'
     }
+  },
+  server: {
+    hostname: 'apparatus.app',
+    androidScheme: 'https',
+    iosScheme: 'capacitor'
   }
 };
 

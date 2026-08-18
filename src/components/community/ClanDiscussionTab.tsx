@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Send, Image as ImageIcon, X, Reply, Edit2, Trash2,
   Smile, CornerDownLeft, ChevronDown, Check, CheckCheck,
-  Shield, Crown, Star, Lock, AlertCircle, Loader2, Sparkles
+  Shield, Crown, Star, Lock, AlertCircle, Loader2, Sparkles, Plus
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -22,9 +22,21 @@ interface ClanDiscussionTabProps {
   isMember: boolean;
   userRole?: 'leader' | 'co_leader' | 'member';
   onJoinClan?: () => void;
+  className?: string;
 }
 
 const QUICK_EMOJIS = ['❤️', '👍', '🔥', '😂', '😮', '😢', '🙏', '👏'];
+
+const EXTENDED_EMOJIS = [
+  '😀', '😃', '😄', '😁', '😆', '😂', '🤣', '🥹', '😊', '😇',
+  '😍', '🥰', '😘', '😋', '😜', '🤪', '😎', '🥳', '🤩', '🤯',
+  '😱', '🥵', '🥶', '😴', '🤠', '🥸', '🫡', '🤖', '👑', '💎',
+  '👍', '👎', '👏', '🙌', '👐', '🤝', '👊', '✌️', '🤞', '🤘',
+  '🤙', '🤌', '🙏', '💪', '🦾', '🥊', '🏋️', '🤸', '🏃', '🚴',
+  '⚡', '💥', '🔥', '✨', '🌟', '🏆', '🥇', '🥈', '🥉', '🎯',
+  '💯', '🚀', '🎉', '🎊', '🍕', '🥗', '☕', '🥤', '❤️', '🧡',
+  '💛', '💚', '💙', '💜', '🤎', '🖤', '🤍', '💖', '💗', '💔'
+];
 
 // Client-side canvas compression for smartphone photos
 async function compressImage(file: File): Promise<string> {
@@ -110,6 +122,7 @@ export function ClanDiscussionTab({
   isMember,
   userRole,
   onJoinClan,
+  className,
 }: ClanDiscussionTabProps) {
   const { user, profile } = useAuthStore();
   const isAdmin = !!profile?.isAdmin;
@@ -124,6 +137,7 @@ export function ClanDiscussionTab({
   const [replyingTo, setReplyingTo] = useState<ClanMessage | null>(null);
   const [editingMessage, setEditingMessage] = useState<ClanMessage | null>(null);
   const [activeReactionMessageId, setActiveReactionMessageId] = useState<string | null>(null);
+  const [emojiInputMessageId, setEmojiInputMessageId] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -131,6 +145,14 @@ export function ClanDiscussionTab({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 112)}px`; // 112px is max-h-28
+    }
+  }, [inputText]);
 
   // Subscribe to real-time clan messages
   useEffect(() => {
@@ -260,6 +282,7 @@ export function ClanDiscussionTab({
       return;
     }
     setActiveReactionMessageId(null);
+    setEmojiInputMessageId(null);
     try {
       await toggleClanMessageReaction(messageId, emoji, user.uid);
     } catch (err: any) {
@@ -359,28 +382,14 @@ export function ClanDiscussionTab({
   let lastDateStr = '';
 
   return (
-    <div className="flex flex-col h-[75vh] min-h-[500px] max-h-[850px] bg-ink rounded-[28px] border border-line/20 overflow-hidden shadow-2xl relative">
-      {/* ─── CHAT HEADER ─── */}
-      <div className="px-4 sm:px-6 py-3.5 bg-ink-2/90 border-b border-line/20 backdrop-blur-md flex items-center justify-between z-20">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-sienna/20 border border-sienna/30 flex items-center justify-center text-sienna font-bold font-display shadow-inner">
-            {clanName.charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <h3 className="font-bold text-sm sm:text-base text-bone tracking-wide flex items-center gap-1.5">
-              <span>{clanName} Discussion</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            </h3>
-            <p className="text-[11px] font-mono text-bone-dim">Group Chat & Live Community Forum</p>
-          </div>
-        </div>
-      </div>
+    <div className={`flex flex-col flex-1 h-full min-h-0 bg-ink relative overflow-hidden ${className || ''}`}>
+      {/* ─── CHAT MESSAGES ─── */}
 
       {/* ─── MESSAGES CONTAINER ─── */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-3 relative [scrollbar-width:thin]"
+        className="flex-1 overflow-y-auto p-3 sm:p-4 relative [scrollbar-width:thin] flex flex-col"
       >
         {loading ? (
           <div className="h-full flex flex-col items-center justify-center text-bone-dim text-xs font-mono gap-2">
@@ -408,6 +417,12 @@ export function ClanDiscussionTab({
             const isCoLeader = msg.userRole === 'co_leader';
             const isAdminMsg = msg.userRole === 'admin';
 
+            const nextMsg = messages[idx + 1];
+            const isNextSameAuthor = nextMsg && nextMsg.userId === msg.userId && formatMessageDateSeparator(nextMsg.createdAt) === messageDateStr;
+
+            const prevMsg = idx > 0 ? messages[idx - 1] : null;
+            const isPrevSameAuthor = prevMsg && prevMsg.userId === msg.userId && formatMessageDateSeparator(prevMsg.createdAt) === messageDateStr;
+
             const canManageMsg = isMe || userRole === 'leader' || userRole === 'co_leader' || isAdmin;
             const showReactionPicker = activeReactionMessageId === msg.id;
 
@@ -423,22 +438,141 @@ export function ClanDiscussionTab({
                 )}
 
                 {/* Message Row */}
-                <div className={`flex items-end gap-2 group relative ${isMe ? 'justify-end' : 'justify-start'}`}>
-                  {/* Sender Avatar for incoming */}
+                <div className={`flex items-start gap-1.5 group relative ${isMe ? 'justify-end' : 'justify-start'} ${isNextSameAuthor ? 'mb-[1.5px]' : 'mb-3'}`}>
+                  {/* Sender Avatar for incoming - positioned at top together with sender name on first message */}
                   {!isMe && (
-                    <div className="w-8 h-8 rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold text-xs shrink-0 overflow-hidden mb-1">
-                      {msg.userPhoto ? (
-                        <img src={msg.userPhoto} alt={msg.userName} className="w-full h-full object-cover" />
-                      ) : (
-                        msg.userName?.charAt(0)?.toUpperCase() || 'M'
+                    <div className={`w-7 h-7 shrink-0 ${!isPrevSameAuthor ? 'rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold text-xs mt-0.5' : 'invisible'}`}>
+                      {!isPrevSameAuthor && (
+                        msg.userPhoto ? (
+                          <img src={msg.userPhoto} alt={msg.userName} className="w-full h-full object-cover rounded-full" />
+                        ) : (
+                          msg.userName?.charAt(0)?.toUpperCase() || 'M'
+                        )
                       )}
                     </div>
                   )}
 
                   {/* Message Bubble Container */}
-                  <div className={`max-w-[85%] sm:max-w-[70%] flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                  <div className={`max-w-[85%] sm:max-w-[70%] flex flex-col relative ${isMe ? 'items-end' : 'items-start'}`}>
+                    {/* Floating WhatsApp Reaction Flyout Picker */}
+                    <AnimatePresence>
+                      {showReactionPicker && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                          transition={{ type: 'spring', damping: 22, stiffness: 300 }}
+                          className={`absolute -top-11 ${
+                            isMe ? 'right-0 origin-bottom-right' : 'left-0 origin-bottom-left'
+                          } bg-ink-2/95 border border-line/30 rounded-full px-2 py-1.5 shadow-2xl flex items-center gap-1 z-50 backdrop-blur-md`}
+                        >
+                          {QUICK_EMOJIS.map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => {
+                                handleToggleReaction(msg.id!, emoji);
+                                setActiveReactionMessageId(null);
+                                setEmojiInputMessageId(null);
+                              }}
+                              className="hover:scale-130 active:scale-95 transition-transform text-lg p-1"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                          {/* More Emojis '+' Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEmojiInputMessageId(emojiInputMessageId === msg.id ? null : msg.id!);
+                            }}
+                            className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
+                              emojiInputMessageId === msg.id
+                                ? 'bg-sienna text-bg shadow-sm'
+                                : 'hover:bg-ink-3 text-bone-dim hover:text-bone'
+                            }`}
+                            title="More reactions..."
+                          >
+                            <Plus size={15} />
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Extended Emoji Grid Popover Modal */}
+                    <AnimatePresence>
+                      {emojiInputMessageId === msg.id && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9, y: 10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.9, y: 10 }}
+                          transition={{ type: 'spring', damping: 24, stiffness: 300 }}
+                          className={`absolute -top-[235px] ${
+                            isMe ? 'right-0 origin-bottom-right' : 'left-0 origin-bottom-left'
+                          } w-72 max-w-[90vw] bg-ink-2 border border-line/30 rounded-2xl p-3 shadow-2xl z-50 backdrop-blur-xl flex flex-col gap-2`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-line/20">
+                            <span className="text-xs font-bold text-bone">Select Reaction</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEmojiInputMessageId(null);
+                                setActiveReactionMessageId(null);
+                              }}
+                              className="p-1 rounded-full text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+
+                          {/* Keyboard text input field to open native Android/iOS keyboard */}
+                          <input
+                            id={`emoji-reaction-search-${msg.id}`}
+                            name={`emojiReactionSearch_${msg.id}`}
+                            aria-label="Type or choose emoji"
+                            autoComplete="off"
+                            autoFocus
+                            inputMode="text"
+                            className="w-full bg-ink-3 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-sienna text-bone border border-line/20 placeholder:text-bone-dim/70"
+                            placeholder="Use keyboard / paste emoji..."
+                            onChange={(e) => {
+                              const val = e.target.value.trim();
+                              if (val) {
+                                const match = val.match(/\p{Extended_Pictographic}/u);
+                                if (match) {
+                                  handleToggleReaction(msg.id!, match[0]);
+                                  setEmojiInputMessageId(null);
+                                  setActiveReactionMessageId(null);
+                                }
+                              }
+                            }}
+                          />
+
+                          {/* Scrollable curated emojis */}
+                          <div className="grid grid-cols-7 gap-1 max-h-36 overflow-y-auto pr-0.5 custom-scrollbar py-1">
+                            {EXTENDED_EMOJIS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => {
+                                  handleToggleReaction(msg.id!, emoji);
+                                  setEmojiInputMessageId(null);
+                                  setActiveReactionMessageId(null);
+                                }}
+                                className="w-8 h-8 rounded-lg hover:bg-ink-3 active:scale-95 hover:scale-110 flex items-center justify-center text-lg transition-transform"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     {/* Sender Name & Role on incoming */}
-                    {!isMe && (
+                    {!isMe && !isPrevSameAuthor && (
                       <div className="flex items-center gap-1.5 ml-2 mb-1">
                         <span className="text-xs font-bold text-sienna/90">{msg.userName}</span>
                         {isLeader && (
@@ -460,27 +594,44 @@ export function ClanDiscussionTab({
                     )}
 
                     {/* Bubble Body */}
-                    <div
-                      className={`relative rounded-[22px] px-4 py-2.5 shadow-sm text-sm transition-all ${
+                    <motion.div
+                      drag="x"
+                      dragConstraints={{ left: 0, right: 0 }}
+                      dragElastic={0.1}
+                      dragDirectionLock
+                      onDragEnd={(e: any, info: any) => {
+                         if (info.offset.x > 50 || info.offset.x < -50) startReply(msg);
+                      }}
+                      className={`relative px-3 py-1.5 text-sm transition-all ${
                         isMe
-                          ? 'bg-sienna text-bg rounded-br-sm'
-                          : 'bg-ink-2 text-bone rounded-bl-sm border border-line/20'
+                          ? `bg-sienna text-bg ${
+                              !isPrevSameAuthor
+                                ? 'rounded-[14px] rounded-tr-[3px]'
+                                : 'rounded-[14px] rounded-tr-[7px]'
+                            }`
+                          : `bg-[#faebe1] dark:bg-ink-2 text-stone-900 dark:text-bone border border-[#ecd5c6] dark:border-line/20 ${
+                              !isPrevSameAuthor
+                                ? 'rounded-[14px] rounded-tl-[3px]'
+                                : 'rounded-[14px] rounded-tl-[7px]'
+                            }`
                       } ${msg.isDeleted ? 'opacity-70 italic' : ''}`}
                     >
                       {/* Quoted Reply Preview (if replyTo exists) */}
                       {msg.replyTo && !msg.isDeleted && (
                         <div
-                          className={`mb-2 p-2 rounded-xl text-xs border-l-4 transition-colors ${
+                          className={`mb-1.5 p-2 rounded-xl text-xs border-l-4 transition-colors ${
                             isMe
-                              ? 'bg-black/15 border-bg text-bg/90'
-                              : 'bg-ink-3 border-sienna text-bone-dim'
+                              ? 'bg-black/20 border-bg/90 text-bg'
+                              : 'bg-white/70 dark:bg-amber-950/40 border-sienna text-stone-900 dark:text-bone'
                           }`}
                         >
-                          <div className="font-bold flex items-center gap-1">
+                          <div className={`font-bold flex items-center gap-1 ${isMe ? 'text-bg' : 'text-sienna'}`}>
                             <Reply size={11} className="rotate-180" />
                             <span>{msg.replyTo.userName}</span>
                           </div>
-                          <p className="truncate line-clamp-1 opacity-90">{msg.replyTo.text || 'Photo attachment'}</p>
+                          <p className={`truncate line-clamp-1 text-[11px] mt-0.5 font-medium ${isMe ? 'text-bg/90' : 'text-stone-800 dark:text-bone/90'}`}>
+                            {msg.replyTo.text || 'Photo attachment'}
+                          </p>
                         </div>
                       )}
 
@@ -500,14 +651,14 @@ export function ClanDiscussionTab({
                       )}
 
                       {/* Message Text */}
-                      <p className="whitespace-pre-wrap leading-relaxed break-words select-text">
+                      <p className="whitespace-pre-wrap leading-snug break-words select-text">
                         {msg.text}
                       </p>
 
                       {/* Footer: Time + Edited badge + Status Checkmarks */}
                       <div
-                        className={`flex items-center justify-end gap-1.5 mt-1 text-[10px] font-mono ${
-                          isMe ? 'text-bg/80' : 'text-bone-dim'
+                        className={`flex items-center justify-end gap-1.5 mt-0.5 text-[10px] font-mono ${
+                          isMe ? 'text-bg/80' : 'text-stone-600 dark:text-bone-dim'
                         }`}
                       >
                         {msg.isEdited && !msg.isDeleted && <span>(edited)</span>}
@@ -533,51 +684,33 @@ export function ClanDiscussionTab({
                           ))}
                         </div>
                       )}
-                    </div>
+                    </motion.div>
 
                     {/* Quick Hover / Action Bar */}
                     {!msg.isDeleted && (
                       <div
-                        className={`opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 mt-1 px-1 ${
-                          isMe ? 'justify-end' : 'justify-start'
-                        }`}
+                        className={`transition-all duration-150 flex items-center gap-1 px-1 mt-0.5 ${
+                          showReactionPicker
+                            ? 'opacity-100'
+                            : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-h-0 group-hover:max-h-8 overflow-hidden group-hover:overflow-visible'
+                        } ${isMe ? 'justify-end' : 'justify-start'}`}
                       >
                         {/* Reaction Trigger Button */}
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setActiveReactionMessageId(activeReactionMessageId === msg.id ? null : msg.id!)
-                            }
-                            className="p-1 rounded-full text-bone-dim hover:text-bone hover:bg-ink-2 transition-colors"
-                            title="React"
-                          >
-                            <Smile size={13} />
-                          </button>
-
-                          {/* WhatsApp Emoji Reaction Flyout */}
-                          <AnimatePresence>
-                            {showReactionPicker && (
-                              <motion.div
-                                initial={{ opacity: 0, scale: 0.8, y: 10 }}
-                                animate={{ opacity: 1, scale: 1, y: -40 }}
-                                exit={{ opacity: 0, scale: 0.8 }}
-                                className="absolute bottom-full left-0 bg-ink-2 border border-line/30 rounded-full p-1.5 shadow-2xl flex items-center gap-1 z-50 backdrop-blur-md"
-                              >
-                                {QUICK_EMOJIS.map((emoji) => (
-                                  <button
-                                    key={emoji}
-                                    type="button"
-                                    onClick={() => handleToggleReaction(msg.id!, emoji)}
-                                    className="hover:scale-130 active:scale-95 transition-transform text-base p-1"
-                                  >
-                                    {emoji}
-                                  </button>
-                                ))}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveReactionMessageId(activeReactionMessageId === msg.id ? null : msg.id!);
+                          }}
+                          className={`p-1 rounded-full transition-colors ${
+                            showReactionPicker
+                              ? 'text-sienna bg-ink-2 shadow-sm'
+                              : 'text-bone-dim hover:text-bone hover:bg-ink-2'
+                          }`}
+                          title="React"
+                        >
+                          <Smile size={13} />
+                        </button>
 
                         {/* Reply Button */}
                         <button
@@ -692,14 +825,14 @@ export function ClanDiscussionTab({
       {/* ─── CHAT INPUT BAR ─── */}
       <form
         onSubmit={handleSendMessage}
-        className="p-3 sm:p-4 bg-ink-2/95 border-t border-line/20 backdrop-blur-md flex items-end gap-2 z-20"
+        className="p-2 sm:p-3 bg-ink-2/95 border-t border-line/20 backdrop-blur-md flex items-center gap-2 z-20 shrink-0"
       >
         {/* Attachment Button */}
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={images.length >= 3 || isProcessingImage}
-          className="p-2.5 rounded-2xl bg-ink-3 hover:bg-ink text-bone-dim hover:text-sienna border border-line/20 transition-colors disabled:opacity-50 shrink-0"
+          className="w-10 h-10 flex items-center justify-center rounded-2xl bg-ink-3 hover:bg-ink text-bone-dim hover:text-sienna border border-line/20 transition-colors disabled:opacity-50 shrink-0 shadow-sm"
           title="Attach Image"
         >
           {isProcessingImage ? (
@@ -709,6 +842,9 @@ export function ClanDiscussionTab({
           )}
         </button>
         <input
+          id="chat-image-upload"
+          name="chat-image-upload"
+          aria-label="Upload image"
           type="file"
           ref={fileInputRef}
           onChange={handleImageSelect}
@@ -718,8 +854,12 @@ export function ClanDiscussionTab({
         />
 
         {/* Text Input */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative flex items-center">
+          <label htmlFor="chat-message-input" className="sr-only">Message</label>
           <textarea
+            id="chat-message-input"
+            name="chat-message"
+            aria-label="Message the clan"
             ref={inputRef}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
@@ -727,7 +867,7 @@ export function ClanDiscussionTab({
             placeholder={editingMessage ? 'Edit your message...' : 'Message the clan...'}
             rows={1}
             maxLength={1000}
-            className="w-full bg-ink-3 border border-line/25 rounded-2xl px-4 py-2.5 text-sm text-bone placeholder:text-bone-dim/40 resize-none focus:outline-none focus:border-sienna/80 transition-colors leading-relaxed shadow-inner max-h-28"
+            className="w-full bg-ink-3 border border-line/25 rounded-2xl px-4 py-2 min-h-[40px] text-sm text-bone placeholder:text-bone-dim/40 resize-none focus:outline-none focus:border-sienna/80 transition-colors leading-relaxed shadow-inner max-h-28 flex items-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
           />
         </div>
 
@@ -735,11 +875,10 @@ export function ClanDiscussionTab({
         <button
           type="submit"
           disabled={(!inputText.trim() && images.length === 0) || isProcessingImage}
-          className="p-2.5 sm:px-4 sm:py-2.5 rounded-2xl bg-sienna hover:bg-sienna/90 text-bg font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-sienna/25 flex items-center justify-center gap-1.5 transition-all active:scale-95 shrink-0"
+          className="w-10 h-10 flex items-center justify-center rounded-2xl bg-sienna hover:bg-sienna/90 text-bg font-bold disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(205,111,72,0.3)] transition-all active:scale-95 shrink-0"
           title="Send"
         >
-          <Send size={16} />
-          <span className="hidden sm:inline text-xs font-mono">Send</span>
+          <Send size={16} className="-ml-0.5" />
         </button>
       </form>
 

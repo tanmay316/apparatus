@@ -121,9 +121,9 @@ service cloud.firestore {
         || (resource.data.visibility == 'followers' && isAuthenticated());
       allow create: if isOwner(request.resource.data.userId)
         && request.resource.data.visibility in ['public', 'followers', 'private'];
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId;
-      allow delete: if resource == null || isOwner(resource.data.userId);
+      allow update: if isAdmin() || (isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId);
+      allow delete: if isAdmin() || resource == null || isOwner(resource.data.userId);
 
       match /exercises/{exerciseLogId} {
         allow read: if canReadWorkout(workoutId);
@@ -385,9 +385,9 @@ service cloud.firestore {
         || (resource.data.visibility == 'followers' && isAuthenticated());
       allow create: if isOwner(request.resource.data.userId)
         && request.resource.data.visibility in ['public', 'followers', 'private'];
-      allow update: if isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId;
-      allow delete: if resource == null || isOwner(resource.data.userId);
+      allow update: if isAdmin() || (isOwner(resource.data.userId)
+        && request.resource.data.userId == resource.data.userId);
+      allow delete: if isAdmin() || resource == null || isOwner(resource.data.userId);
     }
     
     // ─── Video Resolver Cache ───────────────────────────────────

@@ -1,5 +1,68 @@
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
+import { doc, setDoc, arrayUnion } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+
+export async function setupNotificationChannels() {
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
+    try {
+      await LocalNotifications.createChannel({
+        id: 'clan_chat_messages',
+        name: 'Clan Chat Messages',
+        description: 'Instant notifications for new clan chat messages',
+        importance: 5, // MAX importance - heads up banner + sound + vibration
+        visibility: 1, // Public on lockscreen
+        sound: 'default',
+        vibration: true,
+        lights: true,
+        lightColor: '#e07a5f'
+      });
+    } catch (err) {
+      console.warn('Failed to create notification channel:', err);
+    }
+  }
+}
+
+export async function initPushNotifications(userId: string) {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    let perm = await PushNotifications.checkPermissions();
+    if (perm.receive !== 'granted') {
+      perm = await PushNotifications.requestPermissions();
+    }
+    if (perm.receive !== 'granted') return;
+
+    await PushNotifications.register();
+
+    // Register token in user profile
+    await PushNotifications.addListener('registration', async (token) => {
+      if (userId && token.value) {
+        try {
+          await setDoc(doc(db, 'users', userId), {
+            fcmToken: token.value,
+            fcmTokens: arrayUnion(token.value),
+            lastFcmRegisteredAt: Date.now()
+          }, { merge: true });
+        } catch (e) {
+          console.warn('Failed to save FCM token:', e);
+        }
+      }
+    });
+
+    // User clicked notification banner
+    await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+      const data = action.notification?.data;
+      if (data?.link) {
+        window.location.href = data.link;
+      } else if (data?.clanId) {
+        window.location.href = `/clan/${data.clanId}/chat`;
+      }
+    });
+  } catch (err) {
+    console.warn('Push notification setup error:', err);
+  }
+}
 
 export async function requestNotificationPermission() {
   if (Capacitor.isNativePlatform()) {
@@ -60,6 +123,7 @@ export async function showNotification(id: number, title: string, body: string, 
             id: safeId,
             extra: extraData,
             autoCancel: true,
+            channelId: 'clan_chat_messages',
             smallIcon: 'ic_stat_icon_config_sample',
             sound: 'default',
           }

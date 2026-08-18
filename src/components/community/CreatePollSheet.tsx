@@ -146,245 +146,243 @@ export function CreatePollSheet({
 
   const isValid = question.trim().length > 0 && options.filter(o => o.trim().length > 0).length >= 2;
 
-  return createPortal(
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-[650] flex flex-col justify-end sm:justify-center sm:items-center sm:p-4">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0 bg-black/75 backdrop-blur-md"
+  if (!isOpen) return null;
+
+  return (
+    <div className="flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-300">
+      {/* Header */}
+      <div className="flex items-center justify-between pb-3 border-b border-line/20 mb-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-2 rounded-full text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors"
+        >
+          <X size={20} />
+        </button>
+        <h2 className="text-base sm:text-lg font-bold text-bone text-center tracking-tight">Create a Poll</h2>
+        <div className="w-8" />
+      </div>
+
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 sm:gap-5 pb-2">
+        {/* Question Field */}
+        <div>
+          <label htmlFor="poll-question-input" className="block text-[11px] font-mono uppercase text-bone-dim mb-1.5 tracking-wider">
+            Ask a Question<span className="text-sienna ml-0.5">*</span>
+          </label>
+          <input
+            id="poll-question-input"
+            name="pollQuestion"
+            type="text"
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            placeholder="Type your question here..."
+            maxLength={150}
+            className="w-full bg-ink-2 border border-line/25 rounded-xl px-3.5 sm:px-4 py-3 text-sm text-bone placeholder:text-bone-dim/40 font-semibold focus:outline-none focus:border-sienna/80 transition-colors shadow-inner"
+            autoFocus
           />
+        </div>
 
-          <motion.div
-            initial={{ y: '100%', opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: '100%', opacity: 0 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 220 }}
-            className="bg-white dark:bg-[#16181d] text-[#17191c] dark:text-[#f3f4f6] w-full max-w-lg rounded-t-[32px] sm:rounded-[28px] relative z-10 flex flex-col shadow-2xl p-5 sm:p-6 border-t sm:border border-gray-100 dark:border-white/10 max-h-[92vh] overflow-y-auto"
-          >
-            {/* Drag Handle for Mobile */}
-            <div className="w-12 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full mx-auto mb-3 sm:hidden" />
-
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-white/10 mb-4">
-              <button
-                type="button"
-                onClick={onClose}
-                className="p-2 rounded-full text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
-              >
-                <X size={20} />
-              </button>
-              <h2 className="text-base sm:text-lg font-bold text-center tracking-tight">Create a Poll</h2>
-              <div className="w-8" />
-            </div>
-
-            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-              {/* Question Field */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                  Ask a Question<span className="text-red-500 ml-0.5">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={question}
-                  onChange={e => setQuestion(e.target.value)}
-                  placeholder="Type Here..."
-                  maxLength={150}
-                  className="w-full bg-gray-50 dark:bg-[#1f2229] border border-gray-200 dark:border-white/10 rounded-2xl px-4 py-3.5 text-sm text-[#17191c] dark:text-white placeholder:text-gray-400 font-medium focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-all shadow-sm"
-                  autoFocus
-                />
-              </div>
-
-              {/* Poll Options */}
-              <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">
-                  Poll Options
-                </label>
-                <div className="space-y-2.5">
-                  {options.map((opt, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <div className="text-gray-400 dark:text-gray-500 cursor-grab active:cursor-grabbing p-1">
-                        <GripVertical size={16} />
-                      </div>
-                      <div className="flex-1 relative flex items-center">
-                        <input
-                          type="text"
-                          value={opt}
-                          onChange={e => handleOptionChange(idx, e.target.value)}
-                          placeholder={`Option ${idx + 1}`}
-                          maxLength={80}
-                          className="w-full bg-gray-50 dark:bg-[#1f2229] border border-gray-200 dark:border-white/10 rounded-2xl px-4 py-3 text-sm text-[#17191c] dark:text-white placeholder:text-gray-400 font-medium focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-400 transition-all shadow-sm pr-10"
-                        />
-                        {options.length > 2 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveOption(idx)}
-                            className="absolute right-3 p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
-                            title="Remove option"
-                          >
-                            <X size={16} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {options.length < 10 && (
+        {/* Poll Options */}
+        <div>
+          <label className="block text-[11px] font-mono uppercase text-bone-dim mb-2 tracking-wider">
+            Poll Options
+          </label>
+          <div className="space-y-2.5">
+            {options.map((opt, idx) => (
+              <div key={idx} className="flex items-center gap-1.5 sm:gap-2">
+                <div className="text-bone-dim/60 cursor-grab active:cursor-grabbing p-1 shrink-0">
+                  <GripVertical size={16} />
+                </div>
+                <div className="flex-1 relative flex items-center min-w-0">
+                  <input
+                    id={`poll-option-${idx}`}
+                    name={`pollOption_${idx}`}
+                    aria-label={`Option ${idx + 1}`}
+                    type="text"
+                    value={opt}
+                    onChange={e => handleOptionChange(idx, e.target.value)}
+                    placeholder={`Option ${idx + 1}`}
+                    maxLength={80}
+                    className="w-full bg-ink-2 border border-line/25 rounded-xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm text-bone placeholder:text-bone-dim/40 font-semibold focus:outline-none focus:border-sienna/80 transition-colors shadow-inner pr-9 sm:pr-10"
+                  />
+                  {options.length > 2 && (
                     <button
                       type="button"
-                      onClick={handleAddOption}
-                      className="w-full mt-2 py-3 px-4 rounded-2xl bg-gray-50 hover:bg-gray-100 dark:bg-[#1f2229] dark:hover:bg-[#282c35] border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-200 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm"
+                      onClick={() => handleRemoveOption(idx)}
+                      className="absolute right-2 sm:right-3 p-1.5 text-bone-dim hover:text-red-500 rounded-lg hover:bg-ink-3 transition-colors shrink-0"
+                      title="Remove option"
+                      aria-label={`Remove option ${idx + 1}`}
                     >
-                      <Plus size={16} />
-                      <span>Add Another Option</span>
+                      <X size={15} />
                     </button>
                   )}
                 </div>
               </div>
+            ))}
 
-              {/* Poll Settings */}
-              <div className="pt-2 border-t border-gray-100 dark:border-white/10">
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2.5">
-                  Poll Settings
-                </label>
-
-                <div className="space-y-3">
-                  {/* Setting 1: Multiple Options */}
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50/70 dark:bg-[#1f2229]/60">
-                    <div>
-                      <h4 className="text-xs sm:text-sm font-semibold text-[#17191c] dark:text-white">
-                        Allow people to choose Multiple Options
-                      </h4>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={isMultipleChoice}
-                        onChange={e => setIsMultipleChoice(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                    </label>
-                  </div>
-
-                  {/* Setting 2: Anonymous Voting */}
-                  <div
-                    className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
-                      isAnonymous
-                        ? 'border-indigo-500 dark:border-indigo-400 bg-indigo-50/40 dark:bg-indigo-950/20'
-                        : 'border-gray-200 dark:border-white/10 bg-gray-50/70 dark:bg-[#1f2229]/60'
-                    }`}
-                  >
-                    <div className="pr-2">
-                      <h4 className="text-xs sm:text-sm font-semibold text-[#17191c] dark:text-white">
-                        Enable Anonymous Voting
-                      </h4>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                        Your vote will not be disclosed to others.
-                      </p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                      <input
-                        type="checkbox"
-                        checked={isAnonymous}
-                        onChange={e => setIsAnonymous(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                    </label>
-                  </div>
-
-                  {/* Setting 3: Set Expiration Date & Time */}
-                  <div className="p-3.5 rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-50/70 dark:bg-[#1f2229]/60 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="pr-2">
-                        <h4 className="text-xs sm:text-sm font-semibold text-[#17191c] dark:text-white">
-                          Set an Expiration Date & Time
-                        </h4>
-                        <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                          You can change this later via edit.
-                        </p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={hasExpiration}
-                          onChange={e => setHasExpiration(e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-                      </label>
-                    </div>
-
-                    {/* Expiration Controls when Toggle is ON */}
-                    {hasExpiration && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="pt-2 border-t border-gray-200 dark:border-white/10 space-y-2.5 overflow-hidden"
-                      >
-                        <div className="flex flex-wrap gap-2">
-                          {[
-                            { id: '1d', label: '1 Day' },
-                            { id: '3d', label: '3 Days' },
-                            { id: '7d', label: '7 Days' },
-                            { id: 'custom', label: 'Custom' },
-                          ].map(preset => (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              onClick={() => setDurationPreset(preset.id as any)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 ${
-                                durationPreset === preset.id
-                                  ? 'bg-indigo-600 text-white shadow-sm'
-                                  : 'bg-white dark:bg-[#16181d] text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/5'
-                              }`}
-                            >
-                              {durationPreset === preset.id && <Check size={12} />}
-                              <span>{preset.label}</span>
-                            </button>
-                          ))}
-                        </div>
-
-                        {durationPreset === 'custom' && (
-                          <div className="mt-2">
-                            <label className="block text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">
-                              Select Expiry Date & Time
-                            </label>
-                            <input
-                              type="datetime-local"
-                              value={customExpiry}
-                              min={new Date().toISOString().slice(0, 16)}
-                              onChange={e => setCustomExpiry(e.target.value)}
-                              className="w-full bg-white dark:bg-[#16181d] border border-gray-200 dark:border-white/10 rounded-xl px-3 py-2 text-xs text-[#17191c] dark:text-white font-mono focus:outline-none focus:border-indigo-500"
-                            />
-                          </div>
-                        )}
-                      </motion.div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <div className="pt-2">
-                <button
-                  type="submit"
-                  disabled={!isValid}
-                  className="w-full py-3.5 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm tracking-wide disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/35 transition-all flex items-center justify-center gap-2 active:scale-[0.99]"
-                >
-                  <span>{initialPoll ? 'Update Poll' : 'Next'}</span>
-                </button>
-              </div>
-            </form>
-          </motion.div>
+            {options.length < 10 && (
+              <button
+                type="button"
+                onClick={handleAddOption}
+                className="w-full mt-1.5 py-2.5 sm:py-3 px-4 rounded-xl bg-ink-2 hover:bg-ink-3 border border-line/25 text-bone text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm active:scale-[0.99]"
+              >
+                <Plus size={15} />
+                <span>Add Another Option</span>
+              </button>
+            )}
+          </div>
         </div>
-      )}
-    </AnimatePresence>,
-    document.body
+
+        {/* Poll Settings */}
+        <div className="pt-2 border-t border-line/20">
+          <label className="block text-[11px] font-mono uppercase text-bone-dim mb-2.5 tracking-wider">
+            Poll Settings
+          </label>
+
+          <div className="space-y-2.5 sm:space-y-3">
+            {/* Setting 1: Multiple Options */}
+            <div className="flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-xl border border-line/20 bg-ink-2/60">
+              <div className="min-w-0 flex-1">
+                <h4 className="text-xs sm:text-sm font-bold text-bone">
+                  Allow Multiple Options
+                </h4>
+                <p className="text-[11px] text-bone-dim mt-0.5">
+                  Voters can choose more than one answer.
+                </p>
+              </div>
+              <label htmlFor="poll-setting-multiple" className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  id="poll-setting-multiple"
+                  name="pollMultipleChoice"
+                  aria-label="Allow Multiple Options"
+                  type="checkbox"
+                  checked={isMultipleChoice}
+                  onChange={e => setIsMultipleChoice(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-300 dark:bg-ink-3 border border-line/30 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 dark:after:border-line/40 after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-sm peer-checked:bg-sienna peer-checked:border-sienna"></div>
+              </label>
+            </div>
+
+            {/* Setting 2: Anonymous Voting */}
+            <div
+              className={`flex items-center justify-between gap-3 p-3 sm:p-3.5 rounded-xl border transition-all ${
+                isAnonymous
+                  ? 'border-sienna/40 bg-sienna/10'
+                  : 'border-line/20 bg-ink-2/60'
+              }`}
+            >
+              <div className="min-w-0 flex-1">
+                <h4 className="text-xs sm:text-sm font-bold text-bone">
+                  Enable Anonymous Voting
+                </h4>
+                <p className="text-[11px] text-bone-dim mt-0.5">
+                  Votes will not be publicly disclosed.
+                </p>
+              </div>
+              <label htmlFor="poll-setting-anonymous" className="relative inline-flex items-center cursor-pointer shrink-0">
+                <input
+                  id="poll-setting-anonymous"
+                  name="pollAnonymous"
+                  aria-label="Enable Anonymous Voting"
+                  type="checkbox"
+                  checked={isAnonymous}
+                  onChange={e => setIsAnonymous(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-300 dark:bg-ink-3 border border-line/30 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 dark:after:border-line/40 after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-sm peer-checked:bg-sienna peer-checked:border-sienna"></div>
+              </label>
+            </div>
+
+            {/* Setting 3: Set Expiration Date & Time */}
+            <div className="p-3 sm:p-3.5 rounded-xl border border-line/20 bg-ink-2/60 space-y-2.5 sm:space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs sm:text-sm font-bold text-bone">
+                    Set an Expiration Date & Time
+                  </h4>
+                  <p className="text-[11px] text-bone-dim mt-0.5">
+                    Automatically closes poll when expired.
+                  </p>
+                </div>
+                <label htmlFor="poll-setting-expiration" className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    id="poll-setting-expiration"
+                    name="pollExpiration"
+                    aria-label="Set Expiration Date & Time"
+                    type="checkbox"
+                    checked={hasExpiration}
+                    onChange={e => setHasExpiration(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-300 dark:bg-ink-3 border border-line/30 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 dark:after:border-line/40 after:border after:rounded-full after:h-5 after:w-5 after:transition-all after:shadow-sm peer-checked:bg-sienna peer-checked:border-sienna"></div>
+                </label>
+              </div>
+
+              {/* Expiration Controls when Toggle is ON */}
+              {hasExpiration && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="pt-2 border-t border-line/20 space-y-2.5 overflow-hidden"
+                >
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                    {[
+                      { id: '1d', label: '1 Day' },
+                      { id: '3d', label: '3 Days' },
+                      { id: '7d', label: '7 Days' },
+                      { id: 'custom', label: 'Custom' },
+                    ].map(preset => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => setDurationPreset(preset.id as any)}
+                        className={`px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                          durationPreset === preset.id
+                            ? 'bg-sienna text-bg shadow-sm'
+                            : 'bg-ink-3 text-bone border border-line/20 hover:bg-ink'
+                        }`}
+                      >
+                        {durationPreset === preset.id && <Check size={12} />}
+                        <span>{preset.label}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {durationPreset === 'custom' && (
+                    <div className="mt-2">
+                      <label htmlFor="poll-custom-expiry" className="block text-[11px] font-mono uppercase text-bone-dim mb-1 tracking-wider">
+                        Select Expiry Date & Time
+                      </label>
+                      <input
+                        id="poll-custom-expiry"
+                        name="pollCustomExpiry"
+                        type="datetime-local"
+                        value={customExpiry}
+                        min={new Date().toISOString().slice(0, 16)}
+                        onChange={e => setCustomExpiry(e.target.value)}
+                        className="w-full bg-ink-3 border border-line/25 rounded-xl px-3 py-2 text-xs text-bone font-mono focus:outline-none focus:border-sienna/80"
+                      />
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Submit Button */}
+        <div className="pt-2 sticky bottom-0 bg-ink/95 backdrop-blur-sm pb-1 z-10">
+          <button
+            type="submit"
+            disabled={!isValid}
+            className="w-full py-3 px-6 rounded-xl bg-sienna hover:bg-sienna/90 text-bg font-bold text-sm disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-sienna/20 hover:scale-[1.01] active:scale-[0.98] transition-all"
+          >
+            <span>{initialPoll ? 'Update Poll' : 'Done'}</span>
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

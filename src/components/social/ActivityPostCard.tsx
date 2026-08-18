@@ -561,9 +561,9 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
           {/* Like */}
           <motion.button
             whileTap={{ scale: 1.25 }}
-            onClick={() => likeMutation.mutate()}
-            className={`flex items-center gap-1.5 transition-colors ${liked ? 'text-red-500 font-bold' : 'text-[#777b86] hover:text-red-500'
-              }`}
+            onClick={() => !likeMutation.isPending && likeMutation.mutate()}
+            disabled={likeMutation.isPending}
+            className={`flex items-center gap-1.5 transition-colors ${liked ? 'text-red-500 font-bold' : 'text-[#777b86] hover:text-red-500'} ${likeMutation.isPending ? 'opacity-70 cursor-not-allowed' : ''}`}
           >
             <AnimatedHeart isLiked={liked} size={18} />
             <span>{activity.likesCount || 0}</span>

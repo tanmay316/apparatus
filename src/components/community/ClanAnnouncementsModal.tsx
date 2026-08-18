@@ -307,7 +307,7 @@ export function ClanAnnouncementsModal({
                       onChange={e => setIsPinned(e.target.checked)}
                       className="sr-only peer"
                     />
-                    <div className="w-9 h-5 bg-ink-3 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                    <div className="w-10 h-5.5 bg-slate-300 dark:bg-ink-3 border border-line/30 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 dark:after:border-line/40 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all after:shadow-sm peer-checked:bg-amber-500 peer-checked:border-amber-500"></div>
                   </label>
                 </div>
 
@@ -379,7 +379,7 @@ export function ClanAnnouncementsModal({
                       animate={{ opacity: 1, y: 0 }}
                       className={`p-4 sm:p-5 rounded-2xl border transition-all ${
                         ann.isPinned
-                          ? 'bg-[#1e1c18] border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.05)]'
+                          ? 'bg-amber-500/10 border-amber-500/35 shadow-sm'
                           : 'bg-ink-2 border-line/20'
                       }`}
                     >
@@ -398,11 +398,11 @@ export function ClanAnnouncementsModal({
                               <span className="font-bold text-xs text-bone truncate">{ann.authorName}</span>
                               <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 rounded border ${
                                 isAdminAuthor
-                                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
                                   : isLeaderAuthor
-                                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                  ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
                                   : isCoLeaderAuthor
-                                  ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                                  ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30'
                                   : 'bg-ink-3 text-bone-dim border-line/20'
                               }`}>
                                 {isAdminAuthor ? 'Admin' : isLeaderAuthor ? 'Leader' : isCoLeaderAuthor ? 'Co-Leader' : 'Officer'}
@@ -414,7 +414,7 @@ export function ClanAnnouncementsModal({
 
                         <div className="flex items-center gap-1 shrink-0">
                           {ann.isPinned && (
-                            <span className="flex items-center gap-1 text-[10px] font-mono font-bold uppercase text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded-full">
+                            <span className="flex items-center gap-1 text-[10px] font-mono font-bold uppercase text-amber-600 dark:text-amber-400 bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 rounded-full">
                               <Pin size={10} className="fill-current" />
                               <span>Pinned</span>
                             </span>

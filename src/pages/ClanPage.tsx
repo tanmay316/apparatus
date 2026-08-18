@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { collection, query, where, orderBy, limit, getDocs, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, Shield, Users, MapPin, Search, Plus, Target, CalendarDays, MessageSquare, Heart, CornerDownRight, Trophy, Sparkles, Bookmark, Share2, Megaphone, MessageCircle, UserPlus, Clock, Lock } from 'lucide-react';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
@@ -27,7 +29,6 @@ import { EditEventSheet } from '@/components/community/EditEventSheet';
 import { ClanPostItem } from '@/components/community/ClanPostItem';
 import { ClanAnnouncementsModal } from '@/components/community/ClanAnnouncementsModal';
 import { ClanAnnouncementBanner } from '@/components/community/ClanAnnouncementBanner';
-import { ClanDiscussionTab } from '@/components/community/ClanDiscussionTab';
 import { RequestJoinClanModal } from '@/components/community/RequestJoinClanModal';
 import { ClanJoinRequestsModal } from '@/components/community/ClanJoinRequestsModal';
 
@@ -57,7 +58,7 @@ export function ClanPage() {
   const { showToast, confirm } = useUIStore();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'chat' | 'posts' | 'about' | 'members' | 'challenges' | 'events'>('chat');
+  const [activeTab, setActiveTab] = useState<'posts' | 'challenges' | 'events' | 'members' | 'about'>('posts');
   
   const [createChallengeOpen, setCreateChallengeOpen] = useState(false);
   const [createEventOpen, setCreateEventOpen] = useState(false);
@@ -127,6 +128,67 @@ export function ClanPage() {
   });
 
   const pinnedAnnouncement = announcements.find(a => a.isPinned) || announcements[0];
+
+  const [hasUnreadChat, setHasUnreadChat] = useState(false);
+
+  // Real-time unread message subscription
+  useEffect(() => {
+    if (!clanId || !isMember) {
+      setHasUnreadChat(false);
+      return;
+    }
+
+    const q = query(
+      collection(db, 'clan_messages'),
+      where('clanId', '==', clanId),
+      limit(50)
+    );
+
+    const unsubscribe = onSnapshot(q, (snap) => {
+      if (snap.empty) {
+        setHasUnreadChat(false);
+        return;
+      }
+
+      const getTime = (val: any) => {
+        if (!val) return 0;
+        if (typeof val.toMillis === 'function') return val.toMillis();
+        if (val.seconds) return val.seconds * 1000;
+        if (typeof val === 'string') return new Date(val).getTime();
+        if (typeof val === 'number') return val;
+        return 0;
+      };
+
+      // Find the most recent message by sorting in memory (avoids requiring composite index)
+      const docs = snap.docs.map(d => d.data());
+      docs.sort((a, b) => getTime(b.createdAt) - getTime(a.createdAt));
+      const latestMsg = docs[0];
+
+      if (!latestMsg) {
+        setHasUnreadChat(false);
+        return;
+      }
+
+      // If user themselves sent the latest message, it is not unread for them
+      if (latestMsg.userId === user?.uid) {
+        setHasUnreadChat(false);
+        return;
+      }
+
+      const msgTime = getTime(latestMsg.createdAt);
+      const lastRead = parseInt(localStorage.getItem(`lastReadChat_${clanId}`) || '0', 10);
+      
+      if (msgTime > lastRead) {
+        setHasUnreadChat(true);
+      } else {
+        setHasUnreadChat(false);
+      }
+    }, (err) => {
+      console.warn('Unread chat listener error:', err);
+    });
+
+    return () => unsubscribe();
+  }, [clanId, isMember, user?.uid]);
 
   const cancelRequestMutation = useMutation({
     mutationFn: async (reqId: string) => {
@@ -299,15 +361,23 @@ export function ClanPage() {
         <span className="font-display tracking-widest text-bone uppercase line-clamp-1 max-w-[200px]">{clan.name}</span>
         
         <div className="flex items-center gap-1 -mr-2">
-          {/* Discussion Shortcut Button */}
+          {/* Discussion Shortcut Button (Opens dedicated WhatsApp-style chat page) */}
           <button
-            onClick={() => setActiveTab('chat')}
-            className={`p-2 rounded-full hover:bg-ink-2 transition-colors ${
-              activeTab === 'chat' ? 'text-sienna bg-sienna/10' : 'text-bone-dim hover:text-bone'
-            }`}
+            onClick={() => {
+              if (clanId) {
+                localStorage.setItem(`lastReadChat_${clanId}`, Date.now().toString());
+                setHasUnreadChat(false);
+              }
+              navigate(`/clan/${clanId}/chat`);
+            }}
+            className="relative p-2 rounded-full hover:bg-ink-2 text-bone-dim hover:text-sienna transition-colors"
             title="Clan Discussion"
+            aria-label="Clan Discussion"
           >
             <MessageCircle size={20} />
+            {isMember && hasUnreadChat && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-ink animate-pulse shadow-[0_0_10px_rgba(16,185,129,0.9)]" />
+            )}
           </button>
 
           {/* Membership Requests Button for Leadership */}
@@ -333,17 +403,6 @@ export function ClanPage() {
               <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-amber-500 rounded-full ring-2 ring-ink animate-pulse" />
             )}
           </button>
-
-          {/* Edit Clan Settings for Leader */}
-          {isLeader && (
-            <button
-              onClick={() => setEditClanOpen(true)}
-              className="p-2 rounded-full hover:bg-ink-2 text-bone-dim hover:text-bone transition-colors"
-              title="Clan Settings"
-            >
-              <Shield size={18} />
-            </button>
-          )}
         </div>
       </div>
 
@@ -371,7 +430,7 @@ export function ClanPage() {
                 <span className="flex items-center gap-1.5"><MapPin size={14} className="text-sienna" /> {clan.location.city}</span>
               )}
               <span className="flex items-center gap-1">
-                • {clan.visibility === 'private' ? 'Private Clan' : 'Public Clan'}
+                • {clan.visibility === 'closed' ? 'Closed Clan' : clan.visibility === 'private' ? 'Private Clan' : 'Public Clan'}
               </span>
             </div>
           </div>
@@ -385,6 +444,14 @@ export function ClanPage() {
               className={`px-6 py-2 rounded-xl text-sm font-bold text-bone ${nmBtn}`}
             >
               {leaveMutation.isPending ? 'Leaving...' : 'Leave Clan'}
+            </button>
+          ) : clan.visibility === 'closed' ? (
+            <button 
+              disabled 
+              className="px-7 py-2 rounded-xl text-sm font-bold bg-ink-2 text-bone-dim shadow-sm flex items-center gap-2 cursor-not-allowed opacity-80"
+            >
+              <Lock size={15} />
+              <span>Clan Closed</span>
             </button>
           ) : clan.visibility === 'private' ? (
             userJoinRequest ? (
@@ -430,19 +497,6 @@ export function ClanPage() {
             </button>
           )}
 
-          {/* Announcements Button */}
-          <button
-            onClick={() => setAnnouncementsOpen(true)}
-            className={`px-4 py-2 rounded-xl text-sm font-bold text-bone flex items-center gap-2 ${nmBtn}`}
-          >
-            <Megaphone size={15} className="text-amber-400" />
-            <span>Announcements</span>
-            {announcements.length > 0 && (
-              <span className="text-[10px] font-mono font-bold bg-amber-400/20 text-amber-400 px-2 py-0.5 rounded-full border border-amber-400/30">
-                {announcements.length}
-              </span>
-            )}
-          </button>
         </div>
       </div>
 
@@ -450,12 +504,11 @@ export function ClanPage() {
         {/* Tabs */}
         <div className="px-6 border-b border-line shrink-0 flex gap-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {[
-            { id: 'chat', label: 'Discussion' },
             { id: 'posts', label: 'Posts' },
-            { id: 'about', label: 'About' },
-            { id: 'members', label: 'Members' },
             { id: 'challenges', label: 'Challenges' },
             { id: 'events', label: 'Events' },
+            { id: 'members', label: 'Members' },
+            { id: 'about', label: 'About' },
           ].map(tab => (
             <button
               key={tab.id}
@@ -465,9 +518,6 @@ export function ClanPage() {
               }`}
             >
               <span>{tab.label}</span>
-              {tab.id === 'chat' && isMember && (
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              )}
               {activeTab === tab.id && (
                 <motion.div layoutId="clan_detail_tab" className="absolute bottom-0 left-0 right-0 h-1 bg-sienna rounded-t-full" />
               )}
@@ -477,17 +527,6 @@ export function ClanPage() {
 
         {/* Tab Content Area */}
         <div className="p-6">
-          {activeTab === 'chat' && (
-            <div className="animate-in fade-in duration-300">
-              <ClanDiscussionTab
-                clanId={clanId!}
-                clanName={clan.name}
-                isMember={isMember}
-                userRole={myMembership?.role}
-                onJoinClan={() => joinMutation.mutate()}
-              />
-            </div>
-          )}
 
           {activeTab === 'posts' && (
             <div className="space-y-6 animate-in fade-in duration-500">
@@ -568,13 +607,14 @@ export function ClanPage() {
               
               <div className="space-y-3">
                 {members.map(member => (
-                  <div key={member.id} className="flex items-center justify-between p-4 rounded-2xl bg-ink-2/60 border border-line/30 hover:border-line/60 transition-colors">
+                  <div key={member.id} className="flex items-center gap-3.5 p-3.5 sm:p-4 rounded-2xl bg-ink-2/60 border border-line/30 hover:border-line/60 transition-colors">
+                    {/* Avatar */}
                     <div 
                       onClick={() => {
                         if (member.userId === user?.uid) navigate('/profile');
                         else navigate(`/profile/${member.userId}`);
                       }}
-                      className="flex items-center gap-3.5 cursor-pointer hover:opacity-80 transition-opacity min-w-0 flex-1"
+                      className="shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
                     >
                       {member.userPhoto ? (
                         <img 
@@ -588,34 +628,49 @@ export function ClanPage() {
                           {member.userName.charAt(0)}
                         </div>
                       )}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-bone font-bold text-sm hover:underline truncate max-w-[130px] sm:max-w-[220px]">{member.userName} {member.userId === user?.uid && '(You)'}</div>
-                        <div className="text-xs font-mono text-bone-dim flex items-center gap-2 truncate">
-                          {member.role === 'leader' && <span className="text-amber-400 font-bold">👑 Leader</span>}
-                          {member.role === 'co_leader' && <span className="text-emerald-400 font-bold">⚔️ Co-Leader</span>}
-                          {member.role === 'member' && <span>Member</span>}
-                        </div>
+                    </div>
+
+                    {/* Member Details: Name on Top, Role Dropdown / Badge Below */}
+                    <div className="min-w-0 flex-1 flex flex-col gap-1">
+                      <div 
+                        onClick={() => {
+                          if (member.userId === user?.uid) navigate('/profile');
+                          else navigate(`/profile/${member.userId}`);
+                        }}
+                        className="text-bone font-bold text-sm hover:underline truncate cursor-pointer"
+                      >
+                        {member.userName} {member.userId === user?.uid && <span className="text-bone-dim text-xs font-normal">(You)</span>}
+                      </div>
+
+                      {/* Dropdown / Role Badge below the Name */}
+                      <div className="flex items-center gap-2">
+                        {isLeader && member.userId !== user?.uid ? (
+                          <select
+                            id={`member-role-select-${member.userId}`}
+                            name={`memberRoleSelect_${member.userId}`}
+                            aria-label={`Role for ${member.userName}`}
+                            value={member.role}
+                            onChange={(e) => handleRoleChange(member.userId, e.target.value as any, member.userName)}
+                            className="bg-ink-3 hover:bg-ink-2 text-bone border border-line rounded-lg px-2.5 py-1 text-xs font-mono font-bold focus:ring-1 focus:ring-sienna outline-none transition-colors cursor-pointer appearance-none pr-6 max-w-full"
+                            style={{
+                              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23d9a441' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+                              backgroundRepeat: 'no-repeat',
+                              backgroundPosition: 'right 6px center'
+                            }}
+                          >
+                            <option value="member" className="bg-ink text-bone">Member</option>
+                            <option value="co_leader" className="bg-ink text-bone">Co-Leader</option>
+                            <option value="leader" className="bg-ink text-amber-400">Transfer Leadership</option>
+                          </select>
+                        ) : (
+                          <div className="text-xs font-mono text-bone-dim flex items-center gap-1.5">
+                            {member.role === 'leader' && <span className="text-amber-400 font-bold flex items-center gap-1">👑 Leader</span>}
+                            {member.role === 'co_leader' && <span className="text-emerald-400 font-bold flex items-center gap-1">⚔️ Co-Leader</span>}
+                            {member.role === 'member' && <span className="px-2 py-0.5 rounded-md bg-ink-3/80 border border-line/20 text-[11px]">Member</span>}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    
-                    {isLeader && member.userId !== user?.uid && (
-                      <div className="shrink-0">
-                        <select
-                          value={member.role}
-                          onChange={(e) => handleRoleChange(member.userId, e.target.value as any, member.userName)}
-                          className="bg-ink-3 hover:bg-ink-2 text-bone border border-line rounded-xl px-3 py-1.5 text-xs font-mono font-bold focus:ring-1 focus:ring-sienna outline-none transition-colors cursor-pointer appearance-none pr-7"
-                          style={{
-                            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23d9a441' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
-                            backgroundRepeat: 'no-repeat',
-                            backgroundPosition: 'right 8px center'
-                          }}
-                        >
-                          <option value="member" className="bg-ink text-bone">Member</option>
-                          <option value="co_leader" className="bg-ink text-bone">Co-Leader</option>
-                          <option value="leader" className="bg-ink text-amber-400">Transfer Leadership</option>
-                        </select>
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>

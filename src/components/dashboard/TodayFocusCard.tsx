@@ -61,6 +61,8 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
 
   // Find today's target day
   const todayDay = activeDays[currentDayIndex] || activeDays[0];
+  if (!todayDay) return null;
+  
   const wasCompletedToday = todayWorkouts.some((w: any) => w.dayId === todayDay.id || String(todayDay.dayNumber) === String(w.dayId));
   const allExercises = [...(todayDay.warmup || []), ...(todayDay.skillWork || []), ...(todayDay.strength || []), ...(todayDay.cooldown || [])];
 

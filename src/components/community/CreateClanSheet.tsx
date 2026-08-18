@@ -113,9 +113,11 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
           </div>
 
           <div>
-            <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Cover Image</label>
+            <label htmlFor="create-clan-cover" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Cover Image</label>
             <div className="flex gap-2">
               <input 
+                id="create-clan-cover"
+                name="clanCoverUrl"
                 value={coverUrl.startsWith('data:') ? 'Image uploaded & compressed' : coverUrl} 
                 onChange={e => setCoverUrl(e.target.value)} 
                 disabled={coverUrl.startsWith('data:')}
@@ -123,6 +125,9 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
                 className="input-field flex-1 text-xs font-mono truncate" 
               />
               <input 
+                id="create-clan-file-upload"
+                name="clanFileUpload"
+                aria-label="Upload clan cover image"
                 ref={fileInputRef} 
                 type="file" 
                 accept="image/*" 
@@ -141,19 +146,21 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
           </div>
 
           <div>
-            <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Clan Name</label>
-            <input required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Iron Lifters" className="input-field w-full text-lg" />
+            <label htmlFor="create-clan-name" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Clan Name</label>
+            <input id="create-clan-name" name="clanName" required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Iron Lifters" className="input-field w-full text-lg" />
           </div>
           
           <div>
-            <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Description</label>
-            <textarea required value={description} onChange={e => setDescription(e.target.value)} placeholder="What is the mission and vision of your clan?" className="input-field w-full min-h-[80px] py-3" />
+            <label htmlFor="create-clan-desc" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Description</label>
+            <textarea id="create-clan-desc" name="clanDescription" required value={description} onChange={e => setDescription(e.target.value)} placeholder="What is the mission and vision of your clan?" className="input-field w-full min-h-[80px] py-3" />
           </div>
           
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Category</label>
+              <label htmlFor="create-clan-category" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Category</label>
               <CustomSelect
+                id="create-clan-category"
+                name="clanCategory"
                 className="w-full"
                 value={category}
                 onChange={(val) => setCategory(val as ClanCategory)}
@@ -168,22 +175,25 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
               />
             </div>
             <div>
-              <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Visibility</label>
+              <label htmlFor="create-clan-visibility" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Visibility</label>
               <CustomSelect
+                id="create-clan-visibility"
+                name="clanVisibility"
                 className="w-full"
                 value={visibility}
                 onChange={(val) => setVisibility(val as ClanVisibility)}
                 options={[
                   { value: 'public', label: 'Public (Anyone can join directly)' },
                   { value: 'private', label: 'Private (Request to join)' },
+                  { value: 'closed', label: 'Closed (Not accepting new members)' },
                 ]}
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Tags (comma separated)</label>
-            <input value={tags} onChange={e => setTags(e.target.value)} placeholder="fitness, hypertrophy, running" className="input-field w-full" />
+            <label htmlFor="create-clan-tags" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Tags (comma separated)</label>
+            <input id="create-clan-tags" name="clanTags" value={tags} onChange={e => setTags(e.target.value)} placeholder="fitness, hypertrophy, running" className="input-field w-full" />
           </div>
 
           <button type="submit" disabled={createMutation.isPending || !name.trim() || !description.trim()} className="btn-primary w-full py-4 text-lg mt-4 font-bold">

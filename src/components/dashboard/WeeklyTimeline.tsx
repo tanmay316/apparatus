@@ -47,7 +47,7 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
       <AiPlanGeneratorModal isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} />
 
       <div className="flex gap-4 overflow-x-auto px-1 -mx-1 pb-6 pt-2 snap-x snap-mandatory [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        {activeDays.map((day, index) => {
+        {activeDays.filter(Boolean).map((day, index) => {
           const wasCompleted = todayWorkouts.some((w: any) => w.dayId === day.id)
             || recentWorkouts.some((w: any) => w.dayId === day.id);
 
@@ -59,7 +59,7 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
 
           const allExercises = [...(day.warmup || []), ...(day.skillWork || []), ...(day.strength || []), ...(day.cooldown || [])];
           
-          const exerciseNames = allExercises.map(ex => ex.name);
+          const exerciseNames = allExercises.filter(Boolean).map(ex => ex.name);
           const activeMuscleSet = getActiveMuscles(exerciseNames);
           const muscleIds = Array.from(activeMuscleSet) as MuscleRegion[];
           const muscleString = muscleIds

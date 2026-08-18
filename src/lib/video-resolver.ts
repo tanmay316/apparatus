@@ -97,8 +97,20 @@ export function scoreVideo(title: string, exerciseName: string) {
 
   let score = 0;
 
+  const VARIATION_TERMS = new Set([
+    'dumbbell', 'barbell', 'machine', 'smith', 'cable', 'band', 'kettlebell', 
+    'bulgarian', 'hack', 'incline', 'decline', 'seated', 'standing', 'single', 'one'
+  ]);
+
   for (const token of exerciseTokens) {
     if (titleTokens.has(token)) score += 20;
+  }
+
+  // Heavily penalize videos that include variation keywords not present in the target exercise
+  for (const vToken of VARIATION_TERMS) {
+    if (titleTokens.has(vToken) && !exerciseTokens.includes(vToken)) {
+      score -= 50; 
+    }
   }
 
   if (titleTokens.has('form')) score += 20;
@@ -147,22 +159,45 @@ export async function resolveExerciseVideo(exerciseName: string, directYtLink?: 
   }
 
   if (signal?.aborted) return null;
+  
+  // Create a helper to cache success and return video
+  const cacheAndReturn = (videoId: string, title: string, source: string) => {
+    setDoc(doc(db, 'exerciseVideoMappings', norm), {
+      youtubeId: videoId,
+      exerciseName: norm,
+      title: title,
+      status: 'found',
+      source,
+      updatedAt: Date.now(),
+      expiresAt: Date.now() + 2 * 365 * 24 * 60 * 60 * 1000 
+    }, { merge: true }).catch(console.warn);
+    return videoId;
+  };
+
   // 4. Try YouTube Data API
   try {
     const apiKey = Capacitor.isNativePlatform() ? YT_ANDROID_KEY : YT_WEB_KEY;
     const params = new URLSearchParams({
       part: 'snippet',
-      maxResults: '10',
+      maxResults: '5',
       q: `${exerciseName} proper form technique`,
       type: 'video',
       videoEmbeddable: 'true',
       videoSyndicated: 'true',
-      order: 'relevance',
+      order: 'viewCount',
       relevanceLanguage: 'en',
       key: apiKey,
     });
     
-    const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`, { signal });
+    // Add a short timeout to the YT fetch so we fallback quickly if it hangs
+    const ytAbort = new AbortController();
+    const timeout = setTimeout(() => ytAbort.abort(), 4000);
+    
+    const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`, { 
+      signal: signal ? AbortSignal.any([signal, ytAbort.signal]) : ytAbort.signal 
+    });
+    clearTimeout(timeout);
+    
     if (res.ok) {
       const data = await res.json();
       if (data.items && data.items.length > 0) {
@@ -180,18 +215,7 @@ export async function resolveExerciseVideo(exerciseName: string, directYtLink?: 
         });
 
         if (bestVideo) {
-          // Cache success (2 years TTL)
-          setDoc(doc(db, 'exerciseVideoMappings', norm), {
-            youtubeId: bestVideo,
-            exerciseName: norm,
-            title: bestTitle,
-            status: 'found',
-            source: 'youtube',
-            updatedAt: Date.now(),
-            expiresAt: Date.now() + 2 * 365 * 24 * 60 * 60 * 1000 
-          }, { merge: true }).catch(console.warn);
-
-          return bestVideo;
+          return cacheAndReturn(bestVideo, bestTitle, 'youtube');
         }
       } else {
         // Cache failure (7 days TTL)
@@ -203,51 +227,61 @@ export async function resolveExerciseVideo(exerciseName: string, directYtLink?: 
           expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 
         }, { merge: true }).catch(console.warn);
       }
+      // If YT API succeeded but found nothing, don't fallback.
+      return null;
     }
   } catch (err) {
-    console.warn("YouTube API request failed:", err);
+    console.warn("YouTube API request failed, falling back:", err);
   }
 
   if (signal?.aborted) return null;
-  // 5. Fallback to Invidious
-  for (const instance of INVIDIOUS_INSTANCES) {
+
+  // 5. Fallback to Invidious (Race all instances for the fastest response)
+  const fallbackPromises = INVIDIOUS_INSTANCES.map(async (instance) => {
+    // Add a strict timeout to each instance to fail fast
+    const invAbort = new AbortController();
+    const timeout = setTimeout(() => invAbort.abort(), 6000);
+    
     try {
       const res = await fetch(
-        `${instance}/api/v1/search?q=${encodeURIComponent(`${exerciseName} proper form technique`)}&type=video&sort_by=relevance`,
-        { signal }
+        `${instance}/api/v1/search?q=${encodeURIComponent(`${exerciseName} proper form technique`)}&type=video&sort_by=views`,
+        { signal: signal ? AbortSignal.any([signal, invAbort.signal]) : invAbort.signal }
       );
-      if (!res.ok) continue;
+      if (!res.ok) throw new Error('Bad response');
       const results = await res.json();
       
       if (results && results.length > 0) {
         let bestVideo = results[0].videoId;
         let maxScore = -999;
+        let bestTitle = results[0].title;
         
-        results.slice(0, 10).forEach((item: any) => {
+        results.slice(0, 5).forEach((item: any) => {
           const score = scoreVideo(item.title, exerciseName);
           if (score > maxScore) {
             maxScore = score;
             bestVideo = item.videoId;
+            bestTitle = item.title;
           }
         });
         
         if (bestVideo) {
-          // Cache success (2 years TTL)
-          setDoc(doc(db, 'exerciseVideoMappings', norm), {
-            youtubeId: bestVideo,
-            exerciseName: norm,
-            status: 'found',
-            source: 'invidious',
-            updatedAt: Date.now(),
-            expiresAt: Date.now() + 2 * 365 * 24 * 60 * 60 * 1000 
-          }, { merge: true }).catch(console.warn);
-
-          return bestVideo;
+          return { videoId: bestVideo, title: bestTitle };
         }
       }
-    } catch {
-      continue;
+      throw new Error('No results');
+    } finally {
+      clearTimeout(timeout);
     }
+  });
+
+  try {
+    // Promise.any will resolve with the FIRST successful instance
+    const fastestResult = await Promise.any(fallbackPromises);
+    if (fastestResult) {
+      return cacheAndReturn(fastestResult.videoId, fastestResult.title, 'invidious');
+    }
+  } catch (e) {
+    console.warn("All Invidious fallback instances failed.");
   }
 
   return null;

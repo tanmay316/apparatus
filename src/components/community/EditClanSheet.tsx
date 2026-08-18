@@ -90,37 +90,46 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
 
             <div className="space-y-4 pr-1">
               <div>
-                <label className="block text-xs font-mono text-bone-dim mb-1 ml-1 uppercase">Name</label>
+                <label htmlFor="edit-clan-name" className="block text-xs font-mono text-bone-dim mb-1 ml-1 uppercase">Name</label>
                 <input 
+                  id="edit-clan-name"
+                  name="editClanName"
                   type="text" value={name} onChange={e => setName(e.target.value)}
                   className="input-field w-full text-bone text-lg"
                 />
               </div>
               
               <div>
-                <label className="block text-xs font-mono text-bone-dim mb-1 ml-1 uppercase">Description</label>
+                <label htmlFor="edit-clan-desc" className="block text-xs font-mono text-bone-dim mb-1 ml-1 uppercase">Description</label>
                 <textarea 
+                  id="edit-clan-desc"
+                  name="editClanDescription"
                   value={description} onChange={e => setDescription(e.target.value)}
                   className="input-field w-full h-24 resize-none text-bone"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-bone-dim mb-1 ml-1 uppercase">Visibility</label>
+                <label htmlFor="edit-clan-visibility" className="block text-xs font-mono text-bone-dim mb-1 ml-1 uppercase">Visibility</label>
                 <CustomSelect
+                  id="edit-clan-visibility"
+                  name="editClanVisibility"
                   className="w-full"
                   value={visibility}
                   onChange={(val) => setVisibility(val as ClanVisibility)}
                   options={[
                     { value: 'public', label: 'Public (Anyone can join directly)' },
                     { value: 'private', label: 'Private (Request to join)' },
+                    { value: 'closed', label: 'Closed (Not accepting new members)' },
                   ]}
                 />
               </div>
               
               <div>
-                <label className="block text-xs font-mono text-bone-dim mb-1 ml-1 uppercase">Tags (comma separated)</label>
+                <label htmlFor="edit-clan-tags" className="block text-xs font-mono text-bone-dim mb-1 ml-1 uppercase">Tags (comma separated)</label>
                 <input 
+                  id="edit-clan-tags"
+                  name="editClanTags"
                   type="text" value={tags} onChange={e => setTags(e.target.value)}
                   className="input-field w-full text-bone"
                   placeholder="e.g. running, beginners, hiit"
@@ -128,9 +137,11 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
               </div>
               
               <div>
-                <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Cover Image</label>
+                <label htmlFor="edit-clan-cover" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Cover Image</label>
                 <div className="flex gap-2">
                   <input 
+                    id="edit-clan-cover"
+                    name="editClanCover"
                     type="text" 
                     value={coverUrl.startsWith('data:') ? 'Image uploaded & compressed' : coverUrl} 
                     onChange={e => setCoverUrl(e.target.value)} 
@@ -139,6 +150,9 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
                     className="input-field flex-1 text-xs font-mono truncate text-bone"
                   />
                   <input 
+                    id="edit-clan-file-upload"
+                    name="editClanFileUpload"
+                    aria-label="Upload clan cover file"
                     ref={fileInputRef} 
                     type="file" 
                     accept="image/*" 

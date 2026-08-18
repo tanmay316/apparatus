@@ -173,7 +173,7 @@ export function WorkoutSession() {
   }, [store.isPaused]);
 
 
-  const hasLoggedSets = Object.values(store.logs).some(ex => ex.sets.some(s => s.completed));
+  const hasLoggedSets = Object.values(store.logs || {}).some(ex => (ex.sets || []).some(s => s.completed));
   const hasLoggedSetsRef = useRef(hasLoggedSets);
   useEffect(() => {
     hasLoggedSetsRef.current = hasLoggedSets;
@@ -239,9 +239,9 @@ export function WorkoutSession() {
   const displayCooldown = currentDay?.cooldown || [];
   const displayStrength = hasPlanExercises ? [...(currentDay?.strength || []), ...missingHistoricalExercises] : historicalExercises;
   const displayExercises = [...displayWarmup, ...displaySkillWork, ...displayStrength, ...displayCooldown];
-  const activeLogs = store.isActive ? Object.values(store.logs) : historicalLogs;
+  const activeLogs = store.isActive ? Object.values(store.logs || {}) : historicalLogs;
   const activeExercises = store.isActive
-    ? [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown]
+    ? [...(store.warmup || []), ...(store.skillWork || []), ...(store.strength || []), ...(store.cooldown || [])]
     : displayExercises;
   const estimatedCalories = calculateWorkoutCalories(
     activeExercises,
@@ -351,7 +351,8 @@ export function WorkoutSession() {
     setIsSaving(true);
     
     try {
-      const exLogs = Object.values(store.logs).filter(ex => ex.sets.some(s => s.completed));
+      const logsObj = store.logs || {};
+      const exLogs = Object.values(logsObj).filter(ex => (ex.sets || []).some(s => s.completed));
       
       if (exLogs.length === 0) {
         // If they click finish/stop with no sets logged, just silently cancel the workout and remove the notification
@@ -365,7 +366,7 @@ export function WorkoutSession() {
       // Play celebration sound
       playSuccessChime();
 
-      const allExercises = [...store.warmup, ...store.skillWork, ...store.strength, ...store.cooldown];
+      const allExercises = [...(store.warmup || []), ...(store.skillWork || []), ...(store.strength || []), ...(store.cooldown || [])];
       const totalVol = calculateWorkoutVolume(allExercises, exLogs, userWeight || 70);
       const finalDurationMin = Math.max(1, Math.round(elapsedSec / 60));
       const calories = displayCalories;

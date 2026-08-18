@@ -299,7 +299,7 @@ export function SingleActivitySheet({ activity, isOpen, onClose }: SingleActivit
             {/* Scrollable Body Content */}
             <div className="flex-1 overflow-y-auto px-3.5 sm:px-4 py-3.5 space-y-4">
               {/* Main Activity Card (Uses the exact same component as the feed, without opening this modal) */}
-              <div className="pointer-events-none">
+              <div>
                 <ActivityPostCard activity={activity} hideCommentsToggle isEmbedded />
               </div>
               <div className="border-b border-line/10 pt-2" />

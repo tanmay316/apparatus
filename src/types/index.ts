@@ -592,7 +592,7 @@ export interface CardioActivity {
 
 // ─── Clan System (V2) ────────────────────────────────────────
 export type ClanRole = 'leader' | 'co_leader' | 'member';
-export type ClanVisibility = 'public' | 'private';
+export type ClanVisibility = 'public' | 'private' | 'closed';
 export type ClanStatus = 'active' | 'suspended' | 'disbanded';
 export type ClanCategory = 'Calisthenics' | 'Gym' | 'Running' | 'Cycling' | 
   'Yoga' | 'CrossFit' | 'Swimming' | 'MMA' | 'General' | 'Other';

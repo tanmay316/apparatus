@@ -206,7 +206,9 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
                 {/* Drag Handle on Mobile */}
                 <div className="w-12 h-1.5 bg-line/40 rounded-full mx-auto mb-4 sm:hidden" />
 
-                {/* Header */}
+                {!isPollSheetOpen ? (
+                  <div className="flex flex-col h-full animate-in fade-in slide-in-from-left-4 duration-300">
+                    {/* Header */}
                 <div className="flex items-center justify-between mb-4 pb-3 border-b border-line/20">
                   <div>
                     <h2 className="text-lg font-bold text-bone tracking-wide">Edit Post</h2>
@@ -223,10 +225,12 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
                 <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
                   {/* Title Field */}
                   <div>
-                    <label className="block text-[11px] font-mono uppercase text-bone-dim mb-1.5 tracking-wider">
+                    <label htmlFor="edit-post-title" className="block text-[11px] font-mono uppercase text-bone-dim mb-1.5 tracking-wider">
                       Title (Optional)
                     </label>
                     <input
+                      id="edit-post-title"
+                      name="editPostTitle"
                       type="text"
                       value={title}
                       onChange={e => setTitle(e.target.value)}
@@ -238,10 +242,12 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
 
                   {/* Body Textarea */}
                   <div>
-                    <label className="block text-[11px] font-mono uppercase text-bone-dim mb-1.5 tracking-wider">
+                    <label htmlFor="edit-post-content" className="block text-[11px] font-mono uppercase text-bone-dim mb-1.5 tracking-wider">
                       Post Content
                     </label>
                     <textarea
+                      id="edit-post-content"
+                      name="editPostContent"
                       value={postText}
                       onChange={e => setPostText(e.target.value)}
                       placeholder="What's on your mind? Share a workout, question, tip, or achievement..."
@@ -358,35 +364,41 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
                   {/* Action Bar */}
                   <div className="flex items-center justify-between pt-3 border-t border-line/20 mt-2">
                     <div className="flex items-center gap-2">
+                      {/* Image Attachment Button */}
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={images.length >= 4 || isProcessingImage}
-                        className="px-3 py-2.5 bg-ink-2 rounded-xl text-bone-dim hover:text-sienna hover:bg-sienna/10 transition-colors flex items-center gap-1.5 text-xs font-mono disabled:opacity-50 border border-line/20 hover:border-sienna/30"
+                        className="w-10 h-10 bg-ink-2 rounded-xl text-bone-dim hover:text-sienna hover:bg-sienna/10 transition-colors flex items-center justify-center disabled:opacity-50 border border-line/20 hover:border-sienna/30 shadow-sm"
+                        title="Attach Photo"
+                        aria-label="Attach Photo"
                       >
                         {isProcessingImage ? (
-                          <Loader2 size={15} className="animate-spin text-sienna" />
+                          <Loader2 size={18} className="animate-spin text-sienna" />
                         ) : (
-                          <ImageIcon size={15} />
+                          <ImageIcon size={18} />
                         )}
-                        <span>{images.length > 0 ? 'Image' : 'Photo'}</span>
                       </button>
 
                       {/* Poll Button */}
                       <button
                         type="button"
                         onClick={() => setIsPollSheetOpen(true)}
-                        className={`px-3 py-2.5 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-mono border ${
+                        className={`w-10 h-10 rounded-xl transition-colors flex items-center justify-center border shadow-sm ${
                           poll
-                            ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
+                            ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/40 shadow-indigo-500/10'
                             : 'bg-ink-2 text-bone-dim hover:text-indigo-400 hover:bg-indigo-500/10 border-line/20 hover:border-indigo-500/30'
                         }`}
+                        title={poll ? 'Edit Poll' : 'Add Poll'}
+                        aria-label={poll ? 'Edit Poll' : 'Add Poll'}
                       >
-                        <BarChart2 size={15} />
-                        <span>{poll ? 'Edit Poll' : 'Add Poll'}</span>
+                        <BarChart2 size={18} />
                       </button>
 
                       <input
+                        id="edit-post-image-upload"
+                        name="editPostImageUpload"
+                        aria-label="Upload post images"
                         type="file"
                         ref={fileInputRef}
                         onChange={handleImageSelect}
@@ -425,20 +437,21 @@ export function EditPostSheet({ post, isOpen, onClose, onUpdated }: EditPostShee
                     </div>
                   </div>
                 </form>
+                </div>
+                ) : (
+                  <CreatePollSheet
+                    isOpen={isPollSheetOpen}
+                    onClose={() => setIsPollSheetOpen(false)}
+                    onPollCreated={p => setPoll(p)}
+                    initialPoll={poll}
+                  />
+                )}
               </motion.div>
             </div>
           )}
         </AnimatePresence>,
         document.body
       )}
-
-      {/* Create / Edit Poll Sheet */}
-      <CreatePollSheet
-        isOpen={isPollSheetOpen}
-        onClose={() => setIsPollSheetOpen(false)}
-        onPollCreated={p => setPoll(p)}
-        initialPoll={poll}
-      />
     </>
   );
 }

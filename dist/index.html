@@ -6,6 +6,7 @@
     <title>APPARATUS — Multi-User Fitness Platform</title>
     <meta name="description" content="Track workouts, build strength, follow friends. Calisthenics, gym, and bodyweight training in one place." />
     <meta name="theme-color" content="#14151A" />
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/png" href="/logo.png" />
@@ -33,17 +34,29 @@
         } catch (e) {}
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-Bb9XGpaz.js"></script>
+    <script type="module" crossorigin src="/assets/index-CekQpX0q.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-CNC7AqOf.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-motion-BH4b_M8o.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-react-0Ld3fSRY.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-BYyWylwy.js">
     <link rel="modulepreload" crossorigin href="/assets/ui-store-DPWDRGrn.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-firebase-C4r9GTSs.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-firebase-D3n6mDxa.js">
     <link rel="modulepreload" crossorigin href="/assets/dist-DS-py3R3.js">
     <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-O2qoNjQA.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-DHcYTr-7.css">
   </head>
   <body class="bg-ink text-bone antialiased">
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-preloader" style="position:fixed;top:0;left:0;right:0;bottom:0;background-color:#f4a080;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;">
+        <div style="position:relative;display:flex;flex-direction:column;align-items:center;">
+          <img src="/logo.png" alt="Apparatus" style="width:128px;height:auto;margin-bottom:32px;mix-blend-mode:multiply;opacity:0.9;animation:preloaderPulse 3s ease-in-out infinite;filter:drop-shadow(0 4px 6px rgba(0,0,0,0.1));" />
+        </div>
+        <style>
+          @keyframes preloaderPulse {
+            0%, 100% { opacity: 0.9; }
+            50% { opacity: 0.5; }
+          }
+        </style>
+      </div>
+    </div>
   </body>
 </html>

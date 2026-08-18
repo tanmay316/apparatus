@@ -196,22 +196,22 @@ export function ClanPollCard({
   return (
     <div
       onClick={e => e.stopPropagation()}
-      className="w-full bg-[#fbfbfb] dark:bg-[#1a1d24] border border-[#ebebeb] dark:border-white/10 rounded-[28px] p-4 sm:p-5 shadow-sm text-left relative overflow-hidden my-3"
+      className="w-full bg-ink-2/80 border border-line/25 rounded-2xl p-4 sm:p-5 shadow-sm text-left relative overflow-hidden my-3"
     >
       {/* Header Question */}
       <div className="mb-4">
-        <h3 className="font-display font-bold text-base sm:text-lg text-[#17191c] dark:text-white leading-snug tracking-tight">
+        <h3 className="font-display font-bold text-base sm:text-lg text-bone leading-snug tracking-tight">
           {currentPoll.question}
         </h3>
-        <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400 font-medium">
+        <div className="flex items-center gap-2 mt-1 text-xs text-bone-dim font-medium">
           <span>{totalVotes} {totalVotes === 1 ? 'vote' : 'votes'}</span>
           <span>•</span>
           {isExpired ? (
-            <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1">
+            <span className="text-amber-500 font-semibold flex items-center gap-1">
               <AlertCircle size={12} /> Voting Ended
             </span>
           ) : hasUserVoted ? (
-            <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+            <span className="text-emerald-500 font-semibold">
               {currentPoll.isMultipleChoice ? 'Multiple choice • You voted' : 'You voted'}
             </span>
           ) : (
@@ -231,12 +231,12 @@ export function ClanPollCard({
             <div
               key={opt.id}
               onClick={e => handleVoteOption(e, opt.id)}
-              className={`relative overflow-hidden rounded-[20px] p-3.5 sm:p-4 border transition-all select-none ${
+              className={`relative overflow-hidden rounded-xl p-3 sm:p-3.5 border transition-all select-none ${
                 interactive && !isExpired ? 'cursor-pointer active:scale-[0.99]' : 'cursor-default'
               } ${
                 isSelected
-                  ? 'border-emerald-500 dark:border-emerald-400/90 shadow-[0_0_0_1px_rgba(16,185,129,0.3)] bg-white dark:bg-[#20242e]'
-                  : 'border-gray-200/80 dark:border-white/10 bg-white/80 dark:bg-[#1f2229]/80 hover:border-gray-300 dark:hover:border-white/20'
+                  ? 'border-emerald-500 bg-emerald-500/10 shadow-sm'
+                  : 'border-line/25 bg-ink hover:border-line/40 hover:bg-ink-3/70'
               }`}
             >
               {/* Animated Progress Fill Bar */}
@@ -244,8 +244,8 @@ export function ClanPollCard({
                 initial={false}
                 animate={{ width: `${percent}%` }}
                 transition={{ duration: 0.5, ease: 'easeOut' }}
-                className={`absolute top-0 bottom-0 left-0 rounded-[18px] opacity-80 pointer-events-none transition-colors ${
-                  isSelected ? 'bg-emerald-500/20 dark:bg-emerald-500/25' : colorClass.split(' ')[0]
+                className={`absolute top-0 bottom-0 left-0 rounded-xl opacity-80 pointer-events-none transition-colors ${
+                  isSelected ? 'bg-emerald-500/20' : 'bg-sienna/15'
                 }`}
               />
 
@@ -263,8 +263,8 @@ export function ClanPollCard({
                   <span
                     className={`text-xs sm:text-sm font-semibold truncate ${
                       isSelected
-                        ? 'text-emerald-900 dark:text-emerald-200 font-bold'
-                        : 'text-[#17191c] dark:text-white'
+                        ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                        : 'text-bone'
                     }`}
                   >
                     {opt.text}
@@ -281,7 +281,7 @@ export function ClanPollCard({
                         return (
                           <div
                             key={voter.userId || vIdx}
-                            className={`w-6 h-6 rounded-full border-2 border-white dark:border-[#1a1d24] overflow-hidden flex items-center justify-center text-[10px] font-bold shadow-sm ${avatarColor}`}
+                            className={`w-6 h-6 rounded-full border-2 border-ink overflow-hidden flex items-center justify-center text-[10px] font-bold shadow-sm ${avatarColor}`}
                             title={voter.userName}
                           >
                             {voter.userPhoto ? (
@@ -293,7 +293,7 @@ export function ClanPollCard({
                         );
                       })}
                       {opt.voters.length > 3 && (
-                        <div className="w-6 h-6 rounded-full border-2 border-white dark:border-[#1a1d24] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 flex items-center justify-center text-[9px] font-bold shadow-sm">
+                        <div className="w-6 h-6 rounded-full border-2 border-ink bg-ink-3 text-bone-dim flex items-center justify-center text-[9px] font-bold shadow-sm">
                           +{opt.voters.length - 3}
                         </div>
                       )}
@@ -304,8 +304,8 @@ export function ClanPollCard({
                   <span
                     className={`text-xs sm:text-sm font-bold font-mono min-w-[36px] text-right ${
                       isSelected
-                        ? 'text-emerald-700 dark:text-emerald-300'
-                        : 'text-gray-700 dark:text-gray-300'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-bone-dim'
                     }`}
                   >
                     {percent}%
@@ -318,7 +318,7 @@ export function ClanPollCard({
       </div>
 
       {/* Footer Info Row */}
-      <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100 dark:border-white/10 text-xs text-gray-500 dark:text-gray-400 font-medium">
+      <div className="flex items-center justify-between mt-4 pt-3 border-t border-line/20 text-xs text-bone-dim font-medium">
         <div className="flex items-center gap-1.5">
           {currentPoll.isAnonymous ? (
             <>
@@ -327,14 +327,14 @@ export function ClanPollCard({
             </>
           ) : (
             <>
-              <Eye size={13} className="text-gray-400 shrink-0" />
+              <Eye size={13} className="text-bone-dim shrink-0" />
               <span>Open Voting</span>
             </>
           )}
         </div>
 
         <div className="flex items-center gap-1.5">
-          <Clock size={13} className={`shrink-0 ${isExpired ? 'text-red-500' : 'text-gray-400'}`} />
+          <Clock size={13} className={`shrink-0 ${isExpired ? 'text-red-500' : 'text-bone-dim'}`} />
           <span className={isExpired ? 'text-red-500 font-semibold' : ''}>
             {expirationText}
           </span>

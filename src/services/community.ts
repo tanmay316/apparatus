@@ -13,12 +13,14 @@ export function cleanDoc<T extends Record<string, any>>(obj: T): T {
         typeof value === 'object' &&
         !Array.isArray(value) &&
         !(value instanceof Date) &&
-        typeof (value as any).toMillis !== 'function'
+        typeof (value as any).toMillis !== 'function' &&
+        typeof (value as any).isEqual !== 'function' &&
+        !(value as any)._methodName
       ) {
         result[key] = cleanDoc(value);
       } else if (Array.isArray(value)) {
         result[key] = value.map(item =>
-          item !== null && typeof item === 'object' && !(item instanceof Date) && typeof (item as any).toMillis !== 'function'
+          item !== null && typeof item === 'object' && !(item instanceof Date) && typeof (item as any).toMillis !== 'function' && typeof (item as any).isEqual !== 'function' && !(item as any)._methodName
             ? cleanDoc(item)
             : (item === undefined ? null : item)
         );
@@ -85,7 +87,6 @@ export async function getClan(id: string): Promise<ClanV2 | null> {
 export async function getPublicClans(limitCount = 20): Promise<ClanV2[]> {
   const q = query(
     collection(db, 'clans_v2'),
-    where('visibility', '==', 'public'),
     where('status', '==', 'active'),
     limit(limitCount)
   );
@@ -2358,12 +2359,16 @@ export function subscribeClanMessages(
       const msgs = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as ClanMessage))
         .sort((a, b) => {
-          const timeA = a.createdAt && typeof (a.createdAt as any).toMillis === 'function'
-            ? (a.createdAt as any).toMillis()
-            : ((a.createdAt as any)?.seconds ? (a.createdAt as any).seconds * 1000 : 0);
-          const timeB = b.createdAt && typeof (b.createdAt as any).toMillis === 'function'
-            ? (b.createdAt as any).toMillis()
-            : ((b.createdAt as any)?.seconds ? (b.createdAt as any).seconds * 1000 : 0);
+          const getTime = (val: any) => {
+            if (!val) return 0;
+            if (typeof val.toMillis === 'function') return val.toMillis();
+            if (val.seconds) return val.seconds * 1000;
+            if (typeof val === 'string') return new Date(val).getTime();
+            if (typeof val === 'number') return val;
+            return 0;
+          };
+          const timeA = getTime(a.createdAt);
+          const timeB = getTime(b.createdAt);
           return timeA - timeB;
         });
       onMessages(msgs);
@@ -2404,7 +2409,7 @@ export async function sendClanMessage(
     title: `💬 ${data.userName}`,
     body: preview,
     type: 'clan_message',
-    link: `/clan/${data.clanId}`,
+    link: `/clan/${data.clanId}/chat`,
     extraData: { messageId: docRef.id, clanId: data.clanId }
   }).catch(err => console.warn('Failed to notify clan members for chat message:', err));
 
@@ -2472,6 +2477,12 @@ export async function requestToJoinClan(
   const existingReq = await getUserClanJoinRequest(clanId, user.uid);
   if (existingReq) {
     return existingReq.id!;
+  }
+  
+  // Verify clan is not closed
+  const clan = await getClan(clanId);
+  if (clan?.visibility === 'closed') {
+    throw new Error('This clan is currently closed and not accepting join requests.');
   }
 
   const docRef = await addDoc(collection(db, 'clan_join_requests'), cleanDoc({
@@ -2567,6 +2578,22 @@ export async function cancelClanJoinRequest(requestId: string): Promise<void> {
   await deleteDoc(doc(db, 'clan_join_requests', requestId));
 }
 
+async function dismissLeadershipJoinRequestNotifications(requestId: string): Promise<void> {
+  try {
+    const q = query(
+      collection(db, 'app_notifications'),
+      where('type', '==', 'clan_join_request'),
+      where('extra.requestId', '==', requestId)
+    );
+    const snap = await getDocs(q);
+    const batch = writeBatch(db);
+    snap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  } catch (err) {
+    console.warn('Failed to dismiss leadership notifications:', err);
+  }
+}
+
 export async function acceptClanJoinRequest(
   requestId: string,
   clanId: string,
@@ -2594,6 +2621,9 @@ export async function acceptClanJoinRequest(
     createdAt: serverTimestamp(),
     extra: { clanId, clanName }
   }).catch(err => console.warn('Failed to notify accepted requester:', err));
+
+  // 4. Dismiss notifications for all leaders
+  await dismissLeadershipJoinRequestNotifications(requestId);
 }
 
 export async function declineClanJoinRequest(
@@ -2620,4 +2650,7 @@ export async function declineClanJoinRequest(
     createdAt: serverTimestamp(),
     extra: { clanId, clanName }
   }).catch(err => console.warn('Failed to notify declined requester:', err));
+
+  // 3. Dismiss notifications for all leaders
+  await dismissLeadershipJoinRequestNotifications(requestId);
 }

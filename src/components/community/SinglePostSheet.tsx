@@ -188,6 +188,7 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
     try {
       await deleteClanPost(post.id);
       queryClient.invalidateQueries({ queryKey: ['clanPosts'] });
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
       showToast('Post deleted successfully');
       onClose();
     } catch (err: any) {
@@ -863,6 +864,9 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
 
                 {/* Upload Image Button */}
                 <input 
+                  id="post-comment-image-upload"
+                  name="postCommentImageUpload"
+                  aria-label="Upload comment image"
                   type="file" 
                   ref={commentImageInputRef} 
                   className="hidden" 
@@ -881,6 +885,10 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                 </button>
 
                 <input
+                  id="post-comment-text-input"
+                  name="postCommentText"
+                  aria-label="Post your reply"
+                  autoComplete="off"
                   ref={commentInputRef}
                   type="text"
                   value={commentText}

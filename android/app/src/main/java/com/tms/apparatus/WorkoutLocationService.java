@@ -79,7 +79,7 @@ public final class WorkoutLocationService extends Service {
     public static final String KEY_LAST_RAW_TIMESTAMP = "last_raw_timestamp";
 
     // Quality Constants
-    private static final float MAX_ACCEPTED_ACCURACY_M = 35.0f;
+    private static final float MAX_ACCEPTED_ACCURACY_M = 55.0f;
     private static final long GPS_SETTLING_DURATION_MS = 6000L; // First 6s suppresses noise while anchor settles
     private static final float SPEED_EMA_ALPHA = 0.25f;
 
@@ -101,6 +101,19 @@ public final class WorkoutLocationService extends Service {
 
     private HandlerThread locationThread;
     private Handler locationHandler;
+
+    private final Runnable notificationTicker = new Runnable() {
+        @Override
+        public void run() {
+            SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+            if ("TRACKING".equals(prefs.getString(KEY_STATE, "IDLE"))) {
+                updateNotification();
+                if (locationHandler != null) {
+                    locationHandler.postDelayed(this, 3000L);
+                }
+            }
+        }
+    };
 
     @Override
     public void onCreate() {
@@ -179,6 +192,10 @@ public final class WorkoutLocationService extends Service {
         }
         if ("TRACKING".equals(state)) {
             requestFusedLocationUpdates();
+            if (locationHandler != null) {
+                locationHandler.removeCallbacks(notificationTicker);
+                locationHandler.postDelayed(notificationTicker, 3000L);
+            }
         }
         broadcastStateChange(state);
     }
@@ -232,6 +249,10 @@ public final class WorkoutLocationService extends Service {
             wakeLock.acquire(12 * 60 * 60 * 1000L); // 12hr safety timeout
         }
         requestFusedLocationUpdates();
+        if (locationHandler != null) {
+            locationHandler.removeCallbacks(notificationTicker);
+            locationHandler.postDelayed(notificationTicker, 3000L);
+        }
         broadcastStateChange("TRACKING");
     }
 
@@ -270,6 +291,9 @@ public final class WorkoutLocationService extends Service {
     }
 
     private void pauseTracking() {
+        if (locationHandler != null) {
+            locationHandler.removeCallbacks(notificationTicker);
+        }
         SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         prefs.edit()
                 .putString(KEY_STATE, "PAUSED")
@@ -295,10 +319,17 @@ public final class WorkoutLocationService extends Service {
                 .apply();
         emaSpeedKmh = 0f;
         updateNotification();
+        if (locationHandler != null) {
+            locationHandler.removeCallbacks(notificationTicker);
+            locationHandler.postDelayed(notificationTicker, 3000L);
+        }
         broadcastStateChange("TRACKING");
     }
 
     private void stopTracking() {
+        if (locationHandler != null) {
+            locationHandler.removeCallbacks(notificationTicker);
+        }
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putString(KEY_STATE, "STOPPED")
                 .apply();
@@ -484,7 +515,7 @@ public final class WorkoutLocationService extends Service {
                 lastAcceptedLocation = location;
 
                 // Moving Time Accumulation (cap burst when waking from background)
-                if (dtSec < 30f) {
+                if (dtSec < 60f) {
                     movingDurationSec += Math.round(dtSec);
                 }
 
@@ -631,10 +662,24 @@ public final class WorkoutLocationService extends Service {
         float speedKmh = prefs.getFloat(KEY_CURRENT_SPEED_KMH, 0f);
         String activity = activityLabel(prefs.getString(KEY_ACTIVITY_TYPE, "walk"));
 
+        long startedAt = prefs.getLong(KEY_STARTED_AT, System.currentTimeMillis());
+        long totalPausedMs = prefs.getLong(KEY_TOTAL_PAUSED_MS, 0L);
+        long pausedAt = prefs.getLong(KEY_PAUSED_AT, 0L);
+        if (pausedAt > 0L) {
+            totalPausedMs += (System.currentTimeMillis() - pausedAt);
+        }
+        long baseTime = startedAt + totalPausedMs;
+
         String title = isPaused ? activity + " (Paused)" : "Apparatus • " + activity;
         String paceStr = formatPace(distanceMeters, movingDurationSec);
-        String line1 = formatDuration(movingDurationSec) + "  •  " + String.format(Locale.US, "%.2f km", distanceMeters / 1000f) + "  •  " + paceStr + (paceStr.equals("--:--") ? "" : " /km");
-        String line2 = "Speed: " + String.format(Locale.US, "%.1f km/h", speedKmh);
+        String distStr = String.format(Locale.US, "%.2f km", distanceMeters / 1000f);
+
+        String line1 = distStr + "  •  " + (paceStr.equals("--:--") ? "0.0 km/h" : paceStr + " /km");
+        String line2 = "Moving: " + formatDuration(movingDurationSec) + "  •  Speed: " + String.format(Locale.US, "%.1f km/h", speedKmh);
+        if (isPaused) {
+            line1 = distStr + "  •  Paused at " + formatDuration(movingDurationSec);
+            line2 = "Pace: " + paceStr + (paceStr.equals("--:--") ? "" : " /km");
+        }
 
         Intent openAppIntent = new Intent(this, MainActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, openAppIntent,
@@ -656,6 +701,9 @@ public final class WorkoutLocationService extends Service {
                 .setContentTitle(title)
                 .setContentText(line1)
                 .setSubText(line2)
+                .setWhen(baseTime)
+                .setShowWhen(true)
+                .setUsesChronometer(!isPaused)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(line1 + "\n" + line2))
                 .setContentIntent(pendingIntent)
                 .addAction(isPaused ? android.R.drawable.ic_media_play : android.R.drawable.ic_media_pause,
@@ -683,6 +731,9 @@ public final class WorkoutLocationService extends Service {
 
     @Override
     public void onDestroy() {
+        if (locationHandler != null) {
+            locationHandler.removeCallbacks(notificationTicker);
+        }
         removeFusedLocationUpdates();
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         if (locationThread != null) {
