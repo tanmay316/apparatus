@@ -62,6 +62,19 @@ function pushSpeed(raw: number): number {
   return emaSpeed;
 }
 
+
+function resampleRoute(points: RoutePoint[], maxPoints: number): RoutePoint[] {
+  if (!points || points.length <= maxPoints) return points || [];
+  if (maxPoints <= 1) return [points[0]];
+
+  const result: RoutePoint[] = [];
+  const step = (points.length - 1) / (maxPoints - 1);
+  for (let i = 0; i < maxPoints; i++) {
+    result.push(points[Math.round(i * step)]);
+  }
+  return result;
+}
+
 function resetWebGpsEngine() {
   rawSpeedBuffer = [];
   emaSpeed = 0;
@@ -130,36 +143,36 @@ export const syncWithNativeSession = async (): Promise<boolean> => {
   try {
     const summary: NativeWorkoutSessionSummary = await NativeWorkoutLocation.getSessionSummary();
     if (summary.state === 'TRACKING' || summary.state === 'PAUSED') {
-      const downsampled = await NativeWorkoutLocation.getDownsampledPoints({ maxPoints: 500 });
-      const pts: RoutePoint[] = downsampled.points.map(p => ({
-        lat: p.lat,
-        lng: p.lng,
-        ts: p.timestamp,
-        alt: p.altitude ?? undefined,
-        speed: p.speed ?? undefined,
-      }));
+      // Native SQLite is the durable source of truth. Never compare a 500/2000-point
+      // display route with stale WebView memory and refuse the native route.
+      const stored = await NativeWorkoutLocation.getLocationsAfter({ timestamp: 0 });
+      const fullRoute: RoutePoint[] = stored.points
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .map(p => ({
+          lat: p.lat,
+          lng: p.lng,
+          ts: p.timestamp,
+          alt: p.altitude ?? undefined,
+          speed: p.speed ?? undefined,
+        }));
 
       const currentStore = useCardioStore.getState();
-      const nativeDistKm = summary.distanceMeters / 1000;
-      const finalDistKm = Math.max(currentStore.distanceKm, nativeDistKm);
-      const finalMovingSec = Math.max(currentStore.movingDurationSec, summary.movingDurationSec);
-      const finalMaxSpeed = Math.max(currentStore.maxSpeedKmh, summary.maxSpeedKmh);
-      const finalElevation = Math.max(currentStore.elevationGainM, summary.elevationGainM);
-      const finalRoute = pts.length >= currentStore.routePoints.length ? pts : currentStore.routePoints;
+      const nativeDistKm = Math.max(0, summary.distanceMeters / 1000);
+      const displayRoute = resampleRoute(fullRoute, MAX_DISPLAY_POINTS);
 
       useCardioStore.setState({
         isTracking: true,
         isPaused: summary.state === 'PAUSED',
         activityType: summary.activityType,
-        startedAt: summary.startedAt,
+        startedAt: summary.startedAt || currentStore.startedAt,
         pausedAt: summary.pausedAt > 0 ? summary.pausedAt : null,
-        totalPausedMs: summary.totalPausedMs,
-        movingDurationSec: finalMovingSec,
-        distanceKm: finalDistKm,
+        totalPausedMs: Math.max(currentStore.totalPausedMs, summary.totalPausedMs),
+        movingDurationSec: Math.max(currentStore.movingDurationSec, summary.movingDurationSec),
+        distanceKm: Math.max(currentStore.distanceKm, nativeDistKm),
         currentSpeedKmh: summary.currentSpeedKmh,
-        maxSpeedKmh: finalMaxSpeed,
-        elevationGainM: finalElevation,
-        currentLocation: summary.lastLat && summary.lastLng ? {
+        maxSpeedKmh: Math.max(currentStore.maxSpeedKmh, summary.maxSpeedKmh),
+        elevationGainM: Math.max(currentStore.elevationGainM, summary.elevationGainM),
+        currentLocation: summary.lastLat != null && summary.lastLng != null ? {
           lat: summary.lastLat,
           lng: summary.lastLng,
           heading: summary.lastBearing ?? undefined,
@@ -167,13 +180,13 @@ export const syncWithNativeSession = async (): Promise<boolean> => {
         gpsAccuracy: summary.lastAccuracy,
         gpsStatus: 'active',
         lastGpsTimestamp: summary.lastTimestamp,
-        routePoints: finalRoute,
+        routePoints: displayRoute.length > 0 ? displayRoute : currentStore.routePoints,
         isRecovering: false,
       });
       return true;
     }
   } catch (error) {
-    console.warn('[CardioStore] Failed to sync native session summary:', error);
+    console.warn('[CardioStore] Failed to sync native session:', error);
   }
   return false;
 };
@@ -246,8 +259,7 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
     nextRoutePoints = [...store.routePoints, acceptedPt];
 
     if (nextRoutePoints.length > MAX_DISPLAY_POINTS) {
-      const half = Math.floor(nextRoutePoints.length / 2);
-      nextRoutePoints = nextRoutePoints.filter((_, i) => i >= half || i % 2 === 0);
+      nextRoutePoints = resampleRoute(nextRoutePoints, MAX_DISPLAY_POINTS);
     }
   }
 

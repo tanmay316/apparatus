@@ -355,7 +355,7 @@ export function CardioTracker() {
         pausedDurationSec,
         distanceKm: dist,
         avgSpeedKmh: Math.round(avgSpeedKmh * 10) / 10,
-        maxSpeedKmh: Math.round(Math.max(maxSpeed, avgSpeedKmh) * 10) / 10,
+        maxSpeedKmh: Math.round(maxSpeed * 10) / 10,
         avgPace: formatPace(dist, durationSec),
         calories,
         elevationGainM: Math.round(elevation),
@@ -483,7 +483,7 @@ export function CardioTracker() {
       pausedDurationSec,
       avgPace: pace,
       avgSpeedKmh: Math.round(avgSpeed * 10) / 10,
-      maxSpeedKmh: Math.round(Math.max(finalStore.maxSpeedKmh, avgSpeed) * 10) / 10,
+      maxSpeedKmh: Math.round(finalStore.maxSpeedKmh * 10) / 10,
       calories,
       elevationGainM: finalElevationGain,
       route: finalStore.routePoints,
@@ -501,17 +501,17 @@ export function CardioTracker() {
           userId: user.uid,
           userName: user.displayName || 'Athlete',
           userPhoto: user.photoURL || '',
-          type: store.activityType!,
-          date: localDateKey(new Date()),
-          startedAt: store.startedAt ? Timestamp.fromMillis(store.startedAt) : Timestamp.now(),
+          type: finalStore.activityType!,
+          date: localDateKey(new Date(finalStore.startedAt || Date.now())),
+          startedAt: finalStore.startedAt ? Timestamp.fromMillis(finalStore.startedAt) : Timestamp.now(),
           finishedAt: Timestamp.now(),
           durationSec: movingDurationSec,
           movingDurationSec,
           elapsedDurationSec,
           pausedDurationSec,
           distanceKm: dist,
-          avgSpeedKmh: Math.round(avgSpeed * 10) / 10,
-          maxSpeedKmh: Math.round(Math.max(store.maxSpeedKmh, avgSpeed) * 10) / 10,
+          avgSpeedKmh: data.avgSpeedKmh!,
+          maxSpeedKmh: data.maxSpeedKmh!,
           avgPace: `${pace} /km`,
           calories: calories,
           elevationGainM: finalElevationGain,
@@ -877,7 +877,7 @@ export function CardioTracker() {
 
   // ─── Screen 3: Tracking Screen ───
   if (screen === 'tracking') {
-    const avgSpeed = elapsedSec > 0 ? (store.distanceKm / (elapsedSec / 3600)).toFixed(1) : '0.0';
+    const avgSpeed = store.movingDurationSec > 0 ? (store.distanceKm / (store.movingDurationSec / 3600)).toFixed(1) : '0.0';
     const currentPace = formatPaceMs(store.currentPaceMs);
     const activityType = store.activityType || 'run';
     const typeLabel = activityType === 'walk' ? 'Walk' : activityType === 'run' ? 'Run' : 'Cycle';

@@ -74,6 +74,9 @@ public final class WorkoutLocationService extends Service {
     public static final String KEY_LAST_BEARING = "last_bearing";
     public static final String KEY_LAST_ACCURACY = "last_accuracy";
     public static final String KEY_LAST_TIMESTAMP = "last_timestamp";
+    public static final String KEY_LAST_RAW_LAT = "last_raw_lat";
+    public static final String KEY_LAST_RAW_LNG = "last_raw_lng";
+    public static final String KEY_LAST_RAW_TIMESTAMP = "last_raw_timestamp";
 
     // Quality Constants
     private static final float MAX_ACCEPTED_ACCURACY_M = 35.0f;
@@ -131,7 +134,14 @@ public final class WorkoutLocationService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) return START_STICKY;
+        // START_STICKY may restart the service with a null intent after Android
+        // kills the app process. The old implementation returned immediately,
+        // leaving the workout marked TRACKING but with NO GPS updates running.
+        // Always restore an active session in that case.
+        if (intent == null) {
+            restoreActiveSessionIfNeeded();
+            return START_STICKY;
+        }
 
         String action = intent.getAction();
         if (ACTION_STOP.equals(action)) {
@@ -150,7 +160,27 @@ public final class WorkoutLocationService extends Service {
             return START_STICKY;
         }
 
+        restoreActiveSessionIfNeeded();
         return START_STICKY;
+    }
+
+    private void restoreActiveSessionIfNeeded() {
+        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        String state = prefs.getString(KEY_STATE, "IDLE");
+        long startedAt = prefs.getLong(KEY_STARTED_AT, 0L);
+        if (startedAt <= 0L || !("TRACKING".equals(state) || "PAUSED".equals(state))) {
+            return;
+        }
+
+        restoreInMemoryState(prefs);
+        startForegroundNotification();
+        if (wakeLock != null && !wakeLock.isHeld()) {
+            wakeLock.acquire(12 * 60 * 60 * 1000L);
+        }
+        if ("TRACKING".equals(state)) {
+            requestFusedLocationUpdates();
+        }
+        broadcastStateChange(state);
     }
 
     private void startNewSession(String activityType, boolean reset) {
@@ -188,16 +218,13 @@ public final class WorkoutLocationService extends Service {
                     .remove(KEY_LAST_BEARING)
                     .remove(KEY_LAST_ACCURACY)
                     .remove(KEY_LAST_TIMESTAMP)
+                    .remove(KEY_LAST_RAW_LAT)
+                    .remove(KEY_LAST_RAW_LNG)
+                    .remove(KEY_LAST_RAW_TIMESTAMP)
                     .apply();
         } else {
             prefs.edit().putString(KEY_STATE, "TRACKING").apply();
-            // Restore last accepted location if available
-            if (prefs.contains(KEY_LAST_LAT) && prefs.contains(KEY_LAST_LNG)) {
-                lastAcceptedLocation = new Location("restored");
-                lastAcceptedLocation.setLatitude(Double.longBitsToDouble(prefs.getLong(KEY_LAST_LAT, 0L)));
-                lastAcceptedLocation.setLongitude(Double.longBitsToDouble(prefs.getLong(KEY_LAST_LNG, 0L)));
-                lastAcceptedLocation.setTime(prefs.getLong(KEY_LAST_TIMESTAMP, System.currentTimeMillis()));
-            }
+            restoreInMemoryState(prefs);
         }
 
         startForegroundNotification();
@@ -206,6 +233,40 @@ public final class WorkoutLocationService extends Service {
         }
         requestFusedLocationUpdates();
         broadcastStateChange("TRACKING");
+    }
+
+    private void restoreInMemoryState(SharedPreferences prefs) {
+        lastAcceptedLocation = null;
+        lastRawLocation = null;
+        emaSpeedKmh = prefs.getFloat(KEY_CURRENT_SPEED_KMH, 0f);
+        isCurrentlyMoving = emaSpeedKmh >= 1.5f;
+        lastMovementTimeMs = prefs.getLong(KEY_LAST_TIMESTAMP, 0L);
+
+        if (prefs.contains(KEY_LAST_LAT) && prefs.contains(KEY_LAST_LNG)) {
+            lastAcceptedLocation = new Location("restored_accepted");
+            lastAcceptedLocation.setLatitude(Double.longBitsToDouble(prefs.getLong(KEY_LAST_LAT, 0L)));
+            lastAcceptedLocation.setLongitude(Double.longBitsToDouble(prefs.getLong(KEY_LAST_LNG, 0L)));
+            lastAcceptedLocation.setTime(prefs.getLong(KEY_LAST_TIMESTAMP, System.currentTimeMillis()));
+            if (prefs.contains(KEY_LAST_ALT)) {
+                lastAcceptedLocation.setAltitude(Double.longBitsToDouble(prefs.getLong(KEY_LAST_ALT, 0L)));
+            }
+        }
+
+        if (prefs.contains(KEY_LAST_RAW_LAT) && prefs.contains(KEY_LAST_RAW_LNG)) {
+            lastRawLocation = new Location("restored_raw");
+            lastRawLocation.setLatitude(Double.longBitsToDouble(prefs.getLong(KEY_LAST_RAW_LAT, 0L)));
+            lastRawLocation.setLongitude(Double.longBitsToDouble(prefs.getLong(KEY_LAST_RAW_LNG, 0L)));
+            lastRawLocation.setTime(prefs.getLong(KEY_LAST_RAW_TIMESTAMP, prefs.getLong(KEY_LAST_TIMESTAMP, System.currentTimeMillis())));
+        }
+
+        lastElevationAnchor = null;
+        altBuffer.clear();
+        if (lastAcceptedLocation != null && lastAcceptedLocation.hasAltitude()) {
+            lastElevationAnchor = lastAcceptedLocation.getAltitude();
+            altBuffer.add(lastElevationAnchor);
+        }
+        // Do not start a new 6s session settling window after process death.
+        sessionSettleUntil = 0L;
     }
 
     private void pauseTracking() {
@@ -257,6 +318,8 @@ public final class WorkoutLocationService extends Service {
         }
 
         try {
+            if (locationHandler == null) return;
+            removeFusedLocationUpdates();
             LocationRequest locationRequest = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
                     .setMinUpdateIntervalMillis(1000L)
                     .setMaxUpdateDelayMillis(0) // Ensure delivery is not batched in the background
@@ -377,40 +440,42 @@ public final class WorkoutLocationService extends Service {
             }
 
             // Feed EMA speed filter
-            if (candidateSpeedKmh < 1.0f && rawDeltaDistanceM < 2.0f) {
+            if (candidateSpeedKmh < 0.8f && rawDeltaDistanceM < 1.5f) {
                 // If moving very slowly or barely any displacement, decay speed
                 emaSpeedKmh = (1f - SPEED_EMA_ALPHA) * emaSpeedKmh;
-                if (emaSpeedKmh < 0.4f) emaSpeedKmh = 0f;
+                if (emaSpeedKmh < 0.3f) emaSpeedKmh = 0f;
             } else if (emaSpeedKmh == 0f) {
                 emaSpeedKmh = candidateSpeedKmh;
             } else {
                 emaSpeedKmh = (SPEED_EMA_ALPHA * candidateSpeedKmh) + ((1f - SPEED_EMA_ALPHA) * emaSpeedKmh);
             }
 
-            // Stationary Filter (determine movement state)
-            boolean isStationary = (emaSpeedKmh < 1.5f);
-            if (isStationary || isSettling) {
-                currentSpeedKmh = 0f;
-                isCurrentlyMoving = false;
-            } else {
-                currentSpeedKmh = emaSpeedKmh;
+            // Spatial displacement noise threshold based on GPS accuracy
+            float dynamicNoiseThreshold = Math.max(5.0f, accuracy * 0.40f);
+            if (nativeSpeedKmh >= 1.8f) {
+                dynamicNoiseThreshold = 0f; // High confidence hardware doppler speed
+            }
+
+            // True Movement Determination:
+            // Moving if EMA speed >= 1.0 km/h, hardware speed >= 1.0 km/h, or physical displacement >= noise threshold
+            boolean hasSpeedEvidence = (emaSpeedKmh >= 1.0f || nativeSpeedKmh >= 1.0f);
+            boolean hasSpatialEvidence = (deltaDistanceM >= dynamicNoiseThreshold);
+
+            if (!isSettling && (hasSpeedEvidence || hasSpatialEvidence)) {
                 isCurrentlyMoving = true;
+                currentSpeedKmh = emaSpeedKmh > 0.5f ? emaSpeedKmh : Math.max(derivedSpeedKmh, 0.5f);
+            } else {
+                isCurrentlyMoving = false;
+                currentSpeedKmh = 0f;
             }
 
             isMoving = isCurrentlyMoving;
 
-            // Dynamic noise threshold based on GPS accuracy for DISTANCE accumulation
-            float dynamicNoiseThreshold = Math.max(baseNoiseFloorM, accuracy * 0.45f);
-            if (isMoving) {
-                dynamicNoiseThreshold = 1.0f; // Accept almost every point when moving for super smooth curves!
-            }
-            if (nativeSpeedKmh >= 2.0f) {
-                dynamicNoiseThreshold = 0f; // Disable spatial noise filter if we have high-confidence hardware speed
-            }
-
-            // Acceptance Gate: Must be outside settling, currently moving, and have sufficient displacement from last anchor
-            boolean hasMovedThreshold = deltaDistanceM >= dynamicNoiseThreshold;
-            boolean movementConfirmed = !isSettling && isMoving && hasMovedThreshold;
+            // Acceptance Gate:
+            // When moving: accept whenever displacement >= 1.0m for continuous, detailed curves.
+            // When stationary: accept only if physical displacement breaks past the noise threshold.
+            float requiredDisplacement = isMoving ? 1.0f : dynamicNoiseThreshold;
+            boolean movementConfirmed = !isSettling && isMoving && (deltaDistanceM >= requiredDisplacement);
 
             if (movementConfirmed) {
                 isAccepted = true;
@@ -521,6 +586,11 @@ public final class WorkoutLocationService extends Service {
         if (location.hasBearing()) {
             editor.putFloat(KEY_LAST_BEARING, location.getBearing());
         }
+
+        editor.putLong(KEY_LAST_RAW_LAT, Double.doubleToRawLongBits(location.getLatitude()))
+              .putLong(KEY_LAST_RAW_LNG, Double.doubleToRawLongBits(location.getLongitude()))
+              .putLong(KEY_LAST_RAW_TIMESTAMP, location.getTime());
+
         editor.apply();
     }
 
@@ -605,8 +675,9 @@ public final class WorkoutLocationService extends Service {
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
-        // User explicitly swiped app from recents — pause tracking instead of stopping
-        pauseTracking();
+        // Do not pause or stop a workout when the WebView/Activity is removed from
+        // recents. The foreground location service is deliberately independent of
+        // the UI lifecycle.
         super.onTaskRemoved(rootIntent);
     }
 
