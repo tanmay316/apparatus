@@ -9,11 +9,20 @@ export async function setupNotificationChannels() {
     try {
       await LocalNotifications.createChannel({
         id: 'clan_chat_messages',
-        name: 'Clan Chat Messages',
+        name: 'Clan Chat & Messages',
         description: 'Instant notifications for new clan chat messages',
         importance: 5, // MAX importance - heads up banner + sound + vibration
         visibility: 1, // Public on lockscreen
-        sound: 'default',
+        vibration: true,
+        lights: true,
+        lightColor: '#e07a5f'
+      });
+      await LocalNotifications.createChannel({
+        id: 'general_notifications',
+        name: 'General Notifications',
+        description: 'App notifications, announcements, and reminders',
+        importance: 4,
+        visibility: 1,
         vibration: true,
         lights: true,
         lightColor: '#e07a5f'
@@ -64,13 +73,26 @@ export async function initPushNotifications(userId: string) {
   }
 }
 
-export async function requestNotificationPermission() {
+export async function requestNotificationPermission(): Promise<boolean> {
   if (Capacitor.isNativePlatform()) {
-    const perm = await LocalNotifications.requestPermissions();
-    return perm.display === 'granted';
+    try {
+      const check = await LocalNotifications.checkPermissions();
+      if (check.display === 'granted') return true;
+      const perm = await LocalNotifications.requestPermissions();
+      return perm.display === 'granted';
+    } catch (err) {
+      console.warn('Local notification permission check/request failed:', err);
+      return false;
+    }
   } else if ('Notification' in window) {
-    const permission = await Notification.requestPermission();
-    return permission === 'granted';
+    try {
+      if (Notification.permission === 'granted') return true;
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+    } catch (err) {
+      console.warn('Web notification permission request failed:', err);
+      return false;
+    }
   }
   return false;
 }
@@ -112,25 +134,51 @@ export async function clearNotification(id: number) {
 }
 
 export async function showNotification(id: number, title: string, body: string, extraData?: any) {
-  const safeId = id || (Date.now() % 2147483647);
+  const safeId = id || Math.floor(Math.random() * 2147483647);
   if (Capacitor.isNativePlatform()) {
     try {
+      // 1. Ensure permission is checked before trying to schedule
+      const check = await LocalNotifications.checkPermissions();
+      if (check.display !== 'granted') {
+        const req = await LocalNotifications.requestPermissions();
+        if (req.display !== 'granted') {
+          console.warn('Local notification permission not granted on device');
+          return;
+        }
+      }
+
+      // 2. Schedule with primary channel & existing icon
       await LocalNotifications.schedule({
         notifications: [
           {
-            title,
-            body,
+            title: title || 'Apparatus',
+            body: body || 'New message in clan',
             id: safeId,
             extra: extraData,
             autoCancel: true,
             channelId: 'clan_chat_messages',
-            smallIcon: 'ic_stat_icon_config_sample',
-            sound: 'default',
+            smallIcon: 'ic_notification',
+            iconColor: '#e07a5f',
           }
         ]
       });
     } catch (err) {
-      console.warn('Failed to schedule local notification:', err);
+      console.warn('Failed to schedule local notification with channel, trying fallback:', err);
+      try {
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              title: title || 'Apparatus',
+              body: body || 'New notification',
+              id: safeId,
+              extra: extraData,
+              autoCancel: true,
+            }
+          ]
+        });
+      } catch (fallbackErr) {
+        console.error('All local notification attempts failed:', fallbackErr);
+      }
     }
   } else if ('Notification' in window) {
     if (Notification.permission === 'granted') {

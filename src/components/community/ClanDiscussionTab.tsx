@@ -631,9 +631,7 @@ export function ClanDiscussionTab({
                                 ? 'rounded-[14px] rounded-tl-[3px]'
                                 : 'rounded-[14px] rounded-tl-[7px]'
                             }`
-                      } ${msg.isDeleted ? 'opacity-70 italic' : ''} ${
-                        msg.reactions && Object.keys(msg.reactions).length > 0 ? 'mb-3.5' : ''
-                      }`}
+                      } ${msg.isDeleted ? 'opacity-70 italic' : ''}`}
                     >
                       {/* Quoted Reply Preview (if replyTo exists) */}
                       {msg.replyTo && !msg.isDeleted && (
@@ -688,26 +686,29 @@ export function ClanDiscussionTab({
                             : <Check size={13} className="text-bg/90" />
                         )}
                       </div>
+                    </motion.div>
 
-                      {/* Reaction Badges Bubble Corner */}
-                      {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                        <div className={`absolute -bottom-3.5 ${isMe ? 'right-2' : 'left-2'} flex flex-wrap items-center gap-1 bg-ink-3 dark:bg-ink-2 border border-line/30 rounded-full px-2 py-0.5 shadow-md z-10`}>
-                          {Object.entries(msg.reactions).map(([emoji, userIds]) => (
+                    {/* Reaction Badges Below Bubble */}
+                    {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                      <div className={`flex flex-wrap items-center gap-1 mt-1 ${isMe ? 'justify-end pr-1' : 'justify-start pl-1'}`}>
+                        {Object.entries(msg.reactions).map(([emoji, userIds]) => {
+                          const iReacted = userIds.includes(user?.uid || '');
+                          return (
                             <button
                               key={emoji}
                               type="button"
                               onClick={() => handleToggleReaction(msg.id!, emoji)}
-                              className={`text-xs flex items-center gap-0.5 hover:scale-110 transition-transform ${
-                                userIds.includes(user?.uid || '') ? 'font-bold scale-105' : 'opacity-80'
+                              className={`text-[11px] flex items-center gap-1 bg-white dark:bg-ink-2 border rounded-full px-2 py-0.5 shadow-sm hover:scale-105 active:scale-95 transition-transform ${
+                                iReacted ? 'border-sienna/50 text-sienna font-bold' : 'border-line/30 text-stone-600 dark:text-bone-dim'
                               }`}
                             >
                               <span>{emoji}</span>
-                              <span className="text-[10px] font-mono text-bone-dim">{userIds.length}</span>
+                              <span className="font-mono">{userIds.length}</span>
                             </button>
-                          ))}
-                        </div>
-                      )}
-                    </motion.div>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* Quick Hover / Action Bar */}
                     {!msg.isDeleted && (

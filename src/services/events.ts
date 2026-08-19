@@ -1,5 +1,6 @@
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp, increment, orderBy, addDoc, Timestamp, writeBatch, documentId } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp, increment, orderBy, addDoc, Timestamp, writeBatch, documentId, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { notifyClanMembers } from './community';
 import type { Community, AppEvent, EventRegistration, EventReview, CommunityAnnouncement, CommunityPoll, CommunityChallenge, CommunityPost } from '@/types';
 
 // ─── Communities ──────────────────────────────────────────────────
@@ -484,6 +485,22 @@ export async function createCommunityPost(post: Omit<CommunityPost, 'id' | 'crea
     likedUserIds: [],
     createdAt: serverTimestamp(),
   });
+
+  const clanId = post.communityId;
+  const isPoll = !!post.poll;
+  const snippet = post.text ? post.text.slice(0, 100) : (isPoll ? post.poll?.question : 'New post');
+
+  notifyClanMembers({
+    clanId,
+    senderId: post.authorId,
+    senderName: post.authorName,
+    title: isPoll ? `📊 Poll from ${post.authorName}` : `📝 Post by ${post.authorName}`,
+    body: snippet || 'Tap to view',
+    type: isPoll ? 'clan_poll' : 'clan_post',
+    link: `/clan/${clanId}`,
+    extraData: { postId: docRef.id, clanId }
+  }).catch(err => console.warn('Failed to notify clan members for post/poll:', err));
+
   return docRef.id;
 }
 

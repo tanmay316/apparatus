@@ -23,12 +23,23 @@ def root():
     return {"message": "Apparatus AI Nutrition Backend", "docs": "/docs"}
 
 
+@app.get("/ping")
+def ping():
+    """Keep-alive endpoint for cron-job.org"""
+    return {"status": "ok", "message": "Pong!"}
+
+
 @app.on_event("startup")
 def on_startup():
     """Create tables on startup (SQLite for dev, Alembic for production)."""
     from app.db.session import engine
     from app.database.models import Base  # Import all models
+    from app.services.fcm import start_fcm_listener
+    
     Base.metadata.create_all(bind=engine)
+    
+    # Start the background FCM push notification listener
+    start_fcm_listener()
 
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

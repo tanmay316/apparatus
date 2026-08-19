@@ -7,8 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
-import { getNotifications, markNotificationRead, markAllNotificationsRead, searchUsers, subscribeToNotifications } from '@/services/social';
-import { showNotification, requestNotificationPermission } from '@/utils/notifications';
+import { getNotifications, markNotificationRead, markAllNotificationsRead, searchUsers } from '@/services/social';
 import { COMPACT_LIBRARY } from '@/services/library';
 import { getSamplePlans } from '@/services/plans';
 
@@ -41,35 +40,13 @@ export function Topbar() {
 
   // ─── Semantic Search Logic (Moved to SearchPage) ───
 
-  // ─── Notifications Listener ─────────────────────────────────
+  // ─── Notifications Data ─────────────────────────────────
   const { data: notifications = [] } = useQuery({
     queryKey: ['notifications', profile?.uid],
     queryFn: () => getNotifications(profile!.uid),
     enabled: !!profile,
-    staleTime: Infinity, // Handled by listener
+    staleTime: Infinity, // Handled by global listener in App.tsx
   });
-
-  useEffect(() => {
-    if (!profile?.uid) return;
-    requestNotificationPermission().catch(() => {});
-    const unsub = subscribeToNotifications(
-      profile.uid,
-      (notes) => {
-        queryClient.setQueryData(['notifications', profile.uid], notes);
-      },
-      (newNote) => {
-        if (!newNote.read) {
-          showNotification(
-            Math.floor(Math.random() * 100000),
-            'Apparatus',
-            newNote.message,
-            { type: newNote.type, senderId: newNote.senderId, targetId: newNote.targetId }
-          );
-        }
-      }
-    );
-    return () => unsub();
-  }, [profile?.uid, queryClient]);
 
   const readMutation = useMutation({
     mutationFn: (notificationId: string) => markNotificationRead(notificationId),

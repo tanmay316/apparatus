@@ -214,7 +214,7 @@ export interface Comment {
 
 export interface Notification {
   id?: string;
-  type: 'follow' | 'follow_request' | 'unfollow' | 'like' | 'comment' | 'activity' | 'achievement' | 'reminder' | 'clan_poll' | 'clan_announcement' | 'clan_message' | 'clan_join_request' | 'clan_join_accepted';
+  type: 'follow' | 'follow_request' | 'unfollow' | 'like' | 'comment' | 'activity' | 'achievement' | 'reminder' | 'clan_post' | 'clan_poll' | 'clan_announcement' | 'clan_message' | 'clan_join_request' | 'clan_join_accepted';
   receiverId: string;
   senderId: string;
   senderName: string;
@@ -538,6 +538,7 @@ export type AppNotificationType =
   | 'ticket_confirmed' 
   | 'event_cancelled'
   | 'community_announcement'
+  | 'clan_post'
   | 'clan_poll'
   | 'clan_announcement'
   | 'clan_message'

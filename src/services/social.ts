@@ -598,11 +598,7 @@ export function subscribeToNotifications(
       snap.docChanges().forEach(change => {
         if (change.type === 'added') {
           const data = change.doc.data();
-          const time = data.createdAt?.toMillis ? data.createdAt.toMillis() / 1000 : (data.createdAt?.seconds || now);
-          // Increased threshold to 300s (5 minutes) to prevent device-server clock skew from swallowing notifications
-          if (now - time < 300) {
-            onNew({ id: change.doc.id, ...data } as AppNotification);
-          }
+          onNew({ id: change.doc.id, ...data } as AppNotification);
         }
       });
     }

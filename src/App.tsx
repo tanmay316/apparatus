@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, lazy, Suspense } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { Layout } from '@/components/layout/Layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -8,6 +8,7 @@ import { Toast } from '@/components/ui/Toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { subscribeToNotifications } from '@/services/social';
 import { 
   requestNotificationPermission, 
   scheduleDailyReminders, 
@@ -102,6 +103,7 @@ function PublicOnly({ children }: { children: React.ReactNode }) {
 function PreferencesSync() {
   const { theme, setTheme, language } = useUIStore();
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const key = 'forced-light-theme-reset-v2';
@@ -195,21 +197,49 @@ function PreferencesSync() {
     };
   }, []);
 
-  // Real-time notification listener for in-app & mobile push delivery
+  // Global real-time notification listener (Always active for mobile local & in-app delivery)
   useEffect(() => {
-    if (!user) return;
+    if (!user?.uid) return;
 
     // Register push notification token on mobile
     initPushNotifications(user.uid);
 
+    // 1. Listen to main 'notifications' collection (Clan messages, announcements, challenges, achievements)
+    const unsubMain = subscribeToNotifications(
+      user.uid,
+      (notes) => {
+        queryClient.setQueryData(['notifications', user.uid], notes);
+      },
+      (newNote) => {
+        if (!newNote.read) {
+          const notifId = Math.floor(Math.random() * 2147483647);
+          const sender = newNote.senderName || 'Apparatus';
+          showNotification(
+            notifId,
+            sender,
+            newNote.message,
+            {
+              ...newNote.extra,
+              type: newNote.type,
+              senderId: newNote.senderId,
+              targetId: newNote.targetId,
+              id: newNote.id,
+              link: newNote.extra?.link || (newNote.extra?.clanId ? `/clan/${newNote.extra.clanId}/chat` : undefined)
+            }
+          );
+        }
+      }
+    );
+
+    // 2. Also listen to 'app_notifications' collection (Join requests, direct notifications)
     const mountedAt = Date.now();
-    const q = query(
+    const qAppNotifs = query(
       collection(db, 'app_notifications'),
       where('userId', '==', user.uid),
       where('read', '==', false)
     );
 
-    const unsubscribe = onSnapshot(q, (snap) => {
+    const unsubAppNotifs = onSnapshot(qAppNotifs, (snap) => {
       snap.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const notif = change.doc.data() as AppNotificationItem;
@@ -217,10 +247,9 @@ function PreferencesSync() {
             ? (notif.createdAt as any).toMillis()
             : ((notif.createdAt as any)?.seconds ? (notif.createdAt as any).seconds * 1000 : 0);
 
-          // Push local notification for any new message/poll/announcement arriving in real-time
           if (createdAtMillis >= mountedAt - 30000 || !createdAtMillis) {
-            const notifId = (Date.now() % 2147483647);
-            showNotification(notifId, notif.title, notif.body, {
+            const notifId = Math.floor(Math.random() * 2147483647);
+            showNotification(notifId, notif.title || 'Apparatus', notif.body || 'New notification', {
               ...notif,
               id: change.doc.id,
               link: notif.link,
@@ -228,10 +257,13 @@ function PreferencesSync() {
           }
         }
       });
-    }, (err) => console.warn('Notification watcher subscription error:', err));
+    }, (err) => console.warn('App notification subscription error:', err));
 
-    return () => unsubscribe();
-  }, [user]);
+    return () => {
+      unsubMain();
+      unsubAppNotifs();
+    };
+  }, [user?.uid, queryClient]);
 
   return null;
 }

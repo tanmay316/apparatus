@@ -148,9 +148,16 @@ export function EventsChallengesTab() {
           onClick={() => setSelectedChallengeId(featured.id!)}
           className="relative overflow-hidden rounded-[32px] bg-ink-2 border border-line p-6 sm:p-8 cursor-pointer hover:border-sienna/50 transition-all shadow-xl group"
         >
-          <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
-            <Target size={140} />
-          </div>
+          {featured.coverUrl ? (
+            <div className="absolute inset-0 overflow-hidden">
+              <img src={featured.coverUrl} alt={featured.title} className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity duration-300" />
+              <div className="absolute inset-0 bg-gradient-to-t from-ink-2 via-ink-2/80 to-ink-2/30" />
+            </div>
+          ) : (
+            <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition-transform">
+              <Target size={140} />
+            </div>
+          )}
           <div className="relative z-10">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-2">

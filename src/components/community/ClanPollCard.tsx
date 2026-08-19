@@ -250,18 +250,18 @@ export function ClanPollCard({
               />
 
               {/* Foreground Content */}
-              <div className="relative z-10 flex items-center justify-between gap-3">
+              <div className="relative z-10 flex items-start sm:items-center justify-between gap-3 w-full">
                 {/* Left: Checkmark / Text */}
-                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1 pr-2">
                   {isSelected ? (
-                    <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                    <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5 sm:mt-0">
                       <Check size={12} strokeWidth={3} />
                     </div>
                   ) : (
-                    <div className="w-2" />
+                    <div className="w-1 sm:w-2 shrink-0" />
                   )}
                   <span
-                    className={`text-xs sm:text-sm font-semibold truncate ${
+                    className={`text-xs sm:text-sm font-semibold break-words whitespace-normal leading-snug w-full ${
                       isSelected
                         ? 'text-emerald-600 dark:text-emerald-400 font-bold'
                         : 'text-bone'

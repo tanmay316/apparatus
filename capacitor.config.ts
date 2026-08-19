@@ -13,6 +13,10 @@ const config: CapacitorConfig = {
       launchAutoHide: false,
       showSpinner: false,
       androidSplashResourceName: 'splash'
+    },
+    LocalNotifications: {
+      smallIcon: 'ic_notification',
+      iconColor: '#e07a5f'
     }
   },
   server: {
