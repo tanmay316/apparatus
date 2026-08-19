@@ -12,7 +12,8 @@ import {
   sendClanMessage,
   editClanMessage,
   deleteClanMessage,
-  toggleClanMessageReaction
+  toggleClanMessageReaction,
+  markClanMessageRead
 } from '@/services/community';
 import type { ClanMessage, ClanMessageReplyTo } from '@/types';
 
@@ -176,6 +177,22 @@ export function ClanDiscussionTab({
 
     return () => unsubscribe();
   }, [clanId, isMember]);
+
+  // Mark incoming messages as read when viewed
+  useEffect(() => {
+    if (!user || messages.length === 0) return;
+    
+    const unreadMessages = messages.filter(m => 
+      !m.isDeleted && 
+      m.userId !== user.uid && 
+      (!m.readBy || !m.readBy.includes(user.uid))
+    );
+    
+    // Fire and forget read receipts
+    unreadMessages.forEach(m => {
+      if (m.id) markClanMessageRead(m.id, user.uid);
+    });
+  }, [messages, user]);
 
   // Scroll to bottom on initial load or new messages if near bottom
   useEffect(() => {
@@ -663,7 +680,11 @@ export function ClanDiscussionTab({
                       >
                         {msg.isEdited && !msg.isDeleted && <span>(edited)</span>}
                         <span>{formatMessageTime(msg.createdAt)}</span>
-                        {isMe && <CheckCheck size={13} className="text-bg/90" />}
+                        {isMe && (
+                          msg.readBy && msg.readBy.length > 0
+                            ? <CheckCheck size={13} className="text-[#3b82f6] drop-shadow-sm" /> 
+                            : <Check size={13} className="text-bg/90" />
+                        )}
                       </div>
 
                       {/* Reaction Badges Bubble Corner */}

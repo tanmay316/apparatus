@@ -223,6 +223,7 @@ export interface Notification {
   targetId: string;
   read: boolean;
   createdAt: Timestamp;
+  extra?: any;
 }
 
 // ─── Measurements ────────────────────────────────────────────
@@ -456,6 +457,7 @@ export interface ClanMessage {
   reactions?: Record<string, string[]>; // emoji -> array of userIds
   isEdited?: boolean;
   isDeleted?: boolean;
+  readBy?: string[];
   createdAt: Timestamp | string | null;
   updatedAt?: Timestamp | string | null;
 }

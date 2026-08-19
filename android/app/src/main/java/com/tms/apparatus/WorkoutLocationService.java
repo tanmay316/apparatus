@@ -109,6 +109,7 @@ public final class WorkoutLocationService extends Service {
     private final List<Double> altBuffer = new ArrayList<>();
     private Double lastElevationAnchor = null;
     private long lastMovementTimeMs = 0L;
+    private final GpsKalmanFilter gpsKalman = new GpsKalmanFilter();
 
     private HandlerThread locationThread;
     private Handler locationHandler;
@@ -229,6 +230,7 @@ public final class WorkoutLocationService extends Service {
             consecutiveStillSamples = 0;
             emaSpeedKmh = 0f;
             lastMovementTimeMs = 0L;
+            gpsKalman.reset();
             sessionSettleUntil = System.currentTimeMillis() + GPS_SETTLING_DURATION_MS;
 
             prefs.edit()
@@ -303,6 +305,7 @@ public final class WorkoutLocationService extends Service {
         }
         // Do not start a new 6s session settling window after process death.
         sessionSettleUntil = 0L;
+        gpsKalman.reset();
     }
 
     private void pauseTracking() {
@@ -419,21 +422,37 @@ public final class WorkoutLocationService extends Service {
             return;
         }
 
-        // Base noise floor: 8 meters minimum displacement to reject stationary indoor drift
-        float baseNoiseFloorM = 8.0f;
         boolean isSettling = sessionSettleUntil > 0L && location.getTime() < sessionSettleUntil;
 
-        // Hardware Doppler speed confidence (only when >= 2.0 km/h)
+        // ─── Kalman Filter: Smooth raw GPS coordinates ───
+        // Uses constant-velocity model. When stationary, process noise drops to near-zero
+        // so jitter is absorbed. When moving, filter tracks the real trajectory.
+        double[] kalmanCoords = gpsKalman.process(lat, lng, accuracy, location.getTime(), !isCurrentlyMoving);
+        Location smoothedLoc = new Location("kalman");
+        smoothedLoc.setLatitude(kalmanCoords[0]);
+        smoothedLoc.setLongitude(kalmanCoords[1]);
+        smoothedLoc.setTime(location.getTime());
+        smoothedLoc.setAccuracy(accuracy);
+        if (location.hasAltitude()) smoothedLoc.setAltitude(location.getAltitude());
+        if (location.hasSpeed()) smoothedLoc.setSpeed(location.getSpeed());
+        if (location.hasBearing()) smoothedLoc.setBearing(location.getBearing());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (location.hasSpeedAccuracy()) smoothedLoc.setSpeedAccuracyMetersPerSecond(location.getSpeedAccuracyMetersPerSecond());
+        }
+
+        // Hardware Doppler speed — independent of coordinate jitter
         float nativeSpeedKmh = -1f;
         boolean hasHighConfidenceSpeed = false;
+        // Also extract raw Doppler for sanity-checking derived speed even at lower confidence
+        float rawDopplerKmh = -1f;
         if (location.hasSpeed() && location.getSpeed() >= 0f) {
+            rawDopplerKmh = location.getSpeed() * 3.6f;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasSpeedAccuracy()) {
                 hasHighConfidenceSpeed = location.getSpeedAccuracyMetersPerSecond() <= 1.5f;
             } else {
                 hasHighConfidenceSpeed = accuracy <= 20.0f;
             }
             if (hasHighConfidenceSpeed) {
-                float rawDopplerKmh = location.getSpeed() * 3.6f;
                 // Zero out stationary Doppler noise (< 2.0 km/h)
                 nativeSpeedKmh = rawDopplerKmh < 2.0f ? 0f : rawDopplerKmh;
             }
@@ -449,37 +468,42 @@ public final class WorkoutLocationService extends Service {
         float currentSpeedKmh = 0f;
         boolean isMoving = false;
 
-        float rawDeltaDistanceM = 0f;
+        // Use Kalman-smoothed coordinates for delta distance and speed derivation
+        float smoothedDeltaDistanceM = 0f;
         float rawDtSec = 1f;
         if (lastRawLocation != null) {
-            rawDeltaDistanceM = lastRawLocation.distanceTo(location);
+            smoothedDeltaDistanceM = lastRawLocation.distanceTo(smoothedLoc);
             rawDtSec = Math.max(0.1f, (location.getTime() - lastRawLocation.getTime()) / 1000f);
         }
 
         if (lastAcceptedLocation != null) {
-            float deltaDistanceM = lastAcceptedLocation.distanceTo(location);
+            float deltaDistanceM = lastAcceptedLocation.distanceTo(smoothedLoc);
             float dtSec = Math.max(0.1f, (location.getTime() - lastAcceptedLocation.getTime()) / 1000f);
-            float derivedSpeedKmh = (rawDeltaDistanceM / rawDtSec) * 3.6f;
+            float derivedSpeedKmh = (smoothedDeltaDistanceM / rawDtSec) * 3.6f;
 
             // Spike Detection: Validate gradual acceleration/deceleration.
             float maxAllowedDeltaSpeedKmh = Math.max(30.0f, emaSpeedKmh * 0.8f + 25.0f) * Math.min(3.0f, rawDtSec);
-            boolean isSuddenSpike = Math.abs(derivedSpeedKmh - emaSpeedKmh) > maxAllowedDeltaSpeedKmh && rawDeltaDistanceM > 20.0f;
-            boolean isAbsurdTeleport = derivedSpeedKmh > 180.0f; // >180 km/h is impossible ground workout speed
+            boolean isSuddenSpike = Math.abs(derivedSpeedKmh - emaSpeedKmh) > maxAllowedDeltaSpeedKmh && smoothedDeltaDistanceM > 20.0f;
+            boolean isAbsurdTeleport = derivedSpeedKmh > 180.0f;
 
             if ((isSuddenSpike && !hasHighConfidenceSpeed) || isAbsurdTeleport) {
-                // Reject glitch point from distance/route accumulation
-                saveLiveLocationPrefs(prefs, location, accuracy, distanceMeters, movingDurationSec, 0f, maxSpeedKmh, elevationGainM);
-                broadcastLocation(location, accuracy, distanceMeters, movingDurationSec, 0f, maxSpeedKmh, elevationGainM, false, false, true);
+                saveLiveLocationPrefs(prefs, smoothedLoc, accuracy, distanceMeters, movingDurationSec, 0f, maxSpeedKmh, elevationGainM);
+                broadcastLocation(smoothedLoc, accuracy, distanceMeters, movingDurationSec, 0f, maxSpeedKmh, elevationGainM, false, false, true);
                 return;
             }
 
-            // Speed estimation
+            // ─── Speed Estimation with Doppler cross-check ───
             float candidateSpeedKmh;
             if (nativeSpeedKmh >= 2.0f) {
+                // High-confidence Doppler — most reliable signal
                 candidateSpeedKmh = nativeSpeedKmh;
-            } else if (!isCurrentlyMoving && !hasHighConfidenceSpeed) {
-                // When stationary and no Doppler, clamp derived speed from position drift
-                // GPS jitter of 5m/1s = 18 km/h derived — must not poison EMA
+            } else if (rawDopplerKmh >= 0f && rawDopplerKmh < 2.0f && derivedSpeedKmh > 4.0f) {
+                // Doppler says nearly stopped but derived says fast → GPS coordinate jitter.
+                // Clamp hard. This is the key fix for the "stopped but showing 5-10 km/h" bug.
+                candidateSpeedKmh = 0f;
+            } else if (consecutiveStillSamples > 0 || !isCurrentlyMoving) {
+                // Transitioning to still or already still — clamp derived speed from position drift.
+                // Without this, jitter-derived 5-10 km/h values keep resetting the still counter.
                 candidateSpeedKmh = Math.min(derivedSpeedKmh, 1.5f);
             } else {
                 candidateSpeedKmh = derivedSpeedKmh;
@@ -491,7 +515,7 @@ public final class WorkoutLocationService extends Service {
 
             // Feed EMA speed filter with adaptive alpha
             float alpha = isCurrentlyMoving ? SPEED_EMA_ALPHA : SPEED_EMA_ALPHA_CAUTIOUS;
-            if (candidateSpeedKmh < 0.8f && rawDeltaDistanceM < 1.5f) {
+            if (candidateSpeedKmh < 0.8f && smoothedDeltaDistanceM < 1.5f) {
                 // If moving very slowly or barely any displacement, decay speed
                 emaSpeedKmh = (1f - SPEED_EMA_ALPHA) * emaSpeedKmh;
                 if (emaSpeedKmh < 0.3f) emaSpeedKmh = 0f;
@@ -513,14 +537,18 @@ public final class WorkoutLocationService extends Service {
             if (!isSettling) {
                 boolean hasSpeedEvidence = (emaSpeedKmh >= (isCurrentlyMoving ? MOVING_STOP_SPEED_KMH : MOVING_START_SPEED_KMH))
                         || (nativeSpeedKmh >= (isCurrentlyMoving ? 1.5f : 2.5f));
-                boolean hasSpatialEvidence = (deltaDistanceM >= dynamicNoiseThreshold) && dynamicNoiseThreshold > 0f;
+                // Spatial evidence only counts if Doppler doesn't contradict it
+                boolean dopplerContradictsMovement = rawDopplerKmh >= 0f && rawDopplerKmh < 1.5f;
+                boolean hasSpatialEvidence = (deltaDistanceM >= dynamicNoiseThreshold)
+                        && dynamicNoiseThreshold > 0f
+                        && !dopplerContradictsMovement;
                 sampleLooksMoving = hasSpeedEvidence || hasSpatialEvidence;
             }
 
             if (isCurrentlyMoving) {
                 // Currently MOVING — need consecutive still samples to stop
                 if (sampleLooksMoving) {
-                    consecutiveStillSamples = 0; // reset still counter
+                    consecutiveStillSamples = 0;
                     currentSpeedKmh = emaSpeedKmh > 0.5f ? emaSpeedKmh : Math.max(derivedSpeedKmh, 0.5f);
                 } else {
                     consecutiveStillSamples++;
@@ -529,8 +557,9 @@ public final class WorkoutLocationService extends Service {
                         isCurrentlyMoving = false;
                         consecutiveMovingSamples = 0;
                         currentSpeedKmh = 0f;
+                        emaSpeedKmh = 0f; // Hard reset EMA on confirmed stop
                     } else {
-                        // Still in grace period — maintain moving but show decaying speed
+                        // Grace period — show decaying speed
                         currentSpeedKmh = emaSpeedKmh > 0.3f ? emaSpeedKmh : 0f;
                     }
                 }
@@ -544,11 +573,10 @@ public final class WorkoutLocationService extends Service {
                         consecutiveStillSamples = 0;
                         currentSpeedKmh = emaSpeedKmh > 0.5f ? emaSpeedKmh : Math.max(derivedSpeedKmh, 0.5f);
                     } else {
-                        // Not yet confirmed — stay still
                         currentSpeedKmh = 0f;
                     }
                 } else {
-                    consecutiveMovingSamples = 0; // reset moving counter
+                    consecutiveMovingSamples = 0;
                     currentSpeedKmh = 0f;
                 }
             }
@@ -565,7 +593,7 @@ public final class WorkoutLocationService extends Service {
                 isAccepted = true;
                 addedDistanceM = deltaDistanceM;
                 distanceMeters += addedDistanceM;
-                lastAcceptedLocation = location;
+                lastAcceptedLocation = smoothedLoc;
 
                 // Moving Time Accumulation (cap burst when waking from background)
                 if (dtSec < 60f) {
@@ -589,7 +617,7 @@ public final class WorkoutLocationService extends Service {
                 }
             } else if (isSettling) {
                 // During settling, update anchor without distance accumulation
-                lastAcceptedLocation = location;
+                lastAcceptedLocation = smoothedLoc;
                 if (location.hasAltitude()) {
                     lastElevationAnchor = smoothAltitude(location.getAltitude());
                 }
@@ -602,7 +630,7 @@ public final class WorkoutLocationService extends Service {
         } else {
             // First accepted location of the session
             isAccepted = true;
-            lastAcceptedLocation = location;
+            lastAcceptedLocation = smoothedLoc;
             if (nativeSpeedKmh >= 2.0f) {
                 emaSpeedKmh = nativeSpeedKmh;
                 currentSpeedKmh = emaSpeedKmh;
@@ -618,7 +646,7 @@ public final class WorkoutLocationService extends Service {
             }
         }
 
-        lastRawLocation = location;
+        lastRawLocation = smoothedLoc;
 
         if (isMoving) {
             lastMovementTimeMs = location.getTime();
@@ -630,20 +658,20 @@ public final class WorkoutLocationService extends Service {
         boolean isAutoPaused = !isMoving && (location.getTime() - lastMovementTimeMs >= AUTO_PAUSE_TIMEOUT_MS);
 
         try {
-            JSONObject pointJson = locationToJson(location, accuracy, distanceMeters, movingDurationSec, currentSpeedKmh, maxSpeedKmh, elevationGainM, isMoving, isAccepted, isAutoPaused);
+            JSONObject pointJson = locationToJson(smoothedLoc, accuracy, distanceMeters, movingDurationSec, currentSpeedKmh, maxSpeedKmh, elevationGainM, isMoving, isAccepted, isAutoPaused);
 
             // Persist ONLY accepted route points to durable SQLite journal
             if (isAccepted) {
                 database.append(pointJson);
             }
 
-            // Update SharedPreferences
-            saveLiveLocationPrefs(prefs, location, accuracy, distanceMeters, movingDurationSec, currentSpeedKmh, maxSpeedKmh, elevationGainM);
+            // Update SharedPreferences with smoothed coordinates
+            saveLiveLocationPrefs(prefs, smoothedLoc, accuracy, distanceMeters, movingDurationSec, currentSpeedKmh, maxSpeedKmh, elevationGainM);
 
             // Update Ongoing Foreground Notification
             updateNotification();
 
-            // BROADCAST location to web UI
+            // BROADCAST smoothed location to web UI
             Intent update = new Intent(ACTION_LOCATION).setPackage(getPackageName());
             update.putExtra("point", pointJson.toString());
             sendBroadcast(update);
@@ -872,5 +900,122 @@ public final class WorkoutLocationService extends Service {
         point.put("isAutoPaused", isAutoPaused);
 
         return point;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // GPS Kalman Filter: Constant-Velocity model on lat/lng axes
+    // Smooths raw GPS coordinates to eliminate jitter-derived phantom
+    // distances and speeds. Adaptive process noise: near-zero when
+    // stationary (absorbs jitter), higher when moving (tracks trajectory).
+    // ─────────────────────────────────────────────────────────────
+    private static final class GpsKalmanFilter {
+        private boolean initialized = false;
+
+        // Latitude axis state
+        private double posLat, velLat;               // position, velocity (deg/s)
+        private double ppLat, pvLat, vpLat, vvLat;   // 2×2 covariance
+
+        // Longitude axis state
+        private double posLng, velLng;
+        private double ppLng, pvLng, vpLng, vvLng;
+
+        private long lastTimeMs;
+
+        void reset() {
+            initialized = false;
+        }
+
+        /**
+         * Process a raw GPS measurement and return Kalman-smoothed [lat, lng].
+         *
+         * @param measLat      Raw GPS latitude
+         * @param measLng      Raw GPS longitude
+         * @param accuracyM    Horizontal accuracy in meters
+         * @param timeMs       Fix timestamp (ms)
+         * @param isStationary true when the hysteresis engine considers user still
+         */
+        double[] process(double measLat, double measLng, float accuracyM, long timeMs, boolean isStationary) {
+            // Convert horizontal accuracy (meters) → approximate variance (degrees²)
+            // 1° latitude ≈ 111 320 m
+            double accDeg = accuracyM / 111_320.0;
+            double R = accDeg * accDeg;
+
+            if (!initialized) {
+                posLat = measLat;  velLat = 0;
+                posLng = measLng;  velLng = 0;
+                ppLat = ppLng = R;
+                pvLat = pvLng = vpLat = vpLng = 0;
+                vvLat = vvLng = R * 0.01;
+                lastTimeMs = timeMs;
+                initialized = true;
+                return new double[]{posLat, posLng};
+            }
+
+            double dt = Math.max(0.1, (timeMs - lastTimeMs) / 1000.0);
+            if (dt > 30.0) {
+                // Large gap (background wake) — reinitialize to avoid wild prediction
+                posLat = measLat;  velLat = 0;
+                posLng = measLng;  velLng = 0;
+                ppLat = ppLng = R;
+                pvLat = pvLng = vpLat = vpLng = 0;
+                vvLat = vvLng = R * 0.01;
+                lastTimeMs = timeMs;
+                return new double[]{posLat, posLng};
+            }
+            lastTimeMs = timeMs;
+
+            // Adaptive process noise
+            // Stationary: near-zero → filter becomes very confident, absorbs jitter
+            // Moving:     moderate  → filter follows real trajectory
+            double qPos = isStationary ? 1e-14 : 5e-10;
+            double qVel = isStationary ? 1e-14 : 5e-9;
+
+            // ── Latitude axis ────────────────────────────────
+            double predLat = posLat + velLat * dt;
+            double predPPLat = ppLat + dt * (pvLat + vpLat) + dt * dt * vvLat + qPos;
+            double predPVLat = pvLat + dt * vvLat;
+            double predVPLat = vpLat + dt * vvLat;
+            double predVVLat = vvLat + qVel;
+
+            double innovLat = measLat - predLat;
+            double sLat = predPPLat + R;
+            double k0Lat = predPPLat / sLat;
+            double k1Lat = predVPLat / sLat;
+
+            posLat = predLat + k0Lat * innovLat;
+            velLat = velLat + k1Lat * innovLat;
+            ppLat = (1 - k0Lat) * predPPLat;
+            pvLat = (1 - k0Lat) * predPVLat;
+            vpLat = predVPLat - k1Lat * predPPLat;
+            vvLat = predVVLat - k1Lat * predPVLat;
+
+            // ── Longitude axis ───────────────────────────────
+            double predLng = posLng + velLng * dt;
+            double predPPLng = ppLng + dt * (pvLng + vpLng) + dt * dt * vvLng + qPos;
+            double predPVLng = pvLng + dt * vvLng;
+            double predVPLng = vpLng + dt * vvLng;
+            double predVVLng = vvLng + qVel;
+
+            double innovLng = measLng - predLng;
+            double sLng = predPPLng + R;
+            double k0Lng = predPPLng / sLng;
+            double k1Lng = predVPLng / sLng;
+
+            posLng = predLng + k0Lng * innovLng;
+            velLng = velLng + k1Lng * innovLng;
+            ppLng = (1 - k0Lng) * predPPLng;
+            pvLng = (1 - k0Lng) * predPVLng;
+            vpLng = predVPLng - k1Lng * predPPLng;
+            vvLng = predVVLng - k1Lng * predPVLng;
+
+            // When stationary, actively decay velocity toward zero
+            // This prevents the filter from "drifting" with accumulated jitter momentum
+            if (isStationary) {
+                velLat *= 0.3;
+                velLng *= 0.3;
+            }
+
+            return new double[]{posLat, posLng};
+        }
     }
 }

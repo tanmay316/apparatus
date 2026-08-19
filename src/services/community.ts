@@ -2235,18 +2235,19 @@ export async function notifyClanMembers(params: {
     const notifPromises = members
       .filter(m => m.userId && m.userId !== senderId)
       .map(m =>
-        addDoc(collection(db, 'app_notifications'), cleanDoc({
-          userId: m.userId,
-          title,
-          body,
+        addDoc(collection(db, 'notifications'), cleanDoc({
+          receiverId: m.userId,
+          senderId: senderId,
+          senderName: senderName,
+          senderPhoto: '', // fallback if not provided
           type,
-          link: link || `/clan/${clanId}`,
+          message: body ? `${title}: ${body}` : title,
+          targetId: extraData?.messageId || extraData?.announcementId || clanId,
           read: false,
           createdAt: serverTimestamp(),
           extra: {
             clanId,
-            senderId,
-            senderName,
+            link: link || `/clan/${clanId}`,
             ...(extraData || {})
           }
         })).catch(err => console.warn('Failed to send notification to member:', m.userId, err))
@@ -2439,6 +2440,13 @@ export async function deleteClanMessage(
     isDeleted: true,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function markClanMessageRead(messageId: string, userId: string): Promise<void> {
+  const ref = doc(db, 'clan_messages', messageId);
+  await updateDoc(ref, {
+    readBy: arrayUnion(userId)
+  }).catch(() => {}); // fire and forget
 }
 
 export async function toggleClanMessageReaction(

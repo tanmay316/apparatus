@@ -84,7 +84,10 @@ export function Topbar() {
   const handleNotificationClick = async (notification: any) => {
     if (notification.id && !notification.read) await readMutation.mutateAsync(notification.id);
     setNotificationsOpen(false);
-    if (notification.type === 'follow_request') {
+    
+    if (notification.extra?.link) {
+      navigate(notification.extra.link);
+    } else if (notification.type === 'follow_request') {
       navigate(`/profile/${profile?.username}?modal=followers`);
     } else if (notification.type === 'follow' || notification.type === 'unfollow') {
       navigate(`/profile/${notification.targetId || notification.senderId}`);
