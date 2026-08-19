@@ -115,7 +115,7 @@ export function EventsTab() {
           className="relative overflow-hidden rounded-[32px] bg-ink-2 border border-line p-6 sm:p-8 cursor-pointer hover:border-blue-500/50 transition-all shadow-xl group"
         >
           {featured.coverUrl && (
-            <div className="absolute inset-0 opacity-20 group-hover:opacity-30 transition-opacity">
+            <div className="absolute inset-0 opacity-50 dark:opacity-40 group-hover:opacity-60 dark:group-hover:opacity-50 transition-opacity">
               <img src={featured.coverUrl} alt={featured.title} className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/60 to-transparent" />
             </div>

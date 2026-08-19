@@ -195,7 +195,7 @@ export function WorkoutSession() {
     return () => {
       if (isActiveRef.current && !hasLoggedSetsRef.current) {
         if (userRef.current) {
-          endActiveSession(userRef.current.uid).catch(console.error);
+          endActiveSession(userRef.current.uid, 'workout').catch(console.error);
         }
         // Avoid calling navigate() during unmount to prevent redirect bugs on page refresh
         useWorkoutStore.getState().cancelWorkout();
@@ -279,7 +279,7 @@ export function WorkoutSession() {
       currentExercise: lastExercise,
       caloriesBurned: Math.round(displayCalories) || 0,
       startedAt: Timestamp.fromMillis(store.startedAt)
-    }).catch(console.error);
+    }, 'workout').catch(console.error);
 
     // Request permission and show ongoing notification
     requestNotificationPermission().then(() => {
@@ -319,7 +319,7 @@ export function WorkoutSession() {
     if (!user || !store.isActive || sessionFinished || !store.startedAt) return;
     updateActiveSession(user.uid, {
       currentExercise: lastExercise,
-    }).catch(console.error);
+    }, 'workout').catch(console.error);
   }, [lastExercise, user, store.isActive, sessionFinished, store.startedAt]);
 
   // Periodically update the active session's stats (calories, etc.)
@@ -329,7 +329,7 @@ export function WorkoutSession() {
       updateActiveSession(user.uid, {
         currentExercise: lastExerciseRef.current,
         caloriesBurned: Math.round(displayCaloriesRef.current) || 0,
-      }).catch(console.error);
+      }, 'workout').catch(console.error);
     }, 10000); // Update every 10s
     return () => clearInterval(interval);
   }, [store.isActive, sessionFinished, user, store.startedAt]);
@@ -490,7 +490,7 @@ export function WorkoutSession() {
       showNotification(1002, 'Workout Complete', `You completed your session in ${formatStopwatch(elapsedSec)}.`);
       stopWorkoutForegroundService();
       if (user) {
-        endActiveSession(user.uid).catch(console.error);
+        endActiveSession(user.uid, 'workout').catch(console.error);
       }
       
       // Smart Background Reminders

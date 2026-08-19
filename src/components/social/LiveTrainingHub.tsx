@@ -7,13 +7,21 @@ import { getFollowing, type ActiveSession } from '@/services/social';
 import { getAvatarUrl } from '@/lib/avatar';
 import { useUIStore } from '@/stores/ui-store';
 import { LiveSessionModal } from './LiveSessionModal';
-import { Activity } from 'lucide-react';
+import { Activity, Dumbbell, Zap } from 'lucide-react';
+
+export interface GroupedLiveSession {
+  uid: string;
+  displayName: string;
+  photoURL: string;
+  workout?: ActiveSession;
+  cardio?: ActiveSession;
+}
 
 export function LiveTrainingHub() {
   const { user } = useAuthStore();
   const { theme } = useUIStore();
-  const [activeSessions, setActiveSessions] = useState<(ActiveSession & { displayName: string, photoURL: string })[]>([]);
-  const [selectedSession, setSelectedSession] = useState<any | null>(null);
+  const [groupedSessions, setGroupedSessions] = useState<GroupedLiveSession[]>([]);
+  const [selectedUid, setSelectedUid] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -41,28 +49,26 @@ export function LiveTrainingHub() {
             const updateTime = s.updatedAt.toMillis ? s.updatedAt.toMillis() : (s.updatedAt.seconds * 1000) || now;
             return now - updateTime < 120000; // 2 minutes
           });
+        // Group by user
+        const grouped: Record<string, GroupedLiveSession> = {};
+        for (const s of sessions) {
+          if (!grouped[s.uid]) {
+            let displayName = 'Athlete';
+            let photoURL = '';
+            try {
+              const userDoc = await getDoc(doc(db, 'users', s.uid));
+              if (userDoc.exists()) {
+                displayName = userDoc.data().displayName || 'Athlete';
+                photoURL = userDoc.data().photoURL || '';
+              }
+            } catch (e) {}
+            grouped[s.uid] = { uid: s.uid, displayName, photoURL };
+          }
+          if (s.sessionType === 'cardio') grouped[s.uid].cardio = s;
+          else grouped[s.uid].workout = s; // default to workout
+        }
         
-        // Fetch user details for these sessions
-        const sessionsWithUsers = await Promise.all(sessions.map(async (s) => {
-          try {
-            const userDoc = await getDoc(doc(db, 'users', s.uid));
-            if (userDoc.exists()) {
-              return {
-                ...s,
-                displayName: userDoc.data().displayName || 'Athlete',
-                photoURL: userDoc.data().photoURL || '',
-              };
-            }
-          } catch (e) {}
-          
-          return {
-            ...s,
-            displayName: 'Athlete',
-            photoURL: '',
-          };
-        }));
-        
-        setActiveSessions(sessionsWithUsers);
+        setGroupedSessions(Object.values(grouped));
       });
     }
 
@@ -70,7 +76,7 @@ export function LiveTrainingHub() {
     return () => unsubscribe();
   }, [user]);
 
-  if (activeSessions.length === 0) return null;
+  if (groupedSessions.length === 0) return null;
 
   return (
     <>
@@ -81,15 +87,16 @@ export function LiveTrainingHub() {
         </div>
         
         <div className="flex gap-4 overflow-x-auto pb-4 pt-2 px-2 -mx-2 snap-x snap-mandatory touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          {activeSessions.map((session) => (
+          {groupedSessions.map((session) => (
             <motion.button
               key={session.uid}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => setSelectedSession(session)}
+              onClick={() => setSelectedUid(session.uid)}
               className="flex flex-col items-center gap-2 shrink-0 snap-start"
             >
               <div className="relative w-[56px] h-[56px]">
+                {/* Gradient Border */}
                 <div className="absolute -inset-1 bg-gradient-to-tr from-sienna to-amber rounded-full animate-spin-slow opacity-75 blur-[2px]" />
                 <div className="absolute inset-0 bg-gradient-to-tr from-sienna to-amber rounded-full p-[2px]">
                   <div className="w-full h-full bg-[var(--bg)] rounded-full flex items-center justify-center p-0.5">
@@ -99,6 +106,20 @@ export function LiveTrainingHub() {
                       className="w-full h-full rounded-full object-cover border border-[var(--bg)]"
                     />
                   </div>
+                </div>
+
+                {/* Activity Badges Overlay */}
+                <div className="absolute -bottom-1 -right-1 flex gap-0.5">
+                  {session.workout && (
+                    <div className="w-5 h-5 rounded-full bg-emerald-500 border-2 border-[var(--bg)] flex items-center justify-center text-white shadow-sm">
+                      <Dumbbell size={10} />
+                    </div>
+                  )}
+                  {session.cardio && (
+                    <div className="w-5 h-5 rounded-full bg-blue-500 border-2 border-[var(--bg)] flex items-center justify-center text-white shadow-sm">
+                      <Zap size={10} />
+                    </div>
+                  )}
                 </div>
               </div>
               <span className="text-[10px] font-mono font-medium text-[var(--text)] truncate max-w-[64px]">
@@ -110,11 +131,11 @@ export function LiveTrainingHub() {
       </div>
 
       <AnimatePresence>
-        {selectedSession && (
+        {selectedUid && (
           <LiveSessionModal
-            isOpen={!!selectedSession}
-            onClose={() => setSelectedSession(null)}
-            session={selectedSession ? activeSessions.find(s => s.uid === selectedSession.uid) || selectedSession : null}
+            isOpen={!!selectedUid}
+            onClose={() => setSelectedUid(null)}
+            groupedSession={groupedSessions.find(s => s.uid === selectedUid) || null}
           />
         )}
       </AnimatePresence>

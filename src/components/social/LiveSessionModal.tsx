@@ -6,22 +6,33 @@ import { collection, query, orderBy, onSnapshot, serverTimestamp, Timestamp, whe
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { sendLiveMessage, type ActiveSession } from '@/services/social';
+import type { GroupedLiveSession } from './LiveTrainingHub';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
 
 interface Props {
-  session: ActiveSession & { displayName: string, photoURL: string };
+  groupedSession: GroupedLiveSession | null;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function LiveSessionModal({ session, isOpen, onClose }: Props) {
+export function LiveSessionModal({ groupedSession, isOpen, onClose }: Props) {
   const { user, profile } = useAuthStore();
   const { theme, showToast } = useUIStore();
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
   const [elapsed, setElapsed] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [activeTab, setActiveTab] = useState<'workout' | 'cardio'>(groupedSession?.workout ? 'workout' : 'cardio');
+
+  useEffect(() => {
+    if (groupedSession) {
+      if (activeTab === 'workout' && !groupedSession.workout && groupedSession.cardio) setActiveTab('cardio');
+      if (activeTab === 'cardio' && !groupedSession.cardio && groupedSession.workout) setActiveTab('workout');
+    }
+  }, [groupedSession]);
+
+  const session = groupedSession?.[activeTab];
 
   const themeStyles = theme === 'dark' ? {
     '--bg': '#090605',
@@ -43,10 +54,10 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
 
   // Time elapsed calculator
   useEffect(() => {
-    if (!session.startedAt) return;
+    if (!session?.startedAt) return;
     
     const updateTime = () => {
-      const start = session.startedAt?.seconds ? session.startedAt.toDate() : new Date();
+      const start = session?.startedAt?.seconds ? session.startedAt.toDate() : new Date();
       const diff = Math.floor((new Date().getTime() - start.getTime()) / 1000);
       const m = Math.floor(diff / 60);
       const s = diff % 60;
@@ -56,13 +67,13 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
-  }, [session.startedAt]);
+  }, [session?.startedAt]);
 
-  // Chat listener
+  // Chat listener (listens to the user's unified chat)
   useEffect(() => {
-    if (!session?.uid) return;
+    if (!groupedSession?.uid) return;
     
-    const chatColl = collection(db, 'activeSessions', session.uid, 'chat');
+    const chatColl = collection(db, 'activeSessions', groupedSession.uid, 'chat');
     const q = query(chatColl, orderBy('createdAt', 'asc'));
 
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -100,7 +111,7 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
     });
 
     return () => unsubscribe();
-  }, [session?.uid]);
+  }, [groupedSession?.uid]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -110,8 +121,9 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
     setInputText('');
     
     try {
+      if (!groupedSession) return;
       await sendLiveMessage(
-        session.uid, 
+        groupedSession.uid, 
         user.uid, 
         profile.displayName || 'Athlete', 
         profile.photoURL || '', 
@@ -122,7 +134,7 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !groupedSession) return null;
 
   return createPortal(
     <div style={themeStyles} className="fixed inset-0 z-[999] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
@@ -140,13 +152,13 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
             <div className="relative">
               <div className="absolute -inset-0.5 bg-gradient-to-tr from-sienna to-amber rounded-full animate-spin-slow opacity-75 blur-[2px]" />
               <img 
-                src={session.photoURL || getAvatarUrl(session.displayName, theme)} 
-                alt={session.displayName} 
+                src={groupedSession.photoURL || getAvatarUrl(groupedSession.displayName, theme)} 
+                alt={groupedSession.displayName} 
                 className="w-10 h-10 rounded-full object-cover relative z-10 border-2 border-[var(--bg)]"
               />
             </div>
             <div>
-              <h2 className="font-sans text-sm font-bold">{session.displayName}</h2>
+              <h2 className="font-sans text-sm font-bold">{groupedSession.displayName}</h2>
               <div className="flex items-center gap-1.5 text-sienna text-[10px] font-bold uppercase tracking-wider">
                 <span className="w-1.5 h-1.5 rounded-full bg-sienna animate-pulse" />
                 Live Now
@@ -159,14 +171,36 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
         </div>
 
         {/* Live Stats Bar */}
-        <div className="px-5 py-4 bg-[var(--card)] shrink-0 flex flex-col gap-4 border-b border-[var(--border)]">
-          <div>
-            <div className="text-[10px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Current Plan</div>
-            <div className="font-serif text-lg font-medium leading-tight">{session.dayTitle}</div>
+        {groupedSession.workout && groupedSession.cardio && (
+          <div className="px-5 pt-3 bg-[var(--card)] flex gap-2 border-b border-[var(--border)] shrink-0">
+            <button
+              onClick={() => setActiveTab('workout')}
+              className={`pb-2 px-1 text-sm font-bold border-b-2 transition-colors ${
+                activeTab === 'workout' ? 'border-sienna text-sienna' : 'border-transparent text-[var(--muted)] hover:text-[var(--text)]'
+              }`}
+            >
+              Workout
+            </button>
+            <button
+              onClick={() => setActiveTab('cardio')}
+              className={`pb-2 px-1 text-sm font-bold border-b-2 transition-colors ${
+                activeTab === 'cardio' ? 'border-sienna text-sienna' : 'border-transparent text-[var(--muted)] hover:text-[var(--text)]'
+              }`}
+            >
+              Cardio
+            </button>
           </div>
-          
-          <div className={`grid ${session.steps && session.steps > 0 ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
-            <div className="bg-[var(--bg)] rounded-xl p-3 border border-[var(--border)]">
+        )}
+        
+        {session && (
+          <div className="px-5 py-4 bg-[var(--card)] shrink-0 flex flex-col gap-4 border-b border-[var(--border)]">
+            <div>
+              <div className="text-[10px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Current Plan</div>
+              <div className="font-serif text-lg font-medium leading-tight">{session.dayTitle}</div>
+            </div>
+            
+            <div className={`grid ${session.steps && session.steps > 0 ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
+              <div className="bg-[var(--bg)] rounded-xl p-3 border border-[var(--border)]">
               <div className="flex items-center gap-1.5 text-[10px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">
                 <Clock size={12} className="text-teal-500" /> Time
               </div>
@@ -188,11 +222,12 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
             )}
           </div>
 
-          <div className="flex items-center gap-2 text-sm font-medium p-3 rounded-xl bg-sienna/10 text-sienna border border-sienna/20">
-            <Play size={16} fill="currentColor" />
-            <span className="truncate">Active: {session.currentExercise || 'Warming up...'}</span>
+            <div className="flex items-center gap-2 text-sm font-medium p-3 rounded-xl bg-sienna/10 text-sienna border border-sienna/20">
+              <Play size={16} fill="currentColor" />
+              <span className="truncate">Active: {session.currentExercise || 'Warming up...'}</span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Chat Area */}
         <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-[var(--bg)] custom-scrollbar">
@@ -202,7 +237,7 @@ export function LiveSessionModal({ session, isOpen, onClose }: Props) {
                 <Flame size={24} className="text-sienna/50" />
               </div>
               <p className="text-sm font-medium text-[var(--text)] mb-1">Be the first to cheer!</p>
-              <p className="text-xs text-[var(--muted)]">Send a message to hype up {session.displayName.split(' ')[0]}</p>
+              <p className="text-xs text-[var(--muted)]">Send a message to hype up {groupedSession.displayName.split(' ')[0]}</p>
             </div>
           ) : (
             messages.map((msg, i) => (

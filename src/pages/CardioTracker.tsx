@@ -330,7 +330,7 @@ export function CardioTracker() {
     const maxSpeed = finalStore.maxSpeedKmh;
 
     if (user) {
-      endActiveSession(user.uid).catch(console.error);
+      endActiveSession(user.uid, 'cardio').catch(console.error);
     }
 
     if (user && dist > 0.01) {
@@ -400,7 +400,7 @@ export function CardioTracker() {
         currentExercise: '0.00 km',
         caloriesBurned: 0,
         startedAt: Timestamp.now()
-      }).catch(console.error);
+      }, 'cardio').catch(console.error);
     }
   };
 
@@ -437,7 +437,7 @@ export function CardioTracker() {
     const finalStore = await finishTracking();
 
     if (user) {
-      endActiveSession(user.uid).catch(console.error);
+      endActiveSession(user.uid, 'cardio').catch(console.error);
     }
 
     const movingDurationSec = finalStore.movingDurationSec > 0
@@ -580,7 +580,7 @@ export function CardioTracker() {
     if (window.confirm('Are you sure you want to discard this cardio session?')) {
       processingRef.current = true;
       try {
-      if (user) endActiveSession(user.uid).catch(console.error);
+      if (user) endActiveSession(user.uid, 'cardio').catch(console.error);
       await stopGpsWatch();
       if (store.activityType === 'walk' || store.activityType === 'run') {
         await pedometerStore.stopSession();

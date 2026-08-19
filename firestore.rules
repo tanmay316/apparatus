@@ -207,9 +207,10 @@ service cloud.firestore {
     }
 
     // ─── Active Sessions (Live Training) ────────────────────────
-    match /activeSessions/{uid} {
+    match /activeSessions/{sessionId} {
       allow read: if isAuthenticated();
-      allow write: if isOwner(uid);
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
       
       match /chat/{chatId} {
         allow read, create, delete: if isAuthenticated();
@@ -353,7 +354,7 @@ service cloud.firestore {
       allow update: if isOwner(resource.data.userId) || isAdmin()
         || isOwner(get(/databases/$(database)/documents/clans_v2/$(resource.data.clanId)).data.leaderId)
         || isClanCoLeader(resource.data.clanId)
-        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']));
+        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'readBy']));
       allow delete: if resource == null || isOwner(resource.data.userId) || isAdmin()
         || isOwner(get(/databases/$(database)/documents/clans_v2/$(resource.data.clanId)).data.leaderId)
         || isClanCoLeader(resource.data.clanId);

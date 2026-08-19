@@ -631,7 +631,9 @@ export function ClanDiscussionTab({
                                 ? 'rounded-[14px] rounded-tl-[3px]'
                                 : 'rounded-[14px] rounded-tl-[7px]'
                             }`
-                      } ${msg.isDeleted ? 'opacity-70 italic' : ''}`}
+                      } ${msg.isDeleted ? 'opacity-70 italic' : ''} ${
+                        msg.reactions && Object.keys(msg.reactions).length > 0 ? 'mb-3.5' : ''
+                      }`}
                     >
                       {/* Quoted Reply Preview (if replyTo exists) */}
                       {msg.replyTo && !msg.isDeleted && (
@@ -689,7 +691,7 @@ export function ClanDiscussionTab({
 
                       {/* Reaction Badges Bubble Corner */}
                       {msg.reactions && Object.keys(msg.reactions).length > 0 && (
-                        <div className="absolute -bottom-3 right-2 flex items-center gap-1 bg-ink-3 border border-line/30 rounded-full px-2 py-0.5 shadow-md">
+                        <div className={`absolute -bottom-3.5 ${isMe ? 'right-2' : 'left-2'} flex flex-wrap items-center gap-1 bg-ink-3 dark:bg-ink-2 border border-line/30 rounded-full px-2 py-0.5 shadow-md z-10`}>
                           {Object.entries(msg.reactions).map(([emoji, userIds]) => (
                             <button
                               key={emoji}

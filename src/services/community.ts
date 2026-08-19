@@ -1,4 +1,4 @@
-import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, increment, setDoc, writeBatch, Timestamp, documentId, onSnapshot } from 'firebase/firestore';
+import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, increment, setDoc, writeBatch, Timestamp, documentId, onSnapshot, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, SimpleEventStatus, CommunityPost, EarnedCommunityBadge, ClanPoll, ClanPollOption, ClanPollVoter, CommunityAnnouncement, ClanMessage, AppNotificationType, ClanJoinRequest } from '@/types';
 import { notify } from '@/services/social';

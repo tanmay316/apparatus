@@ -599,7 +599,8 @@ export function subscribeToNotifications(
         if (change.type === 'added') {
           const data = change.doc.data();
           const time = data.createdAt?.toMillis ? data.createdAt.toMillis() / 1000 : (data.createdAt?.seconds || now);
-          if (now - time < 60) {
+          // Increased threshold to 300s (5 minutes) to prevent device-server clock skew from swallowing notifications
+          if (now - time < 300) {
             onNew({ id: change.doc.id, ...data } as AppNotification);
           }
         }
@@ -667,6 +668,7 @@ export async function getBookmarkedActivities(bookmarkIds: string[]): Promise<Ac
 
 export interface ActiveSession {
   uid: string;
+  sessionType?: 'workout' | 'cardio';
   planId: string;
   dayId: string;
   dayTitle: string;
@@ -677,43 +679,58 @@ export interface ActiveSession {
   steps?: number;
 }
 
-export async function startActiveSession(uid: string, sessionData: Omit<ActiveSession, 'uid' | 'updatedAt'> & { startedAt?: any }) {
-  const ref = doc(db, 'activeSessions', uid);
-  // Clear any residual chat documents from an aborted prior session
-  const chatRef = collection(db, 'activeSessions', uid, 'chat');
-  const snap = await getDocs(chatRef).catch(() => null);
-  if (snap && snap.docs.length > 0) {
-    const batch = writeBatch(db);
-    snap.docs.forEach(d => batch.delete(d.ref));
-    await batch.commit().catch(() => {});
+export async function startActiveSession(uid: string, sessionData: Omit<ActiveSession, 'uid' | 'updatedAt' | 'sessionType'> & { startedAt?: any }, sessionType: 'workout' | 'cardio' = 'workout') {
+  const sessionId = `${uid}_${sessionType}`;
+  const ref = doc(db, 'activeSessions', sessionId);
+  
+  // Only clear chat if starting fresh (no other active sessions)
+  const existingSessions = await getDocs(query(collection(db, 'activeSessions'), where('uid', '==', uid)));
+  if (existingSessions.empty) {
+    const chatRef = collection(db, 'activeSessions', uid, 'chat');
+    const snap = await getDocs(chatRef).catch(() => null);
+    if (snap && snap.docs.length > 0) {
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit().catch(() => {});
+    }
   }
 
   await setDoc(ref, {
     ...sessionData,
     uid,
+    sessionType,
     startedAt: sessionData.startedAt || serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
 }
 
-export async function updateActiveSession(uid: string, data: Partial<ActiveSession>) {
-  const ref = doc(db, 'activeSessions', uid);
+export async function updateActiveSession(uid: string, data: Partial<ActiveSession>, sessionType: 'workout' | 'cardio' = 'workout') {
+  const sessionId = `${uid}_${sessionType}`;
+  const ref = doc(db, 'activeSessions', sessionId);
   await updateDoc(ref, {
     ...data,
     updatedAt: serverTimestamp(),
   });
 }
 
-export async function endActiveSession(uid: string) {
-  const ref = doc(db, 'activeSessions', uid);
-  const chatRef = collection(db, 'activeSessions', uid, 'chat');
-  const snap = await getDocs(chatRef).catch(() => null);
-  if (snap && snap.docs.length > 0) {
-    const batch = writeBatch(db);
-    snap.docs.forEach(d => batch.delete(d.ref));
-    await batch.commit().catch(() => {});
-  }
+export async function endActiveSession(uid: string, sessionType: 'workout' | 'cardio' = 'workout') {
+  const sessionId = `${uid}_${sessionType}`;
+  const ref = doc(db, 'activeSessions', sessionId);
+  
+  // Delete the specific session
   await deleteDoc(ref).catch(() => {});
+  
+  // Only clear chat if no other active sessions remain for this user
+  const remainingSessions = await getDocs(query(collection(db, 'activeSessions'), where('uid', '==', uid)));
+  if (remainingSessions.empty) {
+    const chatRef = collection(db, 'activeSessions', uid, 'chat');
+    const snap = await getDocs(chatRef).catch(() => null);
+    if (snap && snap.docs.length > 0) {
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit().catch(() => {});
+    }
+  }
 }
 
 export async function sendLiveMessage(sessionUid: string, senderUid: string, senderName: string, senderPhoto: string, text: string) {
