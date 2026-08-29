@@ -3,7 +3,8 @@ import { db } from '@/lib/firebase';
 import type { CardioActivity, RoutePoint } from '@/types';
 
 /**
- * Perpendicular distance from a point to a line segment in lat/lng degrees.
+ * Perpendicular distance from a point (x0, y0) to line segment (x1, y1)-(x2, y2) in lat/lng degrees.
+ * where x is lng, y is lat.
  */
 function perpendicularDistance(pt: RoutePoint, lineStart: RoutePoint, lineEnd: RoutePoint): number {
   const dx = lineEnd.lng - lineStart.lng;
@@ -15,7 +16,8 @@ function perpendicularDistance(pt: RoutePoint, lineStart: RoutePoint, lineEnd: R
     return Math.sqrt(dLat * dLat + dLng * dLng);
   }
 
-  const num = Math.abs(dy * pt.lng - dx * pt.lat + lineEnd.lat * lineStart.lng - lineEnd.lng * lineStart.lat);
+  // Exact distance formula: |dy * x0 - dx * y0 + (x2 * y1 - y2 * x1)| / sqrt(dx^2 + dy^2)
+  const num = Math.abs(dy * pt.lng - dx * pt.lat + (lineEnd.lng * lineStart.lat - lineEnd.lat * lineStart.lng));
   const den = Math.sqrt(dy * dy + dx * dx);
   return num / den;
 }
@@ -51,21 +53,21 @@ function ramerDouglasPeucker(points: RoutePoint[], epsilon: number): RoutePoint[
 /**
  * Compresses route to at most `maxPoints` using geometry-preserving RDP simplification.
  */
-export function simplifyRoute(points: RoutePoint[], maxPoints = 500): RoutePoint[] {
+export function simplifyRoute(points: RoutePoint[], maxPoints = 1000): RoutePoint[] {
   if (!points || points.length <= maxPoints) return points || [];
 
-  let minEps = 0.000005; // ~0.5m
+  let minEps = 0.000001; // ~0.1m
   let maxEps = 0.001;    // ~100m
   let best = points;
 
-  for (let iter = 0; iter < 10; iter++) {
+  for (let iter = 0; iter < 12; iter++) {
     const midEps = (minEps + maxEps) / 2;
     const simplified = ramerDouglasPeucker(points, midEps);
     if (simplified.length <= maxPoints) {
       best = simplified;
-      maxEps = midEps; // try tighter tolerance
+      maxEps = midEps; // try tighter tolerance (smaller epsilon)
     } else {
-      minEps = midEps; // need looser tolerance to reduce points
+      minEps = midEps; // need looser tolerance (larger epsilon)
     }
   }
 
@@ -76,8 +78,8 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
   const ref = doc(collection(db, 'cardioActivities'));
   const id = ref.id;
 
-  // Geometry-aware compression — keeps sharp turns and road intersections crisp
-  const route = simplifyRoute(activity.route, 500);
+  // Geometry-aware compression — keeps full fidelity for up to 1000 points
+  const route = simplifyRoute(activity.route, 1000);
 
   const dataToSave = {
     ...activity,
@@ -96,6 +98,36 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
   });
 
   await setDoc(ref, dataToSave);
+
+  // Auto-track challenge progress (fire-and-forget)
+  try {
+    const { getActiveAutoTrackChallenges, addChallengeProgressLog } = await import('@/services/community');
+    const actType = activity.type as 'run' | 'walk' | 'cycle';
+    const matches = await getActiveAutoTrackChallenges(userId, actType);
+
+    for (const { challenge } of matches) {
+      let value = 0;
+      const metric = challenge.metric;
+      if (metric === 'distance') value = activity.distanceKm || 0;
+      else if (metric === 'calories') value = activity.calories || 0;
+      else if (metric === 'duration') value = Math.round((activity.movingDurationSec || activity.durationSec || 0) / 60);
+      else if (metric === 'steps') value = activity.steps || 0;
+      else if (metric === 'workouts') value = 1;
+
+      if (value > 0 && challenge.id) {
+        await addChallengeProgressLog({
+          challengeId: challenge.id,
+          userId,
+          userName: activity.userName || '',
+          userPhoto: activity.userPhoto || '',
+          value,
+          unit: challenge.unit,
+          source: 'auto_cardio',
+          sourceActivityId: id,
+        });
+      }
+    }
+  } catch { /* auto-track is non-critical */ }
 
   return id;
 };

@@ -31,6 +31,8 @@ import { ClanAnnouncementsModal } from '@/components/community/ClanAnnouncements
 import { ClanAnnouncementBanner } from '@/components/community/ClanAnnouncementBanner';
 import { RequestJoinClanModal } from '@/components/community/RequestJoinClanModal';
 import { ClanJoinRequestsModal } from '@/components/community/ClanJoinRequestsModal';
+import { PersonalChallengeDetailSheet } from '@/components/community/PersonalChallengeDetailSheet';
+import { CreatePersonalChallengeSheet } from '@/components/community/CreatePersonalChallengeSheet';
 
 const nmBtn = "bg-ink shadow-sm border border-line/20 hover:border-line/40 transition-colors";
 const nmInset = "bg-ink-2 shadow-inner border border-line/10";
@@ -61,6 +63,7 @@ export function ClanPage() {
   const [activeTab, setActiveTab] = useState<'posts' | 'challenges' | 'events' | 'members' | 'about'>('posts');
   
   const [createChallengeOpen, setCreateChallengeOpen] = useState(false);
+  const [createPersonalChallengeOpen, setCreatePersonalChallengeOpen] = useState(false);
   const [createEventOpen, setCreateEventOpen] = useState(false);
   const [createPostOpen, setCreatePostOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
@@ -679,14 +682,24 @@ export function ClanPage() {
 
           {activeTab === 'challenges' && (
             <div className="space-y-6 animate-in fade-in duration-500">
-              {(isLeader || isCoLeader) && (
-                <div className="flex justify-end mb-4">
-                  <button 
-                    onClick={() => setCreateChallengeOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-sienna text-bg text-sm font-bold shadow-[0_0_10px_rgba(205,111,72,0.2)] hover:shadow-[0_0_20px_rgba(205,111,72,0.4)] transition-all"
-                  >
-                    <Plus size={16} /> Create Challenge
-                  </button>
+              {(isLeader || isCoLeader || isMember) && (
+                <div className="flex justify-end gap-2 mb-4">
+                  {isMember && (
+                    <button 
+                      onClick={() => setCreatePersonalChallengeOpen(true)}
+                      className="flex items-center gap-2 px-3 py-2 rounded-xl bg-violet-500/15 text-violet-400 border border-violet-500/30 text-xs font-bold hover:bg-violet-500/25 transition-all"
+                    >
+                      <Sparkles size={14} /> Personal Challenge
+                    </button>
+                  )}
+                  {(isLeader || isCoLeader) && (
+                    <button 
+                      onClick={() => setCreateChallengeOpen(true)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-sienna text-bg text-sm font-bold shadow-[0_0_10px_rgba(205,111,72,0.2)] hover:shadow-[0_0_20px_rgba(205,111,72,0.4)] transition-all"
+                    >
+                      <Plus size={16} /> Create Challenge
+                    </button>
+                  )}
                 </div>
               )}
               
@@ -888,6 +901,7 @@ export function ClanPage() {
       <AnimatePresence>
         {createChallengeOpen && <CreateChallengeSheet prefilledClanId={clanId} onClose={() => setCreateChallengeOpen(false)} />}
         {createEventOpen && <CreateEventSheet prefilledClanId={clanId} onClose={() => setCreateEventOpen(false)} />}
+        {createPersonalChallengeOpen && <CreatePersonalChallengeSheet onClose={() => setCreatePersonalChallengeOpen(false)} />}
       </AnimatePresence>
       <CreatePostSheet clanId={clanId!} isOpen={createPostOpen} onClose={() => setCreatePostOpen(false)} />
       <SinglePostSheet post={selectedPost} isOpen={!!selectedPost} onClose={() => setSelectedPost(null)} />
@@ -897,10 +911,23 @@ export function ClanPage() {
 
       <AnimatePresence>
         {selectedChallengeId && (
-          <ChallengeDetailSheet
-            challengeId={selectedChallengeId}
-            onClose={() => setSelectedChallengeId(null)}
-          />
+          (() => {
+            const sel = challenges.find(c => c.id === selectedChallengeId);
+            if (sel?.challengeType === 'personal') {
+              return (
+                <PersonalChallengeDetailSheet
+                  challengeId={selectedChallengeId}
+                  onClose={() => setSelectedChallengeId(null)}
+                />
+              );
+            }
+            return (
+              <ChallengeDetailSheet
+                challengeId={selectedChallengeId}
+                onClose={() => setSelectedChallengeId(null)}
+              />
+            );
+          })()
         )}
       </AnimatePresence>
 

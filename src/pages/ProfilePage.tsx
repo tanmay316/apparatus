@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
 import { useUserWeight } from '@/hooks/use-user-weight';
-import { followUser, unfollowUser, isFollowing, hasRequestedFollow, removeFollower, acceptFollowRequest, declineFollowRequest, getFollowRequests, getFollowCounts, getFollowers, getFollowing, getUsersByUids, getBookmarkedActivities } from '@/services/social';
+import { followUser, unfollowUser, isFollowing, hasRequestedFollow, removeFollower, acceptFollowRequest, declineFollowRequest, getFollowRequests, getFollowCounts, getFollowers, getFollowing, getUsersByUids, getBookmarkedActivities, getUserFeedActivities } from '@/services/social';
 import type { Activity as ActivityType, UserProfile, UserStats } from '@/types';
 import { createReport } from '@/services/admin';
 import { getPublicWorkoutsForUser, getUserWorkouts } from '@/services/workouts';
@@ -239,28 +239,58 @@ export function ProfilePage() {
     
     const fetchAllActivities = async () => {
       try {
-        let gymWorkouts = [];
-        let cardioLogs = [];
-        let plans = [];
+        let gymWorkouts: any[] = [];
+        let cardioLogs: any[] = [];
+        let plans: any[] = [];
+        let feedActivities: ActivityType[] = [];
 
         if (isOwnProfile) {
-          [gymWorkouts, cardioLogs] = await Promise.all([
+          [gymWorkouts, cardioLogs, feedActivities] = await Promise.all([
             getUserWorkouts(viewProfile.uid, 20),
-            getUserCardioActivities(viewProfile.uid, 10)
+            getUserCardioActivities(viewProfile.uid, 10),
+            getUserFeedActivities(viewProfile.uid, true, false)
           ]);
         } else {
-          [gymWorkouts, plans, cardioLogs] = await Promise.all([
+          [gymWorkouts, plans, cardioLogs, feedActivities] = await Promise.all([
             getPublicWorkoutsForUser(viewProfile.uid, myProfile?.uid),
             getPublicPlansForUser(viewProfile.uid),
-            getUserCardioActivities(viewProfile.uid, 10)
+            getUserCardioActivities(viewProfile.uid, 10),
+            getUserFeedActivities(viewProfile.uid, false, isFollowingProfile)
           ]);
           setPublicPlans(plans);
         }
 
-        // Merge and sort
-        const merged = [...gymWorkouts, ...cardioLogs].sort((a: any, b: any) => {
-          const timeA = a.createdAt?.seconds || (a.date ? Math.floor(new Date(a.date).getTime() / 1000) : 0);
-          const timeB = b.createdAt?.seconds || (b.date ? Math.floor(new Date(b.date).getTime() / 1000) : 0);
+        // Build merged list prioritizing authentic social activities from feed
+        const mergedMap = new Map<string, any>();
+        
+        // 1. Add all feed activities (which contain the exact, authentic feed map route)
+        feedActivities.forEach(act => {
+          if (act.id) mergedMap.set(act.id, act);
+        });
+
+        // 2. Add cardio logs if not already present in feed
+        cardioLogs.forEach((c: any) => {
+          const matchInFeed = feedActivities.find((f: any) => 
+            f.id === c.id || 
+            (f.type === c.type && Math.abs(Number(f.details?.distanceKm || 0) - Number(c.distanceKm || 0)) < 0.05 && Math.abs(Number(f.createdAt?.seconds || 0) - Number(c.startedAt?.seconds || 0)) < 300)
+          );
+          if (!matchInFeed) {
+            mergedMap.set(`cardio_${c.id}`, c);
+          }
+        });
+
+        // 3. Add gym workouts if not already present in feed
+        gymWorkouts.forEach((w: any) => {
+          const matchInFeed = feedActivities.find((f: any) => f.workoutId === w.id || f.id === w.id);
+          if (!matchInFeed) {
+            mergedMap.set(`workout_${w.id}`, w);
+          }
+        });
+
+        // Sort by timestamp descending
+        const merged = Array.from(mergedMap.values()).sort((a: any, b: any) => {
+          const timeA = Number(a.createdAt?.seconds || a.startedAt?.seconds || (a.date ? Math.floor(new Date(a.date).getTime() / 1000) : 0));
+          const timeB = Number(b.createdAt?.seconds || b.startedAt?.seconds || (b.date ? Math.floor(new Date(b.date).getTime() / 1000) : 0));
           return timeB - timeA;
         });
 
@@ -271,7 +301,7 @@ export function ProfilePage() {
     };
 
     fetchAllActivities();
-  }, [viewProfile, isOwnProfile, myProfile?.uid]);
+  }, [viewProfile, isOwnProfile, myProfile?.uid, isFollowingProfile]);
 
   const importPublicPlan = async (planId: string) => {
     if (!myProfile) return;
@@ -783,12 +813,18 @@ export function ProfilePage() {
                   ) : (
                 <div className="space-y-4">
                   {publicWorkouts.slice(0, showAllActivities ? publicWorkouts.length : 1).map(workout => {
-                    const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
-                    const exerciseNamesList = rawExLogs.map((e: any) => typeof e === 'string' ? e : e.name);
+                    const isFeedActivity = Boolean(workout.details && workout.userId && (workout.summary || workout.details.activityType));
+                    
+                    let activityItem: ActivityType;
+                    if (isFeedActivity) {
+                      activityItem = workout as ActivityType;
+                    } else {
+                      const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
+                      const exerciseNamesList = rawExLogs.map((e: any) => typeof e === 'string' ? e : e.name);
 
-                      const isCardio = workout.type === 'walk' || workout.type === 'run' || workout.type === 'cycle' || ['walk', 'run', 'cycle'].includes((workout.details as any)?.activityType) || (workout.details?.distanceKm !== undefined && !workout.details?.exercises && !workout.details?.exerciseLogs);
+                      const isCardio = workout.type === 'walk' || workout.type === 'run' || workout.type === 'cycle' || ['walk', 'run', 'cycle'].includes((workout.details as any)?.activityType) || (workout.distanceKm !== undefined && !workout.exercises && !workout.exerciseLogs);
                       
-                      const activityItem: ActivityType = isCardio ? {
+                      activityItem = isCardio ? {
                         id: workout.id,
                         userId: viewProfile.uid,
                         userName: viewProfile.displayName,
@@ -796,7 +832,7 @@ export function ProfilePage() {
                         username: viewProfile.username,
                         type: workout.type,
                         workoutId: null,
-                        visibility: workout.visibility,
+                        visibility: workout.visibility || 'followers',
                         likesCount: workout.likesCount || 0,
                         commentsCount: workout.commentsCount || 0,
                         summary: `Completed a ${workout.distanceKm?.toFixed(2)} km ${workout.type}`,
@@ -834,6 +870,7 @@ export function ProfilePage() {
                         },
                         createdAt: workout.createdAt || { seconds: workout.date ? Math.floor(new Date(workout.date).getTime() / 1000) : Math.floor(Date.now() / 1000) },
                       };
+                    }
 
                     return (
                       <ActivityPostCard

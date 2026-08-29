@@ -647,6 +647,9 @@ export type ChallengeMetric = 'distance' | 'calories' | 'workouts' |
   'duration' | 'steps';
 export type ChallengeStatus = 'upcoming' | 'active' | 'completed' | 
   'cancelled' | 'removed';
+export type ChallengeCategory = 'cardio' | 'gym' | 'calisthenics' | 'mixed' | 'other';
+export type ChallengeType = 'community' | 'personal';
+export type ChallengeActivityFilter = 'run' | 'walk' | 'cycle' | 'any_cardio' | 'workout' | 'all';
 
 export interface ChallengeV2 {
   id?: string;
@@ -657,6 +660,8 @@ export interface ChallengeV2 {
   creatorPhoto: string;
   clanId?: string;
   clanName?: string;
+  clanIds?: string[];       // multi-clan support
+  clanNames?: string[];     // display names for multi-clan
   metric: ChallengeMetric;
   target: number;
   unit: string;
@@ -677,6 +682,10 @@ export interface ChallengeV2 {
   status: ChallengeStatus;
   participantCount: number;
   coverUrl?: string;
+  challengeType?: ChallengeType;           // 'community' | 'personal'
+  category?: ChallengeCategory | string;   // allow custom categories
+  autoTrack?: boolean;                     // auto-track from activities
+  activityFilter?: ChallengeActivityFilter; // which activities count
   createdAt: Timestamp | null;
 }
 
@@ -691,8 +700,23 @@ export interface ChallengeParticipant {
   customResult?: string;
   isRanked?: boolean;
   badgeAwarded?: 1 | 2 | 3;
+  progressPrivacy?: 'public' | 'private';  // hide progress from others
   joinedAt: Timestamp | null;
   updatedAt: Timestamp | null;
+}
+
+export interface ChallengeProgressLog {
+  id?: string;
+  challengeId: string;
+  userId: string;
+  userName: string;
+  userPhoto?: string;
+  value: number;
+  unit: string;
+  source: 'auto_cardio' | 'auto_workout' | 'manual';
+  sourceActivityId?: string;
+  note?: string;
+  createdAt: Timestamp | null;
 }
 
 // ─── Event System (V2) ───────────────────────────────────────

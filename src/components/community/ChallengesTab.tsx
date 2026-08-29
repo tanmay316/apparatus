@@ -4,6 +4,7 @@ import { Target, Users, Flame, Edit3, Trash2, Trophy, Sparkles, Shield, Trending
 import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { ChallengeDetailSheet } from './ChallengeDetailSheet';
+import { PersonalChallengeDetailSheet } from './PersonalChallengeDetailSheet';
 import { EditChallengeSheet } from './EditChallengeSheet';
 import { formatChallengeGoal } from './UpcomingReminderWidget';
 import { useAuthStore } from '@/stores/auth-store';
@@ -41,7 +42,7 @@ function getCountdownLabel(startMs: number, endMs: number) {
 }
 
 export function ChallengesTab() {
-  const [filter, setFilter] = useState<'all' | 'active' | 'upcoming' | 'concluded'>('all');
+  const [filter, setFilter] = useState<'all' | 'active' | 'upcoming' | 'concluded' | 'personal'>('all');
   const [selectedChallengeId, setSelectedChallengeId] = useState<string | null>(null);
   const [editingChallenge, setEditingChallenge] = useState<ChallengeV2 | null>(null);
 
@@ -87,6 +88,7 @@ export function ChallengesTab() {
     if (filter === 'upcoming') return now < startMs;
     if (filter === 'active') return now >= startMs && (endMs ? now <= endMs : true);
     if (filter === 'concluded') return endMs ? now > endMs : false;
+    if (filter === 'personal') return c.challengeType === 'personal';
     return true;
   });
 
@@ -100,7 +102,7 @@ export function ChallengesTab() {
     <div className="space-y-6 animate-in fade-in duration-500">
       {/* Filter Tabs */}
       <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {(['all', 'active', 'upcoming', 'concluded'] as const).map(f => (
+        {(['all', 'active', 'upcoming', 'concluded', 'personal'] as const).map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -108,7 +110,7 @@ export function ChallengesTab() {
               filter === f ? 'bg-ink text-bone font-bold shadow-sm border border-line/40' : 'bg-ink-2 text-bone-dim hover:bg-ink-3'
             }`}
           >
-            {f === 'all' ? 'All Challenges' : f}
+            {f === 'all' ? 'All' : f === 'personal' ? 'Personal' : f}
           </button>
         ))}
       </div>
@@ -119,12 +121,10 @@ export function ChallengesTab() {
           onClick={() => setSelectedChallengeId(featured.id!)}
           className="relative overflow-hidden rounded-[32px] bg-ink-2 border border-line p-6 sm:p-8 cursor-pointer hover:border-emerald-500/50 transition-all shadow-xl group"
         >
-          {featured.coverUrl && (
-            <div className="absolute inset-0 opacity-50 dark:opacity-40 group-hover:opacity-60 dark:group-hover:opacity-50 transition-opacity">
-              <img src={featured.coverUrl} alt={featured.title} className="w-full h-full object-cover" />
-              <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/60 to-transparent" />
-            </div>
-          )}
+          <div className="absolute inset-0 opacity-50 dark:opacity-40 group-hover:opacity-60 dark:group-hover:opacity-50 transition-opacity">
+            <img src={featured.coverUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1000&auto=format&fit=crop'} alt={featured.title} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/60 to-transparent" />
+          </div>
 
           <div className="relative z-10">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -244,6 +244,11 @@ export function ChallengesTab() {
                                 <Shield size={9} /> Clan
                               </span>
                             )}
+                            {c.challengeType === 'personal' && (
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono uppercase bg-violet-500/15 text-violet-400 px-1.5 py-0.5 rounded border border-violet-500/30 shrink-0">
+                                Personal
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -324,10 +329,23 @@ export function ChallengesTab() {
 
       <AnimatePresence>
         {selectedChallengeId && (
-          <ChallengeDetailSheet 
-            challengeId={selectedChallengeId} 
-            onClose={() => setSelectedChallengeId(null)} 
-          />
+          (() => {
+            const sel = challenges.find(c => c.id === selectedChallengeId);
+            if (sel?.challengeType === 'personal') {
+              return (
+                <PersonalChallengeDetailSheet
+                  challengeId={selectedChallengeId}
+                  onClose={() => setSelectedChallengeId(null)}
+                />
+              );
+            }
+            return (
+              <ChallengeDetailSheet 
+                challengeId={selectedChallengeId} 
+                onClose={() => setSelectedChallengeId(null)} 
+              />
+            );
+          })()
         )}
       </AnimatePresence>
 

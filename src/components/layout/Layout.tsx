@@ -44,7 +44,7 @@ export function Layout() {
       {!isFullScreen && <LiveChatOverlay />}
       {!isFullScreen && <BottomNav />}
 
-      <main className={isFullScreen ? "h-full w-full p-0 m-0 overflow-hidden" : `max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-4 ${hasBottomNav ? 'pb-28' : 'pb-4'} relative`}>
+      <main className={isFullScreen ? "h-full w-full p-0 m-0 overflow-y-auto overscroll-contain" : `max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-4 ${hasBottomNav ? 'pb-28' : 'pb-4'} relative`}>
         <Outlet />
       </main>
     </div>

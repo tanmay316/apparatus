@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { X, Play, Clock, TrendingUp, History, Info, ChevronRight, Check, Dumbbell, ShieldAlert, ImagePlus, Loader2, Edit3, Trash2, RotateCcw, Plus, ExternalLink, LoaderCircle } from 'lucide-react';
+import { X, Play, Clock, TrendingUp, History, Info, ChevronRight, Check, Dumbbell, ShieldAlert, ImagePlus, Loader2, Edit3, Trash2, RotateCcw, RotateCw, Plus, ExternalLink, LoaderCircle } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useWorkoutStore } from '@/stores/workout-store';
+import { useUIStore } from '@/stores/ui-store';
 import type { Exercise, SetData } from '@/types';
 import { MUSCLE_GROUPS } from '@/lib/muscle-map';
 import { Browser } from '@capacitor/browser';
@@ -36,6 +37,8 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
   const [resolvedYoutubeId, setResolvedYoutubeId] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { showToast } = useUIStore();
 
   useEffect(() => {
     let cancelled = false;
@@ -47,12 +50,17 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
         if (vidId) {
           setResolvedYoutubeId(vidId);
 
-          // Test if thumbnail actually loads (sometimes YT videos are deleted)
+          // Test if thumbnail actually loads (YouTube returns 120px placeholder for deleted/unavailable videos)
           const thumb = `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`;
           const img = new Image();
           img.onload = () => {
             if (!cancelled) {
-              setThumbnailUrl(thumb);
+              if (img.naturalWidth <= 120) {
+                setThumbnailUrl(null);
+                setResolvedYoutubeId(null);
+              } else {
+                setThumbnailUrl(thumb);
+              }
               setLoading(false);
             }
           };
@@ -73,6 +81,49 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
     return () => { cancelled = true; };
   }, [exercise.name, exercise.yt]);
 
+  const handleRefreshVideo = async (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (isRefreshing || loading) return;
+
+    setIsRefreshing(true);
+    setIsPlaying(false);
+
+    try {
+      const { refreshExerciseVideo } = await import('@/lib/video-resolver');
+      const result = await refreshExerciseVideo(exercise.name, resolvedYoutubeId, exercise.yt);
+
+      if (result && result.youtubeId) {
+        const thumb = `https://i.ytimg.com/vi/${result.youtubeId}/hqdefault.jpg`;
+        const img = new Image();
+        img.onload = () => {
+          if (img.naturalWidth <= 120) {
+            setThumbnailUrl(null);
+            setResolvedYoutubeId(null);
+            showToast('No alternative video found for this exercise', 'error');
+          } else {
+            setResolvedYoutubeId(result.youtubeId);
+            setThumbnailUrl(thumb);
+            showToast(`Updated demonstration video for ${exercise.name}`);
+          }
+          setIsRefreshing(false);
+        };
+        img.onerror = () => {
+          setThumbnailUrl(null);
+          setIsRefreshing(false);
+          showToast('No alternative video found for this exercise', 'error');
+        };
+        img.src = thumb;
+      } else {
+        setIsRefreshing(false);
+        showToast('No alternative video found for this exercise', 'error');
+      }
+    } catch (err) {
+      console.warn("Failed to refresh exercise video:", err);
+      setIsRefreshing(false);
+      showToast('Could not refresh video. Try again later.', 'error');
+    }
+  };
+
   const formUrl = resolvedYoutubeId
     ? `https://www.youtube.com/watch?v=${resolvedYoutubeId}`
     : `https://www.youtube.com/results?search_query=${encodeURIComponent(`${exercise.name} proper form technique`)}`;
@@ -87,7 +138,19 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-line/60 bg-ink">
+    <div className="relative overflow-hidden rounded-2xl border border-line/60 bg-ink group/media">
+      {/* Floating Refresh Button in Top Right Overlay - Mobile Responsive */}
+      <button
+        type="button"
+        onClick={handleRefreshVideo}
+        disabled={isRefreshing || loading}
+        aria-label="Change technique video"
+        title="Change video / Find alternative demonstration"
+        className="absolute top-2.5 right-2.5 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-line/80 bg-ink/80 text-bone-dim backdrop-blur-md shadow-md hover:border-sienna/60 hover:bg-ink hover:text-sienna active:scale-95 transition-all disabled:opacity-50 touch-manipulation"
+      >
+        <RotateCw size={14} className={isRefreshing ? 'animate-spin text-sienna' : 'transition-transform duration-200 group-hover/media:rotate-45'} />
+      </button>
+
       {isPlaying && resolvedYoutubeId ? (
         <div className="relative w-full bg-black flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
           <iframe
@@ -114,6 +177,12 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
               <Play size={24} className="text-white ml-1" fill="white" />
             </div>
           </div>
+          {isRefreshing && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm z-10 transition-all">
+              <LoaderCircle size={28} className="animate-spin text-sienna mb-2" />
+              <span className="text-xs font-mono text-bone tracking-wider uppercase">Loading next video...</span>
+            </div>
+          )}
         </div>
       ) : (
         <div
@@ -121,10 +190,12 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
           style={{ aspectRatio: '16/9' }}
           onClick={handleDemoClick}
         >
-          {loading ? (
+          {loading || isRefreshing ? (
             <div className="flex flex-col items-center gap-3">
               <LoaderCircle size={24} className="animate-spin text-sienna" />
-              <span className="text-xs font-mono text-bone-dim uppercase tracking-wider">Finding demo...</span>
+              <span className="text-xs font-mono text-bone-dim uppercase tracking-wider">
+                {isRefreshing ? 'Finding next demo...' : 'Finding demo...'}
+              </span>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-3">
@@ -136,22 +207,24 @@ function ExerciseMedia({ exercise }: { exercise: Exercise }) {
           )}
         </div>
       )}
-      <div className="flex items-center justify-between gap-3 border-t border-line/60 px-4 py-3 bg-ink-2">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-line/60 px-3.5 sm:px-4 py-2.5 sm:py-3 bg-ink-2">
+        <div className="min-w-0 flex-1">
           <div className="text-[10px] font-mono uppercase tracking-widest text-sienna">Technique reference</div>
-          <div className="mt-1 text-xs text-bone-dim">
-            {isPlaying ? 'Playing video' : thumbnailUrl ? 'Ready to watch' : 'Find technique demo'}
+          <div className="mt-0.5 text-xs text-bone-dim truncate">
+            {isRefreshing ? 'Loading alternative video...' : isPlaying ? 'Playing video' : thumbnailUrl ? 'Ready to watch' : 'Find technique demo'}
           </div>
         </div>
-        {isPlaying ? (
-          <button onClick={(e) => { e.preventDefault(); openInAppBrowser(formUrl); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/10 transition-colors">
-            <ExternalLink size={12} /> More Videos
-          </button>
-        ) : (
-          <button onClick={handleDemoClick} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 bg-sienna/10 px-4 py-1.5 text-[10px] font-bold text-sienna hover:bg-sienna/20 transition-colors">
-            <Play size={12} fill="currentColor" /> {thumbnailUrl ? 'Watch' : 'Search YouTube'}
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {isPlaying ? (
+            <button onClick={(e) => { e.preventDefault(); openInAppBrowser(formUrl); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] sm:text-[11px] font-bold text-sienna hover:bg-sienna/10 active:scale-95 transition-all">
+              <ExternalLink size={12} /> More Videos
+            </button>
+          ) : (
+            <button onClick={handleDemoClick} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 bg-sienna/10 px-3.5 sm:px-4 py-1.5 text-[10px] sm:text-[11px] font-bold text-sienna hover:bg-sienna/20 active:scale-95 transition-all">
+              <Play size={12} fill="currentColor" /> {thumbnailUrl ? 'Watch' : 'Search YouTube'}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

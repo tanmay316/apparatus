@@ -118,6 +118,33 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
     transaction.set(statsRef, newStats);
   });
 
+  // Auto-track challenge progress (fire-and-forget)
+  try {
+    const { getActiveAutoTrackChallenges, addChallengeProgressLog } = await import('@/services/community');
+    const matches = await getActiveAutoTrackChallenges(userId, 'workout');
+
+    for (const { challenge } of matches) {
+      let value = 0;
+      const metric = challenge.metric;
+      if (metric === 'workouts') value = 1;
+      else if (metric === 'calories') value = workout.calories || 0;
+      else if (metric === 'duration') value = workout.durationMin || 0;
+
+      if (value > 0 && challenge.id) {
+        await addChallengeProgressLog({
+          challengeId: challenge.id,
+          userId,
+          userName: workout.userName || '',
+          userPhoto: workout.userPhoto || '',
+          value,
+          unit: challenge.unit,
+          source: 'auto_workout',
+          sourceActivityId: newWorkoutId,
+        });
+      }
+    }
+  } catch { /* auto-track is non-critical */ }
+
   return newWorkoutId;
 };
 

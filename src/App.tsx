@@ -22,10 +22,9 @@ import { useWorkoutStore } from '@/stores/workout-store';
 import { useCardioStore } from '@/stores/cardio-store';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
+import { OtaKit } from '@otakit/capacitor-updater';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { LocalNotifications } from '@capacitor/local-notifications';
-import { CapacitorUpdater } from '@capgo/capacitor-updater';
-import { OTAUpdater } from '@/components/ui/OTAUpdater';
 import { MedalCelebrationModal } from '@/components/community/MedalCelebrationModal';
 import type { AppNotificationItem } from '@/types';
 
@@ -141,14 +140,13 @@ function PreferencesSync() {
         scheduleDailyReminders();
       }
     });
-    
-    // Notify Capgo that the app is ready so it doesn't rollback updates
-    if (CapacitorApp) {
-      CapacitorUpdater.notifyAppReady().catch(() => {});
-    }
 
     // Setup Android notification channels
     setupNotificationChannels();
+
+    if (CapacitorApp) {
+      OtaKit.notifyAppReady();
+    }
 
     if (Capacitor.isNativePlatform()) {
       try {
@@ -212,6 +210,12 @@ function PreferencesSync() {
       },
       (newNote) => {
         if (!newNote.read) {
+          // Suppress notification if user is actively looking at this clan's chat page
+          if (newNote.type === 'clan_message' && newNote.extra?.clanId) {
+            if (window.location.pathname === `/clan/${newNote.extra.clanId}/chat`) {
+              return;
+            }
+          }
           const notifId = Math.floor(Math.random() * 2147483647);
           const sender = newNote.senderName || 'Apparatus';
           showNotification(

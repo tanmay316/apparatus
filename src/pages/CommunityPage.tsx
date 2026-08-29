@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Shield, Target, CalendarDays } from 'lucide-react';
+import { Plus, Shield, Target, CalendarDays, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 
@@ -11,12 +11,13 @@ import { ChallengesTab } from '@/components/community/ChallengesTab';
 import { CreateClanSheet } from '@/components/community/CreateClanSheet';
 import { CreateChallengeSheet } from '@/components/community/CreateChallengeSheet';
 import { CreateEventSheet } from '@/components/community/CreateEventSheet';
+import { CreatePersonalChallengeSheet } from '@/components/community/CreatePersonalChallengeSheet';
 import { UpcomingReminderWidget } from '@/components/community/UpcomingReminderWidget';
 
 export function CommunityPage() {
   const [activeTab, setActiveTab] = useState<'clans' | 'events' | 'challenges'>('clans');
   const [showCreateMenu, setShowCreateMenu] = useState(false);
-  const [createType, setCreateType] = useState<'clan' | 'challenge' | 'event' | null>(null);
+  const [createType, setCreateType] = useState<'clan' | 'challenge' | 'event' | 'personal_challenge' | null>(null);
   
   const { user } = useAuthStore();
   const isDark = useUIStore(s => s.theme === 'dark');
@@ -119,38 +120,49 @@ export function CommunityPage() {
                 
                 <h2 className="font-display text-2xl text-bone mb-6">Create New</h2>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <button 
                     onClick={() => { setShowCreateMenu(false); setCreateType('clan'); }}
-                    className="card p-6 flex flex-col items-center text-center hover:border-sienna/50 transition-colors group"
+                    className="card p-4 flex flex-col items-center text-center hover:border-sienna/50 transition-colors group"
                   >
-                    <div className="w-16 h-16 rounded-full bg-sienna/20 text-sienna flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Shield size={28} />
+                    <div className="w-12 h-12 rounded-full bg-sienna/20 text-sienna flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                      <Shield size={22} />
                     </div>
-                    <h3 className="font-display text-lg text-bone mb-2">Clan</h3>
-                    <p className="text-sm text-bone-dim">Build your community and grow together.</p>
+                    <h3 className="font-display text-sm text-bone mb-1">Clan</h3>
+                    <p className="text-[11px] text-bone-dim leading-tight">Build your community</p>
                   </button>
 
                   <button 
                     onClick={() => { setShowCreateMenu(false); setCreateType('event'); }}
-                    className="card p-6 flex flex-col items-center text-center hover:border-blue-500/50 transition-colors group"
+                    className="card p-4 flex flex-col items-center text-center hover:border-blue-500/50 transition-colors group"
                   >
-                    <div className="w-16 h-16 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <CalendarDays size={28} />
+                    <div className="w-12 h-12 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                      <CalendarDays size={22} />
                     </div>
-                    <h3 className="font-display text-lg text-bone mb-2">Event</h3>
-                    <p className="text-sm text-bone-dim">Organize a real-world or virtual meetup.</p>
+                    <h3 className="font-display text-sm text-bone mb-1">Event</h3>
+                    <p className="text-[11px] text-bone-dim leading-tight">Virtual or real meetup</p>
                   </button>
 
                   <button 
                     onClick={() => { setShowCreateMenu(false); setCreateType('challenge'); }}
-                    className="card p-6 flex flex-col items-center text-center hover:border-emerald-500/50 transition-colors group"
+                    className="card p-4 flex flex-col items-center text-center hover:border-emerald-500/50 transition-colors group"
                   >
-                    <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                      <Target size={28} />
+                    <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                      <Target size={22} />
                     </div>
-                    <h3 className="font-display text-lg text-bone mb-2">Challenge</h3>
-                    <p className="text-sm text-bone-dim">Create a fitness goal for athletes to hit.</p>
+                    <h3 className="font-display text-sm text-bone mb-1">Challenge</h3>
+                    <p className="text-[11px] text-bone-dim leading-tight">Community fitness goal</p>
+                  </button>
+
+                  <button 
+                    onClick={() => { setShowCreateMenu(false); setCreateType('personal_challenge'); }}
+                    className="card p-4 flex flex-col items-center text-center hover:border-violet-500/50 transition-colors group"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                      <Sparkles size={22} />
+                    </div>
+                    <h3 className="font-display text-sm text-bone mb-1">Personal</h3>
+                    <p className="text-[11px] text-bone-dim leading-tight">Your own challenge</p>
                   </button>
                 </div>
               </motion.div>
@@ -164,6 +176,7 @@ export function CommunityPage() {
         {createType === 'clan' && <CreateClanSheet onClose={() => setCreateType(null)} />}
         {createType === 'event' && <CreateEventSheet onClose={() => setCreateType(null)} />}
         {createType === 'challenge' && <CreateChallengeSheet onClose={() => setCreateType(null)} />}
+        {createType === 'personal_challenge' && <CreatePersonalChallengeSheet onClose={() => setCreateType(null)} />}
       </AnimatePresence>
 
       <UpcomingReminderWidget />

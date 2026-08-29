@@ -311,6 +311,37 @@ export async function getPublicActivities(limitCount = 100): Promise<Activity[]>
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity));
 }
 
+export async function getUserFeedActivities(userId: string, isOwn = false, isFollowing = false): Promise<Activity[]> {
+  const coll = collection(db, 'activities');
+  if (isOwn) {
+    const snaps = await getDocs(query(coll, where('userId', '==', userId)));
+    return snaps.docs.map(d => ({ id: d.id, ...d.data() } as Activity)).sort((a, b) => {
+      const timeA = (a.createdAt as any)?.seconds || 0;
+      const timeB = (b.createdAt as any)?.seconds || 0;
+      return timeB - timeA;
+    });
+  } else if (isFollowing) {
+    const [s1, s2] = await Promise.all([
+      getDocs(query(coll, where('userId', '==', userId), where('visibility', '==', 'public'))),
+      getDocs(query(coll, where('userId', '==', userId), where('visibility', '==', 'followers'))),
+    ]);
+    const map = new Map<string, Activity>();
+    [...s1.docs, ...s2.docs].forEach(d => map.set(d.id, { id: d.id, ...d.data() } as Activity));
+    return Array.from(map.values()).sort((a, b) => {
+      const timeA = (a.createdAt as any)?.seconds || 0;
+      const timeB = (b.createdAt as any)?.seconds || 0;
+      return timeB - timeA;
+    });
+  } else {
+    const snaps = await getDocs(query(coll, where('userId', '==', userId), where('visibility', '==', 'public')));
+    return snaps.docs.map(d => ({ id: d.id, ...d.data() } as Activity)).sort((a, b) => {
+      const timeA = (a.createdAt as any)?.seconds || 0;
+      const timeB = (b.createdAt as any)?.seconds || 0;
+      return timeB - timeA;
+    });
+  }
+}
+
 export async function getFeed(userId: string, followingUids: string[]): Promise<FeedItem[]> {
   // 1. Fetch activities (include user, following athletes, and system celebration posts)
   const ownerIds = [...new Set([userId, 'system', ...followingUids])].slice(0, 31);

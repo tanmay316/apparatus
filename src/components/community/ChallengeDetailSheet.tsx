@@ -363,15 +363,13 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
               className="p-6 space-y-4 max-h-[48vh] overflow-y-auto"
             >
               {/* Cover Image Banner (Natural Aspect, Uncropped) */}
-              {challenge.coverUrl && (
-                <div className="relative w-full max-h-72 rounded-2xl overflow-hidden border border-line/30 shrink-0 bg-ink-2/80 flex items-center justify-center">
-                  <img 
-                    src={challenge.coverUrl} 
-                    alt={challenge.title} 
-                    className="w-full max-h-72 object-contain rounded-2xl" 
-                  />
-                </div>
-              )}
+              <div className="relative w-full max-h-72 rounded-2xl overflow-hidden border border-line/30 shrink-0 bg-ink-2/80 flex items-center justify-center">
+                <img 
+                  src={challenge.coverUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1000&auto=format&fit=crop'} 
+                  alt={challenge.title} 
+                  className="w-full max-h-72 object-cover rounded-2xl" 
+                />
+              </div>
 
               <div>
                 <h1 className="font-display text-2xl sm:text-3xl text-bone mb-1.5">{challenge.title}</h1>

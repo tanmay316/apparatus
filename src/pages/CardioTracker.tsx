@@ -616,7 +616,8 @@ export function CardioTracker() {
   // ─── Screen 1: Select Screen ───
   if (screen === 'select') {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-28 max-w-3xl mx-auto px-4 pt-6 md:pt-10" style={themeStyles}>
+      <div className="w-full h-full overflow-y-auto overscroll-contain">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-36 max-w-3xl mx-auto px-4 pt-6 md:pt-10" style={themeStyles}>
         {/* Header Bar */}
         <div className="mb-8 flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -786,6 +787,7 @@ export function CardioTracker() {
           />
         )}
       </motion.div>
+      </div>
     );
   }
 
@@ -1281,163 +1283,165 @@ export function CardioTracker() {
     const typeLabel = summaryData.type === 'walk' ? 'Walk' : summaryData.type === 'run' ? 'Run' : 'Cycle';
 
     return (
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }} 
-        animate={{ opacity: 1, y: 0 }} 
-        className="pb-28 max-w-2xl mx-auto px-4 pt-4 md:pt-8"
-        style={themeStyles}
-      >
-        {/* Celebration Particles FX */}
-        <div className="relative flex flex-col items-center text-center mb-6">
-          <div className="relative mb-3">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-amber-500 via-sienna to-rose-500 flex items-center justify-center text-white shadow-[0_10px_35px_rgba(235,89,60,0.5)]">
-              <Trophy size={40} className="animate-bounce" />
+      <div className="w-full h-full overflow-y-auto overscroll-contain">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }} 
+          animate={{ opacity: 1, y: 0 }} 
+          className="pb-40 max-w-2xl mx-auto px-4 pt-4 md:pt-8"
+          style={themeStyles}
+        >
+          {/* Celebration Particles FX */}
+          <div className="relative flex flex-col items-center text-center mb-6">
+            <div className="relative mb-3">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-amber-500 via-sienna to-rose-500 flex items-center justify-center text-white shadow-[0_10px_35px_rgba(235,89,60,0.5)]">
+                <Trophy size={40} className="animate-bounce" />
+              </div>
+              <div className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-amber-400 text-black flex items-center justify-center shadow-md">
+                <Sparkles size={16} />
+              </div>
             </div>
-            <div className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-amber-400 text-black flex items-center justify-center shadow-md">
-              <Sparkles size={16} />
+
+            <div className="font-mono text-xs font-bold text-sienna uppercase tracking-widest mb-1 flex items-center gap-1.5">
+              <Sparkles size={12} /> Workout Finished
+            </div>
+            <h1 className="font-display text-3xl md:text-4xl text-[var(--text)] tracking-tight">
+              Crushed Your {typeLabel}! 🔥
+            </h1>
+            <p className="text-xs text-[var(--muted)] font-mono mt-1">
+              {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+
+          {/* Master Summary Card */}
+          <div className="rounded-3xl overflow-hidden mb-6 shadow-2xl bg-[var(--card)]/90 backdrop-blur-xl border border-[var(--border)]">
+            {/* Map Preview */}
+            {summaryData.route && summaryData.route.length > 1 && (
+              <div className="h-[240px] w-full border-b border-[var(--border)] relative">
+                <RouteMap route={summaryData.route} height="100%" cardioType={summaryData.type as any} />
+                <div className="absolute inset-0 pointer-events-none shadow-[inset_0_-20px_40px_rgba(0,0,0,0.3)] z-10" />
+              </div>
+            )}
+
+            <div className="p-6">
+              {/* Primary Hero Stats: Distance, Time, Pace */}
+              <div className="grid grid-cols-3 gap-3 pb-6 border-b border-[var(--border)]">
+                {/* Distance */}
+                <div>
+                  <div className="text-[10px] text-sienna font-mono uppercase tracking-widest font-bold">Distance</div>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="font-mono text-4xl md:text-5xl font-black text-[var(--text)]">{summaryData.distanceKm?.toFixed(2)}</span>
+                    <span className="font-mono text-[var(--muted)] text-xs font-bold">km</span>
+                  </div>
+                </div>
+
+                {/* Time */}
+                <div className="text-center">
+                  <div className="text-[10px] text-amber-500 font-mono uppercase tracking-widest font-bold">Time</div>
+                  <div className="font-mono text-3xl md:text-4xl font-extrabold text-[var(--text)] mt-1">
+                    {formatDuration(summaryData.durationSec || 0)}
+                  </div>
+                </div>
+
+                {/* Calories */}
+                <div className="text-right">
+                  <div className="text-[10px] text-rose-500 font-mono uppercase tracking-widest font-bold">Calories</div>
+                  <div className="font-mono text-3xl md:text-4xl font-extrabold text-[var(--text)] mt-1">
+                    {summaryData.calories} <span className="text-xs font-mono text-[var(--muted)]">kcal</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Secondary Metrics Grid */}
+              <div className="grid grid-cols-4 gap-2 pt-5 text-center">
+                <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
+                  <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Avg Pace</div>
+                  <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.avgPace?.replace(' /km', '')}</div>
+                </div>
+                <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
+                  <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Avg Spd</div>
+                  <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.avgSpeedKmh?.toFixed(1)} <span className="text-[10px]">kph</span></div>
+                </div>
+                <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
+                  <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Max Spd</div>
+                  <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.maxSpeedKmh?.toFixed(1)} <span className="text-[10px]">kph</span></div>
+                </div>
+                <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
+                  <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Elevation</div>
+                  <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.elevationGainM || 0}m</div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="font-mono text-xs font-bold text-sienna uppercase tracking-widest mb-1 flex items-center gap-1.5">
-            <Sparkles size={12} /> Workout Finished
+          {/* Workout Effort Rating */}
+          <div className="p-5 rounded-3xl bg-[var(--card)]/90 backdrop-blur-xl border border-[var(--border)] mb-6 shadow-sm">
+            <div className="text-xs font-mono font-bold uppercase text-[var(--muted)] tracking-wider mb-3">
+              How did it feel? (Effort)
+            </div>
+            <div className="grid grid-cols-5 gap-2">
+              {EFFORT_LEVELS.map((eff) => (
+                <button
+                  key={eff.id}
+                  onClick={() => setWorkoutEffort(eff.id)}
+                  className={`py-2 px-1 rounded-2xl flex flex-col items-center gap-1 transition-all border ${
+                    workoutEffort === eff.id
+                      ? 'bg-sienna/20 border-sienna text-sienna scale-105 shadow-sm font-bold'
+                      : 'bg-[var(--bg)]/60 border-[var(--border)] text-[var(--muted)] hover:border-sienna/40'
+                  }`}
+                >
+                  <span className="text-xl">{eff.emoji}</span>
+                  <span className="text-[10px] font-mono">{eff.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <h1 className="font-display text-3xl md:text-4xl text-[var(--text)] tracking-tight">
-            Crushed Your {typeLabel}! 🔥
-          </h1>
-          <p className="text-xs text-[var(--muted)] font-mono mt-1">
-            {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-          </p>
-        </div>
 
-        {/* Master Summary Card */}
-        <div className="rounded-3xl overflow-hidden mb-6 shadow-2xl bg-[var(--card)]/90 backdrop-blur-xl border border-[var(--border)]">
-          {/* Map Preview */}
-          {summaryData.route && summaryData.route.length > 1 && (
-            <div className="h-[240px] w-full border-b border-[var(--border)] relative">
-              <RouteMap route={summaryData.route} height="100%" cardioType={summaryData.type as any} />
-              <div className="absolute inset-0 pointer-events-none shadow-[inset_0_-20px_40px_rgba(0,0,0,0.3)] z-10" />
+          {/* Saving Indicator */}
+          {isSaving && (
+            <div className="text-center text-xs text-amber-500 font-mono mb-4 flex items-center justify-center gap-1.5 animate-pulse">
+              <Loader2 size={14} className="animate-spin" /> Saving activity to your profile...
             </div>
           )}
 
-          <div className="p-6">
-            {/* Primary Hero Stats: Distance, Time, Pace */}
-            <div className="grid grid-cols-3 gap-3 pb-6 border-b border-[var(--border)]">
-              {/* Distance */}
-              <div>
-                <div className="text-[10px] text-sienna font-mono uppercase tracking-widest font-bold">Distance</div>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="font-mono text-4xl md:text-5xl font-black text-[var(--text)]">{summaryData.distanceKm?.toFixed(2)}</span>
-                  <span className="font-mono text-[var(--muted)] text-xs font-bold">km</span>
-                </div>
-              </div>
-
-              {/* Time */}
-              <div className="text-center">
-                <div className="text-[10px] text-amber-500 font-mono uppercase tracking-widest font-bold">Time</div>
-                <div className="font-mono text-3xl md:text-4xl font-extrabold text-[var(--text)] mt-1">
-                  {formatDuration(summaryData.durationSec || 0)}
-                </div>
-              </div>
-
-              {/* Calories */}
-              <div className="text-right">
-                <div className="text-[10px] text-rose-500 font-mono uppercase tracking-widest font-bold">Calories</div>
-                <div className="font-mono text-3xl md:text-4xl font-extrabold text-[var(--text)] mt-1">
-                  {summaryData.calories} <span className="text-xs font-mono text-[var(--muted)]">kcal</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Secondary Metrics Grid */}
-            <div className="grid grid-cols-4 gap-2 pt-5 text-center">
-              <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
-                <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Avg Pace</div>
-                <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.avgPace?.replace(' /km', '')}</div>
-              </div>
-              <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
-                <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Avg Spd</div>
-                <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.avgSpeedKmh?.toFixed(1)} <span className="text-[10px]">kph</span></div>
-              </div>
-              <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
-                <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Max Spd</div>
-                <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.maxSpeedKmh?.toFixed(1)} <span className="text-[10px]">kph</span></div>
-              </div>
-              <div className="p-2.5 rounded-2xl bg-[var(--bg)]/70 border border-[var(--border)]">
-                <div className="text-[9px] text-[var(--muted)] font-mono uppercase tracking-wider mb-1">Elevation</div>
-                <div className="font-mono text-sm md:text-base font-bold text-[var(--text)]">{summaryData.elevationGainM || 0}m</div>
-              </div>
-            </div>
+          {/* Action Buttons */}
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => setShowShare(true)}
+              className="w-full py-4 rounded-2xl font-bold text-base bg-gradient-to-r from-amber-500 via-sienna to-rose-500 text-white shadow-[0_8px_30px_rgba(235,89,60,0.4)] hover:scale-[1.01] transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <Share2 size={20} /> Share Workout (Story / Card)
+            </button>
+            
+            <button
+              onClick={handleDone}
+              className="w-full py-3.5 rounded-2xl font-bold text-base bg-[var(--card)] border border-[var(--border)] text-[var(--text)] hover:bg-[var(--border)] transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+            >
+              <Check size={18} /> Finish & Return Home
+            </button>
           </div>
-        </div>
-
-        {/* Workout Effort Rating */}
-        <div className="p-5 rounded-3xl bg-[var(--card)]/90 backdrop-blur-xl border border-[var(--border)] mb-6 shadow-sm">
-          <div className="text-xs font-mono font-bold uppercase text-[var(--muted)] tracking-wider mb-3">
-            How did it feel? (Effort)
-          </div>
-          <div className="grid grid-cols-5 gap-2">
-            {EFFORT_LEVELS.map((eff) => (
-              <button
-                key={eff.id}
-                onClick={() => setWorkoutEffort(eff.id)}
-                className={`py-2 px-1 rounded-2xl flex flex-col items-center gap-1 transition-all border ${
-                  workoutEffort === eff.id
-                    ? 'bg-sienna/20 border-sienna text-sienna scale-105 shadow-sm font-bold'
-                    : 'bg-[var(--bg)]/60 border-[var(--border)] text-[var(--muted)] hover:border-sienna/40'
-                }`}
-              >
-                <span className="text-xl">{eff.emoji}</span>
-                <span className="text-[10px] font-mono">{eff.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Saving Indicator */}
-        {isSaving && (
-          <div className="text-center text-xs text-amber-500 font-mono mb-4 flex items-center justify-center gap-1.5 animate-pulse">
-            <Loader2 size={14} className="animate-spin" /> Saving activity to your profile...
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex flex-col gap-3">
-          <button
-            onClick={() => setShowShare(true)}
-            className="w-full py-4 rounded-2xl font-bold text-base bg-gradient-to-r from-amber-500 via-sienna to-rose-500 text-white shadow-[0_8px_30px_rgba(235,89,60,0.4)] hover:scale-[1.01] transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-          >
-            <Share2 size={20} /> Share Workout (Story / Card)
-          </button>
           
-          <button
-            onClick={handleDone}
-            className="w-full py-3.5 rounded-2xl font-bold text-base bg-[var(--card)] border border-[var(--border)] text-[var(--text)] hover:bg-[var(--border)] transition-all active:scale-[0.98] flex items-center justify-center gap-2"
-          >
-            <Check size={18} /> Finish & Return Home
-          </button>
-        </div>
-        
-        {showShare && (
-          <CardioShareModal
-            data={{
-              type: summaryData.type as any,
-              date: new Date().toISOString(),
-              distanceKm: summaryData.distanceKm || 0,
-              durationSec: summaryData.durationSec || 0,
-              calories: summaryData.calories || 0,
-              avgPace: summaryData.avgPace || '0:00 /km',
-              avgSpeedKmh: summaryData.avgSpeedKmh || 0,
-              maxSpeedKmh: summaryData.maxSpeedKmh || 0,
-              elevationGainM: summaryData.elevationGainM || 0,
-              route: summaryData.route,
-              currentLocation: store.currentLocation,
-              steps: summaryData.steps,
-            }}
-            mapTheme={mapLayer}
-            onClose={() => setShowShare(false)}
-          />
-        )}
-      </motion.div>
+          {showShare && (
+            <CardioShareModal
+              data={{
+                type: summaryData.type as any,
+                date: new Date().toISOString(),
+                distanceKm: summaryData.distanceKm || 0,
+                durationSec: summaryData.durationSec || 0,
+                calories: summaryData.calories || 0,
+                avgPace: summaryData.avgPace || '0:00 /km',
+                avgSpeedKmh: summaryData.avgSpeedKmh || 0,
+                maxSpeedKmh: summaryData.maxSpeedKmh || 0,
+                elevationGainM: summaryData.elevationGainM || 0,
+                route: summaryData.route,
+                currentLocation: store.currentLocation,
+                steps: summaryData.steps,
+              }}
+              mapTheme={mapLayer}
+              onClose={() => setShowShare(false)}
+            />
+          )}
+        </motion.div>
+      </div>
     );
   }
 

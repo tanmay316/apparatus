@@ -3,6 +3,10 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Share2, Crown, Trophy, Award, Sparkles, Check, Shield } from 'lucide-react';
 import { toCanvas } from 'html-to-image';
+import html2canvas from 'html2canvas';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
 import appLogo from '@/assets/logo.png';
 import type { EarnedCommunityBadge } from '@/types';
 import { useAuthStore } from '@/stores/auth-store';
@@ -173,11 +177,33 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
       return '#0d0a04';
     })();
 
-    const raw = await toCanvas(cardRef.current, {
-      pixelRatio: 2.5,
-      cacheBust: false,
-      backgroundColor: bgColor,
-    });
+    let raw: HTMLCanvasElement | null = null;
+    try {
+      raw = await toCanvas(cardRef.current, {
+        pixelRatio: 2.5,
+        cacheBust: false,
+        skipFonts: true,
+        backgroundColor: bgColor,
+      });
+    } catch (e) {
+      console.warn('html-to-image failed in medal share, attempting html2canvas fallback:', e);
+    }
+
+    if (!raw && cardRef.current) {
+      try {
+        raw = await html2canvas(cardRef.current, {
+          scale: 2.5,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: bgColor,
+          logging: false,
+        });
+      } catch (h2cErr) {
+        console.error('html2canvas also failed:', h2cErr);
+      }
+    }
+
+    if (!raw) return null;
 
     // Apply clipping to match the card's rounded-[32px] corners
     const radius = 32 * 2.5; // scaled by pixelRatio
@@ -212,29 +238,58 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
       const canvas = await getCanvas();
       if (!canvas) throw new Error('Failed to generate image canvas');
 
-      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'));
-      if (!blob) throw new Error('Failed to generate image blob');
+      const fileName = `apparatus_medal_${badge.rank}_${Date.now()}.png`;
 
-      const file = new File([blob], `apparatus_medal_${badge.rank}_${Date.now()}.png`, { type: 'image/png' });
+      // 1. Native Mobile (Capacitor)
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const base64Data = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
+          const fileResult = await Filesystem.writeFile({
+            path: fileName,
+            data: base64Data,
+            directory: Directory.Cache,
+          });
 
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: `${medalConfig.title} - ${badge.title}`,
-          text: `I just won ${medalConfig.title} in "${badge.title}" on Apparatus Arena! 🏆`,
-        });
-      } else {
-        const url = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.download = `apparatus_medal_${badge.rank}_${Date.now()}.png`;
-        link.href = url;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setDidCopy(true);
-        setTimeout(() => setDidCopy(false), 2200);
-        useUIStore.getState().showToast('Image downloaded! Share it on your socials.', 'success');
+          await Share.share({
+            title: `${medalConfig.title} - ${badge.title}`,
+            text: `I just won ${medalConfig.title} in "${badge.title}" on Apparatus Arena! 🏆`,
+            files: [fileResult.uri],
+            dialogTitle: 'Share Medal Card',
+          });
+          return;
+        } catch (capErr: any) {
+          if (capErr?.name === 'AbortError' || capErr?.message?.includes('canceled') || capErr?.message?.includes('cancelled')) {
+            return;
+          }
+          console.error('Capacitor share error:', capErr);
+        }
       }
+
+      // 2. Web Browser Share
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          handleDownload();
+          return;
+        }
+        const file = new File([blob], fileName, { type: 'image/png' });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: `${medalConfig.title} - ${badge.title}`,
+              text: `I just won ${medalConfig.title} in "${badge.title}" on Apparatus Arena! 🏆`,
+            });
+          } catch (shareErr: any) {
+            if (shareErr?.name !== 'AbortError') {
+              handleDownload();
+            }
+          }
+        } else {
+          handleDownload();
+        }
+      }, 'image/png');
+
     } catch (e: any) {
       if (e?.name !== 'AbortError') {
         console.error('Failed to share card:', e);
@@ -253,17 +308,62 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
       const canvas = await getCanvas();
       if (!canvas) throw new Error('Failed to render canvas');
 
-      const url = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.download = `apparatus_medal_${badge.rank}_${Date.now()}.png`;
-      link.href = url;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const fileName = `apparatus_medal_${badge.rank}_${Date.now()}.png`;
 
-      setDidCopy(true);
-      setTimeout(() => setDidCopy(false), 2200);
-      useUIStore.getState().showToast('Medal card downloaded!', 'success');
+      // 1. Native Mobile (Capacitor)
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const base64Data = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
+          const fileResult = await Filesystem.writeFile({
+            path: fileName,
+            data: base64Data,
+            directory: Directory.Cache,
+          });
+
+          await Share.share({
+            title: `Save Medal Card`,
+            files: [fileResult.uri],
+            dialogTitle: 'Save Medal Image',
+          });
+
+          setDidCopy(true);
+          setTimeout(() => setDidCopy(false), 2200);
+          useUIStore.getState().showToast('Medal card saved!', 'success');
+          return;
+        } catch (capErr: any) {
+          if (capErr?.name === 'AbortError' || capErr?.message?.includes('canceled') || capErr?.message?.includes('cancelled')) {
+            return;
+          }
+          console.error('Capacitor download error:', capErr);
+        }
+      }
+
+      // 2. Web Browser Download (Blob URL)
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          const url = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = url;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.download = fileName;
+          link.href = blobUrl;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        }
+
+        setDidCopy(true);
+        setTimeout(() => setDidCopy(false), 2200);
+        useUIStore.getState().showToast('Medal card downloaded!', 'success');
+      }, 'image/png');
+
     } catch (e) {
       console.error('Failed to download card:', e);
       useUIStore.getState().showToast('Failed to download image. Try again.', 'error');

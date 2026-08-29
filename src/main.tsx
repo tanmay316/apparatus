@@ -3,7 +3,6 @@ import ReactDOM from 'react-dom/client';
 import { App } from './App';
 import { useAuthStore } from './stores/auth-store';
 import { logError } from '@/services/logger';
-import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { defineCustomElements } from '@ionic/pwa-elements/loader';
 import './index.css';
 import { SocialLogin } from '@capgo/capacitor-social-login';
@@ -18,9 +17,6 @@ SocialLogin.initialize({
     mode: 'online',
   },
 }).catch(console.error);
-
-// Notify Capgo that the bundle loaded successfully so it doesn't rollback
-CapacitorUpdater.notifyAppReady();
 
 // Global unhandled error logging
 window.addEventListener('error', (event) => {

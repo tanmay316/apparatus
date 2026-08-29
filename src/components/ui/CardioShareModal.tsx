@@ -4,6 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Check, Share2, LocateFixed, ChevronLeft, ChevronRight, Sparkles, Layers, Palette, Layout as LayoutIcon, Smartphone, Square as SquareIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { toCanvas } from 'html-to-image';
+import html2canvas from 'html2canvas';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
+import { useUIStore } from '@/stores/ui-store';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
 import type { RoutePoint } from '@/types';
 
@@ -110,39 +115,71 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
   const showPathBackground = isTransparent || isAShape;
   const hideMapTiles = isTransparent;
 
-  const getCanvas = async () => {
+  const getCanvas = async (): Promise<HTMLCanvasElement | null> => {
     if (!cardRef.current) return null;
-    const canvas = await toCanvas(cardRef.current, {
-      pixelRatio: 2,
-      backgroundColor: isTransparent ? undefined : '#090605',
-    });
+
+    let canvas: HTMLCanvasElement | null = null;
     
-    // Apply clipping to match the border-radius of the card
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.globalCompositeOperation = 'destination-in';
-      const clipCanvas = document.createElement('canvas');
-      clipCanvas.width = canvas.width;
-      clipCanvas.height = canvas.height;
-      const clipCtx = clipCanvas.getContext('2d');
-      if (clipCtx) {
-        const radius = 64; 
-        clipCtx.beginPath();
-        clipCtx.moveTo(radius, 0);
-        clipCtx.lineTo(canvas.width - radius, 0);
-        clipCtx.quadraticCurveTo(canvas.width, 0, canvas.width, radius);
-        clipCtx.lineTo(canvas.width, canvas.height - radius);
-        clipCtx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height);
-        clipCtx.lineTo(radius, canvas.height);
-        clipCtx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius);
-        clipCtx.lineTo(0, radius);
-        clipCtx.quadraticCurveTo(0, 0, radius, 0);
-        clipCtx.closePath();
-        clipCtx.fill();
-        ctx.drawImage(clipCanvas, 0, 0);
-      }
-      ctx.globalCompositeOperation = 'source-over';
+    // 1. Try html-to-image with skipFonts and cacheBust disabled
+    try {
+      canvas = await toCanvas(cardRef.current, {
+        pixelRatio: 2,
+        cacheBust: false,
+        skipFonts: true,
+        backgroundColor: isTransparent ? undefined : '#090605',
+      });
+    } catch (err) {
+      console.warn('html-to-image toCanvas failed, attempting html2canvas fallback:', err);
     }
+
+    // 2. Fallback to html2canvas if html-to-image threw an error
+    if (!canvas && cardRef.current) {
+      try {
+        canvas = await html2canvas(cardRef.current, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: isTransparent ? null : '#090605',
+          logging: false,
+        });
+      } catch (h2cErr) {
+        console.error('html2canvas also failed:', h2cErr);
+      }
+    }
+
+    if (!canvas) return null;
+
+    // Apply clipping to match the border-radius of the card
+    try {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.globalCompositeOperation = 'destination-in';
+        const clipCanvas = document.createElement('canvas');
+        clipCanvas.width = canvas.width;
+        clipCanvas.height = canvas.height;
+        const clipCtx = clipCanvas.getContext('2d');
+        if (clipCtx) {
+          const radius = 64; 
+          clipCtx.beginPath();
+          clipCtx.moveTo(radius, 0);
+          clipCtx.lineTo(canvas.width - radius, 0);
+          clipCtx.quadraticCurveTo(canvas.width, 0, canvas.width, radius);
+          clipCtx.lineTo(canvas.width, canvas.height - radius);
+          clipCtx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height);
+          clipCtx.lineTo(radius, canvas.height);
+          clipCtx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius);
+          clipCtx.lineTo(0, radius);
+          clipCtx.quadraticCurveTo(0, 0, radius, 0);
+          clipCtx.closePath();
+          clipCtx.fill();
+          ctx.drawImage(clipCanvas, 0, 0);
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    } catch (clipErr) {
+      console.warn('Clipping canvas failed (continuing with canvas):', clipErr);
+    }
+
     return canvas;
   };
 
@@ -151,20 +188,70 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
       setDownloading(true);
       await new Promise(r => setTimeout(r, 60));
       const canvas = await getCanvas();
-      if (!canvas) return;
+      if (!canvas) {
+        useUIStore.getState().showToast('Could not generate share image', 'error');
+        return;
+      }
+
+      const fileName = `apparatus-${data.type}-${format(new Date(data.date), 'yyyy-MM-dd')}.png`;
+
+      // 1. Native Mobile App (Capacitor)
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const base64Data = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
+          const fileResult = await Filesystem.writeFile({
+            path: fileName,
+            data: base64Data,
+            directory: Directory.Cache,
+          });
+
+          await Share.share({
+            title: `Save ${typeLabel} Workout`,
+            files: [fileResult.uri],
+            dialogTitle: 'Save Workout Card',
+          });
+
+          setDidCopy(true);
+          setTimeout(() => setDidCopy(false), 2200);
+          useUIStore.getState().showToast('Workout card ready!', 'success');
+          return;
+        } catch (capErr: any) {
+          if (capErr?.name === 'AbortError' || capErr?.message?.includes('canceled') || capErr?.message?.includes('cancelled')) {
+            return;
+          }
+          console.error('Capacitor download/save error:', capErr);
+        }
+      }
+
+      // 2. Web Browser Download (Blob URL method)
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          const url = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = fileName;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+        }
+
+        setDidCopy(true);
+        setTimeout(() => setDidCopy(false), 2200);
+        useUIStore.getState().showToast('Workout card saved!', 'success');
+      }, 'image/png');
       
-      const url = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `apparatus-${data.type}-${format(new Date(data.date), 'yyyy-MM-dd')}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      setDidCopy(true);
-      setTimeout(() => setDidCopy(false), 2200);
     } catch (err) {
       console.error('Failed to generate image:', err);
+      useUIStore.getState().showToast('Failed to save image. Please try again.', 'error');
     } finally {
       setDownloading(false);
     }
@@ -175,23 +262,68 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
       setDownloading(true);
       await new Promise(r => setTimeout(r, 60));
       const canvas = await getCanvas();
-      if (!canvas) return;
+      if (!canvas) {
+        useUIStore.getState().showToast('Could not generate share image', 'error');
+        return;
+      }
 
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        const file = new File([blob], `apparatus-${data.type}-${format(new Date(data.date), 'yyyy-MM-dd')}.png`, { type: 'image/png' });
-        
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: `My Apparatus ${typeLabel}`,
-            files: [file],
+      const fileName = `apparatus-${data.type}-${format(new Date(data.date), 'yyyy-MM-dd')}.png`;
+
+      // 1. Native Mobile App (Capacitor)
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const base64Data = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
+          const fileResult = await Filesystem.writeFile({
+            path: fileName,
+            data: base64Data,
+            directory: Directory.Cache,
           });
+
+          await Share.share({
+            title: `My Apparatus ${typeLabel}`,
+            text: `Completed a ${data.distanceKm.toFixed(2)} km ${typeLabel} with Apparatus! 🔥`,
+            files: [fileResult.uri],
+            dialogTitle: 'Share Workout Story',
+          });
+          return;
+        } catch (capErr: any) {
+          if (capErr?.name === 'AbortError' || capErr?.message?.includes('canceled') || capErr?.message?.includes('cancelled')) {
+            return;
+          }
+          console.error('Capacitor share error:', capErr);
+        }
+      }
+
+      // 2. Web Browser Share (Web Share API)
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          handleDownload();
+          return;
+        }
+        const file = new File([blob], fileName, { type: 'image/png' });
+        
+        if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              title: `My Apparatus ${typeLabel}`,
+              text: `Completed a ${data.distanceKm.toFixed(2)} km ${typeLabel} with Apparatus! 🔥`,
+              files: [file],
+            });
+          } catch (shareErr: any) {
+            if (shareErr?.name !== 'AbortError') {
+              console.error('Navigator share failed:', shareErr);
+              handleDownload();
+            }
+          }
         } else {
           handleDownload();
         }
-      });
-    } catch (err) {
-      console.error('Failed to share:', err);
+      }, 'image/png');
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        console.error('Failed to share:', err);
+        useUIStore.getState().showToast('Failed to share card. Try saving image directly.', 'error');
+      }
     } finally {
       setDownloading(false);
     }
@@ -215,7 +347,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9999] flex flex-col items-center bg-[#090605]/95 backdrop-blur-2xl touch-none overflow-y-auto px-4 py-3 select-none"
+        className="fixed inset-0 z-[9999] flex flex-col items-center bg-[#090605]/95 backdrop-blur-2xl overflow-y-auto overscroll-contain px-4 py-3 pb-16 select-none"
       >
         {/* Top Navbar */}
         <div className="w-full max-w-[420px] flex items-center justify-between px-2 pt-2 pb-1 shrink-0">

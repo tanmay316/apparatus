@@ -319,6 +319,11 @@ service cloud.firestore {
       allow create, update, delete: if isAuthenticated();
     }
 
+    match /challenge_progress_logs/{logId} {
+      allow read: if true;
+      allow create, update, delete: if isAuthenticated();
+    }
+
     match /simple_events/{eventId} {
       allow read: if true;
       allow create: if isAuthenticated();

@@ -5,9 +5,8 @@ const config: CapacitorConfig = {
   appName: 'Apparatus',
   webDir: 'dist',
   plugins: {
-    CapacitorUpdater: {
-      autoUpdate: true,
-      appId: 'com.tms.apparatus'
+    OtaKit: {
+      appId: "a7c5429c-6e01-44bf-804c-24d3e8cb2441"
     },
     SplashScreen: {
       launchAutoHide: false,
@@ -17,6 +16,9 @@ const config: CapacitorConfig = {
     LocalNotifications: {
       smallIcon: 'ic_notification',
       iconColor: '#e07a5f'
+    },
+    PushNotifications: {
+      presentationOptions: ["badge", "sound"]
     }
   },
   server: {

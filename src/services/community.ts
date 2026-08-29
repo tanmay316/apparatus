@@ -1,6 +1,6 @@
 import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, increment, setDoc, writeBatch, Timestamp, documentId, onSnapshot, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, SimpleEventStatus, CommunityPost, EarnedCommunityBadge, ClanPoll, ClanPollOption, ClanPollVoter, CommunityAnnouncement, ClanMessage, AppNotificationType, ClanJoinRequest } from '@/types';
+import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, ChallengeProgressLog, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, ChallengeActivityFilter, SimpleEventStatus, CommunityPost, EarnedCommunityBadge, ClanPoll, ClanPollOption, ClanPollVoter, CommunityAnnouncement, ClanMessage, AppNotificationType, ClanJoinRequest } from '@/types';
 import { notify } from '@/services/social';
 
 // ─── UTILS ────────────────────────────────────────────────────────
@@ -493,6 +493,178 @@ export async function leaveChallenge(challengeId: string, userId: string): Promi
   const snap = await getDocs(q);
   await updateDoc(doc(db, 'challenges_v2', challengeId), {
     participantCount: snap.size
+  });
+}
+
+// ─── PERSONAL CHALLENGE PROGRESS ─────────────────────────────────
+
+export async function addChallengeProgressLog(
+  log: Omit<ChallengeProgressLog, 'id' | 'createdAt'>
+): Promise<string> {
+  const payload: any = {
+    ...log,
+    createdAt: serverTimestamp(),
+  };
+  Object.keys(payload).forEach(key => {
+    if (payload[key] === undefined) delete payload[key];
+  });
+
+  const docRef = await addDoc(collection(db, 'challenge_progress_logs'), payload);
+
+  // Update participant's aggregate progress
+  const partId = `${log.challengeId}_${log.userId}`;
+  try {
+    const partSnap = await getDoc(doc(db, 'challenge_participants', partId));
+    if (partSnap.exists()) {
+      const current = (partSnap.data().progress as number) || 0;
+      await updateDoc(doc(db, 'challenge_participants', partId), {
+        progress: current + log.value,
+        updatedAt: serverTimestamp()
+      });
+    }
+  } catch { /* ignore update error */ }
+
+  return docRef.id;
+}
+
+export async function getChallengeProgressLogs(
+  challengeId: string,
+  userId?: string,
+  limitCount = 50
+): Promise<ChallengeProgressLog[]> {
+  let q;
+  if (userId) {
+    q = query(
+      collection(db, 'challenge_progress_logs'),
+      where('challengeId', '==', challengeId),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+  } else {
+    q = query(
+      collection(db, 'challenge_progress_logs'),
+      where('challengeId', '==', challengeId),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+  }
+  try {
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() } as ChallengeProgressLog));
+  } catch (error) {
+    console.error('Error fetching challenge progress logs:', error);
+    return [];
+  }
+}
+
+export async function getPersonalChallenges(userId: string): Promise<ChallengeV2[]> {
+  const q = query(
+    collection(db, 'challenges_v2'),
+    where('createdBy', '==', userId),
+    where('challengeType', '==', 'personal')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as ChallengeV2));
+}
+
+export async function getDiscoverableChallenges(userClanIds: string[]): Promise<ChallengeV2[]> {
+  if (!userClanIds.length) return [];
+  
+  const results: ChallengeV2[] = [];
+  // Firestore 'in' supports max 30 values
+  for (let i = 0; i < userClanIds.length; i += 30) {
+    const chunk = userClanIds.slice(i, i + 30);
+    // Query challenges that have any of the user's clan IDs in clanIds array
+    const q = query(
+      collection(db, 'challenges_v2'),
+      where('challengeType', '==', 'personal'),
+      where('status', 'in', ['upcoming', 'active'])
+    );
+    const snap = await getDocs(q);
+    snap.docs.forEach(d => {
+      const data = d.data() as ChallengeV2;
+      // Filter client-side: clanIds overlap with user's clans, or single clanId match
+      const challengeClanIds = data.clanIds || (data.clanId ? [data.clanId] : []);
+      if (challengeClanIds.some(cid => chunk.includes(cid))) {
+        if (!results.find(r => r.id === d.id)) {
+          results.push({ id: d.id, ...data });
+        }
+      }
+    });
+  }
+  return results;
+}
+
+/**
+ * Find active challenges that should auto-track for a given user.
+ * Filters by activity type to ensure run challenges only track runs, etc.
+ */
+export async function getActiveAutoTrackChallenges(
+  userId: string,
+  activityType: 'run' | 'walk' | 'cycle' | 'workout'
+): Promise<{ challenge: ChallengeV2; participantId: string }[]> {
+  // Get all challenge IDs the user is participating in
+  const partSnap = await getDocs(
+    query(collection(db, 'challenge_participants'), where('userId', '==', userId))
+  );
+  if (partSnap.empty) return [];
+
+  const challengeIds = partSnap.docs.map(d => d.data().challengeId as string);
+  const results: { challenge: ChallengeV2; participantId: string }[] = [];
+
+  // Fetch challenges in chunks of 10 (Firestore 'in' limit)
+  for (let i = 0; i < challengeIds.length; i += 10) {
+    const chunk = challengeIds.slice(i, i + 10);
+    const cSnap = await getDocs(
+      query(
+        collection(db, 'challenges_v2'),
+        where(documentId(), 'in', chunk),
+        where('status', 'in', ['active'])
+      )
+    );
+
+    for (const cDoc of cSnap.docs) {
+      const challenge = { id: cDoc.id, ...cDoc.data() } as ChallengeV2;
+      if (!challenge.autoTrack) continue;
+
+      // Activity filter matching — only count activities that match the challenge type
+      const filter = challenge.activityFilter || 'all';
+      let matches = false;
+
+      if (filter === 'all') {
+        matches = true;
+      } else if (filter === 'run' && activityType === 'run') {
+        matches = true;
+      } else if (filter === 'walk' && activityType === 'walk') {
+        matches = true;
+      } else if (filter === 'cycle' && activityType === 'cycle') {
+        matches = true;
+      } else if (filter === 'any_cardio' && ['run', 'walk', 'cycle'].includes(activityType)) {
+        matches = true;
+      } else if (filter === 'workout' && activityType === 'workout') {
+        matches = true;
+      }
+
+      if (matches) {
+        const partId = `${challenge.id}_${userId}`;
+        results.push({ challenge, participantId: partId });
+      }
+    }
+  }
+
+  return results;
+}
+
+export async function updateChallengeParticipantPrivacy(
+  challengeId: string,
+  userId: string,
+  privacy: 'public' | 'private'
+): Promise<void> {
+  const partId = `${challengeId}_${userId}`;
+  await updateDoc(doc(db, 'challenge_participants', partId), {
+    progressPrivacy: privacy,
+    updatedAt: serverTimestamp()
   });
 }
 
@@ -2407,7 +2579,7 @@ export async function sendClanMessage(
     clanId: data.clanId,
     senderId: data.userId,
     senderName: data.userName,
-    title: `💬 ${data.userName}`,
+    title: data.userName,
     body: preview,
     type: 'clan_message',
     link: `/clan/${data.clanId}/chat`,

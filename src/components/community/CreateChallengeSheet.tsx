@@ -169,44 +169,45 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
           {/* Cover Photo Upload with Live Preview */}
           <div className="space-y-2">
             <label className="block text-xs font-mono text-bone-dim uppercase">Cover Photo / Banner</label>
-            {coverUrl ? (
-              <div className="relative max-h-56 w-full rounded-2xl overflow-hidden border border-line/40 group bg-ink-2/80 flex items-center justify-center p-2">
-                <img src={coverUrl} alt="Preview" className="w-full max-h-52 object-contain rounded-xl" />
+            <div 
+              className="relative max-h-56 w-full rounded-2xl overflow-hidden border border-line/40 group bg-ink-2/80 flex items-center justify-center cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <img 
+                src={coverUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1000&auto=format&fit=crop'} 
+                alt="Preview" 
+                className={`w-full h-full object-cover rounded-xl transition-all ${!coverUrl ? 'opacity-70 grayscale-[30%]' : ''}`} 
+              />
+              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
+                <span className="text-white text-xs font-mono font-bold flex items-center gap-2">
+                  <Upload size={14} /> {isCompressing ? 'Compressing...' : (coverUrl ? 'Change Cover' : 'Upload Cover Image')}
+                </span>
+              </div>
+              {coverUrl && (
                 <button
                   type="button"
-                  onClick={() => setCoverUrl('')}
-                  className="absolute top-3 right-3 p-1.5 rounded-full bg-black/80 hover:bg-black text-red-400 transition-colors shadow-lg"
+                  onClick={(e) => { e.stopPropagation(); setCoverUrl(''); }}
+                  className="absolute top-3 right-3 p-1.5 rounded-full bg-black/80 hover:bg-black text-red-400 transition-colors shadow-lg z-10"
                   title="Remove Image"
                 >
                   <X size={16} />
                 </button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isCompressing}
-                  className="btn-secondary flex-1 py-3 text-xs font-mono flex items-center justify-center gap-2"
-                >
-                  <Upload size={14} /> {isCompressing ? 'Compressing...' : 'Upload Image'}
-                </button>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleImageFile}
-                  accept="image/*"
-                  className="hidden"
-                />
-              </div>
-            )}
+              )}
+            </div>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImageFile}
+              accept="image/*"
+              className="hidden"
+            />
             {!coverUrl && (
               <input
                 type="url"
                 value={coverUrl}
                 onChange={e => setCoverUrl(e.target.value)}
                 placeholder="Or paste image URL (https://...)"
-                className="input-field w-full text-xs font-mono text-bone py-2"
+                className="input-field w-full text-xs font-mono text-bone py-2 mt-2"
               />
             )}
           </div>

@@ -1,0 +1,2 @@
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/web-u2fJ58Mc.js","assets/dist-lsa6SoaF.js"])))=>i.map(i=>d[i]);
+import{a as e}from"./dist-lsa6SoaF.js";import{t}from"./preload-helper-Czpn1I53.js";var n=e(`Browser`,{web:()=>t(()=>import(`./web-u2fJ58Mc.js`).then(e=>new e.BrowserWeb),__vite__mapDeps([0,1]))});export{n as t};
