@@ -216,21 +216,27 @@ function PreferencesSync() {
               return;
             }
           }
-          const notifId = Math.floor(Math.random() * 2147483647);
-          const sender = newNote.senderName || 'Apparatus';
-          showNotification(
-            notifId,
-            sender,
-            newNote.message,
-            {
-              ...newNote.extra,
-              type: newNote.type,
-              senderId: newNote.senderId,
-              targetId: newNote.targetId,
-              id: newNote.id,
-              link: newNote.extra?.link || (newNote.extra?.clanId ? `/clan/${newNote.extra.clanId}/chat` : undefined)
-            }
-          );
+          const createdAtMillis = newNote.createdAt && typeof (newNote.createdAt as any).toMillis === 'function'
+            ? (newNote.createdAt as any).toMillis()
+            : ((newNote.createdAt as any)?.seconds ? (newNote.createdAt as any).seconds * 1000 : 0);
+
+          if (createdAtMillis >= mountedAt - 30000 || !createdAtMillis) {
+            const notifId = Math.floor(Math.random() * 2147483647);
+            const sender = newNote.senderName || 'Apparatus';
+            showNotification(
+              notifId,
+              sender,
+              newNote.message,
+              {
+                ...newNote.extra,
+                type: newNote.type,
+                senderId: newNote.senderId,
+                targetId: newNote.targetId,
+                id: newNote.id,
+                link: newNote.extra?.link || (newNote.extra?.clanId ? `/clan/${newNote.extra.clanId}/chat` : undefined)
+              }
+            );
+          }
         }
       }
     );

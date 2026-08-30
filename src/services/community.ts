@@ -211,8 +211,9 @@ export async function transferLeadership(clanId: string, currentLeaderId: string
 // ─── CHALLENGES (V2) ─────────────────────────────────────────────
 
 export async function createChallenge(challenge: Omit<ChallengeV2, 'id' | 'participantCount' | 'createdAt'> & { status?: ChallengeStatus }): Promise<string> {
+  const cleanChallenge = Object.fromEntries(Object.entries(challenge).filter(([_, v]) => v !== undefined));
   const docRef = await addDoc(collection(db, 'challenges_v2'), {
-    ...challenge,
+    ...cleanChallenge,
     status: challenge.status || 'active',
     participantCount: 1,
     createdAt: serverTimestamp(),
@@ -268,7 +269,12 @@ export async function getClanChallenges(clanId: string): Promise<ChallengeV2[]> 
     where('status', 'in', ['upcoming', 'active', 'completed'])
   );
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() } as ChallengeV2));
+  const challenges = snap.docs.map(d => ({ id: d.id, ...d.data() } as ChallengeV2));
+  return challenges.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+    const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+    return bTime - aTime;
+  });
 }
 
 export async function updateChallenge(id: string, data: Partial<ChallengeV2>): Promise<void> {

@@ -79,7 +79,13 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
   const id = ref.id;
 
   // Geometry-aware compression — keeps full fidelity for up to 1000 points
-  const route = simplifyRoute(activity.route, 1000);
+  const route = simplifyRoute(activity.route, 1000).map(pt => {
+    const cleanPt: any = { ...pt };
+    Object.keys(cleanPt).forEach(k => {
+      if (cleanPt[k] === undefined) delete cleanPt[k];
+    });
+    return cleanPt;
+  });
 
   const dataToSave = {
     ...activity,

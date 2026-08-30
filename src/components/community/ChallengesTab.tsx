@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAllCommunityChallenges, deleteChallenge } from '@/services/community';
-import { Target, Users, Flame, Edit3, Trash2, Trophy, Sparkles, Shield, TrendingUp } from 'lucide-react';
+import { Target, Users, Flame, Edit3, Trash2, Trophy, Sparkles, Shield, TrendingUp, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { ChallengeDetailSheet } from './ChallengeDetailSheet';
@@ -10,6 +10,8 @@ import { formatChallengeGoal } from './UpcomingReminderWidget';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { ChallengeV2 } from '@/types';
+import { CreateChallengeSheet } from './CreateChallengeSheet';
+import { CreatePersonalChallengeSheet } from './CreatePersonalChallengeSheet';
 
 function getCountdownLabel(startMs: number, endMs: number) {
   const now = Date.now();
@@ -45,6 +47,8 @@ export function ChallengesTab() {
   const [filter, setFilter] = useState<'all' | 'active' | 'upcoming' | 'concluded' | 'personal'>('all');
   const [selectedChallengeId, setSelectedChallengeId] = useState<string | null>(null);
   const [editingChallenge, setEditingChallenge] = useState<ChallengeV2 | null>(null);
+  const [createChallengeOpen, setCreateChallengeOpen] = useState(false);
+  const [createPersonalChallengeOpen, setCreatePersonalChallengeOpen] = useState(false);
 
   const { user, profile } = useAuthStore();
   const isAdmin = !!profile?.isAdmin;
@@ -207,6 +211,20 @@ export function ChallengesTab() {
             <Target size={20} className="text-emerald-500" />
             Fitness Challenges ({filteredChallenges.length})
           </h3>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setCreatePersonalChallengeOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-violet-500/15 text-violet-400 border border-violet-500/30 text-[11px] font-bold hover:bg-violet-500/25 transition-all"
+            >
+              <Sparkles size={12} /> Personal
+            </button>
+            <button 
+              onClick={() => setCreateChallengeOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-sienna text-bg text-[11px] font-bold shadow-[0_0_10px_rgba(205,111,72,0.2)] hover:shadow-[0_0_20px_rgba(205,111,72,0.4)] transition-all"
+            >
+              <Plus size={12} /> Challenge
+            </button>
+          </div>
         </div>
 
         {loadingChallenges ? (
@@ -355,6 +373,14 @@ export function ChallengesTab() {
           isOpen={!!editingChallenge} 
           onClose={() => setEditingChallenge(null)} 
         />
+      )}
+
+      {createChallengeOpen && (
+        <CreateChallengeSheet onClose={() => setCreateChallengeOpen(false)} />
+      )}
+      
+      {createPersonalChallengeOpen && (
+        <CreatePersonalChallengeSheet onClose={() => setCreatePersonalChallengeOpen(false)} />
       )}
     </div>
   );

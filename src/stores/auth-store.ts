@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult, signOut as firebaseSignOut } from 'firebase/auth';
+import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult, signOut as firebaseSignOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -17,6 +17,9 @@ interface AuthState {
 
   init: () => void;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, pass: string) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string) => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
   reauthenticate: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -174,9 +177,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signInWithGoogle: async () => {
-    set({ loading: true });
     try {
       if (Capacitor.isNativePlatform()) {
+        set({ loading: true });
         try {
           const result = await SocialLogin.login({
             provider: 'google',
@@ -202,17 +205,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
 
-      // Use popup by default for web/PWA
+      // Web/PWA path: DO NOT set loading true here, it breaks popup on iOS Safari PWA
       await signInWithPopup(auth, googleProvider);
+      set({ loading: true }); // set loading after popup opens successfully
     } catch (error: any) {
       console.error('Google sign-in failed:', error);
-      // Fallback if popup blocked
+      set({ loading: false });
       if (error.code === 'auth/popup-blocked') {
-        await signInWithRedirect(auth, googleProvider);
+        useUIStore.getState().showToast('Popup blocked by browser. Please allow popups or use Safari normally.', 'error');
       } else {
-        set({ loading: false });
         throw error;
       }
+    }
+  },
+
+  signInWithEmail: async (email: string, pass: string) => {
+    set({ loading: true });
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (error: any) {
+      set({ loading: false });
+      throw error;
+    }
+  },
+
+  signUpWithEmail: async (email: string, pass: string) => {
+    set({ loading: true });
+    try {
+      await createUserWithEmailAndPassword(auth, email, pass);
+    } catch (error: any) {
+      set({ loading: false });
+      throw error;
+    }
+  },
+
+  resetPassword: async (email: string) => {
+    set({ loading: true });
+    try {
+      await sendPasswordResetEmail(auth, email);
+      set({ loading: false });
+    } catch (error: any) {
+      set({ loading: false });
+      throw error;
     }
   },
 
