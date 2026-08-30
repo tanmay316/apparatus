@@ -211,20 +211,7 @@ export function ChallengesTab() {
             <Target size={20} className="text-emerald-500" />
             Fitness Challenges ({filteredChallenges.length})
           </h3>
-          <div className="flex gap-2">
-            <button 
-              onClick={() => setCreatePersonalChallengeOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-violet-500/15 text-violet-400 border border-violet-500/30 text-[11px] font-bold hover:bg-violet-500/25 transition-all"
-            >
-              <Sparkles size={12} /> Personal
-            </button>
-            <button 
-              onClick={() => setCreateChallengeOpen(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-sienna text-bg text-[11px] font-bold shadow-[0_0_10px_rgba(205,111,72,0.2)] hover:shadow-[0_0_20px_rgba(205,111,72,0.4)] transition-all"
-            >
-              <Plus size={12} /> Challenge
-            </button>
-          </div>
+
         </div>
 
         {loadingChallenges ? (
