@@ -1,5 +1,12 @@
 import { COMPACT_LIBRARY } from '@/services/library';
-import { EXERCISE_ONTOLOGY, MODIFIERS, type MuscleWeight } from './exercise-ontology';
+import {
+  EXERCISE_ONTOLOGY,
+  MODIFIERS,
+  MUSCLE_GROUP_REGIONS,
+  inferMusclesFromName,
+  type MuscleMap,
+  type MuscleWeight,
+} from './exercise-ontology';
 
 export const MUSCLE_GROUPS = [
   'Chest', 'Back', 'Shoulders', 'Quads', 'Glutes',
@@ -78,6 +85,10 @@ export function normalizeExerciseName(name: string): string {
 export function resolveExercise(name: string): MuscleScore[] {
   const norm = normalizeExerciseName(name);
 
+  const matchedModifiers = Object.keys(MODIFIERS).filter(mod =>
+    norm.includes(mod.replace('_', ' '))
+  );
+
   // 1. Exact ID match
   let def = EXERCISE_ONTOLOGY.find(ex => ex.id === norm);
 
@@ -91,24 +102,14 @@ export function resolveExercise(name: string): MuscleScore[] {
     def = EXERCISE_ONTOLOGY.find(ex => ex.aliases.some(alias => normalizeExerciseName(alias) === norm));
   }
 
-  // 4. Base exercise match
-  let matchedModifiers: string[] = [];
+  // 4. Base exercise match — whole-word only, so "bench press" still matches
+  // "paused bench press" but "dip" no longer matches "dipping bird pose".
   if (!def) {
     const sortedOntology = [...EXERCISE_ONTOLOGY].sort((a, b) => b.name.length - a.name.length);
-    for (const ex of sortedOntology) {
-      if (norm.includes(normalizeExerciseName(ex.name)) || ex.aliases.some(a => norm.includes(normalizeExerciseName(a)))) {
-        def = ex;
-        break;
-      }
-    }
-
-    if (def) {
-      Object.keys(MODIFIERS).forEach(mod => {
-        if (norm.includes(mod.replace('_', ' '))) {
-          matchedModifiers.push(mod);
-        }
-      });
-    }
+    def = sortedOntology.find(ex =>
+      containsPhrase(norm, normalizeExerciseName(ex.name)) ||
+      ex.aliases.some(a => containsPhrase(norm, normalizeExerciseName(a)))
+    );
   }
 
   if (def) {
@@ -128,27 +129,95 @@ export function resolveExercise(name: string): MuscleScore[] {
       def.muscles.stabilizers.forEach(m => addScore(m, 'stabilizer'));
     }
 
-    matchedModifiers.forEach(mod => {
-      const adjustments = MODIFIERS[mod];
-      Object.entries(adjustments).forEach(([region, delta]) => {
-        const m = region as MuscleRegion;
-        if (scoresMap.has(m)) {
-          scoresMap.get(m)!.score += (delta as number);
-        } else if ((delta as number) > 0) {
-          scoresMap.set(m, { muscle: m, score: (delta as number), role: 'secondary' });
-        }
-      });
-    });
+    applyModifiers(scoresMap, matchedModifiers);
+    return finalizeScores(scoresMap);
+  }
 
-    return Array.from(scoresMap.values())
-      .filter(s => s.score >= 0.7)
-      .map(s => ({
-        ...s,
-        score: s.score // already >= 0.7, prevent negative no longer needed
-      }));
+  // 5. Movement-pattern inference from the name. Covers the long tail of
+  // variations the curated ontology doesn't list (e.g. "Australian Row").
+  const inferred = inferMusclesFromName(norm);
+  if (inferred && Object.keys(inferred).length > 0) {
+    return buildScores(inferred, matchedModifiers);
+  }
+
+  // 6. Library fallback — coarse muscle-group labels, used only when the name
+  // itself reveals no movement pattern.
+  const libraryMuscles = resolveFromLibrary(norm);
+  if (libraryMuscles) {
+    return buildScores(libraryMuscles, matchedModifiers);
   }
 
   return [];
+}
+
+/** Whole-word phrase containment, avoiding accidental substring matches. */
+function containsPhrase(haystack: string, needle: string): boolean {
+  if (!needle) return false;
+  return new RegExp(`(^|\\s)${escapeRegex(needle)}(\\s|$)`).test(haystack);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildScores(muscles: MuscleMap, modifiers: string[]): MuscleScore[] {
+  const scoresMap = new Map<MuscleRegion, MuscleScore>();
+  Object.entries(muscles).forEach(([region, weight]) => {
+    const w = weight as number;
+    scoresMap.set(region as MuscleRegion, {
+      muscle: region as MuscleRegion,
+      score: w,
+      role: w >= 0.85 ? 'primary' : w >= 0.5 ? 'secondary' : 'stabilizer',
+    });
+  });
+  applyModifiers(scoresMap, modifiers);
+  return finalizeScores(scoresMap);
+}
+
+function applyModifiers(scoresMap: Map<MuscleRegion, MuscleScore>, modifiers: string[]) {
+  modifiers.forEach(mod => {
+    const adjustments = MODIFIERS[mod];
+    if (!adjustments) return;
+    Object.entries(adjustments).forEach(([region, delta]) => {
+      const m = region as MuscleRegion;
+      if (scoresMap.has(m)) {
+        scoresMap.get(m)!.score += (delta as number);
+      } else if ((delta as number) > 0) {
+        scoresMap.set(m, { muscle: m, score: (delta as number), role: 'stabilizer' });
+      }
+    });
+  });
+}
+
+function finalizeScores(scoresMap: Map<MuscleRegion, MuscleScore>): MuscleScore[] {
+  // 0.3 keeps genuine secondaries (pull-up traps/forearms sit at 0.4) while dropping
+  // trivial stabilisers. The old 0.7 cutoff silently discarded most secondary work.
+  return Array.from(scoresMap.values()).filter(s => s.score >= 0.3);
+}
+
+/** Maps a library entry's muscle-group labels onto anatomical regions. */
+function resolveFromLibrary(norm: string): MuscleMap | null {
+  const entry =
+    COMPACT_LIBRARY.find(ex => normalizeExerciseName(ex.name) === norm) ||
+    COMPACT_LIBRARY.find(ex => containsPhrase(norm, normalizeExerciseName(ex.name)));
+  if (!entry) return null;
+
+  const result: MuscleMap = {};
+  const merge = (map: MuscleMap | undefined, scale: number) => {
+    if (!map) return;
+    Object.entries(map).forEach(([region, weight]) => {
+      const m = region as MuscleRegion;
+      const value = (weight as number) * scale;
+      result[m] = Math.max(result[m] ?? 0, value);
+    });
+  };
+
+  merge(MUSCLE_GROUP_REGIONS[entry.muscleGroup.toLowerCase()], 1);
+  (entry.secondaryMuscles || []).forEach(sm => {
+    merge(MUSCLE_GROUP_REGIONS[sm.toLowerCase()], 0.5);
+  });
+
+  return Object.keys(result).length > 0 ? result : null;
 }
 
 /**
