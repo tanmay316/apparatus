@@ -10,6 +10,11 @@ from sqlalchemy import text
 
 from app.db.session import get_db
 from app.core.security import get_current_user
+from app.core.guardrails import (
+    check_rate_limit,
+    validate_chat_message,
+    validate_image,
+)
 from app.middleware.api_keys import resolve_api_keys
 from app.graph.state import GraphState
 from app.graph.nutrition_graph import orchestrator
@@ -53,6 +58,16 @@ async def analyze_food(
     Pipeline: Scanner Agent → Nutrition Agent → Health Score → Save Meal.
     """
     uid = current_user["uid"]
+
+    # Vision calls are the most expensive path — gate them before any work.
+    rate = check_rate_limit(uid, limit=12, window_seconds=60)
+    if not rate.allowed:
+        raise HTTPException(status_code=429, detail=rate.message)
+
+    img_verdict = validate_image(req.image_base64, req.mime_type)
+    if not img_verdict.allowed:
+        raise HTTPException(status_code=400, detail=img_verdict.message)
+
     keys = await resolve_api_keys(current_user)
 
     # Save image to db immediately and schedule cleanup
@@ -338,6 +353,24 @@ async def chat(
 ):
     """Chat with the AI nutrition assistant."""
     uid = current_user["uid"]
+
+    # Guardrails run before any LLM work so abuse and off-topic traffic cost nothing.
+    rate = check_rate_limit(uid, limit=20, window_seconds=60)
+    if not rate.allowed:
+        raise HTTPException(status_code=429, detail=rate.message)
+
+    verdict = validate_chat_message(req.message)
+    if not verdict.allowed:
+        logger.info("Chat blocked for %s: %s", uid, verdict.reason)
+        if verdict.reason in ("off_topic", "injection"):
+            # Answer in-band so the conversation stays natural instead of erroring.
+            return ChatResponse(
+                response=verdict.message,
+                session_id=req.session_id or 0,
+                tokens_used=0,
+            )
+        raise HTTPException(status_code=400, detail=verdict.message)
+
     keys = await resolve_api_keys(current_user)
 
     # Ensure user exists in database before creating any sessions

@@ -12,7 +12,7 @@ class NvidiaLLMProvider(BaseLLMProvider):
     
     def __init__(self, api_key: Optional[str] = None, model: str = "meta/llama-3.1-70b-instruct"):
         from app.core.config import settings
-        self.api_key = api_key or settings.NVIDIA_API_KEY or "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"
+        self.api_key = api_key or settings.NVIDIA_API_KEY
         self.model = model
         self.provider_name = "nvidia"
 
