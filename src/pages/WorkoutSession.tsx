@@ -636,6 +636,11 @@ export function WorkoutSession() {
                 ? histLog?.sets?.filter((s: any) => s.completed !== false).length || 0
                 : log?.sets?.filter((s: any) => s.completed).length || 0;
 
+              const previousCompletedSets = previousLog?.sets?.filter((s: any) => s.completed !== false) || [];
+              const previousSummary = previousCompletedSets
+                .map((s: any) => `${s.reps || s.seconds || 0}${s.seconds ? 's' : ''}${s.weight ? `@${s.weight}kg` : ''}`)
+                .join(', ');
+
               return (
                 <motion.div
                   key={idx}
@@ -681,8 +686,12 @@ export function WorkoutSession() {
                       {e.tempo && <span className="bg-ink px-1.5 py-0.5 rounded border border-line/40 text-[10px] font-mono text-bone-dim shadow-sm">tempo {e.tempo}</span>}
                       {e.rest && <span className="bg-ink px-1.5 py-0.5 rounded border border-line/40 text-[10px] font-mono text-bone-dim shadow-sm">rest {e.rest}</span>}
                     </div>
-                    <div className={`text-[10px] font-mono mt-2 ${isDone ? 'text-green-500' : 'text-bone-dim/50'}`}>
-                      {isDone ? `Logged ${numCompletedSets} sets` : 'No history yet'}
+                    <div className={`text-[10px] font-mono mt-2 truncate ${isDone ? 'text-green-500' : 'text-bone-dim/50'}`}>
+                      {isDone
+                        ? `Logged ${numCompletedSets} sets`
+                        : previousCompletedSets.length > 0
+                          ? `Last: ${previousSummary}`
+                          : 'No history yet'}
                     </div>
                   </div>
 
