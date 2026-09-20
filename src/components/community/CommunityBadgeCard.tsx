@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Sparkles, Shield, Share2 } from 'lucide-react';
+import { Sparkles, Shield, Share2, Crown, Trophy, Award } from 'lucide-react';
 import type { EarnedCommunityBadge } from '@/types';
 import { MedalIcon } from '@/components/community/MedalIcon';
 

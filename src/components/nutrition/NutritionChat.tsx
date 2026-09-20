@@ -66,6 +66,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   const [loggingMessageId, setLoggingMessageId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isWakingUp, setIsWakingUp] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   
   // History Drawer State
   const [showHistory, setShowHistory] = useState(false);
@@ -191,6 +192,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
     loadSessionMessages(sid);
     setShowHistory(false);
+    setShowSuggestions(false);
   };
 
   const handleNewChat = () => {
@@ -205,6 +207,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       },
     ]);
     setShowHistory(false);
+    setShowSuggestions(false);
   };
 
   const handleDeleteSession = async (e: React.MouseEvent, sid: number) => {
@@ -295,6 +298,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
     const currentPreview = previewImage;
     setPreviewImage(null);
+    setShowSuggestions(false);
 
     const attemptRequest = async (retryCount = 0): Promise<void> => {
       try {
@@ -732,37 +736,70 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick actions */}
+      {/* Quick actions (Collapsible Suggestions) */}
       {!previewImage && messages.length <= 2 && !loading && (
-        <div className="px-4 pb-3 bg-ink-2">
-          <div className="flex items-center gap-1.5 mb-2 text-[10px] font-semibold uppercase tracking-wider text-bone-dim/70">
-            <Sparkles size={11} className="text-sienna" />
-            Try one of these
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {quickActions.map((a, i) => {
-              const Icon = a.icon;
-              const isWide = i === quickActions.length - 1 && quickActions.length % 2 === 1;
-              return (
-                <button
-                  key={a.label}
-                  onClick={() => {
-                    if (a.action === 'camera') { setShowCamera(true); return; }
-                    if (a.send) { handleSend(a.prompt); } else { setInput(a.prompt || ''); }
-                  }}
-                  className={`group flex items-start gap-2.5 p-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.06] text-left hover:bg-white/[0.07] hover:border-sienna/30 active:scale-[0.97] transition-all ${isWide ? 'col-span-2' : ''}`}
-                >
-                  <span className="w-7 h-7 rounded-xl bg-sienna/15 border border-sienna/20 flex items-center justify-center shrink-0 group-hover:bg-sienna/25 transition-colors">
-                    <Icon size={14} className="text-sienna" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[12px] font-semibold text-bone leading-tight truncate">{a.label}</span>
-                    <span className="block text-[10px] text-bone-dim mt-0.5 truncate">{a.hint}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+        <div className="px-4 py-1.5 bg-ink-2/95 border-t border-white/[0.04] relative z-10">
+          <button
+            type="button"
+            onClick={() => setShowSuggestions(prev => !prev)}
+            className="w-full flex items-center justify-between py-1.5 px-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.05] transition-all group"
+          >
+            <div className="flex items-center gap-1.5 text-bone-dim group-hover:text-bone">
+              <Sparkles size={12} className="text-sienna group-hover:scale-110 transition-transform" />
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-bone-dim/80 group-hover:text-bone">
+                Try one of these
+              </span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.04] text-bone-dim font-mono">
+                {quickActions.length}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-[11px] text-bone-dim/60 group-hover:text-bone-dim">
+              <span>{showSuggestions ? 'Collapse' : 'Expand'}</span>
+              <ChevronDown
+                size={14}
+                className={`transform transition-transform duration-200 ${showSuggestions ? 'rotate-180' : ''}`}
+              />
+            </div>
+          </button>
+
+          <AnimatePresence>
+            {showSuggestions && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden pt-2"
+              >
+                <div className="grid grid-cols-2 gap-2 max-h-[220px] overflow-y-auto pr-0.5 scrollbar-thin pb-1">
+                  {quickActions.map((a, i) => {
+                    const Icon = a.icon;
+                    const isWide = i === quickActions.length - 1 && quickActions.length % 2 === 1;
+                    return (
+                      <button
+                        key={a.label}
+                        type="button"
+                        onClick={() => {
+                          setShowSuggestions(false);
+                          if (a.action === 'camera') { setShowCamera(true); return; }
+                          if (a.send) { handleSend(a.prompt); } else { setInput(a.prompt || ''); }
+                        }}
+                        className={`group flex items-start gap-2.5 p-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.06] text-left hover:bg-white/[0.07] hover:border-sienna/30 active:scale-[0.97] transition-all ${isWide ? 'col-span-2' : ''}`}
+                      >
+                        <span className="w-7 h-7 rounded-xl bg-sienna/15 border border-sienna/20 flex items-center justify-center shrink-0 group-hover:bg-sienna/25 transition-colors">
+                          <Icon size={14} className="text-sienna" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[12px] font-semibold text-bone leading-tight truncate">{a.label}</span>
+                          <span className="block text-[10px] text-bone-dim mt-0.5 truncate">{a.hint}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
