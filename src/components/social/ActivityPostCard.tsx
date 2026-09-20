@@ -20,6 +20,7 @@ import { getAvatarUrl } from '@/lib/avatar';
 import { RouteMap } from '@/components/cardio/RouteMap';
 import { CelebrationPodiumCard } from '@/components/community/CelebrationPodiumCard';
 import { getAppShareUrl, shareContent } from '@/lib/share';
+import { useLiveDisplayName } from '@/hooks/useLiveDisplayName';
 
 function timeAgo(seconds?: number): string {
   if (!seconds) return 'just now';
@@ -55,6 +56,9 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
   const exerciseNames = (details.exercises || []) as string[];
   const isOwnActivity = activity.userId === user?.uid;
   const activityWeight = details.bodyweight || (isOwnActivity ? profile?.weight : undefined);
+  // Resolve the author's current name/photo live instead of trusting the copy stored on
+  // the activity at post time, so a later name/photo change shows up immediately here.
+  const { displayName: liveUserName, photoURL: liveUserPhoto } = useLiveDisplayName(activity.userId, activity.userName, activity.userPhoto);
 
   // Detect competition celebration post
   const isCelebration =
@@ -156,8 +160,8 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
         <div className="flex items-start md:items-center gap-2.5 sm:gap-3 min-w-0">
           <Link to={`/profile/${activity.username || activity.userId}`} className="shrink-0 mt-0.5 md:mt-0">
             <img
-              src={activity.userPhoto || getAvatarUrl(activity.userName, theme)}
-              alt={activity.userName}
+              src={liveUserPhoto || getAvatarUrl(liveUserName, theme)}
+              alt={liveUserName}
               className="w-10 h-10 md:w-11 md:h-11 rounded-full shadow-[3px_3px_6px_rgba(0,0,0,0.1),-3px_-3px_6px_rgba(255,255,255,1)] object-cover"
               referrerPolicy="no-referrer"
             />
@@ -168,7 +172,7 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
                 to={`/profile/${activity.username || activity.userId}`}
                 className="font-bold text-sm hover:text-[#5d2a1a] transition-colors text-[#17191c] truncate max-w-[120px] sm:max-w-[180px]"
               >
-                {activity.userName}
+                {liveUserName}
               </Link>
               {activity.username && (
                 <span className="text-[11px] font-mono text-[#777b86] hidden sm:inline truncate max-w-[80px]">@{activity.username}</span>

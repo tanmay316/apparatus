@@ -31,11 +31,14 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
   try {
     const previousSnapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)));
     const isFirstWorkoutEver = previousSnapshot.empty;
-    const previousWorkout = previousSnapshot.docs
+    // Pass full workout history (not just the last session on the same plan day) so each
+    // exercise is compared against its own true personal best, which is what "progressive
+    // overload" actually means.
+    const previousWorkouts = previousSnapshot.docs
       .map(item => ({ id: item.id, ...item.data() } as Workout))
-      .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0))
-      .find(item => item.dayId === workout.dayId && item.date !== workout.date && (item.exercises || []).length > 0) || null;
-    progressiveOverload = summarizeProgressiveOverload(workout, previousWorkout, isFirstWorkoutEver);
+      .filter(item => item.date !== workout.date && (item.exercises || []).length > 0)
+      .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0));
+    progressiveOverload = summarizeProgressiveOverload(workout, previousWorkouts, isFirstWorkoutEver);
   } catch {
     // Progressive overload is a nice-to-have — don't let it block saving.
     progressiveOverload = undefined;

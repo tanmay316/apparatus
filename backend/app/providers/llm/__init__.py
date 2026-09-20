@@ -3,6 +3,7 @@ LLM Provider Registry with automatic fallback.
 Order: Nvidia → Gemini → OpenRouter
 """
 from typing import List, Optional
+import asyncio
 import logging
 
 from app.providers.llm.base import BaseLLMProvider, LLMResponse, ChatMessage
@@ -69,6 +70,7 @@ async def chat_with_fallback(
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
     json_mode: bool = False,
+    total_timeout: float = 45.0,
 ) -> LLMResponse:
     """Try each LLM provider in order until one succeeds, with 0ms response caching for repeated queries."""
     cache_key = None
@@ -78,40 +80,50 @@ async def chat_with_fallback(
         if cached:
             ts, cached_res = cached
             if time.time() - ts < CACHE_TTL_SECONDS:
-                logger.info(f"⚡ Returning cached LLM response for query (0ms latency)")
+                logger.info("Returning cached LLM response (0ms latency)")
                 return cached_res
 
+    deadline = time.monotonic() + total_timeout
     last_error = "No LLM providers configured"
     for provider in providers:
+        # A slow chain must not outlive the client's patience; stop trying once
+        # the overall budget is spent rather than walking every provider.
+        remaining = deadline - time.monotonic()
+        if remaining <= 1.0:
+            last_error = f"Timed out after {total_timeout:.0f}s before {provider.provider_name}"
+            logger.warning(last_error)
+            break
+
         try:
-            logger.info(f"Trying LLM provider: {provider.provider_name}")
-            result = await provider.chat(
-                messages, system_prompt, temperature, max_tokens, json_mode
+            logger.info("Trying LLM provider: %s", provider.provider_name)
+            result = await asyncio.wait_for(
+                provider.chat(messages, system_prompt, temperature, max_tokens, json_mode),
+                timeout=remaining,
             )
-            
+
             if not result.content.startswith("Error:"):
                 if cache_key:
                     _llm_cache[cache_key] = (time.time(), result)
-                # Extract and print detailed usage/rate limits
-                print(f"\n" + "="*50)
-                print(f"🤖 LLM CALL SUCCESS (Cached)")
-                print(f"Provider & Model : {result.provider_used}")
-                print(f"Tokens Used      : {result.tokens_used}")
-                print(f"Latency          : {result.latency_ms / 1000:.2f}s")
-                print("="*50 + "\n")
+                logger.info(
+                    "LLM ok provider=%s tokens=%s latency_ms=%s",
+                    result.provider_used, result.tokens_used, result.latency_ms,
+                )
                 return result
-                
+
             last_error = result.content
-            print(f"\n❌ [LLM CALL FAILED] {provider.provider_name} -> {last_error}\n")
-            logger.warning(f"LLM provider {provider.provider_name} failed: {last_error}")
-            
+            logger.warning("LLM provider %s failed: %s", provider.provider_name, last_error)
+
+        except asyncio.TimeoutError:
+            last_error = f"{provider.provider_name}: timed out"
+            logger.warning("LLM provider %s timed out", provider.provider_name)
+            continue
         except Exception as e:
             error_msg = str(e)
             if hasattr(e, "response") and hasattr(e.response, "text"):
                 error_msg += f" - Body: {e.response.text}"
             last_error = f"{provider.provider_name}: {error_msg}"
-            print(f"\n❌ [LLM CALL FAILED EXCEPTION] {provider.provider_name} -> {error_msg}\n")
-            logger.warning(f"LLM provider {provider.provider_name} failed with exception: {error_msg}")
+            logger.warning("LLM provider %s raised: %s", provider.provider_name, error_msg)
             continue
 
+    logger.error("All LLM providers failed: %s", last_error)
     return LLMResponse(content=f"All LLM providers failed: {last_error}", provider_used="none")

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2, Brain, ChevronDown, ChevronUp, History, Plus, Trash2, MessageSquare, Square } from 'lucide-react';
+import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2, Brain, ChevronDown, ChevronUp, History, Plus, Trash2, MessageSquare, Square, Flame, ChefHat, CalendarDays, Scale, Copy, Check, RefreshCw } from 'lucide-react';
 import { sendChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionMessages, deleteChatSession, wakeUpServer, type FoodAnalyzeResponse, type ChatSessionItem } from '@/services/nutrition-api';
 import NutritionResultCard from './NutritionResultCard';
 import CameraScanner from './CameraScanner';
@@ -54,7 +54,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     {
       id: 'welcome',
       role: 'assistant',
-      content: "Hey! 👋 I'm Astra AI, your AI nutrition assistant.\n\nTo get started, please tap the **Body Metrics** button (👤) at the top right to set up your body data.\n\nThen, ask me anything, upload a photo to scan your food, or ask for a personalized meal plan!\n\n*(Tip: When uploading a photo, add a message with details like counting pieces or ingredients for the most accurate calculation!)*",
+      content: "Hey! I'm **Astra**, your nutrition coach.\n\nI can scan meals from a photo, break down macros, build recipes and plan your day around your calorie and protein targets.\n\nFirst time? Tap the **Body Metrics** button (👤) up top so I can tailor everything to you.\n\n*Tip: when you send a food photo, add a note like \"2 rotis, cooked in ghee\" for a far more accurate estimate.*",
       timestamp: new Date(),
     },
   ]);
@@ -64,6 +64,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   const [sessionId, setSessionId] = useState<number | undefined>();
   const [previewImage, setPreviewImage] = useState<{ url: string; base64: string; mime: string } | null>(null);
   const [loggingMessageId, setLoggingMessageId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isWakingUp, setIsWakingUp] = useState(false);
   
   // History Drawer State
@@ -272,13 +273,14 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     }
   };
 
-  const handleSend = async () => {
-    if ((!input.trim() && !previewImage) || loading) return;
+  const handleSend = async (overrideText?: string) => {
+    const text = (overrideText ?? input).trim();
+    if ((!text && !previewImage) || loading) return;
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: input.trim() || 'Scan this food',
+      content: text || 'Scan this food',
       timestamp: new Date(),
       isImage: !!previewImage,
       imageUrl: previewImage?.url,
@@ -407,11 +409,63 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     }
   };
 
-  const suggestions = [
-    "Scan a meal",
-    "High-protein breakfast recipe",
-    "Generate a daily meal plan",
-    "Compare paneer vs chicken",
+  const handleCopy = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 1800);
+    } catch { /* clipboard unavailable */ }
+  };
+
+  /** Drops the last answer and re-asks the preceding question. */
+  const handleRegenerate = () => {
+    if (loading) return;
+    const lastUser = [...messages].reverse().find(m => m.role === 'user' && !m.isImage);
+    if (!lastUser) return;
+    setMessages(prev => {
+      const copy = [...prev];
+      while (copy.length && copy[copy.length - 1].role === 'assistant') copy.pop();
+      return copy;
+    });
+    handleSend(lastUser.content);
+  };
+
+  // Grouped starters. `send: true` fires immediately; otherwise the text is
+  // placed in the input so the user can edit before sending.
+  const quickActions = [
+    {
+      icon: Camera,
+      label: 'Scan a meal',
+      hint: 'Photo → macros',
+      action: 'camera' as const,
+    },
+    {
+      icon: Flame,
+      label: "What should I eat next?",
+      hint: 'Based on today',
+      prompt: "Based on what I've eaten today, what should I eat next to hit my goals?",
+      send: true,
+    },
+    {
+      icon: ChefHat,
+      label: 'High-protein recipe',
+      hint: 'Quick & simple',
+      prompt: 'Give me a high-protein recipe I can make in 20 minutes.',
+      send: true,
+    },
+    {
+      icon: CalendarDays,
+      label: 'Plan my day',
+      hint: 'Full meal plan',
+      prompt: 'Generate a full day meal plan that hits my calorie and protein goals.',
+      send: true,
+    },
+    {
+      icon: Scale,
+      label: 'Compare two foods',
+      hint: 'Side by side',
+      prompt: 'Compare paneer vs chicken breast for muscle gain.',
+    },
   ];
 
   return (
@@ -528,13 +582,12 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6 scrollbar-thin bg-transparent relative z-10">
-        {messages.map((msg, i) => (
+        {messages.map((msg, idx) => (
           <motion.div
             key={msg.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i === messages.length - 1 ? 0 : 0 }}
-            className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+            className={`group flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
           >
             <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-1 ${
               msg.role === 'user' ? 'bg-sienna/20 shadow-lg shadow-sienna/10' : 'bg-gradient-to-tr from-sienna to-orange-500 shadow-sm shadow-sienna/20'
@@ -614,6 +667,29 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
                   </div>
                 </div>
               )}
+
+              {/* Assistant message actions */}
+              {msg.role === 'assistant' && msg.id !== 'welcome' && !msg.nutritionData && msg.content && (
+                <div className="flex items-center gap-1 mt-1 self-start opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => handleCopy(msg.id, msg.content)}
+                    title="Copy"
+                    className="p-1.5 rounded-lg text-bone-dim hover:text-bone hover:bg-white/10 transition-colors"
+                  >
+                    {copiedId === msg.id ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+                  </button>
+                  {idx === messages.length - 1 && (
+                    <button
+                      onClick={handleRegenerate}
+                      disabled={loading}
+                      title="Regenerate response"
+                      className="p-1.5 rounded-lg text-bone-dim hover:text-bone hover:bg-white/10 transition-colors disabled:opacity-40"
+                    >
+                      <RefreshCw size={13} />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </motion.div>
         ))}
@@ -656,18 +732,37 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Suggestions */}
-      {!previewImage && messages.length <= 2 && (
-        <div className="px-5 pb-3 flex flex-wrap gap-2 bg-ink-2">
-          {suggestions.map((s, i) => (
-            <button
-              key={i}
-              onClick={() => { setInput(s); }}
-              className="text-[12px] px-3.5 py-2 rounded-full bg-white/[0.03] border border-white/[0.06] text-bone-dim hover:text-bone hover:bg-white/[0.08] hover:border-white/10 transition-all active:scale-95"
-            >
-              {s}
-            </button>
-          ))}
+      {/* Quick actions */}
+      {!previewImage && messages.length <= 2 && !loading && (
+        <div className="px-4 pb-3 bg-ink-2">
+          <div className="flex items-center gap-1.5 mb-2 text-[10px] font-semibold uppercase tracking-wider text-bone-dim/70">
+            <Sparkles size={11} className="text-sienna" />
+            Try one of these
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {quickActions.map((a, i) => {
+              const Icon = a.icon;
+              const isWide = i === quickActions.length - 1 && quickActions.length % 2 === 1;
+              return (
+                <button
+                  key={a.label}
+                  onClick={() => {
+                    if (a.action === 'camera') { setShowCamera(true); return; }
+                    if (a.send) { handleSend(a.prompt); } else { setInput(a.prompt || ''); }
+                  }}
+                  className={`group flex items-start gap-2.5 p-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.06] text-left hover:bg-white/[0.07] hover:border-sienna/30 active:scale-[0.97] transition-all ${isWide ? 'col-span-2' : ''}`}
+                >
+                  <span className="w-7 h-7 rounded-xl bg-sienna/15 border border-sienna/20 flex items-center justify-center shrink-0 group-hover:bg-sienna/25 transition-colors">
+                    <Icon size={14} className="text-sienna" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12px] font-semibold text-bone leading-tight truncate">{a.label}</span>
+                    <span className="block text-[10px] text-bone-dim mt-0.5 truncate">{a.hint}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 

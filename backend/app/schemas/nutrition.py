@@ -8,18 +8,18 @@ from pydantic import BaseModel, Field
 # ─── Requests ─────────────────────────────────────────────
 
 class FoodAnalyzeRequest(BaseModel):
-    image_base64: str
-    mime_type: str = "image/jpeg"
-    meal_type: str = "snack"  # breakfast, lunch, dinner, snack
+    image_base64: str = Field(..., max_length=8_000_000)
+    mime_type: str = Field("image/jpeg", max_length=64)
+    meal_type: str = Field("snack", max_length=20)  # breakfast, lunch, dinner, snack
     session_id: Optional[int] = None
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=4000)
     session_id: Optional[int] = None
 
 class RecipeGenerateRequest(BaseModel):
-    query: str
-    cuisine: Optional[str] = None
+    query: str = Field(..., min_length=1, max_length=1000)
+    cuisine: Optional[str] = Field(None, max_length=60)
 
 class MealPlanRequest(BaseModel):
     plan_type: str = "daily"  # daily, weekly

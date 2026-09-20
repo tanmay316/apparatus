@@ -16,6 +16,7 @@ import {
   markClanMessageRead
 } from '@/services/community';
 import type { ClanMessage, ClanMessageReplyTo } from '@/types';
+import { LiveUserName, LiveUserAvatar } from '@/components/ui/LiveUser';
 
 interface ClanDiscussionTabProps {
   clanId: string;
@@ -460,11 +461,7 @@ export function ClanDiscussionTab({
                   {!isMe && (
                     <div className={`w-7 h-7 shrink-0 ${!isPrevSameAuthor ? 'rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold text-xs mt-0.5' : 'invisible'}`}>
                       {!isPrevSameAuthor && (
-                        msg.userPhoto ? (
-                          <img src={msg.userPhoto} alt={msg.userName} className="w-full h-full object-cover rounded-full" />
-                        ) : (
-                          msg.userName?.charAt(0)?.toUpperCase() || 'M'
-                        )
+                        <LiveUserAvatar userId={msg.userId} fallbackName={msg.userName} fallbackPhoto={msg.userPhoto} className="w-full h-full object-cover rounded-full" />
                       )}
                     </div>
                   )}
@@ -591,7 +588,7 @@ export function ClanDiscussionTab({
                     {/* Sender Name & Role on incoming */}
                     {!isMe && !isPrevSameAuthor && (
                       <div className="flex items-center gap-1.5 ml-2 mb-1">
-                        <span className="text-xs font-bold text-sienna/90">{msg.userName}</span>
+                        <LiveUserName userId={msg.userId} fallbackName={msg.userName} className="text-xs font-bold text-sienna/90" />
                         {isLeader && (
                           <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-0.5">
                             <Crown size={9} /> Leader

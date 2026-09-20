@@ -14,6 +14,7 @@ import { CelebrationPodiumCard } from './CelebrationPodiumCard';
 import { EditPostSheet } from './EditPostSheet';
 import { ClanPollCard } from './ClanPollCard';
 import { getAppShareUrl, shareContent } from '@/lib/share';
+import { useLiveDisplayName } from '@/hooks/useLiveDisplayName';
 
 function timeAgo(date: any): string {
   if (!date) return 'just now';
@@ -73,6 +74,8 @@ export function ClanPostItem({ post, onClick }: { post: CommunityPost, onClick: 
 
   const isAuthor = user?.uid === currentPost.authorId;
   const canManage = isAuthor || Boolean(profile?.isAdmin);
+  // Resolve the author's current name/photo live instead of the copy stored on the post.
+  const { displayName: liveAuthorName, photoURL: liveAuthorPhoto } = useLiveDisplayName(currentPost.authorId, currentPost.authorName, currentPost.authorPhoto);
 
   const handleToggleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -118,7 +121,7 @@ export function ClanPostItem({ post, onClick }: { post: CommunityPost, onClick: 
   const handleShare = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const shareUrl = getAppShareUrl(`/post/${currentPost.id}`);
-    const shareTitle = currentPost.title || `Post by ${currentPost.authorName}`;
+    const shareTitle = currentPost.title || `Post by ${liveAuthorName}`;
 
     const res = await shareContent({
       title: shareTitle,
@@ -178,16 +181,16 @@ export function ClanPostItem({ post, onClick }: { post: CommunityPost, onClick: 
         <div className="flex items-center justify-between gap-3 mb-4 relative z-20">
           <div className="flex items-start md:items-center gap-3 min-w-0">
             <div className="w-10 h-10 md:w-11 md:h-11 rounded-full shadow-[3px_3px_6px_rgba(0,0,0,0.1),-3px_-3px_6px_rgba(255,255,255,1)] overflow-hidden bg-[#fdfbfb] flex items-center justify-center text-[#17191c] font-bold text-sm shrink-0 border border-[#ececec]/60">
-              {currentPost.authorPhoto ? (
-                <img src={currentPost.authorPhoto} alt={currentPost.authorName} className="w-full h-full object-cover" />
+              {liveAuthorPhoto ? (
+                <img src={liveAuthorPhoto} alt={liveAuthorName} className="w-full h-full object-cover" />
               ) : (
-                currentPost.authorName?.charAt(0)?.toUpperCase() || '?'
+                liveAuthorName?.charAt(0)?.toUpperCase() || '?'
               )}
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
                 <span className="font-bold text-sm text-[#17191c] truncate max-w-[140px] sm:max-w-[200px]">
-                  {currentPost.authorName}
+                  {liveAuthorName}
                 </span>
                 {currentPost.clanName && (
                   <span className="text-[9px] md:text-[10px] font-mono font-medium uppercase px-2.5 py-0.5 rounded-full bg-[#fdfbfb] text-[#5d2a1a] border border-[#5d2a1a]/15 shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] shrink-0">

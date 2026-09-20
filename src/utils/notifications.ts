@@ -36,6 +36,19 @@ export async function setupNotificationChannels() {
 export async function initPushNotifications(userId: string) {
   if (!Capacitor.isNativePlatform()) return;
   try {
+    // iOS gates local and push notifications behind separate permission grants;
+    // asking only for push leaves in-app local notifications silently disabled.
+    if (Capacitor.getPlatform() === 'ios') {
+      try {
+        const localCheck = await LocalNotifications.checkPermissions();
+        if (localCheck.display !== 'granted') {
+          await LocalNotifications.requestPermissions();
+        }
+      } catch (e) {
+        console.warn('iOS local notification permission request failed:', e);
+      }
+    }
+
     let perm = await PushNotifications.checkPermissions();
     if (perm.receive !== 'granted') {
       perm = await PushNotifications.requestPermissions();

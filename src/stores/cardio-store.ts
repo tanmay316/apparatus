@@ -123,15 +123,31 @@ function attachVisibilityListener() {
   if (visibilityListenerAttached) return;
   visibilityListenerAttached = true;
 
+  const resyncIfTracking = async () => {
+    const state = useCardioStore.getState();
+    if (Capacitor.isNativePlatform() && state.isTracking) {
+      await reattachNativeListeners();
+      await syncWithNativeSession();
+    }
+  };
+
   document.addEventListener('visibilitychange', async () => {
     if (document.visibilityState === 'visible') {
-      const state = useCardioStore.getState();
-      if (Capacitor.isNativePlatform() && state.isTracking) {
-        await reattachNativeListeners();
-        await syncWithNativeSession();
-      }
+      await resyncIfTracking();
     }
   });
+
+  // iOS WKWebView does not always emit visibilitychange when returning from the
+  // background, so also resync on Capacitor's native app lifecycle event.
+  if (Capacitor.isNativePlatform()) {
+    import('@capacitor/app')
+      .then(({ App }) => {
+        App.addListener('appStateChange', ({ isActive }) => {
+          if (isActive) void resyncIfTracking();
+        });
+      })
+      .catch(() => { /* @capacitor/app unavailable — visibilitychange still covers it */ });
+  }
 }
 
 /**

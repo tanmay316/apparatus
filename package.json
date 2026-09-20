@@ -9,7 +9,10 @@
     "preview": "vite preview",
     "lint": "tsc --noEmit",
     "deploy": "npm run build && firebase deploy --only hosting",
-    "ota:upload": "npm run build && npx otakit upload --release"
+    "ota:upload": "npm run build && npx otakit upload --release",
+    "ios:setup": "bash ./ios-native/setup-ios.sh",
+    "ios:sync": "npm run build && cp ios-native/App/*.swift ios/App/App/ && npx cap sync ios",
+    "ios:open": "npx cap open ios"
   },
   "dependencies": {
     "@capacitor-community/native-audio": "^8.0.0",
@@ -27,6 +30,7 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/geolocation": "^8.2.1",
     "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.5.0",
     "@capacitor/keyboard": "^8.0.5",
     "@capacitor/local-notifications": "^8.2.1",
     "@capacitor/motion": "^8.0.1",

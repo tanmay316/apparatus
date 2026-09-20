@@ -18,8 +18,16 @@ const config: CapacitorConfig = {
       iconColor: '#e07a5f'
     },
     PushNotifications: {
-      presentationOptions: ["badge", "sound"]
+      presentationOptions: ["badge", "sound", "alert"]
     }
+  },
+  ios: {
+    // The UI already handles notch/home-indicator spacing via env(safe-area-inset-*)
+    // together with viewport-fit=cover, so let the webview render edge-to-edge
+    // instead of insetting it natively (which would double the padding).
+    contentInset: 'never',
+    limitsNavigationsToAppBoundDomains: false,
+    backgroundColor: '#00000000'
   },
   server: {
     hostname: 'apparatus.app',

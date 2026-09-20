@@ -360,17 +360,42 @@ export async function resolveExerciseVideo(exerciseName: string, directYtLink?: 
         if (bestVideo && maxScore > -100) {
           return cacheAndReturn(bestVideo, bestTitle, 'youtube', data.nextPageToken);
         }
-      } else {
-        // Cache failure (7 days TTL)
-        setDoc(doc(db, 'exerciseVideoMappings', norm), {
-          youtubeId: null,
-          exerciseName: norm,
-          status: 'not_found',
-          updatedAt: Date.now(),
-          expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000 
-        }, { merge: true }).catch(console.warn);
+        // No item scored well enough — fall through to the Invidious fallback below
+        // instead of giving up, so a weak/no match doesn't hide the video entirely.
       }
-      return null;
+      // Note: don't cache a "not_found" result yet — the Invidious fallback below
+      // still gets a chance to find a video before we give up for real.
+    } else if (res.status === 403 || res.status === 400) {
+      // Quota exceeded or key restricted for this platform — retry once with the other key.
+      const altKey = apiKey === YT_ANDROID_KEY ? YT_WEB_KEY : YT_ANDROID_KEY;
+      try {
+        const altParams = new URLSearchParams(params);
+        altParams.set('key', altKey);
+        const altRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${altParams.toString()}`, { signal });
+        if (altRes.ok) {
+          const altData = await altRes.json();
+          if (altData.items && altData.items.length > 0) {
+            let bestVideo: string | null = null;
+            let maxScore = -999;
+            let bestTitle = '';
+            altData.items.forEach((item: any) => {
+              const vId = item.id?.videoId;
+              if (!vId) return;
+              const score = scoreVideo(item.snippet?.title || '', exerciseName);
+              if (score > maxScore) {
+                maxScore = score;
+                bestVideo = vId;
+                bestTitle = item.snippet?.title || '';
+              }
+            });
+            if (bestVideo && maxScore > -100) {
+              return cacheAndReturn(bestVideo, bestTitle, 'youtube', altData.nextPageToken);
+            }
+          }
+        }
+      } catch (altErr) {
+        console.warn('Alternate YouTube API key also failed:', altErr);
+      }
     }
   } catch (err) {
     console.warn("YouTube API request failed, falling back:", err);
@@ -424,6 +449,15 @@ export async function resolveExerciseVideo(exerciseName: string, directYtLink?: 
   } catch (e) {
     console.warn("All Invidious fallback instances failed.");
   }
+
+  // Nothing found anywhere — cache the miss briefly so we don't hammer the APIs again immediately.
+  setDoc(doc(db, 'exerciseVideoMappings', norm), {
+    youtubeId: null,
+    exerciseName: norm,
+    status: 'not_found',
+    updatedAt: Date.now(),
+    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
+  }, { merge: true }).catch(console.warn);
 
   return null;
 }
@@ -513,7 +547,7 @@ export async function refreshExerciseVideo(
 
   // 3. Query YouTube Data API
   try {
-    const searchYouTube = async (token?: string | null) => {
+    const searchYouTube = async (token?: string | null, keyOverride?: string) => {
       const params = new URLSearchParams({
         part: 'snippet',
         maxResults: '5',
@@ -523,7 +557,7 @@ export async function refreshExerciseVideo(
         videoSyndicated: 'true',
         order: 'relevance',
         relevanceLanguage: 'en',
-        key: apiKey,
+        key: keyOverride || apiKey,
       });
       if (token) {
         params.set('pageToken', token);
@@ -536,7 +570,14 @@ export async function refreshExerciseVideo(
       });
       clearTimeout(timeout);
 
-      if (!res.ok) return null;
+      if (!res.ok) {
+        // Quota exceeded or key restricted — retry once with the other platform's key.
+        if ((res.status === 403 || res.status === 400) && !keyOverride) {
+          const altKey = apiKey === YT_ANDROID_KEY ? YT_WEB_KEY : YT_ANDROID_KEY;
+          return await searchYouTube(token, altKey);
+        }
+        return null;
+      }
       return await res.json();
     };
 
