@@ -1,5 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { ForegroundService, ServiceType } from '@capawesome-team/capacitor-android-foreground-service';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import { useCardioStore } from '@/stores/cardio-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 
@@ -10,8 +11,40 @@ export type ForegroundServiceType = 'cardio' | 'gym';
 const GYM_NOTIFICATION_ID = 102;
 let latestForegroundServiceType: ForegroundServiceType | null = null;
 
+// @capawesome-team/capacitor-android-foreground-service has no iOS implementation,
+// so every call must be Android-gated. iOS keeps the user informed with an ongoing
+// local notification instead (and, for cardio, the system location indicator).
+const isAndroid = () => Capacitor.getPlatform() === 'android';
+const isIOS = () => Capacitor.getPlatform() === 'ios';
+
+async function showIOSOngoingNotification(title: string, body: string) {
+  try {
+    const check = await LocalNotifications.checkPermissions();
+    if (check.display !== 'granted') {
+      const req = await LocalNotifications.requestPermissions();
+      if (req.display !== 'granted') return;
+    }
+    await LocalNotifications.schedule({
+      notifications: [{ id: GYM_NOTIFICATION_ID, title, body, ongoing: true, autoCancel: false }],
+    });
+  } catch (err) {
+    console.warn('[ForegroundService] iOS ongoing notification failed:', err);
+  }
+}
+
 export async function requestForegroundPermissions() {
   if (!Capacitor.isNativePlatform()) return true;
+  if (isIOS()) {
+    try {
+      const check = await LocalNotifications.checkPermissions();
+      if (check.display === 'granted') return true;
+      const req = await LocalNotifications.requestPermissions();
+      return req.display === 'granted';
+    } catch {
+      return false;
+    }
+  }
+  if (!isAndroid()) return true;
   try {
     const status = await ForegroundService.checkPermissions();
     if (status.display !== 'granted') {
@@ -28,6 +61,11 @@ export async function requestForegroundPermissions() {
 export async function startWorkoutForegroundService(type: ForegroundServiceType, title: string, body: string, isPaused: boolean) {
   if (!Capacitor.isNativePlatform()) return;
   latestForegroundServiceType = type;
+  if (isIOS()) {
+    await showIOSOngoingNotification(title, body);
+    return;
+  }
+  if (!isAndroid()) return;
   try {
     await ForegroundService.startForegroundService({
       id: GYM_NOTIFICATION_ID,
@@ -49,6 +87,11 @@ export async function startWorkoutForegroundService(type: ForegroundServiceType,
 export async function updateWorkoutForegroundService(type: ForegroundServiceType, title: string, body: string, isPaused: boolean) {
   if (!Capacitor.isNativePlatform()) return;
   latestForegroundServiceType = type;
+  if (isIOS()) {
+    await showIOSOngoingNotification(title, body);
+    return;
+  }
+  if (!isAndroid()) return;
   try {
     await ForegroundService.updateForegroundService({
       id: GYM_NOTIFICATION_ID,
@@ -68,6 +111,14 @@ export async function updateWorkoutForegroundService(type: ForegroundServiceType
 
 export async function stopWorkoutForegroundService(type: ForegroundServiceType = 'gym') {
   if (!Capacitor.isNativePlatform()) return;
+  if (isIOS()) {
+    try {
+      await LocalNotifications.cancel({ notifications: [{ id: GYM_NOTIFICATION_ID }] });
+    } catch { /* already dismissed */ }
+    latestForegroundServiceType = null;
+    return;
+  }
+  if (!isAndroid()) return;
   try {
     await ForegroundService.stopForegroundService();
     latestForegroundServiceType = null;
@@ -81,6 +132,9 @@ export async function setupForegroundServiceListeners(
   onStop: () => void
 ) {
   if (!Capacitor.isNativePlatform()) return;
+  // Notification action buttons are an Android foreground-service feature; on iOS
+  // the user controls the session from the app itself.
+  if (!isAndroid()) return;
   try {
     await ForegroundService.removeAllListeners();
     await ForegroundService.addListener('buttonClicked', (event) => {

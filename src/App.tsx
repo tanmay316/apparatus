@@ -105,10 +105,20 @@ function PreferencesSync() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const key = 'forced-light-theme-reset-v2';
-    if (!localStorage.getItem(key)) {
-      localStorage.setItem(key, 'true');
-      setTheme('light');
+    // One-time migration (already applied to existing installs). For genuinely new installs
+    // (no stored preference at all) respect the device's system light/dark setting instead of
+    // always forcing light — that mismatch was making the app's colors look "wrong" on
+    // dark-mode phones.
+    const migrationKey = 'forced-light-theme-reset-v2';
+    const hasStoredPreference = !!localStorage.getItem('apparatus-preferences');
+    if (!localStorage.getItem(migrationKey)) {
+      localStorage.setItem(migrationKey, 'true');
+      if (!hasStoredPreference) {
+        const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+        setTheme(prefersDark ? 'dark' : 'light');
+      } else {
+        setTheme('light');
+      }
     }
   }, [setTheme]);
 
@@ -119,10 +129,20 @@ function PreferencesSync() {
     // Status Bar config to prevent overlap and adjust colors dynamically
     if (Capacitor.isNativePlatform()) {
       import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
-        StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+        // setOverlaysWebView / setBackgroundColor are Android-only; on iOS the
+        // status bar sits over the webview and is spaced via safe-area insets.
+        if (Capacitor.getPlatform() === 'android') {
+          StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+          StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#090605' : '#FFFFFF' }).catch(() => {});
+        }
         StatusBar.setStyle({ style: theme === 'dark' ? Style.Dark : Style.Light }).catch(() => {});
-        StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#090605' : '#FFFFFF' }).catch(() => {});
       }).catch(() => {});
+    }
+
+    // Keep the browser/PWA chrome colour in sync with the active theme.
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) {
+      themeMeta.setAttribute('content', theme === 'dark' ? '#14151A' : '#FFFFFF');
     }
   }, [theme, language]);
 

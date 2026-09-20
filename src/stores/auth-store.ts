@@ -196,12 +196,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           console.error('Native GoogleAuth error:', nativeErr);
           set({ loading: false });
           const msg = nativeErr?.message || String(nativeErr);
-          if (msg.includes('12500') || msg.includes('APIException')) {
+          const platform = Capacitor.getPlatform();
+
+          if (platform === 'ios') {
+            useUIStore.getState().showToast(
+              'Native Google Sign-In unavailable. Set VITE_GOOGLE_IOS_CLIENT_ID and add the reversed client id URL scheme in Xcode.',
+              'error'
+            );
+          } else if (msg.includes('12500') || msg.includes('APIException')) {
             useUIStore.getState().showToast('Firebase Error: SHA-1 fingerprint missing in Firebase Console for this Android app.', 'error');
           } else {
             useUIStore.getState().showToast(`Native Login Failed: ${msg}`, 'error');
           }
-          return; // STOP! Don't fallback to web OAuth on Android
+          return;
         }
       }
 

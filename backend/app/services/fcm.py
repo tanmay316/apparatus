@@ -41,10 +41,10 @@ def process_notification(doc_data, doc_id, is_app_notification=False):
         "link": link,
         "clanId": clan_id,
         "type": extra_type
-    })
+    }, channel_id="clan_chat_messages" if extra_type == "clan_message" else "general_notifications")
 
 
-def send_push_notification(user_id: str, title: str, body: str, data_payload: dict):
+def send_push_notification(user_id: str, title: str, body: str, data_payload: dict, channel_id: str = "general_notifications"):
     db = get_firestore_client()
     messaging = get_messaging_client()
     if not db or not messaging:
@@ -79,6 +79,17 @@ def send_push_notification(user_id: str, title: str, body: str, data_payload: di
             notification=messaging.Notification(
                 title=title,
                 body=body,
+            ),
+            # Without an explicit Android channel + high priority, some OEMs (and Android's
+            # default low-importance channel) will silently drop or delay the notification
+            # when the app is backgrounded/killed, which is why delivery was inconsistent
+            # across devices even though the payload included a top-level "notification" field.
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    channel_id=channel_id,
+                    priority="high",
+                ),
             ),
             data=str_data_payload,
             tokens=unique_tokens,

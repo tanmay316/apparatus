@@ -8,6 +8,7 @@
     <meta name="theme-color" content="#14151A" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Apparatus" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="apple-touch-icon" href="/app-icon-512.png" />
@@ -26,11 +27,13 @@
             var state = JSON.parse(store).state;
             if (state && state.theme) {
               document.documentElement.dataset.theme = state.theme;
+              return;
             }
-          } else {
-            // Default to dark theme if no preference
-            document.documentElement.dataset.theme = 'dark';
           }
+          // No stored preference yet (fresh install) — match the device's system setting
+          // instead of hardcoding one theme, so first paint doesn't look "wrong" and then flip.
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.dataset.theme = prefersDark ? 'dark' : 'light';
         } catch (e) {}
       })();
     </script>

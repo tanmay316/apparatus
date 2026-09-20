@@ -195,25 +195,20 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
 
       const fileName = `apparatus-${data.type}-${format(new Date(data.date), 'yyyy-MM-dd')}.png`;
 
-      // 1. Native Mobile App (Capacitor)
+      // 1. Native Mobile App (Capacitor) — save directly to device storage, no share sheet.
       if (Capacitor.isNativePlatform()) {
         try {
           const base64Data = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
-          const fileResult = await Filesystem.writeFile({
-            path: fileName,
+          await Filesystem.writeFile({
+            path: `Apparatus/${fileName}`,
             data: base64Data,
-            directory: Directory.Cache,
-          });
-
-          await Share.share({
-            title: `Save ${typeLabel} Workout`,
-            files: [fileResult.uri],
-            dialogTitle: 'Save Workout Card',
+            directory: Directory.Documents,
+            recursive: true,
           });
 
           setDidCopy(true);
           setTimeout(() => setDidCopy(false), 2200);
-          useUIStore.getState().showToast('Workout card ready!', 'success');
+          useUIStore.getState().showToast('Saved to Documents/Apparatus', 'success');
           return;
         } catch (capErr: any) {
           if (capErr?.name === 'AbortError' || capErr?.message?.includes('canceled') || capErr?.message?.includes('cancelled')) {

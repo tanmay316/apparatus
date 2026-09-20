@@ -80,8 +80,9 @@ export function ProfilePage() {
   const [cardioShareData, setCardioShareData] = useState<CardioShareData | null>(null);
   const [selectedMedalToShare, setSelectedMedalToShare] = useState<any | null>(null);
   const [feedTab, setFeedTab] = useState<'activity' | 'communities' | 'posts' | 'bookmarks' | 'events'>('activity');
-  const [showAllActivities, setShowAllActivities] = useState(false);
-  const [showAllTimeline, setShowAllTimeline] = useState(false);
+  const ACTIVITIES_PAGE_SIZE = 10;
+  const [visibleActivitiesCount, setVisibleActivitiesCount] = useState(ACTIVITIES_PAGE_SIZE);
+  const [visibleTimelineCount, setVisibleTimelineCount] = useState(ACTIVITIES_PAGE_SIZE);
 
   const { data: bookmarkedPosts = [] } = useQuery({
     queryKey: ['bookmarkedPosts', viewProfile?.bookmarks],
@@ -652,7 +653,7 @@ export function ProfilePage() {
                 </div>
               ) : (
                 <div className="relative pl-6 border-l border-[var(--border)] space-y-8">
-                  {publicWorkouts.slice(0, showAllTimeline ? publicWorkouts.length : 2).map((workout, idx) => {
+                  {publicWorkouts.slice(0, visibleTimelineCount).map((workout, idx) => {
                     const relativeTime = getRelativeTime(workout.date || new Date().toISOString());
                     return (
                       <div key={workout.id || idx} className="relative">
@@ -703,12 +704,20 @@ export function ProfilePage() {
                       </div>
                     );
                   })}
-                  {publicWorkouts.length > 2 && (
+                  {publicWorkouts.length > visibleTimelineCount && (
                     <button
-                      onClick={() => setShowAllTimeline(!showAllTimeline)}
+                      onClick={() => setVisibleTimelineCount(count => Math.min(count + ACTIVITIES_PAGE_SIZE, publicWorkouts.length))}
                       className="w-full py-2.5 mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--card)] transition-colors text-xs font-semibold uppercase tracking-wider"
                     >
-                      {showAllTimeline ? 'Show Less' : `Show ${publicWorkouts.length - 2} More Timeline Events`}
+                      {`Show ${Math.min(ACTIVITIES_PAGE_SIZE, publicWorkouts.length - visibleTimelineCount)} More Timeline Events`}
+                    </button>
+                  )}
+                  {visibleTimelineCount > ACTIVITIES_PAGE_SIZE && visibleTimelineCount >= publicWorkouts.length && (
+                    <button
+                      onClick={() => setVisibleTimelineCount(ACTIVITIES_PAGE_SIZE)}
+                      className="w-full py-2.5 mt-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--card)] transition-colors text-xs font-semibold uppercase tracking-wider"
+                    >
+                      Show Less
                     </button>
                   )}
                 </div>
@@ -812,7 +821,7 @@ export function ProfilePage() {
                     <p className="text-sm text-[var(--muted)]">No workouts logged yet.</p>
                   ) : (
                 <div className="space-y-4">
-                  {publicWorkouts.slice(0, showAllActivities ? publicWorkouts.length : 1).map(workout => {
+                  {publicWorkouts.slice(0, visibleActivitiesCount).map(workout => {
                     const isFeedActivity = Boolean(workout.details && workout.userId && (workout.summary || workout.details.activityType));
                     
                     let activityItem: ActivityType;
@@ -908,12 +917,20 @@ export function ProfilePage() {
                       />
                     );
                   })}
-                  {publicWorkouts.length > 1 && (
+                  {publicWorkouts.length > visibleActivitiesCount && (
                     <button
-                      onClick={() => setShowAllActivities(!showAllActivities)}
+                      onClick={() => setVisibleActivitiesCount(count => Math.min(count + ACTIVITIES_PAGE_SIZE, publicWorkouts.length))}
                       className="w-full py-3 mt-2 rounded-2xl border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--card)] transition-colors text-xs font-semibold uppercase tracking-wider"
                     >
-                      {showAllActivities ? 'Show Less' : `Show ${publicWorkouts.length - 1} More Activities`}
+                      {`Show ${Math.min(ACTIVITIES_PAGE_SIZE, publicWorkouts.length - visibleActivitiesCount)} More Activities`}
+                    </button>
+                  )}
+                  {visibleActivitiesCount > ACTIVITIES_PAGE_SIZE && visibleActivitiesCount >= publicWorkouts.length && (
+                    <button
+                      onClick={() => setVisibleActivitiesCount(ACTIVITIES_PAGE_SIZE)}
+                      className="w-full py-3 rounded-2xl border border-[var(--border)] bg-[var(--bg)] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--card)] transition-colors text-xs font-semibold uppercase tracking-wider"
+                    >
+                      Show Less
                     </button>
                   )}
                 </div>

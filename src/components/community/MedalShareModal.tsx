@@ -310,20 +310,15 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
 
       const fileName = `apparatus_medal_${badge.rank}_${Date.now()}.png`;
 
-      // 1. Native Mobile (Capacitor)
+      // 1. Native Mobile (Capacitor) — save directly to device storage, no share sheet.
       if (Capacitor.isNativePlatform()) {
         try {
           const base64Data = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
-          const fileResult = await Filesystem.writeFile({
-            path: fileName,
+          await Filesystem.writeFile({
+            path: `Apparatus/${fileName}`,
             data: base64Data,
-            directory: Directory.Cache,
-          });
-
-          await Share.share({
-            title: `Save Medal Card`,
-            files: [fileResult.uri],
-            dialogTitle: 'Save Medal Image',
+            directory: Directory.Documents,
+            recursive: true,
           });
 
           setDidCopy(true);

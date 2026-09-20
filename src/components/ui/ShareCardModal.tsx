@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Share2, Check, Image as ImageIcon, List } from 'lucide-react';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
+import { Capacitor } from '@capacitor/core';
 import { useUIStore } from '@/stores/ui-store';
 import { getActiveMuscles, getActiveMuscleScores, getActiveMusclesFromLogs, calculateShareVolume, calculateBodyweightReps, calculateTotalSets, isWarmupOrCooldown } from '@/lib/muscle-map';
 import { calculateWorkoutCalories } from '@/lib/calories';
@@ -740,13 +743,34 @@ export function ShareCardModal({ data: originalData, onClose }: Props) {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
+  const fileName = `apparatus-${data.dayTitle.toLowerCase().replace(/[^a-z0-9]/g, '-')}.png`;
+
   const handleShare = async () => {
     setSharing(true);
     try {
-      // Convert synchronously so navigator.share is called during the
+      if (!canvasRef.current) throw new Error('Share card is still generating');
+
+      // Native Android/iOS app: write to cache then hand off to the OS share sheet.
+      if (Capacitor.isNativePlatform()) {
+        const base64Data = canvasRef.current.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
+        const fileResult = await Filesystem.writeFile({
+          path: fileName,
+          data: base64Data,
+          directory: Directory.Cache,
+        });
+        await Share.share({
+          title: `${data.dayTitle} — Apparatus`,
+          text: `Crushed it 💪`,
+          files: [fileResult.uri],
+          dialogTitle: 'Share Workout Card',
+        });
+        return;
+      }
+
+      // Web: convert synchronously so navigator.share is called during the
       // original click gesture on mobile browsers.
       const blob = getBlobSynchronously();
-      const file = new File([blob], 'apparatus-workout.png', { type: 'image/png' });
+      const file = new File([blob], fileName, { type: 'image/png' });
 
       const canShareFiles = typeof navigator.share === 'function'
         && (!navigator.canShare || navigator.canShare({ files: [file] }));
@@ -760,7 +784,7 @@ export function ShareCardModal({ data: originalData, onClose }: Props) {
         downloadBlob(blob);
       }
     } catch (err: any) {
-      if (err?.name !== 'AbortError') {
+      if (err?.name !== 'AbortError' && !String(err?.message).toLowerCase().includes('cancel')) {
         console.error('Share failed:', err);
         try {
           downloadBlob(getBlobSynchronously());
@@ -775,9 +799,25 @@ export function ShareCardModal({ data: originalData, onClose }: Props) {
 
   const handleDownload = async () => {
     try {
+      if (!canvasRef.current) throw new Error('Share card is still generating');
+
+      // Native Android/iOS app: save directly to device storage — no share sheet.
+      if (Capacitor.isNativePlatform()) {
+        const base64Data = canvasRef.current.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
+        await Filesystem.writeFile({
+          path: `Apparatus/${fileName}`,
+          data: base64Data,
+          directory: Directory.Documents,
+          recursive: true,
+        });
+        useUIStore.getState().showToast('Saved to Documents/Apparatus', 'success');
+        return;
+      }
+
       downloadBlob(await getBlob());
     } catch (err) {
       console.error('Download failed:', err);
+      useUIStore.getState().showToast('Failed to save image. Please try again.', 'error');
     }
   };
 
