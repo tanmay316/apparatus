@@ -117,10 +117,15 @@ ruby -e '
 
       app_target.build_configurations.each do |config|
         config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'
+        fsp = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
+        fsp = [fsp] if fsp.is_a?(String)
+        fsp << '$(inherited)' unless fsp.include?('$(inherited)')
+        fsp << '"${PODS_CONFIGURATION_BUILD_DIR}/**"' unless fsp.include?('"${PODS_CONFIGURATION_BUILD_DIR}/**"')
+        config.build_settings['FRAMEWORK_SEARCH_PATHS'] = fsp
       end
 
       project.save
-      puts "✔ App.xcodeproj updated successfully (SWIFT_ENABLE_EXPLICIT_MODULES = NO)"
+      puts "✔ App.xcodeproj updated successfully (SWIFT_ENABLE_EXPLICIT_MODULES = NO, recursive FRAMEWORK_SEARCH_PATHS)"
     end
   rescue => e
     puts "Note: Xcode project registration warning: #{e.message}"
