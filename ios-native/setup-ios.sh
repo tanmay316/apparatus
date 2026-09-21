@@ -35,6 +35,10 @@ cp "$SRC_DIR/GpsKalmanFilter.swift"       "$IOS_APP_DIR/"
 cp "$SRC_DIR/WorkoutLocationStore.swift"  "$IOS_APP_DIR/"
 cp "$SRC_DIR/WorkoutLocationManager.swift" "$IOS_APP_DIR/"
 cp "$SRC_DIR/WorkoutLocationPlugin.swift" "$IOS_APP_DIR/"
+if [ -f "$SRC_DIR/GoogleService-Info.plist" ]; then
+  echo "==> Installing GoogleService-Info.plist"
+  cp "$SRC_DIR/GoogleService-Info.plist" "$IOS_APP_DIR/"
+fi
 
 echo "==> Patching Info.plist"
 pb() { /usr/libexec/PlistBuddy -c "$1" "$PLIST" >/dev/null 2>&1 || true; }

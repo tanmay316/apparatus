@@ -8,6 +8,7 @@
     <meta name="theme-color" content="#14151A" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Apparatus" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="apple-touch-icon" href="/app-icon-512.png" />
@@ -26,24 +27,25 @@
             var state = JSON.parse(store).state;
             if (state && state.theme) {
               document.documentElement.dataset.theme = state.theme;
+              return;
             }
-          } else {
-            // Default to dark theme if no preference
-            document.documentElement.dataset.theme = 'dark';
           }
+          // No stored preference yet (fresh install) — match the device's system setting
+          // instead of hardcoding one theme, so first paint doesn't look "wrong" and then flip.
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.dataset.theme = prefersDark ? 'dark' : 'light';
         } catch (e) {}
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-Dr36hkY7.js"></script>
+    <script type="module" crossorigin src="/assets/index-B3Rm60ze.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-CNC7AqOf.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-motion-BH4b_M8o.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-react-DwCb8qaz.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-BMm_7iJg.js">
     <link rel="modulepreload" crossorigin href="/assets/ui-store-DPWDRGrn.js">
     <link rel="modulepreload" crossorigin href="/assets/vendor-firebase-Bnjjy5Ma.js">
     <link rel="modulepreload" crossorigin href="/assets/dist-lsa6SoaF.js">
     <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
-    <link rel="modulepreload" crossorigin href="/assets/synapse-D5y-aojA.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-CRfzWOpn.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-CTC_KM4-.css">
   </head>
   <body class="bg-ink text-bone antialiased">
     <div id="root">
@@ -58,6 +60,6 @@
           }
         </style>
       </div>
-    </div>
+    </div>
   </body>
 </html>

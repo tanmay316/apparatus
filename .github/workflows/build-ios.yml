@@ -1,0 +1,64 @@
+name: Build iOS IPA (Free)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'ios-native/**'
+      - 'package.json'
+      - 'capacitor.config.ts'
+
+jobs:
+  build-ios:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Build Web Application
+        run: npm run build
+
+      - name: Setup iOS Project
+        run: |
+          chmod +x ./ios-native/setup-ios.sh
+          ./ios-native/setup-ios.sh
+
+      - name: Compile App with Xcode (Unsigned)
+        run: |
+          cd ios/App
+          xcodebuild clean build \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            SYMROOT=../../build
+
+      - name: Package .ipa
+        run: |
+          mkdir -p Payload
+          cp -r build/Release-iphoneos/App.app Payload/
+          zip -r Apparatus.ipa Payload
+
+      - name: Upload .ipa Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Apparatus-iOS-IPA
+          path: Apparatus.ipa
+          retention-days: 14
