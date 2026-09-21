@@ -36,14 +36,19 @@ node "$ROOT/ios-native/patch-ios.cjs"
 echo "==> Building web assets"
 npm run build
 
-echo "==> Installing native WorkoutLocation plugin sources"
-cp "$SRC_DIR/GpsKalmanFilter.swift"       "$IOS_APP_DIR/"
-cp "$SRC_DIR/WorkoutLocationStore.swift"  "$IOS_APP_DIR/"
-cp "$SRC_DIR/WorkoutLocationManager.swift" "$IOS_APP_DIR/"
-cp "$SRC_DIR/WorkoutLocationPlugin.swift" "$IOS_APP_DIR/"
+echo "==> Installing native WorkoutLocation plugin sources and config"
+mkdir -p "$ROOT/ios/App"
+mkdir -p "$IOS_APP_DIR"
+
+for file in "GpsKalmanFilter.swift" "WorkoutLocationStore.swift" "WorkoutLocationManager.swift" "WorkoutLocationPlugin.swift"; do
+  cp -f "$SRC_DIR/$file" "$ROOT/ios/App/"
+  cp -f "$SRC_DIR/$file" "$IOS_APP_DIR/"
+done
+
 if [ -f "$SRC_DIR/GoogleService-Info.plist" ]; then
   echo "==> Installing GoogleService-Info.plist"
-  cp "$SRC_DIR/GoogleService-Info.plist" "$IOS_APP_DIR/"
+  cp -f "$SRC_DIR/GoogleService-Info.plist" "$ROOT/ios/App/"
+  cp -f "$SRC_DIR/GoogleService-Info.plist" "$IOS_APP_DIR/"
 fi
 
 echo "==> Patching Info.plist"
@@ -90,7 +95,15 @@ node "$ROOT/ios-native/patch-ios.cjs"
 echo "==> Syncing Capacitor"
 npx cap sync ios
 
-echo "==> Ensuring Podfile post_install after sync"
+echo "==> Ensuring Podfile post_install and local source pods after sync"
+node "$ROOT/ios-native/patch-ios.cjs"
+
+echo "==> Installing pods with patched Podfile"
+cd "$ROOT/ios/App"
+pod install
+cd "$ROOT"
+
+echo "==> Ensuring native files are present in all target paths"
 node "$ROOT/ios-native/patch-ios.cjs"
 
 echo ""

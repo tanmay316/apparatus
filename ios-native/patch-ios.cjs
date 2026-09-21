@@ -40,6 +40,46 @@ if (fs.existsSync(geolocPluginSwift)) {
   }
 }
 
+const geolocErrorSwift = path.join(geolocDir, 'ios', 'Sources', 'GeolocationPlugin', 'GeolocationError.swift');
+if (fs.existsSync(geolocErrorSwift)) {
+  let content = fs.readFileSync(geolocErrorSwift, 'utf8');
+  if (content.includes('case .positionUnavailable: 2')) {
+    content = content.replace(
+      /private extension GeolocationError\s*\{[\s\S]*?\n\}/,
+      `private extension GeolocationError {
+    var code: Int {
+        switch self {
+        case .positionUnavailable: return 2
+        case .permissionDenied: return 3
+        case .locationServicesDisabled: return 7
+        case .permissionRestricted: return 8
+        case .inputArgumentsIssue(let target):
+            switch target {
+            case .getCurrentPosition: return 4
+            case .watchPosition: return 5
+            case .clearWatch: return 6
+            }
+        case .timeout: return 10
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .positionUnavailable: return "There was an error trying to obtain the location."
+        case .permissionDenied: return "Location permission request was denied."
+        case .locationServicesDisabled: return "Location services are not enabled."
+        case .permissionRestricted: return "Application's use of location services was restricted."
+        case .inputArgumentsIssue(let target): return "The '\\(target.rawValue)' input parameters aren't valid."
+        case .timeout: return "Could not obtain location in time. Try with a higher timeout."
+        }
+    }
+}`
+    );
+    fs.writeFileSync(geolocErrorSwift, content, 'utf8');
+    console.log('✔ Patched GeolocationError.swift return statements');
+  }
+}
+
 // 3. Patch @capacitor/ios pods_helpers.rb to ensure SWIFT_VERSION 5.9 and disable explicit modules
 const podsHelpers = path.join(ROOT, 'node_modules', '@capacitor', 'ios', 'scripts', 'pods_helpers.rb');
 if (fs.existsSync(podsHelpers)) {
@@ -136,6 +176,25 @@ if (fs.existsSync(pbxPath)) {
   }
 
   fs.writeFileSync(pbxPath, pbx, 'utf8');
+}
+
+// 6. Ensure native files are present in ios/App and ios/App/App
+const srcAppDir = path.join(ROOT, 'ios-native', 'App');
+if (fs.existsSync(srcAppDir)) {
+  const targetDirs = [
+    path.join(ROOT, 'ios', 'App'),
+    path.join(ROOT, 'ios', 'App', 'App')
+  ];
+
+  for (const dir of targetDirs) {
+    if (fs.existsSync(dir)) {
+      const files = fs.readdirSync(srcAppDir);
+      for (const file of files) {
+        fs.copyFileSync(path.join(srcAppDir, file), path.join(dir, file));
+      }
+      console.log(`✔ Copied native files to ${path.relative(ROOT, dir)}`);
+    }
+  }
 }
 
 console.log('==> iOS environment patches applied successfully.');
