@@ -20,6 +20,13 @@ SRC_DIR="$ROOT/ios-native/App"
 echo "==> Installing npm dependencies"
 npm install
 
+echo "==> Ensuring plugin podspecs match CocoaPods names"
+OTAKIT_DIR="$ROOT/node_modules/@otakit/capacitor-updater"
+if [ -d "$OTAKIT_DIR" ] && [ -f "$OTAKIT_DIR/OtaKitUpdater.podspec" ]; then
+  cp "$OTAKIT_DIR/OtaKitUpdater.podspec" "$OTAKIT_DIR/OtakitCapacitorUpdater.podspec"
+  sed -i '' "s/s.name = 'OtaKitUpdater'/s.name = 'OtakitCapacitorUpdater'/g" "$OTAKIT_DIR/OtakitCapacitorUpdater.podspec" 2>/dev/null || sed -i "s/s.name = 'OtaKitUpdater'/s.name = 'OtakitCapacitorUpdater'/g" "$OTAKIT_DIR/OtakitCapacitorUpdater.podspec" || true
+fi
+
 if [ ! -d "$ROOT/ios" ]; then
   echo "==> Creating iOS platform (using CocoaPods)"
   npx cap add ios --packagemanager cocoapods
