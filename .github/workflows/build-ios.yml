@@ -21,9 +21,9 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16
+      - name: Select Latest Xcode
         run: |
-          XCODE_PATH=$(find /Applications -maxdepth 1 -name "Xcode_16*.app" | sort -V | tail -n 1)
+          XCODE_PATH=$(find /Applications -maxdepth 1 -name "Xcode*.app" | sort -V | tail -n 1)
           if [ -n "$XCODE_PATH" ]; then
             echo "==> Selecting $XCODE_PATH"
             sudo xcode-select -s "$XCODE_PATH/Contents/Developer"

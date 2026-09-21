@@ -58,14 +58,24 @@ if (fs.existsSync(podsHelpers)) {
 const podfile = path.join(ROOT, 'ios', 'App', 'Podfile');
 if (fs.existsSync(podfile)) {
   let content = fs.readFileSync(podfile, 'utf8');
+
+  // Inject local source pod for IONGeolocationLib to avoid incompatible binary framework
+  if (!content.includes("pod 'IONGeolocationLib'")) {
+    content = content.replace(
+      /target\s+['"]App['"]\s+do/,
+      "target 'App' do\n  pod 'IONGeolocationLib', :path => '../../ios-native/IONGeolocationLib'"
+    );
+    console.log('✔ Injected local source IONGeolocationLib pod into Podfile');
+  }
+
   if (!content.includes("config.build_settings['SWIFT_VERSION']")) {
     content = content.replace(
       'assertDeploymentTarget(installer)',
       `assertDeploymentTarget(installer)\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings['SWIFT_VERSION'] = '5.9'\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n    end\n  end`
     );
-    fs.writeFileSync(podfile, content, 'utf8');
     console.log('✔ Patched ios/App/Podfile post_install');
   }
+  fs.writeFileSync(podfile, content, 'utf8');
 }
 
 console.log('==> iOS environment patches applied successfully.');
