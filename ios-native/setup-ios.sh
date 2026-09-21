@@ -114,8 +114,13 @@ ruby -e '
           puts "==> Registered #{file_name} in App target"
         end
       end
+
+      app_target.build_configurations.each do |config|
+        config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'
+      end
+
       project.save
-      puts "✔ App.xcodeproj updated successfully"
+      puts "✔ App.xcodeproj updated successfully (SWIFT_ENABLE_EXPLICIT_MODULES = NO)"
     end
   rescue => e
     puts "Note: Xcode project registration warning: #{e.message}"

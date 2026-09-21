@@ -40,17 +40,17 @@ if (fs.existsSync(geolocPluginSwift)) {
   }
 }
 
-// 3. Patch @capacitor/ios pods_helpers.rb to ensure SWIFT_VERSION 5.9 across all pods
+// 3. Patch @capacitor/ios pods_helpers.rb to ensure SWIFT_VERSION 5.9 and disable explicit modules
 const podsHelpers = path.join(ROOT, 'node_modules', '@capacitor', 'ios', 'scripts', 'pods_helpers.rb');
 if (fs.existsSync(podsHelpers)) {
   let content = fs.readFileSync(podsHelpers, 'utf8');
   if (!content.includes("config.build_settings['SWIFT_VERSION']")) {
     content = content.replace(
       'target.build_configurations.each do |config|',
-      "target.build_configurations.each do |config|\n      config.build_settings['SWIFT_VERSION'] = '5.9'"
+      "target.build_configurations.each do |config|\n      config.build_settings['SWIFT_VERSION'] = '5.9'\n      config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'"
     );
     fs.writeFileSync(podsHelpers, content, 'utf8');
-    console.log('✔ Patched pods_helpers.rb with SWIFT_VERSION 5.9');
+    console.log('✔ Patched pods_helpers.rb with SWIFT_VERSION 5.9 and SWIFT_ENABLE_EXPLICIT_MODULES NO');
   }
 }
 
@@ -68,10 +68,10 @@ if (fs.existsSync(podfile)) {
     console.log('✔ Injected local source IONGeolocationLib pod into Podfile');
   }
 
-  if (!content.includes("config.build_settings['SWIFT_VERSION']")) {
+  if (!content.includes("config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES']")) {
     content = content.replace(
       'assertDeploymentTarget(installer)',
-      `assertDeploymentTarget(installer)\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings['SWIFT_VERSION'] = '5.9'\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n    end\n  end`
+      `assertDeploymentTarget(installer)\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings['SWIFT_VERSION'] = '5.9'\n      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'\n      config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'\n    end\n  end`
     );
     console.log('✔ Patched ios/App/Podfile post_install');
   }
