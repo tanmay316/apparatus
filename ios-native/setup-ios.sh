@@ -21,8 +21,8 @@ echo "==> Installing npm dependencies"
 npm install
 
 if [ ! -d "$ROOT/ios" ]; then
-  echo "==> Creating iOS platform"
-  npx cap add ios
+  echo "==> Creating iOS platform (using CocoaPods)"
+  npx cap add ios --packagemanager cocoapods
 else
   echo "==> iOS platform already exists, skipping 'cap add'"
 fi
