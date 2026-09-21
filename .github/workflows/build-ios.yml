@@ -41,8 +41,21 @@ jobs:
       - name: Compile App with Xcode (Unsigned)
         run: |
           cd ios/App
+          if [ -f "Podfile" ] && [ ! -d "App.xcworkspace" ]; then
+            echo "==> Running pod install to create workspace..."
+            pod install || true
+          fi
+
+          if [ -d "App.xcworkspace" ]; then
+            echo "==> Found App.xcworkspace"
+            XC_TARGET="-workspace App.xcworkspace"
+          else
+            echo "==> Using App.xcodeproj"
+            XC_TARGET="-project App.xcodeproj"
+          fi
+
           xcodebuild clean build \
-            -workspace App.xcworkspace \
+            $XC_TARGET \
             -scheme App \
             -configuration Release \
             -sdk iphoneos \
@@ -54,8 +67,13 @@ jobs:
 
       - name: Package .ipa
         run: |
+          APP_PATH=$(find build -name "*.app" -type d | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find ios -name "*.app" -type d | head -n 1)
+          fi
+          echo "Found app at: $APP_PATH"
           mkdir -p Payload
-          cp -r build/Release-iphoneos/App.app Payload/
+          cp -r "$APP_PATH" Payload/
           zip -r Apparatus.ipa Payload
 
       - name: Upload .ipa Artifact
