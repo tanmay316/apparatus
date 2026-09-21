@@ -78,4 +78,64 @@ if (fs.existsSync(podfile)) {
   fs.writeFileSync(podfile, content, 'utf8');
 }
 
+// 5. Patch ios/App/App.xcodeproj/project.pbxproj if it exists
+const pbxPath = path.join(ROOT, 'ios', 'App', 'App.xcodeproj', 'project.pbxproj');
+if (fs.existsSync(pbxPath)) {
+  let pbx = fs.readFileSync(pbxPath, 'utf8');
+
+  if (!pbx.includes('SWIFT_ENABLE_EXPLICIT_MODULES = NO')) {
+    pbx = pbx.replace(
+      /(buildSettings\s*=\s*\{)/g,
+      '$1\n\t\t\t\tSWIFT_ENABLE_EXPLICIT_MODULES = NO;'
+    );
+    console.log('✔ Injected SWIFT_ENABLE_EXPLICIT_MODULES = NO into project.pbxproj');
+  }
+
+  const filesToAdd = [
+    { name: 'GpsKalmanFilter.swift', type: 'sourcecode.swift', phase: 'Sources' },
+    { name: 'WorkoutLocationStore.swift', type: 'sourcecode.swift', phase: 'Sources' },
+    { name: 'WorkoutLocationManager.swift', type: 'sourcecode.swift', phase: 'Sources' },
+    { name: 'WorkoutLocationPlugin.swift', type: 'sourcecode.swift', phase: 'Sources' },
+    { name: 'GoogleService-Info.plist', type: 'text.plist.xml', phase: 'Resources' }
+  ];
+
+  let buildFiles = '';
+  let fileRefs = '';
+  let sourcesEntries = '';
+  let resourcesEntries = '';
+  let groupEntries = '';
+
+  filesToAdd.forEach((f, i) => {
+    if (pbx.includes(f.name)) return;
+    const fileId = 'A1B2C3D4E5F6A7B8C9D00' + i + '1';
+    const buildId = 'A1B2C3D4E5F6A7B8C9D00' + i + '2';
+    
+    buildFiles += `\t\t${buildId} /* ${f.name} in ${f.phase} */ = {isa = PBXBuildFile; fileRef = ${fileId} /* ${f.name} */; };\n`;
+    fileRefs += `\t\t${fileId} /* ${f.name} */ = {isa = PBXFileReference; lastKnownFileType = ${f.type}; path = ${f.name}; sourceTree = "<group>"; };\n`;
+    groupEntries += `\t\t\t\t${fileId} /* ${f.name} */,\n`;
+    if (f.phase === 'Sources') {
+      sourcesEntries += `\t\t\t\t${buildId} /* ${f.name} in Sources */,\n`;
+    } else {
+      resourcesEntries += `\t\t\t\t${buildId} /* ${f.name} in Resources */,\n`;
+    }
+  });
+
+  if (buildFiles) {
+    pbx = pbx.replace('/* End PBXBuildFile section */', buildFiles + '/* End PBXBuildFile section */');
+    pbx = pbx.replace('/* End PBXFileReference section */', fileRefs + '/* End PBXFileReference section */');
+    if (sourcesEntries) {
+      pbx = pbx.replace(/(isa = PBXSourcesBuildPhase;[\s\S]*?files = \()/, `$1\n${sourcesEntries}`);
+    }
+    if (resourcesEntries) {
+      pbx = pbx.replace(/(isa = PBXResourcesBuildPhase;[\s\S]*?files = \()/, `$1\n${resourcesEntries}`);
+    }
+    if (groupEntries) {
+      pbx = pbx.replace(/(children = \(\n\s*504EC3071FED79650016851F \/\* AppDelegate\.swift \*\/,)/, `$1\n${groupEntries}`);
+    }
+    console.log('✔ Registered native Swift files in project.pbxproj');
+  }
+
+  fs.writeFileSync(pbxPath, pbx, 'utf8');
+}
+
 console.log('==> iOS environment patches applied successfully.');

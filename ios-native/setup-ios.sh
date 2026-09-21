@@ -81,56 +81,8 @@ pb "Add :UIBackgroundModes:2 string fetch"
 pb "Delete :UIViewControllerBasedStatusBarAppearance"
 pb "Add :UIViewControllerBasedStatusBarAppearance bool false"
 
-echo "==> Registering native files in App.xcodeproj"
-ruby -e '
-  begin
-    require "xcodeproj"
-    project_path = "ios/App/App.xcodeproj"
-    if File.exist?(project_path)
-      project = Xcodeproj::Project.open(project_path)
-      app_target = project.targets.find { |t| t.name == "App" }
-      app_group = project.main_group.find_subpath("App", true)
-      
-      files = [
-        "GpsKalmanFilter.swift",
-        "WorkoutLocationStore.swift",
-        "WorkoutLocationManager.swift",
-        "WorkoutLocationPlugin.swift",
-        "GoogleService-Info.plist"
-      ]
-      
-      files.each do |file_name|
-        full_path = File.join("ios/App/App", file_name)
-        next unless File.exist?(full_path)
-        
-        existing = app_group.files.find { |f| f.path == file_name || f.path == "App/#{file_name}" }
-        unless existing
-          file_ref = app_group.new_file(file_name)
-          if file_name.end_with?(".swift")
-            app_target.source_build_phase.add_file_reference(file_ref)
-          elsif file_name.end_with?(".plist")
-            app_target.resources_build_phase.add_file_reference(file_ref)
-          end
-          puts "==> Registered #{file_name} in App target"
-        end
-      end
-
-      app_target.build_configurations.each do |config|
-        config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES'] = 'NO'
-        fsp = config.build_settings['FRAMEWORK_SEARCH_PATHS'] || ['$(inherited)']
-        fsp = [fsp] if fsp.is_a?(String)
-        fsp << '$(inherited)' unless fsp.include?('$(inherited)')
-        fsp << '"${PODS_CONFIGURATION_BUILD_DIR}/**"' unless fsp.include?('"${PODS_CONFIGURATION_BUILD_DIR}/**"')
-        config.build_settings['FRAMEWORK_SEARCH_PATHS'] = fsp
-      end
-
-      project.save
-      puts "✔ App.xcodeproj updated successfully (SWIFT_ENABLE_EXPLICIT_MODULES = NO, recursive FRAMEWORK_SEARCH_PATHS)"
-    end
-  rescue => e
-    puts "Note: Xcode project registration warning: #{e.message}"
-  end
-' || true
+echo "==> Registering native files and project settings via Node.js"
+node "$ROOT/ios-native/patch-ios.cjs"
 
 echo "==> Re-applying patches before sync"
 node "$ROOT/ios-native/patch-ios.cjs"
