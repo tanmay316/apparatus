@@ -20,12 +20,8 @@ SRC_DIR="$ROOT/ios-native/App"
 echo "==> Installing npm dependencies"
 npm install
 
-echo "==> Ensuring plugin podspecs match CocoaPods names"
-OTAKIT_DIR="$ROOT/node_modules/@otakit/capacitor-updater"
-if [ -d "$OTAKIT_DIR" ] && [ -f "$OTAKIT_DIR/OtaKitUpdater.podspec" ]; then
-  cp "$OTAKIT_DIR/OtaKitUpdater.podspec" "$OTAKIT_DIR/OtakitCapacitorUpdater.podspec"
-  sed -i '' "s/s.name = 'OtaKitUpdater'/s.name = 'OtakitCapacitorUpdater'/g" "$OTAKIT_DIR/OtakitCapacitorUpdater.podspec" 2>/dev/null || sed -i "s/s.name = 'OtaKitUpdater'/s.name = 'OtakitCapacitorUpdater'/g" "$OTAKIT_DIR/OtakitCapacitorUpdater.podspec" || true
-fi
+echo "==> Running iOS dependency patches"
+node "$ROOT/ios-native/patch-ios.cjs"
 
 if [ ! -d "$ROOT/ios" ]; then
   echo "==> Creating iOS platform (using CocoaPods)"
@@ -33,6 +29,9 @@ if [ ! -d "$ROOT/ios" ]; then
 else
   echo "==> iOS platform already exists, skipping 'cap add'"
 fi
+
+echo "==> Applying post-add patches"
+node "$ROOT/ios-native/patch-ios.cjs"
 
 echo "==> Building web assets"
 npm run build
@@ -82,16 +81,56 @@ pb "Add :UIBackgroundModes:2 string fetch"
 pb "Delete :UIViewControllerBasedStatusBarAppearance"
 pb "Add :UIViewControllerBasedStatusBarAppearance bool false"
 
+echo "==> Registering native files in App.xcodeproj"
+ruby -e '
+  begin
+    require "xcodeproj"
+    project_path = "ios/App/App.xcodeproj"
+    if File.exist?(project_path)
+      project = Xcodeproj::Project.open(project_path)
+      app_target = project.targets.find { |t| t.name == "App" }
+      app_group = project.main_group.find_subpath("App", true)
+      
+      files = [
+        "GpsKalmanFilter.swift",
+        "WorkoutLocationStore.swift",
+        "WorkoutLocationManager.swift",
+        "WorkoutLocationPlugin.swift",
+        "GoogleService-Info.plist"
+      ]
+      
+      files.each do |file_name|
+        full_path = File.join("ios/App/App", file_name)
+        next unless File.exist?(full_path)
+        
+        existing = app_group.files.find { |f| f.path == file_name || f.path == "App/#{file_name}" }
+        unless existing
+          file_ref = app_group.new_file(file_name)
+          if file_name.end_with?(".swift")
+            app_target.source_build_phase.add_file_reference(file_ref)
+          elsif file_name.end_with?(".plist")
+            app_target.resources_build_phase.add_file_reference(file_ref)
+          end
+          puts "==> Registered #{file_name} in App target"
+        end
+      end
+      project.save
+      puts "✔ App.xcodeproj updated successfully"
+    end
+  rescue => e
+    puts "Note: Xcode project registration warning: #{e.message}"
+  end
+' || true
+
+echo "==> Re-applying patches before sync"
+node "$ROOT/ios-native/patch-ios.cjs"
+
 echo "==> Syncing Capacitor"
 npx cap sync ios
 
+echo "==> Ensuring Podfile post_install after sync"
+node "$ROOT/ios-native/patch-ios.cjs"
+
 echo ""
-echo "Done. Remaining manual steps in Xcode:"
-echo "  1. Drag the 4 WorkoutLocation*.swift / GpsKalmanFilter.swift files into the App target"
-echo "     if Xcode did not pick them up automatically (File > Add Files to 'App')."
-echo "  2. Add GoogleService-Info.plist (Firebase Console > iOS app) to the App target."
-echo "  3. Signing & Capabilities: add 'Background Modes' (Location updates, Remote"
-echo "     notifications) and 'Push Notifications'."
-echo "  4. Set your Team + bundle id 'com.tms.apparatus'."
-echo ""
+echo "Done iOS setup!"
 echo "Then:  npx cap open ios"

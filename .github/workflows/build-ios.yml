@@ -14,7 +14,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
 
     steps:
@@ -39,14 +39,8 @@ jobs:
       - name: Install Dependencies
         run: npm ci || npm install
 
-      - name: Patch Plugin Podspecs
-        run: |
-          OTAKIT_DIR="node_modules/@otakit/capacitor-updater"
-          if [ -d "$OTAKIT_DIR" ] && [ -f "$OTAKIT_DIR/OtaKitUpdater.podspec" ]; then
-            echo "==> Ensuring OtakitCapacitorUpdater.podspec exists"
-            cp "$OTAKIT_DIR/OtaKitUpdater.podspec" "$OTAKIT_DIR/OtakitCapacitorUpdater.podspec"
-            sed -i '' "s/s.name = 'OtaKitUpdater'/s.name = 'OtakitCapacitorUpdater'/g" "$OTAKIT_DIR/OtakitCapacitorUpdater.podspec" 2>/dev/null || sed -i "s/s.name = 'OtaKitUpdater'/s.name = 'OtakitCapacitorUpdater'/g" "$OTAKIT_DIR/OtakitCapacitorUpdater.podspec" || true
-          fi
+      - name: Patch Dependencies
+        run: node ./ios-native/patch-ios.cjs
 
       - name: Build Web Application
         run: npm run build
@@ -72,6 +66,7 @@ jobs:
             XC_TARGET="-project App.xcodeproj"
           fi
 
+          set -o pipefail
           xcodebuild clean build \
             $XC_TARGET \
             -scheme App \
@@ -81,7 +76,11 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            SYMROOT=../../build
+            SYMROOT=../../build 2>&1 | tee xcodebuild.log || {
+              echo "==================== BUILD FAILED: COMPILER ERRORS ===================="
+              grep -E "error:" xcodebuild.log || tail -n 60 xcodebuild.log
+              exit 1
+            }
 
       - name: Package .ipa
         run: |
