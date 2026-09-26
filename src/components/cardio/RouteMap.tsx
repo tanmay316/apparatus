@@ -388,9 +388,41 @@ export function RouteMap({
   }, [mapRotationMode, visualHeadingRef]);
 
   const positions: [number, number][] = useMemo(() => {
-    const pts = route.map(p => [p.lat, p.lng] as [number, number]);
+    let rawRoute: any = route;
+    if (typeof rawRoute === 'string') {
+      try {
+        rawRoute = JSON.parse(rawRoute);
+      } catch {
+        rawRoute = [];
+      }
+    }
+    if (!Array.isArray(rawRoute)) {
+      rawRoute = [];
+    }
+
+    const pts: [number, number][] = [];
+    for (const p of rawRoute) {
+      if (!p) continue;
+      let lat: number | undefined;
+      let lng: number | undefined;
+      if (Array.isArray(p) && p.length >= 2) {
+        lat = Number(p[0]);
+        lng = Number(p[1]);
+      } else if (typeof p === 'object') {
+        lat = Number(p.lat !== undefined ? p.lat : p.latitude);
+        lng = Number(p.lng !== undefined ? p.lng : p.longitude);
+      }
+      if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng)) {
+        pts.push([lat, lng]);
+      }
+    }
+
     if (isLive && currentLocation) {
-      pts.push([currentLocation.lat, currentLocation.lng]);
+      const cLat = Number(currentLocation.lat);
+      const cLng = Number(currentLocation.lng);
+      if (!isNaN(cLat) && !isNaN(cLng)) {
+        pts.push([cLat, cLng]);
+      }
     }
     return pts;
   }, [route, isLive, currentLocation]);

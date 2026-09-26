@@ -224,6 +224,7 @@ export function Dashboard() {
         avgSpeedKmh: details.avgSpeedKmh,
         maxSpeedKmh: details.maxSpeedKmh,
         elevationGainM: details.elevationGainM,
+        steps: details.steps,
       });
     } else {
       setDashboardShareData({

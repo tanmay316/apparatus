@@ -247,15 +247,15 @@ export function ProfilePage() {
 
         if (isOwnProfile) {
           [gymWorkouts, cardioLogs, feedActivities] = await Promise.all([
-            getUserWorkouts(viewProfile.uid, 20),
-            getUserCardioActivities(viewProfile.uid, 10),
+            getUserWorkouts(viewProfile.uid, 50),
+            getUserCardioActivities(viewProfile.uid, 50),
             getUserFeedActivities(viewProfile.uid, true, false)
           ]);
         } else {
           [gymWorkouts, plans, cardioLogs, feedActivities] = await Promise.all([
-            getPublicWorkoutsForUser(viewProfile.uid, myProfile?.uid),
+            getPublicWorkoutsForUser(viewProfile.uid, myProfile?.uid, 50),
             getPublicPlansForUser(viewProfile.uid),
-            getUserCardioActivities(viewProfile.uid, 10),
+            getUserCardioActivities(viewProfile.uid, 50),
             getUserFeedActivities(viewProfile.uid, false, isFollowingProfile)
           ]);
           setPublicPlans(plans);
@@ -269,13 +269,40 @@ export function ProfilePage() {
           if (act.id) mergedMap.set(act.id, act);
         });
 
-        // 2. Add cardio logs if not already present in feed
+        // 2. Add cardio logs or merge route & telemetry into feed activities if matched
         cardioLogs.forEach((c: any) => {
-          const matchInFeed = feedActivities.find((f: any) => 
-            f.id === c.id || 
-            (f.type === c.type && Math.abs(Number(f.details?.distanceKm || 0) - Number(c.distanceKm || 0)) < 0.05 && Math.abs(Number(f.createdAt?.seconds || 0) - Number(c.startedAt?.seconds || 0)) < 300)
-          );
-          if (!matchInFeed) {
+          const matchInFeed = feedActivities.find((f: any) => {
+            if (f.id === c.id || f.workoutId === c.id) return true;
+            if (f.type !== c.type && f.details?.activityType !== c.type) return false;
+            
+            const distF = Number(f.details?.distanceKm || 0);
+            const distC = Number(c.distanceKm || 0);
+            if (Math.abs(distF - distC) > 0.1) return false;
+            
+            const fTime = f.createdAt?.seconds || (f.createdAt?.toMillis ? f.createdAt.toMillis() / 1000 : 0);
+            const cTime = c.startedAt?.seconds || (c.createdAt?.seconds) || 0;
+            if (fTime && cTime && Math.abs(fTime - cTime) < 14400) return true;
+            if (c.date && f.details?.date && c.date === f.details.date) return true;
+            return false;
+          });
+
+          if (matchInFeed) {
+            // Merge cardio log details (route, speeds, elevation) to ensure high-fidelity map and KPIs
+            const fRoute = matchInFeed.details?.route;
+            const hasFRoute = Array.isArray(fRoute) ? fRoute.length > 0 : Boolean(fRoute);
+            const cRoute = c.route;
+            const hasCRoute = Array.isArray(cRoute) ? cRoute.length > 0 : Boolean(cRoute);
+
+            matchInFeed.details = {
+              ...c,
+              ...matchInFeed.details,
+              route: hasFRoute ? fRoute : (hasCRoute ? cRoute : []),
+              avgSpeedKmh: matchInFeed.details?.avgSpeedKmh ?? c.avgSpeedKmh,
+              maxSpeedKmh: matchInFeed.details?.maxSpeedKmh ?? c.maxSpeedKmh,
+              elevationGainM: matchInFeed.details?.elevationGainM ?? c.elevationGainM,
+              steps: matchInFeed.details?.steps ?? c.steps,
+            };
+          } else {
             mergedMap.set(`cardio_${c.id}`, c);
           }
         });
@@ -416,6 +443,65 @@ export function ProfilePage() {
     if (days === 1) return 'Yesterday';
     return `${days} days ago`;
   }
+
+  const handleShareActivity = (act: any, sourceWorkout?: any) => {
+    const details = (act.details as Record<string, any>) || (sourceWorkout?.details as Record<string, any>) || {};
+    const isCardio = act.type === 'walk' || act.type === 'run' || act.type === 'cycle' || 
+      ['walk', 'run', 'cycle'].includes(details.activityType) || 
+      ['walk', 'run', 'cycle'].includes(sourceWorkout?.type) ||
+      ((details.distanceKm !== undefined || sourceWorkout?.distanceKm !== undefined) && !details.exercises && !details.exerciseLogs && !sourceWorkout?.exercises);
+
+    const createdDate = act.createdAt?.seconds
+      ? new Date(act.createdAt.seconds * 1000)
+      : (act.createdAt?.toMillis
+      ? new Date(act.createdAt.toMillis())
+      : (sourceWorkout?.startedAt?.seconds
+      ? new Date(sourceWorkout.startedAt.seconds * 1000)
+      : (sourceWorkout?.date
+      ? new Date(sourceWorkout.date)
+      : (act.date ? new Date(act.date) : new Date()))));
+
+    if (isCardio) {
+      const dist = Number(details.distanceKm ?? sourceWorkout?.distanceKm ?? act.distanceKm ?? 0);
+      const dur = Number(details.durationSec ?? sourceWorkout?.durationSec ?? act.durationSec ?? 0);
+      const avgSpd = details.avgSpeedKmh ?? sourceWorkout?.avgSpeedKmh ?? act.avgSpeedKmh ?? (dur > 0 && dist > 0 ? Math.round((dist / (dur / 3600)) * 10) / 10 : undefined);
+      const maxSpd = details.maxSpeedKmh ?? sourceWorkout?.maxSpeedKmh ?? act.maxSpeedKmh ?? undefined;
+      const elevation = details.elevationGainM ?? sourceWorkout?.elevationGainM ?? act.elevationGainM ?? undefined;
+      const steps = details.steps ?? sourceWorkout?.steps ?? act.steps ?? undefined;
+      
+      const rawRoute = details.route || act.route || sourceWorkout?.route || sourceWorkout?.details?.route || [];
+      const route = typeof rawRoute === 'string' ? (() => { try { return JSON.parse(rawRoute); } catch { return []; } })() : (Array.isArray(rawRoute) ? rawRoute : []);
+
+      setCardioShareData({
+        type: details.activityType || act.type || sourceWorkout?.type || 'walk',
+        date: createdDate.toISOString(),
+        distanceKm: dist,
+        durationSec: dur,
+        calories: Number(details.calories ?? sourceWorkout?.calories ?? act.calories ?? 0),
+        avgPace: details.avgPace || sourceWorkout?.avgPace || act.avgPace || '0:00 /km',
+        route,
+        avgSpeedKmh: avgSpd,
+        maxSpeedKmh: maxSpd,
+        elevationGainM: elevation,
+        steps,
+      });
+    } else {
+      const rawExLogs = (details.exerciseLogs || sourceWorkout?.exerciseLogs || act.exerciseLogs || []) as any[];
+      const exerciseNamesList = (details.exercises || sourceWorkout?.exercises || act.exercises || []).map((e: any) => typeof e === 'string' ? e : e.name);
+
+      setProfileShareData({
+        dayTitle: details.dayTitle || sourceWorkout?.dayTitle || act.summary || 'Workout',
+        planTitle: details.planTitle || sourceWorkout?.planTitle || 'Personal Session',
+        date: createdDate.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }),
+        durationMin: Number(details.durationMin ?? sourceWorkout?.durationMin ?? act.durationMin ?? 0),
+        calories: Number(details.calories ?? sourceWorkout?.calories ?? act.calories ?? 0),
+        volume: Number(details.volume ?? sourceWorkout?.volume ?? act.volume ?? 0),
+        exerciseNames: exerciseNamesList,
+        exerciseLogs: rawExLogs,
+        bodyweight: details.bodyweight || sourceWorkout?.bodyweight,
+      });
+    }
+  };
 
   const isPrivateAccount = viewProfile.privacySettings?.profileVisibility === 'private' || viewProfile.privacySettings?.profileVisibility === 'followers';
   const isLocked = !isOwnProfile && isPrivateAccount && !isFollowingProfile;
@@ -766,32 +852,7 @@ export function ProfilePage() {
                         onDelete={() => {
                           queryClient.invalidateQueries({ queryKey: ['bookmarkedPosts'] });
                         }}
-                        onShare={(act) => {
-                          const isCardio = act.type === 'walk' || act.type === 'run' || act.type === 'cycle' || ['walk', 'run', 'cycle'].includes((act.details as any)?.activityType);
-                          if (isCardio) {
-                            setCardioShareData({
-                              type: (act.details as any)?.activityType || 'walk',
-                              date: new Date().toISOString(),
-                              distanceKm: (act.details as any)?.distanceKm || 0,
-                              durationSec: (act.details as any)?.durationSec || 0,
-                              calories: (act.details as any)?.calories || 0,
-                              avgPace: (act.details as any)?.avgPace || '0:00 /km',
-                              route: (act.details as any)?.route || [],
-                            });
-                          } else {
-                            setProfileShareData({
-                              dayTitle: (act.details as any)?.dayTitle || act.summary || 'Workout',
-                              planTitle: (act.details as any)?.planTitle || 'Personal Session',
-                              date: new Date().toISOString(),
-                              durationMin: (act.details as any)?.durationMin || 0,
-                              calories: (act.details as any)?.calories || 0,
-                              volume: (act.details as any)?.volume || 0,
-                              exerciseNames: (act.details as any)?.exercises || [],
-                              exerciseLogs: (act.details as any)?.exerciseLogs || [],
-                              bodyweight: (act.details as any)?.bodyweight,
-                            });
-                          }
-                        }}
+                        onShare={(act) => handleShareActivity(act)}
                       />
                     ))}
                   </div>
@@ -831,27 +892,39 @@ export function ProfilePage() {
                       const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
                       const exerciseNamesList = rawExLogs.map((e: any) => typeof e === 'string' ? e : e.name);
 
-                      const isCardio = workout.type === 'walk' || workout.type === 'run' || workout.type === 'cycle' || ['walk', 'run', 'cycle'].includes((workout.details as any)?.activityType) || (workout.distanceKm !== undefined && !workout.exercises && !workout.exerciseLogs);
+                      const isCardio = workout.type === 'walk' || workout.type === 'run' || workout.type === 'cycle' || 
+                        ['walk', 'run', 'cycle'].includes((workout.details as any)?.activityType) || 
+                        (workout.distanceKm !== undefined && !workout.exercises && !workout.exerciseLogs);
                       
+                      const dist = Number(workout.distanceKm ?? workout.details?.distanceKm ?? 0);
+                      const dur = Number(workout.durationSec ?? workout.details?.durationSec ?? 0);
+                      const avgSpd = workout.avgSpeedKmh ?? workout.details?.avgSpeedKmh ?? (dur > 0 && dist > 0 ? Math.round((dist / (dur / 3600)) * 10) / 10 : undefined);
+                      const actRoute = workout.route || workout.details?.route || [];
+
                       activityItem = isCardio ? {
                         id: workout.id,
                         userId: viewProfile.uid,
                         userName: viewProfile.displayName,
                         userPhoto: viewProfile.photoURL,
                         username: viewProfile.username,
-                        type: workout.type,
+                        type: workout.type || workout.details?.activityType || 'walk',
                         workoutId: null,
                         visibility: workout.visibility || 'followers',
                         likesCount: workout.likesCount || 0,
                         commentsCount: workout.commentsCount || 0,
-                        summary: `Completed a ${workout.distanceKm?.toFixed(2)} km ${workout.type}`,
+                        summary: `Completed a ${dist.toFixed(2)} km ${workout.type || 'Cardio'}`,
                         details: {
-                          activityType: workout.type,
-                          distanceKm: workout.distanceKm,
-                          durationSec: workout.durationSec,
-                          calories: workout.calories,
-                          avgPace: workout.avgPace,
-                          route: workout.route,
+                          activityType: workout.type || workout.details?.activityType || 'walk',
+                          distanceKm: dist,
+                          durationSec: dur,
+                          calories: workout.calories ?? workout.details?.calories ?? 0,
+                          avgPace: workout.avgPace || workout.details?.avgPace || '0:00 /km',
+                          route: actRoute,
+                          avgSpeedKmh: avgSpd,
+                          maxSpeedKmh: workout.maxSpeedKmh ?? workout.details?.maxSpeedKmh,
+                          elevationGainM: workout.elevationGainM ?? workout.details?.elevationGainM,
+                          steps: workout.steps ?? workout.details?.steps,
+                          date: workout.date || workout.details?.date,
                         },
                         createdAt: workout.startedAt || workout.createdAt || { seconds: workout.date ? Math.floor(new Date(workout.date).getTime() / 1000) : Math.floor(Date.now() / 1000) },
                       } : {
@@ -888,32 +961,7 @@ export function ProfilePage() {
                         onDelete={(deletedId) => {
                           setPublicWorkouts(prev => prev.filter(w => w.id !== deletedId));
                         }}
-                        onShare={(act) => {
-                          const isCardioOnShare = act.type === 'walk' || act.type === 'run' || act.type === 'cycle' || ['walk', 'run', 'cycle'].includes((act.details as any)?.activityType);
-                          if (isCardioOnShare) {
-                            setCardioShareData({
-                              type: (act.details as any)?.activityType || 'walk',
-                              date: workout.date || new Date().toISOString(),
-                              distanceKm: (act.details as any)?.distanceKm || 0,
-                              durationSec: (act.details as any)?.durationSec || 0,
-                              calories: (act.details as any)?.calories || 0,
-                              avgPace: (act.details as any)?.avgPace || '0:00 /km',
-                              route: (act.details as any)?.route || [],
-                            });
-                          } else {
-                            setProfileShareData({
-                              dayTitle: (act.details as any)?.dayTitle || act.summary || 'Workout',
-                              planTitle: (act.details as any)?.planTitle || 'Personal Session',
-                              date: workout.date || new Date().toISOString(),
-                              durationMin: (act.details as any)?.durationMin || 0,
-                              calories: (act.details as any)?.calories || 0,
-                              volume: (act.details as any)?.volume || 0,
-                              exerciseNames: (act.details as any)?.exercises || [],
-                              exerciseLogs: (act.details as any)?.exerciseLogs || [],
-                              bodyweight: (act.details as any)?.bodyweight,
-                            });
-                          }
-                        }}
+                        onShare={(act) => handleShareActivity(act, workout)}
                       />
                     );
                   })}

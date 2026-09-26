@@ -85,18 +85,29 @@ export function WorkoutSession() {
   });
 
   const { data: workoutHistory = [] } = useQuery({
-    queryKey: ['workoutHistory', user?.uid, planId, dayId],
+    queryKey: ['workoutHistory', user?.uid],
     queryFn: async () => {
       const q = query(
         collection(db, 'workouts'),
-        where('userId', '==', user!.uid),
-        where('planId', '==', planId),
-        where('dayId', '==', dayId)
+        where('userId', '==', user!.uid)
       );
       const snap = await getDocs(q);
-      return snap.docs.map(doc => doc.data()).sort((a, b) => b.createdAt?.toMillis() - a.createdAt?.toMillis());
+      const getWorkoutTime = (w: any): number => {
+        if (w.startedAt?.toMillis) return w.startedAt.toMillis();
+        if (w.startedAt?.seconds) return w.startedAt.seconds * 1000;
+        if (w.finishedAt?.toMillis) return w.finishedAt.toMillis();
+        if (w.finishedAt?.seconds) return w.finishedAt.seconds * 1000;
+        if (w.date) {
+          const t = new Date(w.date).getTime();
+          if (!isNaN(t)) return t;
+        }
+        return 0;
+      };
+      return snap.docs
+        .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
+        .sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a));
     },
-    enabled: !!user && !!planId && !!dayId,
+    enabled: !!user,
   });
 
   const currentDay = days.find(d => d.id === dayId);
@@ -109,6 +120,30 @@ export function WorkoutSession() {
   // sessionFinished tracks if the user JUST finished the workout in this current view session
   const [sessionFinished, setSessionFinished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  const findPreviousExerciseLog = (exerciseName: string) => {
+    if (!exerciseName) return undefined;
+    const targetName = exerciseName.trim().toLowerCase();
+    for (const workout of workoutHistory) {
+      if (completedWorkoutForDay) {
+        if (workout.id && workout.id === completedWorkoutForDay.id) continue;
+        if (workout.startedAt && completedWorkoutForDay.startedAt && 
+            workout.startedAt.seconds === completedWorkoutForDay.startedAt.seconds) continue;
+        if (workout.date === completedWorkoutForDay.date && workout.dayId === completedWorkoutForDay.dayId) continue;
+      }
+      
+      const foundEx = workout.exercises?.find((ex: any) => ex.name?.trim().toLowerCase() === targetName);
+      if (foundEx && foundEx.sets && Array.isArray(foundEx.sets)) {
+        const completedSets = foundEx.sets.filter((s: any) => 
+          s.completed !== false && ((s.reps ?? 0) > 0 || (s.seconds ?? 0) > 0 || (s.weight ?? 0) > 0)
+        );
+        if (completedSets.length > 0) {
+          return foundEx;
+        }
+      }
+    }
+    return undefined;
+  };
 
   const handleCancel = () => {
     store.cancelWorkout();
@@ -625,8 +660,7 @@ export function WorkoutSession() {
             exercises.map((e, idx) => {
               const log = activeLogs.find(item => item.name === e.name);
               const histLog = completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === e.name);
-              const previousWorkout = workoutHistory.find((workout: any) => workout.dayId === dayId && workout.date !== completedWorkoutForDay?.date && workout.exercises?.some((ex: any) => ex.name === e.name));
-              const previousLog = previousWorkout?.exercises?.find((ex: any) => ex.name === e.name);
+              const previousLog = findPreviousExerciseLog(e.name);
               
               const isDone = (!store.isActive && hasCompletedToday)
                 ? !!(histLog && histLog.sets?.some((s: any) => s.completed))
@@ -636,7 +670,9 @@ export function WorkoutSession() {
                 ? histLog?.sets?.filter((s: any) => s.completed !== false).length || 0
                 : log?.sets?.filter((s: any) => s.completed).length || 0;
 
-              const previousCompletedSets = previousLog?.sets?.filter((s: any) => s.completed !== false) || [];
+              const previousCompletedSets = previousLog?.sets?.filter((s: any) => 
+                s.completed !== false && ((s.reps ?? 0) > 0 || (s.seconds ?? 0) > 0 || (s.weight ?? 0) > 0)
+              ) || [];
               const previousSummary = previousCompletedSets
                 .map((s: any) => `${s.reps || s.seconds || 0}${s.seconds ? 's' : ''}${s.weight ? `@${s.weight}kg` : ''}`)
                 .join(', ');
@@ -839,7 +875,7 @@ export function WorkoutSession() {
           section={activeExercise.section}
           index={activeExercise.index}
           historicalLog={(!store.isActive && hasCompletedToday) ? completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === activeExercise.name) : undefined}
-          previousLog={workoutHistory.find((workout: any) => workout.dayId === dayId && workout.date !== completedWorkoutForDay?.date && workout.exercises?.some((ex: any) => ex.name === activeExercise.name))?.exercises?.find((ex: any) => ex.name === activeExercise.name)}
+          previousLog={findPreviousExerciseLog(activeExercise.name)}
         />
       )}
 

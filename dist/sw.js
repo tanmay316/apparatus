@@ -58,3 +58,45 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(request).then((r) => r || Response.error()))
   );
 });
+
+/* Web Push Notification Delivery (Supports iOS 16.4+ Home Screen PWA without Apple Dev Program) */
+self.addEventListener('push', (event) => {
+  let data = { title: 'APPARATUS', body: 'You have a new update.' };
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch {
+      data = { title: 'APPARATUS', body: event.data.text() };
+    }
+  }
+
+  const title = data.title || data.notification?.title || 'APPARATUS';
+  const body = data.body || data.notification?.body || '';
+  const options = {
+    body,
+    icon: '/app-icon-192.png',
+    badge: '/app-icon-192.png',
+    data: data.data || data,
+    vibrate: [100, 50, 100],
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.link || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if (client.url === url && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(url);
+      }
+    })
+  );
+});
+

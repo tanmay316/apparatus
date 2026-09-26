@@ -98,6 +98,7 @@ export function SinglePostPage() {
         avgSpeedKmh: details.avgSpeedKmh,
         maxSpeedKmh: details.maxSpeedKmh,
         elevationGainM: details.elevationGainM,
+        steps: details.steps,
       });
     } else {
       setShareData({

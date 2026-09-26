@@ -7,19 +7,22 @@ import { getPlan, getPlanDays, savePlanDay } from '@/services/plans';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import type { PlanDay, Exercise } from '@/types';
 
-// A simple section component for Warm-up, Skill, Strength, Cooldown
 function ExerciseSection({ 
   title, 
   exercises, 
   isOwner, 
-  onUpdate 
+  onUpdate,
+  workoutHistory = []
 }: { 
   title: string, 
   exercises: Exercise[], 
   isOwner: boolean,
-  onUpdate: (exs: Exercise[]) => void
+  onUpdate: (exs: Exercise[]) => void,
+  workoutHistory?: any[]
 }) {
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
 
@@ -119,6 +122,23 @@ function ExerciseSection({
                       {ex.tempo && <span className="text-bone-dim">T: {ex.tempo}</span>}
                       {ex.rest && <span className="text-bone-dim">R: {ex.rest}</span>}
                     </div>
+                    {(() => {
+                      const targetName = ex.name?.trim().toLowerCase();
+                      const prevWorkout = workoutHistory.find((w: any) =>
+                        w.exercises?.some((e: any) => e.name?.trim().toLowerCase() === targetName && e.sets?.some((s: any) => s.completed !== false && ((s.reps ?? 0) > 0 || (s.seconds ?? 0) > 0 || (s.weight ?? 0) > 0)))
+                      );
+                      const prevEx = prevWorkout?.exercises?.find((e: any) => e.name?.trim().toLowerCase() === targetName);
+                      const prevCompletedSets = prevEx?.sets?.filter((s: any) => s.completed !== false && ((s.reps ?? 0) > 0 || (s.seconds ?? 0) > 0 || (s.weight ?? 0) > 0)) || [];
+                      if (prevCompletedSets.length === 0) return null;
+                      const prevSummary = prevCompletedSets
+                        .map((s: any) => `${s.reps || s.seconds || 0}${s.seconds ? 's' : ''}${s.weight ? `@${s.weight}kg` : ''}`)
+                        .join(', ');
+                      return (
+                        <div className="text-[10px] font-mono text-bone-dim/70 mt-1.5 truncate">
+                          Last: <span className="text-sienna">{prevSummary}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
                 {ex.cues && ex.cues.length > 0 && (
@@ -155,6 +175,32 @@ export function DayView() {
 
   const { data: plan } = useQuery({ queryKey: ['plan', planId], queryFn: () => getPlan(planId!) });
   const { data: days } = useQuery({ queryKey: ['planDays', planId], queryFn: () => getPlanDays(planId!) });
+
+  const { data: workoutHistory = [] } = useQuery({
+    queryKey: ['workoutHistory', user?.uid],
+    queryFn: async () => {
+      const q = query(
+        collection(db, 'workouts'),
+        where('userId', '==', user!.uid)
+      );
+      const snap = await getDocs(q);
+      const getWorkoutTime = (w: any): number => {
+        if (w.startedAt?.toMillis) return w.startedAt.toMillis();
+        if (w.startedAt?.seconds) return w.startedAt.seconds * 1000;
+        if (w.finishedAt?.toMillis) return w.finishedAt.toMillis();
+        if (w.finishedAt?.seconds) return w.finishedAt.seconds * 1000;
+        if (w.date) {
+          const t = new Date(w.date).getTime();
+          if (!isNaN(t)) return t;
+        }
+        return 0;
+      };
+      return snap.docs
+        .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
+        .sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a));
+    },
+    enabled: !!user,
+  });
 
   useEffect(() => {
     if (days) {
@@ -226,10 +272,10 @@ export function DayView() {
         </div>
       </div>
 
-      <ExerciseSection title="Warm-up" exercises={day.warmup || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ warmup: exs })} />
-      <ExerciseSection title="Skill Work" exercises={day.skillWork || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ skillWork: exs })} />
-      <ExerciseSection title="Strength" exercises={day.strength || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ strength: exs })} />
-      <ExerciseSection title="Cool-down" exercises={day.cooldown || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ cooldown: exs })} />
+      <ExerciseSection title="Warm-up" exercises={day.warmup || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ warmup: exs })} workoutHistory={workoutHistory} />
+      <ExerciseSection title="Skill Work" exercises={day.skillWork || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ skillWork: exs })} workoutHistory={workoutHistory} />
+      <ExerciseSection title="Strength" exercises={day.strength || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ strength: exs })} workoutHistory={workoutHistory} />
+      <ExerciseSection title="Cool-down" exercises={day.cooldown || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ cooldown: exs })} workoutHistory={workoutHistory} />
 
       {/* Save FAB */}
       <AnimatePresence>

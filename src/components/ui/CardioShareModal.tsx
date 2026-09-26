@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, Check, Share2, LocateFixed, ChevronLeft, ChevronRight, Sparkles, Layers, Palette, Layout as LayoutIcon, Smartphone, Square as SquareIcon } from 'lucide-react';
@@ -80,6 +80,48 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
 
   const typeLabel = data.type === 'walk' ? 'WALK' : data.type === 'run' ? 'RUN' : 'RIDE';
   const displayDate = format(new Date(data.date), 'EEEE, MMM d, yyyy');
+
+  // Dynamic fallback for avgSpeed if missing or 0
+  const avgSpeed = (data.avgSpeedKmh !== undefined && data.avgSpeedKmh > 0)
+    ? data.avgSpeedKmh
+    : (data.durationSec > 0 && data.distanceKm > 0
+        ? Math.round((data.distanceKm / (data.durationSec / 3600)) * 10) / 10
+        : undefined);
+
+  // Normalize route safely in case it is passed as a string or has alternative field names
+  const normalizedRoute: RoutePoint[] = useMemo(() => {
+    let raw: any = data.route;
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw);
+      } catch {
+        raw = [];
+      }
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .map((p: any) => {
+        if (!p) return null;
+        let lat: number | undefined;
+        let lng: number | undefined;
+        if (Array.isArray(p) && p.length >= 2) {
+          lat = Number(p[0]);
+          lng = Number(p[1]);
+        } else if (typeof p === 'object') {
+          lat = Number(p.lat !== undefined ? p.lat : p.latitude);
+          lng = Number(p.lng !== undefined ? p.lng : p.longitude);
+        }
+        if (lat === undefined || lng === undefined || isNaN(lat) || isNaN(lng)) return null;
+        return {
+          lat,
+          lng,
+          alt: p.alt ?? p.altitude,
+          speed: p.speed,
+          ts: p.ts || Date.now(),
+        };
+      })
+      .filter(Boolean) as RoutePoint[];
+  }, [data.route]);
   
   const PATH_COLORS = [
     { id: 'gradient', bg: 'bg-gradient-to-r from-[#fbbf24] via-[#f43f5e] to-[#a855f7]', label: 'Aurora' },
@@ -399,7 +441,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
               {/* Background Map Layer */}
               {(showMapBackground || showPathBackground) && (
                 <div className="absolute inset-0 z-0">
-                  {(data.route && data.route.length > 0) || data.currentLocation ? (
+                  {(normalizedRoute.length > 0 || data.currentLocation) ? (
                     <div 
                       className="w-full h-full pointer-events-auto"
                       style={isAShape ? {
@@ -411,7 +453,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                       } : {}}
                     >
                       <RouteMap 
-                        route={data.route || []}
+                        route={normalizedRoute}
                         currentLocation={data.currentLocation}
                         theme={selectedTheme}
                         height="100%"
@@ -505,7 +547,7 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                   <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none p-5 pb-8">
                     <div className="bg-[#fcfbf9] rounded-2xl p-4 pb-8 shadow-[0_25px_50px_rgba(0,0,0,0.7)] w-full border border-black/10">
                       <div className="w-full aspect-square bg-gray-900 rounded-xl overflow-hidden relative shadow-inner">
-                        <RouteMap route={data.route || []} theme="satellite" height="100%" fitToContainer showZoomControls={false} hideStartMarker hideMap={false} highlightColor="#f43f5e" cardioType={data.type as any} />
+                        <RouteMap route={normalizedRoute} theme="satellite" height="100%" fitToContainer showZoomControls={false} hideStartMarker hideMap={false} highlightColor="#f43f5e" cardioType={data.type as any} />
                       </div>
                       <div className="mt-5 flex flex-col items-center gap-1 font-sans text-gray-900">
                         <div className="text-2xl font-black italic tracking-tight">{data.distanceKm.toFixed(2)} km {typeLabel}</div>
@@ -583,10 +625,10 @@ export function CardioShareModal({ data, mapTheme = 'street', onClose }: Props) 
                         <div className={`font-mono text-xl sm:text-2xl font-black tracking-tight drop-shadow-sm ${isCyber ? 'text-cyan-300' : isSunset ? 'text-amber-300' : currentTextColorCls}`}>{data.calories}</div>
                       </div>
 
-                      {data.avgSpeedKmh !== undefined && (
+                      {avgSpeed !== undefined && (
                         <div className="flex flex-col">
                           <div className="text-[10px] font-mono font-bold text-white/60 uppercase tracking-wider mb-0.5">Avg Spd</div>
-                          <div className="font-mono text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-sm">{data.avgSpeedKmh.toFixed(1)} <span className="text-xs font-normal text-white/60">km/h</span></div>
+                          <div className="font-mono text-xl sm:text-2xl font-black text-white tracking-tight drop-shadow-sm">{avgSpeed.toFixed(1)} <span className="text-xs font-normal text-white/60">km/h</span></div>
                         </div>
                       )}
 
