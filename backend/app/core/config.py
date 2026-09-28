@@ -17,9 +17,12 @@ class Settings(BaseSettings):
     SQLALCHEMY_DATABASE_URI: str = "sqlite:///./apparatus.db"
 
     def get_database_uri(self) -> str:
-        url = os.getenv("DATABASE_URL", self.SQLALCHEMY_DATABASE_URI)
-        if url and url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql://", 1)
+        url = os.getenv("DATABASE_URL", self.SQLALCHEMY_DATABASE_URI).strip()
+        # Always use psycopg2: psycopg v3's auto-prepared statements break on Supabase's transaction pooler.
+        for prefix in ("postgres://", "postgresql://", "postgresql+psycopg://"):
+            if url.startswith(prefix):
+                url = "postgresql+psycopg2://" + url[len(prefix):]
+                break
         return url
 
     # Firebase Admin SDK credentials
