@@ -27,7 +27,7 @@ function subscribe(userId: string, onChange: (name: string | null, photoURL: str
         current.photoURL = photoURL;
         current.listeners.forEach(listener => listener(name, photoURL));
       }
-    }, () => { /* ignore permission/offline errors — fallback name is used */ });
+    }, () => { /* ignore permission/offline errors - fallback name is used */ });
     entry = { name: null, photoURL: null, listeners, unsubscribe };
     cache.set(userId, entry);
   }
@@ -45,7 +45,7 @@ function subscribe(userId: string, onChange: (name: string | null, photoURL: str
 
 /**
  * Resolves a user's *current* display name/photo live from their profile document instead
- * of trusting a denormalized copy stored on a post/message/membership at write time — so a
+ * of trusting a denormalized copy stored on a post/message/membership at write time - so a
  * name change in Settings is immediately reflected everywhere the user appears.
  * Falls back to the provided values until the live document loads (or if the lookup fails).
  */

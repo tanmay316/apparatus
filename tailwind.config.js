@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     extend: {
       colors: {
@@ -37,6 +38,14 @@ export default {
           DEFAULT: 'rgb(var(--color-sienna) / <alpha-value>)',
           dim: 'rgb(var(--color-sienna-dim) / <alpha-value>)',
           light: 'rgb(var(--color-sienna-light) / <alpha-value>)',
+        },
+        viz: {
+          cardio: 'rgb(var(--viz-cardio) / <alpha-value>)',
+          strength: 'rgb(var(--viz-strength) / <alpha-value>)',
+          speed: 'rgb(var(--viz-speed) / <alpha-value>)',
+          energy: 'rgb(var(--viz-energy) / <alpha-value>)',
+          elev: 'rgb(var(--viz-elev) / <alpha-value>)',
+          event: 'rgb(var(--viz-event) / <alpha-value>)',
         },
         line: 'rgb(var(--color-line) / <alpha-value>)',
         'line-solid': 'rgb(var(--color-line-solid) / <alpha-value>)',

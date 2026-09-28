@@ -1,6 +1,8 @@
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch, onSnapshot, documentId } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { validateComment } from '@/lib/validation';
+import { followNeedsApproval, getProfileVisibility } from '@/lib/privacy';
+import { shareablePhotoURL } from '@/utils/image-compression';
 import type { Activity, Comment, Notification as AppNotification, UserProfile, CommunityPost } from '@/types';
 
 export type FeedItem = Activity | (CommunityPost & { feedType: 'clan_post' });
@@ -9,6 +11,7 @@ export async function notify(receiverId: string, notification: Omit<AppNotificat
   if (!receiverId || receiverId === notification.senderId) return;
   await addDoc(collection(db, 'notifications'), {
     ...notification,
+    senderPhoto: shareablePhotoURL(notification.senderPhoto),
     receiverId,
     createdAt: serverTimestamp(),
   });
@@ -56,20 +59,22 @@ export async function deleteActivity(activityId: string): Promise<void> {
   // Also attempt deleting directly by activityId from workouts and cardioActivities
   await deleteDoc(doc(db, 'workouts', activityId)).catch(() => {});
   await deleteDoc(doc(db, 'cardioActivities', activityId)).catch(() => {});
+  const { scheduleStatsReconcile } = await import('@/services/stats');
+  scheduleStatsReconcile(auth.currentUser?.uid);
 }
 
 // ─── Follow System ──────────────────────────────────────────────
 
-export async function followUser(myUid: string, targetUid: string): Promise<void> {
+export async function followUser(myUid: string, targetUid: string): Promise<'followed' | 'requested'> {
   if (myUid === targetUid) throw new Error('You cannot follow yourself');
 
   const targetSnap = await getDoc(doc(db, 'users', targetUid));
   if (!targetSnap.exists()) throw new Error('User not found');
-  const targetData = targetSnap.data();
-  const isPrivate = targetData.privacySettings?.profileVisibility === 'private';
+  const isPrivate = followNeedsApproval(targetSnap.data() as UserProfile);
 
   if (isPrivate) {
-    return requestFollow(myUid, targetUid);
+    await requestFollow(myUid, targetUid);
+    return 'requested';
   }
 
   const followingRef = doc(db, `followers/${myUid}/following`, targetUid);
@@ -90,11 +95,13 @@ export async function followUser(myUid: string, targetUid: string): Promise<void
     targetId: sender.username || myUid,
     read: false,
   });
+  return 'followed';
 }
 
 export async function requestFollow(myUid: string, targetUid: string): Promise<void> {
   if (myUid === targetUid) throw new Error('You cannot follow yourself');
   const requestRef = doc(db, `followers/${targetUid}/requests`, myUid);
+  if ((await getDoc(requestRef)).exists()) return;
   await setDoc(requestRef, { uid: myUid, timestamp: serverTimestamp() });
   
   const senderSnap = await getDoc(doc(db, 'users', myUid));
@@ -137,6 +144,36 @@ export async function acceptFollowRequest(myUid: string, requesterUid: string): 
 export async function declineFollowRequest(myUid: string, requesterUid: string): Promise<void> {
   const requestRef = doc(db, `followers/${myUid}/requests`, requesterUid);
   await deleteDoc(requestRef);
+}
+
+/** Approves every pending request, e.g. after switching a private profile to public. */
+export async function acceptAllFollowRequests(myUid: string): Promise<number> {
+  const requesters = await getFollowRequests(myUid);
+  const results = await Promise.allSettled(requesters.map(uid => acceptFollowRequest(myUid, uid)));
+  return results.filter(r => r.status === 'fulfilled').length;
+}
+
+/** Content from non-public profiles is never published to everyone. */
+export async function visibilityForUser<T extends 'public' | 'followers' | 'private'>(uid: string, visibility: T): Promise<T | 'followers'> {
+  if (visibility !== 'public') return visibility;
+  try {
+    const snap = await getDoc(doc(db, 'users', uid));
+    return getProfileVisibility(snap.data() as UserProfile) === 'public' ? visibility : 'followers';
+  } catch {
+    return visibility;
+  }
+}
+
+/** Moves a user's existing public workouts, cardio and posts to followers-only. */
+export async function restrictPublicContent(uid: string): Promise<void> {
+  for (const name of ['activities', 'workouts', 'cardioActivities']) {
+    const snap = await getDocs(query(collection(db, name), where('userId', '==', uid), where('visibility', '==', 'public')));
+    for (let i = 0; i < snap.docs.length; i += 400) {
+      const batch = writeBatch(db);
+      snap.docs.slice(i, i + 400).forEach(d => batch.update(d.ref, { visibility: 'followers' }));
+      await batch.commit();
+    }
+  }
 }
 
 export async function removeFollower(myUid: string, followerUid: string): Promise<void> {
@@ -275,12 +312,15 @@ function removeUndefined(obj: any): any {
 // ─── Activity Feed ──────────────────────────────────────────────
 
 export async function postActivity(activity: Omit<Activity, 'id' | 'createdAt'>): Promise<string> {
-  const cleanedActivity = removeUndefined(activity);
+  const cleanedActivity = removeUndefined({
+    ...activity,
+    visibility: await visibilityForUser(activity.userId, activity.visibility as 'public' | 'followers' | 'private'),
+  });
   const docRef = await addDoc(collection(db, 'activities'), {
     ...cleanedActivity,
     createdAt: Timestamp.now(),
   });
-  if (activity.visibility !== 'private') {
+  if (cleanedActivity.visibility !== 'private') {
     const followerUids = await getFollowers(activity.userId);
     await Promise.allSettled(followerUids.map(receiverId => notify(receiverId, {
       type: 'activity',
@@ -451,7 +491,10 @@ export async function hasLiked(activityId: string, userId: string): Promise<bool
 }
 
 export async function addComment(activityId: string, comment: Omit<Comment, 'id' | 'createdAt'>): Promise<string> {
-  const safeComment = { ...comment, text: validateComment(comment.text) };
+  // Firestore rejects `undefined` values, which top-level comments carry for reply fields.
+  const safeComment = Object.fromEntries(
+    Object.entries({ ...comment, text: validateComment(comment.text) }).filter(([, v]) => v !== undefined)
+  );
   const docRef = await addDoc(collection(db, `activities/${activityId}/comments`), {
     ...safeComment,
     likesCount: 0,
@@ -460,36 +503,41 @@ export async function addComment(activityId: string, comment: Omit<Comment, 'id'
     dislikedUserIds: [],
     createdAt: serverTimestamp(),
   });
-  await updateDoc(doc(db, 'activities', activityId), { commentsCount: increment(1) });
-  
-  // Notification to Post Owner
-  const activitySnap = await getDoc(doc(db, 'activities', activityId));
-  if (activitySnap.exists()) {
-    const ownerId = activitySnap.data().userId;
-    if (ownerId !== comment.userId) {
-      await notify(ownerId, {
+  // Side effects must not report an already-saved comment as failed.
+  await updateDoc(doc(db, 'activities', activityId), { commentsCount: increment(1) }).catch(console.warn);
+
+  try {
+    // Notification to Post Owner
+    const activitySnap = await getDoc(doc(db, 'activities', activityId));
+    if (activitySnap.exists()) {
+      const ownerId = activitySnap.data().userId;
+      if (ownerId !== comment.userId) {
+        await notify(ownerId, {
+          type: 'comment',
+          senderId: comment.userId,
+          senderName: comment.userName,
+          senderPhoto: comment.userPhoto || '',
+          message: `${comment.userName} commented on your activity`,
+          targetId: activityId,
+          read: false,
+        });
+      }
+    }
+
+    // Notification to Parent Comment Owner if it's a reply
+    if (comment.parentId && comment.replyToUserId && comment.replyToUserId !== comment.userId) {
+      await notify(comment.replyToUserId, {
         type: 'comment',
         senderId: comment.userId,
         senderName: comment.userName,
         senderPhoto: comment.userPhoto || '',
-        message: `${comment.userName} commented on your activity`,
+        message: `${comment.userName} replied to your comment`,
         targetId: activityId,
         read: false,
       });
     }
-  }
-
-  // Notification to Parent Comment Owner if it's a reply
-  if (comment.parentId && comment.replyToUserId && comment.replyToUserId !== comment.userId) {
-    await notify(comment.replyToUserId, {
-      type: 'comment',
-      senderId: comment.userId,
-      senderName: comment.userName,
-      senderPhoto: comment.userPhoto || '',
-      message: `${comment.userName} replied to your comment`,
-      targetId: activityId,
-      read: false,
-    });
+  } catch (err) {
+    console.warn('[addComment] notification failed', err);
   }
 
   return docRef.id;
@@ -673,17 +721,11 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
 
 export async function getBookmarkedActivities(bookmarkIds: string[]): Promise<Activity[]> {
   if (!bookmarkIds || bookmarkIds.length === 0) return [];
-  const chunks = [];
-  for (let i = 0; i < bookmarkIds.length; i += 30) {
-    chunks.push(bookmarkIds.slice(i, i + 30));
-  }
-  
-  const results: Activity[] = [];
-  for (const chunk of chunks) {
-    const q = query(collection(db, 'activities'), where(documentId(), 'in', chunk));
-    const snap = await getDocs(q);
-    results.push(...snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity)));
-  }
+  // Fetched one by one: an `in` query fails as a whole if any saved post has become private.
+  const snaps = await Promise.all(bookmarkIds.map(id => getDoc(doc(db, 'activities', id)).catch(() => null)));
+  const results: Activity[] = snaps
+    .filter((snap): snap is NonNullable<typeof snap> => !!snap && snap.exists())
+    .map(snap => ({ id: snap.id, ...snap.data() } as Activity));
   return results.sort((a, b) => {
     const va = a.createdAt?.seconds || 0;
     const vb = b.createdAt?.seconds || 0;
@@ -692,6 +734,8 @@ export async function getBookmarkedActivities(bookmarkIds: string[]): Promise<Ac
 }
 
 // ─── Live Training Sessions ──────────────────────────────────
+
+export type LiveSessionStatus = 'active' | 'paused' | 'auto_paused';
 
 export interface ActiveSession {
   uid: string;
@@ -704,6 +748,19 @@ export interface ActiveSession {
   updatedAt: any;
   caloriesBurned: number;
   steps?: number;
+  status?: LiveSessionStatus;
+  /** Session time excluding manual/auto pauses, as of `updatedAt`. */
+  activeSec?: number;
+  movingSec?: number;
+  activityType?: 'walk' | 'run' | 'cycle';
+  distanceKm?: number;
+  currentSpeedKmh?: number;
+  avgSpeedKmh?: number;
+  paceSecPerKm?: number;
+  elevationGainM?: number;
+  setsCompleted?: number;
+  volumeKg?: number;
+  exercisesDone?: number;
 }
 
 export async function startActiveSession(uid: string, sessionData: Omit<ActiveSession, 'uid' | 'updatedAt' | 'sessionType'> & { startedAt?: any }, sessionType: 'workout' | 'cardio' = 'workout') {
@@ -738,6 +795,12 @@ export async function updateActiveSession(uid: string, data: Partial<ActiveSessi
     ...data,
     updatedAt: serverTimestamp(),
   });
+}
+
+/** Heartbeat write that also recreates the doc if the initial create was lost. */
+export async function upsertActiveSession(uid: string, data: Partial<ActiveSession>, sessionType: 'workout' | 'cardio') {
+  const ref = doc(db, 'activeSessions', `${uid}_${sessionType}`);
+  await setDoc(ref, { ...data, uid, sessionType, updatedAt: serverTimestamp() }, { merge: true });
 }
 
 export async function endActiveSession(uid: string, sessionType: 'workout' | 'cardio' = 'workout') {

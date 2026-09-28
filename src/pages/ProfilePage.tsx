@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { doc, getDoc, query, collection, where, limit, getDocs } from 'firebase/firestore';
-import { ChevronLeft, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus, Clock } from 'lucide-react';
+import { ChevronLeft, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus, Clock, Loader2, ImagePlus } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -15,7 +15,11 @@ import { followUser, unfollowUser, isFollowing, hasRequestedFollow, removeFollow
 import type { Activity as ActivityType, UserProfile, UserStats } from '@/types';
 import { createReport } from '@/services/admin';
 import { getPublicWorkoutsForUser, getUserWorkouts } from '@/services/workouts';
-import { getUserCardioActivities } from '@/services/cardio';
+import { getUserCardioActivities, getVisibleCardioActivitiesForUser } from '@/services/cardio';
+import { BADGES, evaluateBadges } from '@/lib/badges';
+import { badgeContextFromStats, effectiveStreak } from '@/lib/stats';
+import { computeAthleteRank } from '@/lib/rank';
+import { getProfileVisibility } from '@/lib/privacy';
 import { clonePlan, getPublicPlansForUser, getPlanDays, getPlan } from '@/services/plans';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
@@ -27,6 +31,7 @@ import { getAppShareUrl, shareContent } from '@/lib/share';
 import { getUserClans, getUserCommunityBadges } from '@/services/community';
 import { CommunityBadgeCard } from '@/components/community/CommunityBadgeCard';
 import { MedalShareModal } from '@/components/community/MedalShareModal';
+import { uploadAvatar, uploadProfileCover } from '@/services/account';
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
@@ -80,6 +85,10 @@ export function ProfilePage() {
   const [cardioShareData, setCardioShareData] = useState<CardioShareData | null>(null);
   const [selectedMedalToShare, setSelectedMedalToShare] = useState<any | null>(null);
   const [feedTab, setFeedTab] = useState<'activity' | 'communities' | 'posts' | 'bookmarks' | 'events'>('activity');
+  const [mobileSection, setMobileSection] = useState<'posts' | 'journey' | 'awards' | 'community'>('posts');
+  const [mediaTarget, setMediaTarget] = useState<'avatar' | 'cover' | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
   const ACTIVITIES_PAGE_SIZE = 10;
   const [visibleActivitiesCount, setVisibleActivitiesCount] = useState(ACTIVITIES_PAGE_SIZE);
   const [visibleTimelineCount, setVisibleTimelineCount] = useState(ACTIVITIES_PAGE_SIZE);
@@ -247,16 +256,17 @@ export function ProfilePage() {
 
         if (isOwnProfile) {
           [gymWorkouts, cardioLogs, feedActivities] = await Promise.all([
-            getUserWorkouts(viewProfile.uid, 50),
-            getUserCardioActivities(viewProfile.uid, 50),
-            getUserFeedActivities(viewProfile.uid, true, false)
+            getUserWorkouts(viewProfile.uid, 50).catch(() => []),
+            getUserCardioActivities(viewProfile.uid, 50).catch(() => []),
+            getUserFeedActivities(viewProfile.uid, true, false).catch(() => [])
           ]);
         } else {
+          // Each source is independent so one denied query can't blank the whole profile.
           [gymWorkouts, plans, cardioLogs, feedActivities] = await Promise.all([
-            getPublicWorkoutsForUser(viewProfile.uid, myProfile?.uid, 50),
-            getPublicPlansForUser(viewProfile.uid),
-            getUserCardioActivities(viewProfile.uid, 50),
-            getUserFeedActivities(viewProfile.uid, false, isFollowingProfile)
+            getPublicWorkoutsForUser(viewProfile.uid, myProfile?.uid, 50).catch(() => []),
+            getPublicPlansForUser(viewProfile.uid).catch(() => []),
+            getVisibleCardioActivitiesForUser(viewProfile.uid, myProfile?.uid, 50).catch(() => []),
+            getUserFeedActivities(viewProfile.uid, false, isFollowingProfile).catch(() => [])
           ]);
           setPublicPlans(plans);
         }
@@ -354,6 +364,29 @@ export function ProfilePage() {
     }
   };
 
+  const handleProfileMediaUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !currentUser || !isOwnProfile || !mediaTarget) return;
+    setUploadingMedia(true);
+    try {
+      if (mediaTarget === 'avatar') {
+        const url = await uploadAvatar(currentUser.uid, file);
+        await updateProfile({ photoURL: url });
+        showToast('Profile photo updated');
+      } else {
+        const url = await uploadProfileCover(currentUser.uid, file);
+        await updateProfile({ coverPhotoURL: url });
+        showToast('Header photo updated');
+      }
+      setMediaTarget(null);
+    } catch (error: any) {
+      showToast(error?.message || 'Could not upload image', 'error');
+    } finally {
+      setUploadingMedia(false);
+      event.target.value = '';
+    }
+  };
+
   const submitReport = async () => {
     if (!myProfile || !viewProfile) return;
     setReporting(true);
@@ -372,14 +405,12 @@ export function ProfilePage() {
   // Loading skeleton state
   if (loading) {
     return (
-      <div style={themeStyles} className="max-w-6xl mx-auto p-4 sm:p-6 space-y-6 animate-pulse bg-[var(--bg)] min-h-screen rounded-3xl">
-        <div className="h-72 bg-slate-800/10 dark:bg-white/5 rounded-3xl" />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map(i => <div key={i} className="h-24 bg-slate-800/10 dark:bg-white/5 rounded-2xl" />)}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 h-96 bg-slate-800/10 dark:bg-white/5 rounded-3xl" />
-          <div className="h-96 bg-slate-800/10 dark:bg-white/5 rounded-3xl" />
+      <div className="dx dx-profile max-w-6xl mx-auto sm:px-2 lg:px-0 pt-1 sm:pt-4 space-y-4 animate-pulse">
+        <div className="dx-card h-72" />
+        <div className="dx-inset h-11" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 dx-card h-96" />
+          <div className="dx-card h-96 hidden lg:block" />
         </div>
       </div>
     );
@@ -395,6 +426,7 @@ export function ProfilePage() {
   const joinDate = viewProfile.createdAt?.toDate
     ? new Date(viewProfile.createdAt.toDate()).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
     : 'Recently';
+  const athleteRank = stats ? computeAthleteRank(stats, p.weight) : null;
 
   // Completion score calculation
   const fields = [
@@ -420,14 +452,14 @@ export function ProfilePage() {
 
   // BMI calculations
   const heightInMeters = (p.height || 0) / 100;
-  const bmi = heightInMeters > 0 && p.weight ? (p.weight / (heightInMeters * heightInMeters)).toFixed(1) : '—';
+  const bmi = heightInMeters > 0 && p.weight ? (p.weight / (heightInMeters * heightInMeters)).toFixed(1) : '-';
 
   // Dynamic calories calculation
   let displayTotalCalories = stats?.totalCalories || 0;
   publicWorkouts.forEach((workout: any) => {
     const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
     if (rawExLogs.length > 0) {
-      const dynamicCals = calculateWorkoutCalories(null, rawExLogs, workout.bodyweight || viewProfile?.weight || 70, workout.durationMin);
+      const dynamicCals = calculateWorkoutCalories(rawExLogs, workout.bodyweight || viewProfile?.weight, workout.durationMin);
       const savedCals = workout.calories || 0;
       displayTotalCalories = displayTotalCalories - savedCals + dynamicCals;
     }
@@ -503,145 +535,195 @@ export function ProfilePage() {
     }
   };
 
-  const isPrivateAccount = viewProfile.privacySettings?.profileVisibility === 'private' || viewProfile.privacySettings?.profileVisibility === 'followers';
+  const isPrivateAccount = getProfileVisibility(viewProfile) !== 'public';
   const isLocked = !isOwnProfile && isPrivateAccount && !isFollowingProfile;
+  const showClans = (isOwnProfile || viewProfile.privacySettings?.showClansToFollowers !== false) && userClans.length > 0;
+  const showEvents = (isOwnProfile || viewProfile.privacySettings?.showEventsToFollowers !== false) && userEvents.length > 0;
+  const mobileSections = [
+    { id: 'posts', label: 'Posts' },
+    { id: 'journey', label: 'Journey' },
+    { id: 'awards', label: 'Awards' },
+    { id: 'community', label: 'Community' },
+  ] as const;
+  const sectionClass = (id: typeof mobileSection) => (mobileSection === id ? '' : 'hidden lg:block');
 
   return (
-    <div style={themeStyles} className="bg-[var(--bg)] text-[var(--text)] transition-colors duration-300 min-h-screen rounded-3xl border border-[var(--border)] p-4 sm:p-6 lg:p-8">
-      <motion.div variants={container} initial="hidden" animate="show" className="max-w-6xl mx-auto space-y-6">
+    <div className="dx dx-profile pro-scope max-w-6xl mx-auto sm:px-2 lg:px-0 pt-1 sm:pt-4">
+      <motion.div variants={container} initial="hidden" animate="show" className="space-y-4 sm:space-y-5">
         
-        {/* SECTION 1: ATHLETE HERO (WHOOP & Nike Run style) */}
-        <motion.div variants={item} className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)]/60 backdrop-blur-md p-6 sm:p-8 shadow-xl min-h-[280px] flex flex-col justify-between">
-          {/* Share icon — top right */}
-          {isOwnProfile && !editing && (
-            <button
-              onClick={async () => {
-                const profileUrl = getAppShareUrl(`/profile/${p.username}`);
-                const res = await shareContent({
-                  title: `${p.displayName} on Apparatus`,
-                  url: profileUrl,
-                  dialogTitle: 'Share Athlete Profile',
-                });
-                if (res.method === 'clipboard') {
-                  useUIStore.getState().showToast('Profile link copied!', 'success');
-                }
-              }}
-              className="absolute top-4 right-4 z-20 w-9 h-9 rounded-full flex items-center justify-center hover:bg-[var(--bg)] transition-colors"
-              title="Share Profile"
-            >
-              <Share2 size={18} className="text-[#5d2a1a] dark:text-[#d7b29d]" />
-            </button>
-          )}
-          <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[var(--teal)]/10 blur-[100px] pointer-events-none" />
-          <div className="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-[var(--amber)]/10 blur-[100px] pointer-events-none" />
-          
-          <div className="grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-center gap-6 relative z-10 w-full">
-            {/* Left: Avatar with completion ring & level badge */}
-            <div className="relative w-28 h-28 mx-auto md:mx-0 flex items-center justify-center">
-              <svg className="absolute w-full h-full -rotate-90">
-                <circle cx="56" cy="56" r={radius} stroke="var(--border)" strokeWidth="3" fill="transparent" />
-                <motion.circle 
-                  cx="56" cy="56" r={radius} 
-                  stroke="var(--teal)" strokeWidth="3.5" fill="transparent"
-                  strokeDasharray={circumference}
-                  initial={{ strokeDashoffset: circumference }}
-                  animate={{ strokeDashoffset }}
-                  transition={{ duration: 1, ease: 'easeOut' }}
-                />
-              </svg>
-              <img
-                src={p.photoURL || (isOwnProfile ? currentUser?.photoURL : '') || getAvatarUrl(p.displayName, theme, 96)}
-                alt={p.displayName}
-                className="w-20 h-20 rounded-full object-cover relative z-10 border-2 border-[var(--card)]"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = getAvatarUrl(p.displayName, theme, 96);
+        {/* HEADER */}
+        <motion.section variants={item} className="dx-card overflow-hidden">
+          <div
+            className={`dx-hero !rounded-none h-24 sm:h-32 relative ${isOwnProfile ? 'cursor-pointer' : ''}`}
+            onClick={() => isOwnProfile && setMediaTarget('cover')}
+            onKeyDown={(e) => {
+              if (isOwnProfile && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                setMediaTarget('cover');
+              }
+            }}
+            role={isOwnProfile ? 'button' : undefined}
+            tabIndex={isOwnProfile ? 0 : undefined}
+            aria-label={isOwnProfile ? 'View or change header photo' : undefined}
+          >
+            {p.coverPhotoURL && (
+              <img src={p.coverPhotoURL} alt="" className="absolute inset-0 w-full h-full object-cover" />
+            )}
+            {isOwnProfile && (
+              <span className="absolute bottom-3 left-3 w-8 h-8 rounded-full bg-black/45 text-white flex items-center justify-center border border-white/15">
+                <Camera size={15} />
+              </span>
+            )}
+            {isOwnProfile && !editing && (
+              <button
+                onClick={async (event) => {
+                  event.stopPropagation();
+                  const profileUrl = getAppShareUrl(`/profile/${p.username}`);
+                  const res = await shareContent({
+                    title: `${p.displayName} on Apparatus`,
+                    url: profileUrl,
+                    dialogTitle: 'Share Athlete Profile',
+                  });
+                  if (res.method === 'clipboard') {
+                    useUIStore.getState().showToast('Profile link copied!', 'success');
+                  }
                 }}
-              />
-              <span className="absolute bottom-1 right-3 w-4.5 h-4.5 rounded-full bg-emerald-500 border-2 border-[var(--card)] z-20" title="Online" />
-              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[var(--amber)] text-ink text-[10px] font-bold px-2 py-0.5 rounded-full z-20 shadow">
-                LV {calculatedLevel}
+                className="dx-hero-icon !w-9 !h-9 !rounded-full absolute top-3 right-3"
+                title="Share Profile"
+                aria-label="Share profile"
+              >
+                <Share2 size={16} />
+              </button>
+            )}
+          </div>
+
+          <div className="px-4 sm:px-6 pb-5">
+            <div className="flex items-end justify-between gap-3 -mt-12 sm:-mt-14">
+              {/* Avatar with profile-completion ring & level badge */}
+              <button
+                type="button"
+                onClick={() => setMediaTarget('avatar')}
+                className="relative w-[104px] h-[104px] shrink-0 rounded-full text-left"
+                style={{ background: 'var(--dx-card)' }}
+                title={isOwnProfile ? 'View or change profile photo' : 'View profile photo'}
+                aria-label={isOwnProfile ? 'View or change profile photo' : 'View profile photo'}
+              >
+                <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 104 104">
+                  <circle cx="52" cy="52" r={radius + 10} strokeWidth="3" fill="transparent" style={{ stroke: 'var(--dx-card-2)' }} />
+                  <motion.circle
+                    cx="52" cy="52" r={radius + 10}
+                    strokeWidth="3.5" fill="transparent" strokeLinecap="round"
+                    style={{ stroke: 'var(--dx-accent)' }}
+                    strokeDasharray={2 * Math.PI * (radius + 10)}
+                    initial={{ strokeDashoffset: 2 * Math.PI * (radius + 10) }}
+                    animate={{ strokeDashoffset: 2 * Math.PI * (radius + 10) * (1 - completionPercent / 100) }}
+                    transition={{ duration: 1, ease: 'easeOut' }}
+                  />
+                </svg>
+                <img
+                  src={p.photoURL || (isOwnProfile ? currentUser?.photoURL : '') || getAvatarUrl(p.displayName, theme, 96)}
+                  alt={p.displayName}
+                  className="absolute inset-[9px] w-[86px] h-[86px] rounded-full object-cover"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = getAvatarUrl(p.displayName, theme, 96);
+                  }}
+                />
+                <span
+                  className="absolute -bottom-1 left-1/2 -translate-x-1/2 dx-pill !h-6 !px-2.5 tabular"
+                  style={{ background: 'var(--dx-accent)', color: 'var(--dx-on-accent)', boxShadow: '0 0 0 3px var(--dx-card)' }}
+                >
+                  LV {calculatedLevel}
+                </span>
+              </button>
+
+              {/* Actions (right of avatar) */}
+              <div className="flex gap-2 pb-1">
+                {isOwnProfile ? (
+                  editing ? (
+                    <>
+                      <button onClick={() => setEditing(false)} className="dx-btn-secondary !h-10 !px-3.5 !text-[13px]">
+                        <X size={15} /> Cancel
+                      </button>
+                      <button onClick={saveEdit} className="dx-btn !h-10 !px-4 !text-[13px]">
+                        <Save size={15} /> Save
+                      </button>
+                    </>
+                  ) : null
+                ) : (
+                  <>
+                    <div className="w-[128px]">
+                      <FollowButton myUid={myProfile!.uid} targetUid={viewProfile.uid} />
+                    </div>
+                    <button
+                      onClick={() => setReportOpen(true)}
+                      className="dx-icon-btn !w-10 !h-10 !rounded-xl text-red-500"
+                      title="Report"
+                      aria-label="Report user"
+                    >
+                      <Flag size={16} />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Center: Info */}
-            <div className="text-center md:text-left flex-1 min-w-0">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1 justify-center md:justify-start">
-                <h1 className="font-serif text-3xl font-normal leading-tight">{p.displayName}</h1>
-                {p.experienceLevel && (
-                  <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-[var(--teal)]/10 text-[var(--teal)] border border-[var(--teal)]/20 mt-1 sm:mt-0 self-center">
-                    {p.experienceLevel}
-                  </span>
-                )}
+            {/* Identity */}
+            <div className="mt-3.5 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-[22px] sm:text-[26px] font-semibold tracking-tight leading-tight break-words">{p.displayName}</h1>
+                <span className="dx-pill dx-pill--accent" title={athleteRank ? `Rank score ${athleteRank.score}/1000` : undefined}>
+                  {athleteRank?.label || p.athleteRank?.label || 'Beginner'}
+                </span>
               </div>
-              <div className="text-sm font-mono text-[var(--teal)] mb-3">@{p.username}</div>
-              
+              <div className="text-[13.5px] dx-muted mt-0.5">@{p.username}</div>
+
               {editing ? (
                 <textarea
-                  className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl p-3 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--teal)] placeholder-slate-500 mb-3"
+                  className="mt-3 w-full rounded-2xl p-3 text-[14px] outline-none min-h-[88px] resize-none"
+                  style={{ background: 'var(--dx-card-2)', border: '1px solid var(--dx-border)', color: 'var(--dx-text)' }}
                   placeholder="Write an athletic bio..."
                   value={editData.bio || ''}
                   onChange={(e) => setEditData({ ...editData, bio: e.target.value })}
                 />
               ) : (
-                p.bio && <p className="text-sm text-[var(--muted)] leading-relaxed mb-3 max-w-xl">{p.bio}</p>
+                p.bio && <p className="mt-2.5 text-[14px] leading-relaxed max-w-xl" style={{ color: 'var(--dx-text)' }}>{p.bio}</p>
               )}
 
-              <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs font-mono text-[var(--muted)]">
-                <span className="flex items-center gap-1"><Calendar size={12} /> Joined {joinDate}</span>
-                <span>•</span>
-                <span>{stats?.xp || 0} XP</span>
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] dx-muted">
+                <span className="inline-flex items-center gap-1.5"><Calendar size={13} /> Joined {joinDate}</span>
+                <span aria-hidden>·</span>
+                <span className="tabular">{(stats?.xp || 0).toLocaleString()} XP</span>
               </div>
             </div>
 
-            {/* Right: Actions */}
-            <div className="flex flex-row md:flex-col gap-2 flex-none justify-center w-full md:w-auto">
-              {isOwnProfile ? (
-                editing ? (
-                  <>
-                    <button onClick={saveEdit} className="btn-primary py-2.5 px-5 flex items-center justify-center gap-1.5 text-xs w-full">
-                      <Save size={14} /> Save
-                    </button>
-                    <button onClick={() => setEditing(false)} className="btn-secondary py-2.5 px-5 flex items-center justify-center gap-1.5 text-xs w-full">
-                      <X size={14} /> Cancel
-                    </button>
-                  </>
-                ) : null
-              ) : (
+            {/* Social + core stats */}
+            <div
+              className={`mt-5 grid ${isLocked ? 'grid-cols-2' : 'grid-cols-4'} rounded-2xl overflow-hidden`}
+              style={{ background: 'var(--dx-card-2)' }}
+            >
+              <FollowCountDisplay uid={viewProfile.uid} />
+              {!isLocked && (
                 <>
-                  <FollowButton myUid={myProfile!.uid} targetUid={viewProfile.uid} />
-                  <button onClick={() => setReportOpen(true)} className="btn-secondary py-2.5 px-5 flex items-center justify-center gap-1.5 text-xs w-full text-red-500 hover:text-red-600">
-                    <Flag size={14} /> Report
-                  </button>
+                  <div className="py-3 text-center border-l" style={{ borderColor: 'var(--dx-border)' }}>
+                    <div className="text-[18px] font-semibold tabular leading-none">{stats?.totalWorkouts || 0}</div>
+                    <div className="text-[11px] dx-muted mt-1">Workouts</div>
+                  </div>
+                  <div className="py-3 text-center border-l" style={{ borderColor: 'var(--dx-border)' }}>
+                    <div className="text-[18px] font-semibold tabular leading-none">{effectiveStreak(stats)}d</div>
+                    <div className="text-[11px] dx-muted mt-1">Streak</div>
+                  </div>
                 </>
               )}
             </div>
           </div>
-
-          {/* Bottom: Follow metrics & core stats inside Hero */}
-          <div className="mt-8 border-t border-[var(--border)] pt-4 flex flex-wrap justify-between items-center gap-4 relative z-10 w-full">
-            <div className="flex gap-6">
-              <FollowCountDisplay uid={viewProfile.uid} />
-            </div>
-            {!isLocked && (
-              <div className="flex gap-5 text-xs font-mono text-[var(--muted)]">
-                <div>
-                  <span className="text-[var(--text)] font-bold text-sm block">{stats?.totalWorkouts || 0}</span> workouts
-                </div>
-              <div className="w-[1px] h-6 bg-[var(--border)] self-center" />
-              <div>
-                <span className="text-[var(--text)] font-bold text-sm block">{stats?.currentStreak || 0}d</span> streak
-              </div>
-              </div>
-            )}
-          </div>
-        </motion.div>
+        </motion.section>
 
         {/* PROFILE DETAIL EDITING EXPANSION */}
         {editing && (
-          <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-lg">
-            <h3 className="font-serif text-lg text-[var(--text)] mb-4">Edit Personal Metrics</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <motion.section variants={item} className="dx-card p-4 sm:p-6">
+            <h3 className="dx-section-title mb-4">Personal metrics</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div>
                 <label className="label">Height (cm)</label>
                 <input
@@ -684,7 +766,7 @@ export function ProfilePage() {
                   className="w-full"
                   value={editData.gender || ''}
                   onChange={(val) => setEditData({ ...editData, gender: val })}
-                  options={GENDERS.map(g => ({ value: g, label: g || '—' }))}
+                  options={GENDERS.map(g => ({ value: g, label: g || '-' }))}
                 />
               </div>
               <div>
@@ -693,7 +775,7 @@ export function ProfilePage() {
                   className="w-full"
                   value={editData.fitnessGoal || ''}
                   onChange={(val) => setEditData({ ...editData, fitnessGoal: val })}
-                  options={FITNESS_GOALS.map(g => ({ value: g, label: g || '—' }))}
+                  options={FITNESS_GOALS.map(g => ({ value: g, label: g || '-' }))}
                 />
               </div>
               <div>
@@ -702,34 +784,52 @@ export function ProfilePage() {
                   className="w-full"
                   value={editData.preferredWorkoutType || ''}
                   onChange={(val) => setEditData({ ...editData, preferredWorkoutType: val })}
-                  options={WORKOUT_TYPES.map(t => ({ value: t, label: t || '—' }))}
+                  options={WORKOUT_TYPES.map(t => ({ value: t, label: t || '-' }))}
                 />
               </div>
             </div>
-          </motion.div>
+          </motion.section>
         )}
 
         {isLocked ? (
-          <motion.div variants={item} className="flex flex-col items-center justify-center py-24 px-4 text-center border border-[var(--border)] rounded-3xl bg-[var(--card)] shadow-sm">
-            <div className="w-20 h-20 rounded-full border border-[var(--border)] bg-[var(--bg)] flex items-center justify-center mb-6">
-              <Lock size={32} className="text-[var(--muted)]" />
+          <motion.section variants={item} className="dx-card flex flex-col items-center justify-center py-14 px-6 text-center">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--dx-card-2)' }}>
+              <Lock size={24} className="dx-muted" />
             </div>
-            <h2 className="font-serif text-2xl text-[var(--text)] mb-2">This Account is Private</h2>
-            <p className="text-[var(--muted)] max-w-md font-mono text-sm leading-relaxed">
+            <h2 className="text-[18px] font-semibold">This account is private</h2>
+            <p className="dx-muted max-w-sm text-[13.5px] leading-relaxed mt-1.5">
               Follow {viewProfile.displayName} to see their workouts, plans, events, and clan affiliations.
             </p>
-          </motion.div>
+          </motion.section>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <>
+          {/* Phones show one section at a time; desktop shows everything in two columns. */}
+          <div className="lg:hidden sticky top-0 z-20 -mx-4 px-4 py-2" style={{ background: 'var(--dx-canvas)' }}>
+            <div className="dx-segment" role="tablist" aria-label="Profile sections">
+              {mobileSections.map(s => (
+                <button
+                  key={s.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={mobileSection === s.id}
+                  onClick={() => setMobileSection(s.id)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
           
           {/* LEFT PANEL: TIMELINE & PROGRESS POSTS */}
-          <div className="lg:col-span-8 space-y-6">
+          <div className="lg:col-span-8 space-y-4 lg:space-y-6">
             
             {/* SECTION 7: ACTIVITY TIMELINE */}
-            <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
-              <div className="flex items-center gap-2 mb-6">
-                <Activity className="text-[var(--teal)]" size={18} />
-                <h3 className="font-serif text-lg tracking-tight">Athlete Journey Timeline</h3>
+            <motion.section variants={item} className={`dx-card p-4 sm:p-6 ${sectionClass('journey')}`}>
+              <div className="flex items-center gap-2 mb-5">
+                <Activity className="dx-accent" size={18} />
+                <h3 className="dx-section-title">Training journey</h3>
               </div>
 
               {publicWorkouts.length === 0 ? (
@@ -808,34 +908,38 @@ export function ProfilePage() {
                   )}
                 </div>
               )}
-            </motion.div>
+            </motion.section>
 
             {/* EXPANDED FEED POSTS */}
-            <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
+            <motion.section variants={item} className={`dx-card p-4 sm:p-6 ${sectionClass('posts')}`}>
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <div className="font-mono text-[10px] text-[var(--teal)] tracking-widest uppercase">
-                    {isOwnProfile ? 'YOUR LIBRARY' : 'PUBLIC TRAINING'}
+                  <div className="dx-eyebrow">
+                    {isOwnProfile ? 'Your library' : 'Public training'}
                   </div>
-                  <h3 className="font-serif text-lg tracking-tight mt-1">
-                    {isOwnProfile ? 'Activity & Bookmarks' : 'Public Workout Posts'}
+                  <h3 className="dx-section-title mt-0.5">
+                    {isOwnProfile ? 'Activity & bookmarks' : 'Workout posts'}
                   </h3>
                 </div>
               </div>
 
               {isOwnProfile && (
-                <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden mb-4 border-b border-[var(--border)] pb-2">
+                <div className="dx-segment mb-4 sm:max-w-xs" role="tablist">
                   <button
+                    type="button"
+                    role="tab"
+                    aria-selected={feedTab !== 'bookmarks'}
                     onClick={() => setFeedTab('posts')}
-                    className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono transition-colors ${feedTab === 'posts' ? 'bg-[var(--teal)] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]'}`}
                   >
-                    Your Posts
+                    Your posts
                   </button>
                   <button
+                    type="button"
+                    role="tab"
+                    aria-selected={feedTab === 'bookmarks'}
                     onClick={() => setFeedTab('bookmarks')}
-                    className={`flex shrink-0 items-center gap-2 px-3 py-1.5 rounded-full text-xs font-mono transition-colors ${feedTab === 'bookmarks' ? 'bg-[var(--teal)] text-white shadow-sm' : 'text-[var(--muted)] hover:bg-[var(--bg)] hover:text-[var(--text)]'}`}
                   >
-                    Saved Bookmarks
+                    Saved
                   </button>
                 </div>
               )}
@@ -985,138 +1089,259 @@ export function ProfilePage() {
               )}
                 </>
               )}
-            </motion.div>
+            </motion.section>
           </div>
 
             {/* RIGHT PANEL: PERFORMANCE & METRICS */}
-          <div className="lg:col-span-4 space-y-6">
+          <div className="lg:col-span-4 space-y-4 lg:space-y-6">
 
             {/* SECTION: CLAN AFFILIATIONS */}
-            {(isOwnProfile || viewProfile.privacySettings?.showClansToFollowers !== false) && userClans.length > 0 && (
-              <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] overflow-hidden shadow-md">
-                <div className="px-6 py-4 flex items-center gap-2 border-b border-[var(--border)] bg-[var(--bg)]">
-                  <Shield className="text-[var(--teal)]" size={16} />
-                  <h3 className="font-serif text-base tracking-tight">Clan Affiliations</h3>
+            {showClans && (
+              <motion.section variants={item} className={`dx-card p-4 sm:p-5 ${sectionClass('community')}`}>
+                <div className="flex items-center gap-2 mb-3.5">
+                  <Shield className="dx-accent" size={17} />
+                  <h3 className="dx-section-title">Clans</h3>
                 </div>
-                <div className="p-4 space-y-4">
+                <div className="space-y-2.5">
                   {userClans.map((clan: any) => (
-                    <Link to={`/clan/${clan.id}`} key={clan.id} className="block relative rounded-2xl overflow-hidden border border-[var(--border)] group hover:border-[var(--teal)]/50 transition-colors">
-                      <div className="h-16 w-full bg-slate-800 relative">
-                        <img src={clan.coverUrl || 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-[var(--card)] to-transparent" />
+                    <Link to={`/clan/${clan.id}`} key={clan.id} className="flex items-center gap-3 p-2.5 -mx-1 rounded-2xl active:opacity-70 transition-opacity" style={{ background: 'var(--dx-card-2)' }}>
+                      <div className="relative w-12 h-12 rounded-xl overflow-hidden shrink-0">
+                        <img src={clan.avatarUrl || clan.coverUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-full h-full object-cover" />
                       </div>
-                      <div className="px-4 pb-4 pt-1 flex items-start gap-3 relative z-10 -mt-6">
-                        <img src={clan.avatarUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-12 h-12 rounded-xl object-cover border-2 border-[var(--card)] shadow-sm bg-[var(--bg)]" />
-                        <div className="flex-1 min-w-0 pt-6">
-                          <h4 className="font-semibold text-sm text-[var(--text)] truncate leading-tight">{clan.name}</h4>
-                          <p className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-mono mt-1">{clan.memberCount} Athletes</p>
-                        </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-[14px] truncate leading-tight">{clan.name}</h4>
+                        <p className="text-[12px] dx-muted mt-0.5 tabular">{clan.memberCount} athletes</p>
                       </div>
+                      <ChevronLeft size={16} className="dx-muted rotate-180 shrink-0" />
                     </Link>
                   ))}
                 </div>
-              </motion.div>
+              </motion.section>
             )}
 
             {/* SECTION: EVENTS & COMPETITIONS */}
-            {(isOwnProfile || viewProfile.privacySettings?.showEventsToFollowers !== false) && userEvents.length > 0 && (
-              <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
-                <div className="flex items-center gap-2 mb-4">
-                  <Calendar className="text-[var(--teal)]" size={16} />
-                  <h3 className="font-serif text-base tracking-tight">Events & Competitions</h3>
+            {showEvents && (
+              <motion.section variants={item} className={`dx-card p-4 sm:p-5 ${sectionClass('community')}`}>
+                <div className="flex items-center gap-2 mb-3.5">
+                  <Calendar className="dx-accent" size={17} />
+                  <h3 className="dx-section-title">Events & competitions</h3>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-2.5">
                   {userEvents.map((event: any) => (
-                    <div key={event.id} className="flex gap-4 p-3 rounded-2xl bg-[var(--bg)] border border-[var(--border)] hover:border-[var(--teal)]/50 transition-colors">
-                      <img src={event.banner || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-14 h-14 rounded-xl object-cover shrink-0" />
-                      <div>
-                        <h4 className="font-semibold text-sm text-[var(--text)] leading-tight mb-1 line-clamp-1">{event.title}</h4>
-                        <div className="flex items-center gap-2 text-xs text-[var(--muted)] font-mono">
-                          <MapPin size={10} /> {event.location || 'Virtual'}
+                    <div key={event.id} className="flex items-center gap-3 p-2.5 -mx-1 rounded-2xl" style={{ background: 'var(--dx-card-2)' }}>
+                      <img src={event.banner || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1470&auto=format&fit=crop'} alt="" className="w-12 h-12 rounded-xl object-cover shrink-0" />
+                      <div className="min-w-0">
+                        <h4 className="font-semibold text-[14px] leading-tight line-clamp-1">{event.title}</h4>
+                        <div className="flex items-center gap-1 text-[12px] dx-muted mt-0.5">
+                          <MapPin size={11} /> {event.location || 'Virtual'}
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
-              </motion.div>
+              </motion.section>
+            )}
+
+            {!showClans && !showEvents && (
+              <section className={`dx-card p-6 text-center lg:hidden ${mobileSection === 'community' ? '' : 'hidden'}`}>
+                <Users size={22} className="dx-muted mx-auto mb-2" />
+                <p className="text-[14px] font-semibold">No clans or events yet</p>
+                <p className="text-[12.5px] dx-muted mt-1">Clans joined and events registered will show here.</p>
+              </section>
             )}
 
             {/* SECTION: COMMUNITY TROPHIES (PODIUM TROPHIES) */}
-            {((isOwnProfile || viewProfile.privacySettings?.showBadgesToFollowers !== false)) && (
-              <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <Award className="text-amber-400" size={18} />
-                    <h3 className="font-serif text-base tracking-tight text-[var(--text)]">Podium Trophies</h3>
+            {((isOwnProfile || viewProfile.privacySettings?.showBadgesToFollowers !== false)) && (() => {
+              const cBadges = userCommunityBadges.length > 0
+                ? userCommunityBadges
+                : (freshUserProfile?.communityBadges || viewProfile?.communityBadges || myProfile?.communityBadges || []);
+              return (
+                <motion.section variants={item} className={`dx-card p-4 sm:p-5 ${sectionClass('awards')}`}>
+                  <div className="flex items-center justify-between mb-3.5">
+                    <div className="flex items-center gap-2">
+                      <Award className="text-amber-500" size={17} />
+                      <h3 className="dx-section-title">Podium trophies</h3>
+                    </div>
+                    {cBadges.length > 0 && (
+                      <span className="dx-pill" style={{ background: 'rgba(217, 119, 6, 0.12)', color: '#b45309' }}>
+                        {cBadges.length} won
+                      </span>
+                    )}
                   </div>
-                  {((userCommunityBadges.length > 0 ? userCommunityBadges : (freshUserProfile?.communityBadges || viewProfile?.communityBadges || myProfile?.communityBadges || [])).length > 0) && (
-                    <span className="text-xs font-mono font-bold text-amber-500 dark:text-amber-300 bg-amber-500/15 px-2.5 py-0.5 rounded-full border border-amber-400/40">
-                      {(userCommunityBadges.length > 0 ? userCommunityBadges : (freshUserProfile?.communityBadges || viewProfile?.communityBadges || myProfile?.communityBadges || [])).length} Won
-                    </span>
-                  )}
-                </div>
 
-                {(() => {
-                  const cBadges = userCommunityBadges.length > 0 
-                    ? userCommunityBadges 
-                    : (freshUserProfile?.communityBadges || viewProfile?.communityBadges || myProfile?.communityBadges || []);
-                  if (cBadges.length === 0) {
-                    return (
-                      <div className="p-5 text-center bg-[var(--bg)]/80 rounded-2xl border border-dashed border-[var(--border)] text-xs text-[var(--text)]/80 font-mono leading-relaxed font-semibold">
-                        🏆 Win Top 3 in Clan & Community challenges to earn and showcase metallic Gold, Silver & Bronze podium trophies here!
-                      </div>
-                    );
-                  }
-                  return (
+                  {cBadges.length === 0 ? (
+                    <div className="dx-inset p-4 text-center">
+                      <p className="text-[13px] font-semibold">No trophies yet</p>
+                      <p className="text-[12px] dx-muted mt-1 leading-relaxed">
+                        Finish top 3 in clan and community challenges to earn gold, silver, and bronze trophies.
+                      </p>
+                    </div>
+                  ) : (
                     <div className="space-y-3">
                       {cBadges.map((b: any) => (
-                        <CommunityBadgeCard 
-                          key={b.id} 
-                          badge={b} 
+                        <CommunityBadgeCard
+                          key={b.id}
+                          badge={b}
                           onShare={(badge) => setSelectedMedalToShare(badge)}
                         />
                       ))}
                     </div>
-                  );
-                })()}
-              </motion.div>
+                  )}
+                </motion.section>
+              );
+            })()}
+
+            {/* SECTION 5b: ATHLETE RANK */}
+            {athleteRank && (
+              <motion.section variants={item} className={`dx-card p-4 sm:p-5 ${sectionClass('awards')}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <TrendingUp className="dx-accent" size={17} />
+                  <h3 className="dx-section-title flex-1">Athlete rank</h3>
+                  <span className="dx-pill dx-pill--accent">{athleteRank.label}</span>
+                </div>
+                <div className="flex items-baseline justify-between text-[12px]">
+                  <span className="dx-muted">Rank score</span>
+                  <span className="tabular">
+                    <span className="font-semibold" style={{ color: 'var(--dx-text)' }}>{athleteRank.score}</span>
+                    {athleteRank.nextTier ? ` / ${athleteRank.nextTier.min} for ${athleteRank.nextTier.name}` : ' · top tier'}
+                  </span>
+                </div>
+                <div className="dx-progress mt-1.5">
+                  <span style={{ width: `${athleteRank.nextTier ? Math.min(100, (athleteRank.score / athleteRank.nextTier.min) * 100) : 100}%` }} />
+                </div>
+                <div className="mt-4 grid grid-cols-3 gap-2">
+                  {[
+                    { label: 'Strength', value: athleteRank.strengthScore, max: 1000 },
+                    { label: 'Endurance', value: athleteRank.enduranceScore, max: 1000 },
+                    { label: 'Consistency', value: athleteRank.consistencyScore, max: 100 },
+                  ].map(row => (
+                    <div key={row.label} className="dx-inset p-2.5">
+                      <div className="text-[11px] dx-muted">{row.label}</div>
+                      <div className="text-[15px] font-semibold tabular leading-tight">{row.value}<span className="text-[10px] font-medium dx-muted">/{row.max}</span></div>
+                      <div className="dx-progress !h-1 mt-1.5"><span style={{ width: `${(row.value / row.max) * 100}%` }} /></div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-[11.5px] dx-muted leading-relaxed">
+                  Updated automatically from logged workouts and cardio: sessions, load lifted vs bodyweight, distance and streaks.
+                </p>
+              </motion.section>
             )}
 
             {/* SECTION 6: ACHIEVEMENTS / BADGES */}
-            <motion.div variants={item} className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-md">
-              <div className="flex items-center gap-2 mb-4">
-                <Award className="text-[var(--amber)]" size={16} />
-                <h3 className="font-serif text-base tracking-tight">Achievements Unlocked</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { title: `${stats?.currentStreak || 0} day streak`, desc: 'Streak Badge', emoji: '🔥', active: (stats?.currentStreak || 0) >= 3 },
-                  { title: 'First Workout', desc: 'Arrived Ready', emoji: '🏋', active: (stats?.totalWorkouts || 0) >= 1 },
-                  { title: '100 Pullups', desc: 'Iron Pulls', emoji: '💪', active: (stats?.totalVolume || 0) >= 1000 },
-                  { title: `${p.experienceLevel || 'Beginner'} Badge`, desc: 'Experience Award', emoji: '🏆', active: true },
-                ].map(item => (
-                  <div 
-                    key={item.title} 
-                    className={`border rounded-2xl p-3 text-center flex flex-col items-center justify-between min-h-[96px] transition-all duration-200 ${
-                      item.active 
-                        ? 'bg-[var(--bg)] border-[var(--teal)]/30 text-[var(--text)]' 
-                        : 'bg-[var(--bg)]/40 border-[var(--border)] text-[var(--muted)] opacity-50'
-                    }`}
-                  >
-                    <span className="text-xl">{item.emoji}</span>
-                    <div className="mt-2">
-                      <div className="text-xs font-bold truncate max-w-full leading-tight">{item.title}</div>
-                      <div className="text-[9px] font-mono text-[var(--muted)] truncate max-w-full leading-none mt-1">{item.desc}</div>
-                    </div>
+            {(() => {
+              const earnedIds = new Set([
+                ...(stats?.badges || []),
+                ...(stats ? evaluateBadges(badgeContextFromStats(stats)) : []),
+              ]);
+              const ordered = [...BADGES.filter(b => earnedIds.has(b.id)), ...BADGES.filter(b => !earnedIds.has(b.id))].slice(0, 6);
+              return (
+                <motion.section variants={item} className={`dx-card p-4 sm:p-5 ${sectionClass('awards')}`}>
+                  <div className="flex items-center gap-2 mb-3.5">
+                    <Award className="dx-accent" size={17} />
+                    <h3 className="dx-section-title flex-1">Achievements</h3>
+                    <span className="dx-pill dx-pill--neutral">{earnedIds.size}/{BADGES.length}</span>
+                    {isOwnProfile && <Link to="/achievements" className="dx-link ml-1">View all</Link>}
                   </div>
-                ))}
-              </div>
-            </motion.div>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {ordered.map(badge => {
+                      const active = earnedIds.has(badge.id);
+                      return (
+                        <div
+                          key={badge.id}
+                          className={`dx-inset p-3 flex items-center gap-2.5 min-w-0 ${active ? '' : 'opacity-45'}`}
+                        >
+                          <span
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-[18px] ${active ? '' : 'grayscale'}`}
+                            style={active ? { background: 'var(--dx-accent-soft)' } : { background: 'var(--dx-card)' }}
+                          >
+                            {badge.icon}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-[12.5px] font-semibold leading-tight truncate">{badge.name}</div>
+                            <div className="text-[11px] dx-muted truncate mt-0.5">{active ? badge.desc : 'Locked'}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </motion.section>
+              );
+            })()}
           </div>
 
         </div>
+          </>
         )}
       </motion.div>
+
+      {/* Profile media preview / owner actions */}
+      {mediaTarget && createPortal(
+        <div className="dx dx-profile pro-scope fixed inset-0 z-[1000] flex items-end sm:items-center justify-center sm:p-4" onClick={() => !uploadingMedia && setMediaTarget(null)}>
+          <div className="absolute inset-0 bg-black/70" />
+          <motion.div
+            initial={{ y: '100%', opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: '100%', opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label={mediaTarget === 'avatar' ? 'Profile photo' : 'Header photo'}
+            className="relative w-full sm:max-w-md dx-card !rounded-b-none sm:!rounded-b-[20px] overflow-hidden"
+          >
+            <div className="h-1 w-10 rounded-full mx-auto mt-2.5 sm:hidden" style={{ background: 'var(--dx-border)' }} />
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--dx-border)' }}>
+              <h2 className="text-[16px] font-semibold">{mediaTarget === 'avatar' ? 'Profile photo' : 'Header photo'}</h2>
+              <button type="button" onClick={() => setMediaTarget(null)} disabled={uploadingMedia} className="dx-icon-btn dx-icon-btn--sm !rounded-full" aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="p-4">
+              {mediaTarget === 'avatar' ? (
+                <img
+                  src={p.photoURL || (isOwnProfile ? currentUser?.photoURL : '') || getAvatarUrl(p.displayName, theme, 320)}
+                  alt={p.displayName}
+                  className="w-full max-w-[280px] aspect-square object-cover rounded-full mx-auto"
+                />
+              ) : p.coverPhotoURL ? (
+                <img src={p.coverPhotoURL} alt="" className="w-full aspect-[16/7] object-cover rounded-2xl" />
+              ) : (
+                <div className="dx-hero w-full aspect-[16/7] flex items-center justify-center">
+                  <ImagePlus size={28} className="opacity-75" />
+                </div>
+              )}
+            </div>
+
+            {isOwnProfile && (
+              <div className="px-4 pb-[max(16px,env(safe-area-inset-bottom))] flex gap-2.5">
+                <input
+                  ref={mediaInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleProfileMediaUpload}
+                />
+                <button
+                  type="button"
+                  onClick={() => mediaInputRef.current?.click()}
+                  disabled={uploadingMedia}
+                  className="dx-btn flex-1"
+                >
+                  {uploadingMedia ? <Loader2 size={17} className="animate-spin" /> : <Camera size={17} />}
+                  {uploadingMedia ? 'Uploading…' : (mediaTarget === 'avatar' ? 'Change photo' : 'Change header')}
+                </button>
+                {mediaTarget === 'avatar' && (
+                  <Link to="/settings" onClick={() => setMediaTarget(null)} className="dx-btn-secondary flex-1">
+                    <Settings size={17} /> Complete profile
+                  </Link>
+                )}
+              </div>
+            )}
+          </motion.div>
+        </div>,
+        document.body
+      )}
 
       {/* REPORT CONSOLE */}
       {reportOpen && (
@@ -1199,11 +1424,11 @@ function FollowButton({ myUid, targetUid }: { myUid: string; targetUid: string }
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (following) return unfollowUser(myUid, targetUid);
-      if (requested) return declineFollowRequest(targetUid, myUid); // Withdraw request
+      if (following) { await unfollowUser(myUid, targetUid); return 'unfollowed'; }
+      if (requested) { await declineFollowRequest(targetUid, myUid); return 'withdrawn'; }
       return followUser(myUid, targetUid);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['isFollowing', myUid, targetUid] });
       queryClient.invalidateQueries({ queryKey: ['hasRequestedFollow', myUid, targetUid] });
       queryClient.invalidateQueries({ queryKey: ['followCounts', targetUid] });
@@ -1211,21 +1436,20 @@ function FollowButton({ myUid, targetUid }: { myUid: string; targetUid: string }
       queryClient.invalidateQueries({ queryKey: ['following'] });
       queryClient.invalidateQueries({ queryKey: ['followList'] });
       queryClient.invalidateQueries({ queryKey: ['feed'] });
-      showToast(following ? 'Unfollowed' : requested ? 'Request Withdrawn' : 'Action successful');
+      showToast({ unfollowed: 'Unfollowed', withdrawn: 'Request withdrawn', requested: 'Follow request sent', followed: 'Following' }[result]);
     },
+    onError: (err: any) => showToast(err?.message || 'Could not update follow', 'error'),
   });
 
   return (
     <button
       onClick={() => mutation.mutate()}
       disabled={mutation.isPending}
-      className={`flex items-center justify-center gap-1.5 text-xs py-2.5 px-5 rounded-xl font-mono transition-all w-full ${
-        following ? 'bg-[var(--border)] border border-[var(--border)] hover:bg-red-600/10 hover:text-red-500 text-[var(--text)]' 
-        : requested ? 'bg-[var(--border)] border border-[var(--border)] text-[var(--muted)]'
-        : 'btn-primary'
-      }`}
+      className={`w-full !h-10 !text-[13px] ${
+        following || requested ? 'dx-btn-secondary' : 'dx-btn'
+      } ${requested ? 'dx-muted' : ''}`}
     >
-      {following ? <><UserMinus size={14} /> Unfollow</> : requested ? <><Clock size={14} /> Requested</> : <><UserPlus size={14} /> Follow</>}
+      {following ? <><UserMinus size={15} /> Following</> : requested ? <><Clock size={15} /> Requested</> : <><UserPlus size={15} /> Follow</>}
     </button>
   );
 }
@@ -1257,20 +1481,20 @@ function FollowCountDisplay({ uid }: { uid: string }) {
   }, [isOwnProfile]);
 
   return (
-    <div className="flex gap-6">
+    <>
       <button 
         onClick={() => setModalType('followers')} 
-        className={`hover:opacity-75 transition-all flex gap-1.5 items-baseline relative ${hasRequests ? 'text-[var(--color-sienna-brown)]' : ''}`}
+        className="relative py-3 text-center active:opacity-70 transition-opacity"
       >
-        <span className="font-bold font-mono text-[var(--text)] text-base">{counts?.followers || 0}</span>
-        <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-mono">Followers</span>
+        <div className="text-[18px] font-semibold tabular leading-none">{counts?.followers || 0}</div>
+        <div className="text-[11px] dx-muted mt-1">Followers</div>
         {hasRequests && (
-          <span className="absolute -top-1 -right-2 w-2 h-2 rounded-full bg-[var(--color-sienna-brown)] animate-pulse drop-shadow-[0_0_8px_rgba(244,160,128,1)]" />
+          <span className="absolute top-2 right-3 w-2 h-2 rounded-full" style={{ background: 'var(--dx-accent)' }} aria-label="Pending follow requests" />
         )}
       </button>
-      <button onClick={() => setModalType('following')} className="hover:opacity-75 transition-opacity flex gap-1.5 items-baseline">
-        <span className="font-bold font-mono text-[var(--text)] text-base">{counts?.following || 0}</span>
-        <span className="text-[10px] text-[var(--muted)] uppercase tracking-wider font-mono">Following</span>
+      <button onClick={() => setModalType('following')} className="py-3 text-center border-l active:opacity-70 transition-opacity" style={{ borderColor: 'var(--dx-border)' }}>
+        <div className="text-[18px] font-semibold tabular leading-none">{counts?.following || 0}</div>
+        <div className="text-[11px] dx-muted mt-1">Following</div>
       </button>
 
       <FollowListModal
@@ -1279,7 +1503,7 @@ function FollowCountDisplay({ uid }: { uid: string }) {
         isOpen={modalType !== null}
         onClose={() => setModalType(null)}
       />
-    </div>
+    </>
   );
 }
 

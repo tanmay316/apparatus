@@ -20,8 +20,9 @@ export interface UserProfile {
   username: string;
   usernameLower?: string;
   displayNameLower?: string;
-  email: string;
+  email?: string;
   photoURL: string;
+  coverPhotoURL?: string;
   bio: string;
   height: number | null;
   weight: number | null;
@@ -40,6 +41,7 @@ export interface UserProfile {
   privacySettings?: PrivacySettings;
   communityBadges?: EarnedCommunityBadge[];
   unseenMedalAward?: EarnedCommunityBadge | null;
+  athleteRank?: { tier: string; track: string | null; label: string; score: number; strength: number; endurance: number };
 }
 
 export interface EarnedCommunityBadge {
@@ -70,6 +72,13 @@ export interface UserStats {
   bestHold: number;
   badges: string[];
   communityBadges?: EarnedCommunityBadge[];
+  totalCardioSessions?: number;
+  totalDistanceKm?: number;
+  longestCardioKm?: number;
+  totalCardioMin?: number;
+  maxLiftKg?: number;
+  fullWeekAchieved?: boolean;
+  statsVersion?: number;
 }
 
 // ─── Plans ───────────────────────────────────────────────────
@@ -156,6 +165,7 @@ export interface Workout {
   finishedAt: Timestamp | null;
   durationMin: number;
   calories: number;
+  caloriesVersion?: number;
   volume: number;
   bodyweight?: number;
   visibility: 'public' | 'followers' | 'private';
@@ -265,11 +275,15 @@ export interface Badge {
   name: string;
   desc: string;
   cond: (ctx: BadgeContext) => boolean;
+  progress?: (ctx: BadgeContext) => { value: number; target: number };
 }
 
 export interface BadgeContext {
   totalSessions: number;
+  totalCalories: number;
+  totalDurationMin: number;
   totalVolume: number;
+  maxLiftKg: number;
   bestHold: number;
   currentStreak: number;
   longestStreak: number;
@@ -279,6 +293,10 @@ export interface BadgeContext {
   yogaCount: number;
   measurementsCount: number;
   weekGoalHit: boolean;
+  totalCardioSessions: number;
+  totalCardioMin: number;
+  totalDistanceKm: number;
+  longestCardioKm: number;
 }
 
 export interface LevelInfo {
@@ -585,6 +603,8 @@ export interface CardioActivity {
   maxSpeedKmh: number;
   avgPace: string;
   calories: number;
+  caloriesVersion?: number;
+  bodyweight?: number;
   elevationGainM: number;
   route: RoutePoint[];
   visibility: 'public' | 'followers' | 'private';

@@ -14,6 +14,8 @@
 @import './styles/layout.css';
 @import './styles/utilities.css';
 @import './styles/themes.css';
+@import './styles/community.css';
+@import './styles/surfaces.css';
 
 /* ─── Tailwind Directives (must be after imports) ───────────── */
 @tailwind base;

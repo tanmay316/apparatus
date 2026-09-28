@@ -52,7 +52,7 @@ export function compareExerciseProgress(current: ExerciseLog, previous?: Exercis
   const previousBest = bestSetMetric(previous);
 
   // Real progressive overload means lifting more/harder (best set improved) or doing more
-  // total work (volume improved) — merely adding an extra set/rep at a lower load doesn't count.
+  // total work (volume improved) - merely adding an extra set/rep at a lower load doesn't count.
   const bestImproved = !!previous && previousBest > 0 && currentBest > previousBest * IMPROVEMENT_TOLERANCE;
   const volumeImproved = !!previous && previousVolume > 0 && currentVolume > previousVolume * IMPROVEMENT_TOLERANCE;
 
@@ -66,6 +66,27 @@ export function compareExerciseProgress(current: ExerciseLog, previous?: Exercis
 }
 
 type WorkoutHistoryEntry = Pick<Workout, 'date' | 'exercises'>;
+
+/** Exercises whose best set beats every earlier logged session of the same exercise. */
+export function findPersonalRecords(
+  currentWorkout: Pick<Workout, 'exercises'>,
+  history: Pick<Workout, 'exercises'>[],
+): string[] {
+  const records: string[] = [];
+  for (const current of currentWorkout.exercises || []) {
+    const name = current.name?.trim().toLowerCase();
+    if (!name) continue;
+    const currentBest = bestSetMetric(current);
+    if (currentBest <= 0) continue;
+    let previousBest = 0;
+    for (const workout of history) {
+      const match = (workout.exercises || []).find(exercise => exercise.name?.trim().toLowerCase() === name);
+      if (match) previousBest = Math.max(previousBest, bestSetMetric(match));
+    }
+    if (previousBest > 0 && currentBest > previousBest * IMPROVEMENT_TOLERANCE) records.push(current.name);
+  }
+  return records;
+}
 
 export function summarizeProgressiveOverload(
   currentWorkout: Pick<Workout, 'exercises'>,

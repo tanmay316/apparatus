@@ -17,6 +17,7 @@ import {
 } from '@/services/community';
 import type { ClanMessage, ClanMessageReplyTo } from '@/types';
 import { LiveUserName, LiveUserAvatar } from '@/components/ui/LiveUser';
+import { shareablePhotoURL } from '@/utils/image-compression';
 
 interface ClanDiscussionTabProps {
   clanId: string;
@@ -24,6 +25,8 @@ interface ClanDiscussionTabProps {
   isMember: boolean;
   userRole?: 'leader' | 'co_leader' | 'member';
   onJoinClan?: () => void;
+  joinLabel?: string;
+  isJoining?: boolean;
   className?: string;
 }
 
@@ -124,6 +127,8 @@ export function ClanDiscussionTab({
   isMember,
   userRole,
   onJoinClan,
+  joinLabel,
+  isJoining = false,
   className,
 }: ClanDiscussionTabProps) {
   const { user, profile } = useAuthStore();
@@ -141,6 +146,11 @@ export function ClanDiscussionTab({
   const [activeReactionMessageId, setActiveReactionMessageId] = useState<string | null>(null);
   const [emojiInputMessageId, setEmojiInputMessageId] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [isSending, setIsSending] = useState(false);
+  // Touch devices have no hover: tapping a bubble reveals its actions.
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
 
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -164,20 +174,23 @@ export function ClanDiscussionTab({
     }
 
     setLoading(true);
+    setLoadError(false);
     const unsubscribe = subscribeClanMessages(
       clanId,
       (newMsgs) => {
         setMessages(newMsgs);
+        setLoadError(false);
         setLoading(false);
       },
       (err) => {
         console.error('Failed to load clan messages:', err);
+        setLoadError(true);
         setLoading(false);
       }
     );
 
     return () => unsubscribe();
-  }, [clanId, isMember]);
+  }, [clanId, isMember, reloadKey]);
 
   // Mark incoming messages as read when viewed
   useEffect(() => {
@@ -252,6 +265,7 @@ export function ClanDiscussionTab({
     if (msg.isDeleted) return;
     setEditingMessage(null);
     setReplyingTo(msg);
+    setSelectedMessageId(null);
     inputRef.current?.focus();
   };
 
@@ -260,6 +274,8 @@ export function ClanDiscussionTab({
     setReplyingTo(null);
     setEditingMessage(msg);
     setInputText(msg.text);
+    setImages([]);
+    setSelectedMessageId(null);
     inputRef.current?.focus();
   };
 
@@ -314,17 +330,29 @@ export function ClanDiscussionTab({
       showToast('Please log in to chat', 'info');
       return;
     }
+    if (isSending) return;
 
     const trimmedText = inputText.trim();
     if (!trimmedText && images.length === 0) return;
 
     // Handle Edit
     if (editingMessage && editingMessage.id) {
+      if (!trimmedText) {
+        showToast('Message cannot be empty', 'info');
+        return;
+      }
+      if (trimmedText === editingMessage.text) {
+        cancelReplyOrEdit();
+        return;
+      }
+      setIsSending(true);
       try {
         await editClanMessage(editingMessage.id, trimmedText);
         cancelReplyOrEdit();
       } catch (err: any) {
         showToast(err?.message || 'Failed to update message', 'error');
+      } finally {
+        setIsSending(false);
       }
       return;
     }
@@ -346,12 +374,13 @@ export function ClanDiscussionTab({
       };
     }
 
+    setIsSending(true);
     try {
       await sendClanMessage({
         clanId,
         userId: user.uid,
         userName: user.displayName || profile?.displayName || 'Clan Member',
-        userPhoto: user.photoURL || profile?.photoURL || '',
+        userPhoto: shareablePhotoURL(user.photoURL, profile?.photoURL),
         userRole: role,
         text: trimmedText,
         imageUrl: images[0] || undefined,
@@ -365,6 +394,8 @@ export function ClanDiscussionTab({
       setTimeout(() => scrollToBottom(), 50);
     } catch (err: any) {
       showToast(err?.message || 'Failed to send message', 'error');
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -378,20 +409,27 @@ export function ClanDiscussionTab({
   // Locked non-member screen
   if (!isMember) {
     return (
-      <div className="py-16 px-4 text-center max-w-md mx-auto">
-        <div className="w-16 h-16 rounded-3xl bg-sienna/20 border border-sienna/40 flex items-center justify-center text-sienna mx-auto mb-4 shadow-lg shadow-sienna/10">
-          <Lock size={30} />
+      <div className={`cx-chat-canvas flex-1 h-full flex items-center justify-center px-6 py-16 ${className || ''}`}>
+        <div className="max-w-sm text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-ink-2 text-bone-dim">
+            <Lock size={22} />
+          </div>
+          <h3 className="text-base font-semibold text-bone">Members-only discussion</h3>
+          <p className="mt-1.5 text-sm leading-relaxed text-bone-dim">
+            The group chat is private to members of <span className="font-medium text-bone">{clanName}</span>. Join to chat, share tips and plan workouts together.
+          </p>
+          {onJoinClan && (
+            <button
+              type="button"
+              onClick={onJoinClan}
+              disabled={isJoining}
+              className="cx-btn bg-sienna mt-5 min-w-[140px]"
+            >
+              {isJoining && <Loader2 size={15} className="animate-spin" />}
+              {isJoining ? 'Joining…' : (joinLabel || 'Join clan')}
+            </button>
+          )}
         </div>
-        <h3 className="font-display text-2xl text-bone mb-2">Members-Only Discussion</h3>
-        <p className="text-sm text-bone-dim mb-6 leading-relaxed">
-          The Clan Discussion & Group Chat is private to active members of <span className="font-semibold text-bone">{clanName}</span>. Join now to chat, discuss workouts, share tips, and coordinate with fellow athletes!
-        </p>
-        <button
-          onClick={onJoinClan}
-          className="px-8 py-3 rounded-2xl bg-sienna hover:bg-sienna/90 text-bg font-bold text-sm shadow-xl shadow-sienna/25 hover:scale-[1.02] active:scale-[0.98] transition-all"
-        >
-          Join {clanName}
-        </button>
       </div>
     );
   }
@@ -399,29 +437,44 @@ export function ClanDiscussionTab({
   // Group messages by date
   let lastDateStr = '';
 
-  return (
-    <div className={`flex flex-col flex-1 h-full min-h-0 bg-ink relative overflow-hidden ${className || ''}`}>
-      {/* ─── CHAT MESSAGES ─── */}
+  const closeOverlays = () => {
+    setActiveReactionMessageId(null);
+    setEmojiInputMessageId(null);
+    setSelectedMessageId(null);
+  };
 
+  return (
+    <div className={`flex flex-col flex-1 h-full min-h-0 cx-chat-canvas relative overflow-hidden ${className || ''}`}>
       {/* ─── MESSAGES CONTAINER ─── */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-3 sm:p-4 relative [scrollbar-width:thin] flex flex-col"
+        onClick={closeOverlays}
+        className="flex-1 overflow-y-auto px-3 py-3 sm:px-5 sm:py-4 relative [scrollbar-width:thin] flex flex-col"
       >
         {loading ? (
-          <div className="h-full flex flex-col items-center justify-center text-bone-dim text-xs font-mono gap-2">
-            <Loader2 size={24} className="animate-spin text-sienna" />
-            <span>Loading discussion...</span>
+          <div className="h-full flex items-center justify-center text-bone-dim">
+            <Loader2 size={22} className="animate-spin" />
+          </div>
+        ) : loadError && messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-6">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-ink-2 text-bone-dim">
+              <AlertCircle size={22} />
+            </div>
+            <h4 className="text-base font-semibold text-bone">Couldn't load messages</h4>
+            <p className="mt-1.5 text-sm text-bone-dim max-w-xs">Check your connection and try again.</p>
+            <button type="button" onClick={() => setReloadKey(k => k + 1)} className="cx-btn cx-btn-ghost mt-5">
+              Retry
+            </button>
           </div>
         ) : messages.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-bone-dim">
-            <div className="w-14 h-14 rounded-full bg-ink-2 flex items-center justify-center text-sienna mb-3 border border-line/20">
-              <Sparkles size={24} />
+          <div className="h-full flex flex-col items-center justify-center text-center p-6">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-ink-2 text-bone-dim">
+              <Sparkles size={22} />
             </div>
-            <h4 className="font-bold text-bone text-base mb-1">Welcome to the Clan Discussion!</h4>
-            <p className="text-xs max-w-xs text-bone-dim leading-relaxed">
-              Be the first to say hi, ask a question, share a victory, or coordinate a workout with your clan mates.
+            <h4 className="text-base font-semibold text-bone">Start the conversation</h4>
+            <p className="mt-1.5 text-sm max-w-xs text-bone-dim leading-relaxed">
+              Say hi, share a win, or plan the next workout with your clan.
             </p>
           </div>
         ) : (
@@ -443,23 +496,23 @@ export function ClanDiscussionTab({
 
             const canManageMsg = isMe || userRole === 'leader' || userRole === 'co_leader' || isAdmin;
             const showReactionPicker = activeReactionMessageId === msg.id;
+            const isSelected = selectedMessageId === msg.id;
 
             return (
               <React.Fragment key={msg.id || idx}>
                 {/* Date Separator Pill */}
                 {showDateSeparator && (
-                  <div className="flex justify-center my-3">
-                    <span className="text-[10px] font-mono font-medium px-3 py-1 rounded-full bg-ink-2/90 text-bone-dim border border-line/20 shadow-sm">
+                  <div className="flex justify-center my-4">
+                    <span className="text-[11px] font-medium px-3 py-1 rounded-full bg-ink-2 text-bone-dim border border-line">
                       {messageDateStr}
                     </span>
                   </div>
                 )}
 
                 {/* Message Row */}
-                <div className={`flex items-start gap-1.5 group relative ${isMe ? 'justify-end' : 'justify-start'} ${isNextSameAuthor ? 'mb-[1.5px]' : 'mb-3'}`}>
-                  {/* Sender Avatar for incoming - positioned at top together with sender name on first message */}
+                <div className={`flex items-start gap-2 group relative ${isMe ? 'justify-end' : 'justify-start'} ${isNextSameAuthor ? 'mb-0.5' : 'mb-3'}`}>
                   {!isMe && (
-                    <div className={`w-7 h-7 shrink-0 ${!isPrevSameAuthor ? 'rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold text-xs mt-0.5' : 'invisible'}`}>
+                    <div className={`w-7 h-7 shrink-0 ${!isPrevSameAuthor ? 'rounded-full bg-ink-3 border border-line overflow-hidden flex items-center justify-center text-bone font-semibold text-xs mt-0.5' : 'invisible'}`}>
                       {!isPrevSameAuthor && (
                         <LiveUserAvatar userId={msg.userId} fallbackName={msg.userName} fallbackPhoto={msg.userPhoto} className="w-full h-full object-cover rounded-full" />
                       )}
@@ -478,7 +531,8 @@ export function ClanDiscussionTab({
                           transition={{ type: 'spring', damping: 22, stiffness: 300 }}
                           className={`absolute -top-11 ${
                             isMe ? 'right-0 origin-bottom-right' : 'left-0 origin-bottom-left'
-                          } bg-ink-2/95 border border-line/30 rounded-full px-2 py-1.5 shadow-2xl flex items-center gap-1 z-50 backdrop-blur-md`}
+                          } bg-ink border border-line rounded-full px-1.5 py-1 shadow-lg flex items-center gap-0.5 z-50`}
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {QUICK_EMOJIS.map((emoji) => (
                             <button
@@ -489,7 +543,8 @@ export function ClanDiscussionTab({
                                 setActiveReactionMessageId(null);
                                 setEmojiInputMessageId(null);
                               }}
-                              className="hover:scale-130 active:scale-95 transition-transform text-lg p-1"
+                              className="w-8 h-8 inline-flex items-center justify-center rounded-full hover:bg-ink-2 active:scale-95 transition-transform text-lg !shadow-none"
+                              aria-label={`React ${emoji}`}
                             >
                               {emoji}
                             </button>
@@ -501,12 +556,12 @@ export function ClanDiscussionTab({
                               e.stopPropagation();
                               setEmojiInputMessageId(emojiInputMessageId === msg.id ? null : msg.id!);
                             }}
-                            className={`w-7 h-7 flex items-center justify-center rounded-full transition-colors ${
+                            className={`w-8 h-8 flex items-center justify-center rounded-full transition-colors !shadow-none ${
                               emojiInputMessageId === msg.id
-                                ? 'bg-sienna text-bg shadow-sm'
-                                : 'hover:bg-ink-3 text-bone-dim hover:text-bone'
+                                ? 'bg-ink-3 text-bone'
+                                : 'hover:bg-ink-2 text-bone-dim hover:text-bone'
                             }`}
-                            title="More reactions..."
+                            aria-label="More reactions"
                           >
                             <Plus size={15} />
                           </button>
@@ -524,18 +579,19 @@ export function ClanDiscussionTab({
                           transition={{ type: 'spring', damping: 24, stiffness: 300 }}
                           className={`absolute -top-[235px] ${
                             isMe ? 'right-0 origin-bottom-right' : 'left-0 origin-bottom-left'
-                          } w-72 max-w-[90vw] bg-ink-2 border border-line/30 rounded-2xl p-3 shadow-2xl z-50 backdrop-blur-xl flex flex-col gap-2`}
+                          } w-72 max-w-[90vw] bg-ink border border-line rounded-2xl p-3 shadow-xl z-50 flex flex-col gap-2`}
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-line/20">
-                            <span className="text-xs font-bold text-bone">Select Reaction</span>
+                          <div className="flex items-center justify-between gap-2 pb-2 border-b border-line">
+                            <span className="text-xs font-semibold text-bone">Add reaction</span>
                             <button
                               type="button"
                               onClick={() => {
                                 setEmojiInputMessageId(null);
                                 setActiveReactionMessageId(null);
                               }}
-                              className="p-1 rounded-full text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors"
+                              className="p-1 rounded-full text-bone-dim hover:text-bone hover:bg-ink-2 transition-colors !shadow-none"
+                              aria-label="Close"
                             >
                               <X size={14} />
                             </button>
@@ -549,8 +605,8 @@ export function ClanDiscussionTab({
                             autoComplete="off"
                             autoFocus
                             inputMode="text"
-                            className="w-full bg-ink-3 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-sienna text-bone border border-line/20 placeholder:text-bone-dim/70"
-                            placeholder="Use keyboard / paste emoji..."
+                            className="w-full bg-ink-2 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-sienna/60 text-bone border border-line placeholder:text-bone-dim/70"
+                            placeholder="Type or paste an emoji"
                             onChange={(e) => {
                               const val = e.target.value.trim();
                               if (val) {
@@ -575,7 +631,7 @@ export function ClanDiscussionTab({
                                   setEmojiInputMessageId(null);
                                   setActiveReactionMessageId(null);
                                 }}
-                                className="w-8 h-8 rounded-lg hover:bg-ink-3 active:scale-95 hover:scale-110 flex items-center justify-center text-lg transition-transform"
+                                className="w-8 h-8 rounded-lg hover:bg-ink-2 active:scale-95 flex items-center justify-center text-lg transition-transform !shadow-none"
                               >
                                 {emoji}
                               </button>
@@ -587,20 +643,20 @@ export function ClanDiscussionTab({
 
                     {/* Sender Name & Role on incoming */}
                     {!isMe && !isPrevSameAuthor && (
-                      <div className="flex items-center gap-1.5 ml-2 mb-1">
-                        <LiveUserName userId={msg.userId} fallbackName={msg.userName} className="text-xs font-bold text-sienna/90" />
+                      <div className="flex items-center gap-1.5 ml-1 mb-1">
+                        <LiveUserName userId={msg.userId} fallbackName={msg.userName} className="text-xs font-semibold text-sienna" />
                         {isLeader && (
-                          <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-0.5">
+                          <span className="inline-flex items-center gap-0.5 h-4 px-1.5 rounded text-[10px] font-semibold bg-amber-500/15 text-amber-600">
                             <Crown size={9} /> Leader
                           </span>
                         )}
                         {isCoLeader && (
-                          <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center gap-0.5">
+                          <span className="inline-flex items-center gap-0.5 h-4 px-1.5 rounded text-[10px] font-semibold bg-sky-500/15 text-sky-600">
                             <Star size={9} /> Co-Leader
                           </span>
                         )}
                         {isAdminMsg && (
-                          <span className="text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-0.5">
+                          <span className="inline-flex items-center gap-0.5 h-4 px-1.5 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-600">
                             <Shield size={9} /> Admin
                           </span>
                         )}
@@ -616,35 +672,30 @@ export function ClanDiscussionTab({
                       onDragEnd={(e: any, info: any) => {
                          if (info.offset.x > 50 || info.offset.x < -50) startReply(msg);
                       }}
-                      className={`relative px-3 py-1.5 text-sm transition-all ${
+                      onClick={(e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        if (msg.isDeleted || !msg.id) return;
+                        // Don't toggle while the user is selecting text
+                        if (window.getSelection()?.toString()) return;
+                        setActiveReactionMessageId(null);
+                        setEmojiInputMessageId(null);
+                        setSelectedMessageId(prev => (prev === msg.id ? null : msg.id!));
+                      }}
+                      className={`relative px-3 py-2 text-sm cursor-default ${
                         isMe
-                          ? `bg-sienna text-bg ${
-                              !isPrevSameAuthor
-                                ? 'rounded-[14px] rounded-tr-[3px]'
-                                : 'rounded-[14px] rounded-tr-[7px]'
-                            }`
-                          : `bg-[#faebe1] dark:bg-ink-2 text-stone-900 dark:text-bone border border-[#ecd5c6] dark:border-line/20 ${
-                              !isPrevSameAuthor
-                                ? 'rounded-[14px] rounded-tl-[3px]'
-                                : 'rounded-[14px] rounded-tl-[7px]'
-                            }`
-                      } ${msg.isDeleted ? 'opacity-70 italic' : ''}`}
+                          ? `cx-bubble-out ${!isPrevSameAuthor ? 'rounded-2xl rounded-tr-md' : 'rounded-2xl'}`
+                          : `cx-bubble-in ${!isPrevSameAuthor ? 'rounded-2xl rounded-tl-md' : 'rounded-2xl'}`
+                      } ${isSelected ? 'ring-2 ring-sienna/30' : ''} ${msg.isDeleted ? 'opacity-70 italic' : ''}`}
                     >
                       {/* Quoted Reply Preview (if replyTo exists) */}
                       {msg.replyTo && !msg.isDeleted && (
-                        <div
-                          className={`mb-1.5 p-2 rounded-xl text-xs border-l-4 transition-colors ${
-                            isMe
-                              ? 'bg-black/20 border-bg/90 text-bg'
-                              : 'bg-white/70 dark:bg-amber-950/40 border-sienna text-stone-900 dark:text-bone'
-                          }`}
-                        >
-                          <div className={`font-bold flex items-center gap-1 ${isMe ? 'text-bg' : 'text-sienna'}`}>
+                        <div className={`mb-1.5 px-2.5 py-1.5 rounded-lg text-xs ${isMe ? 'cx-bubble-quote-out' : 'cx-bubble-quote-in'}`}>
+                          <div className={`font-semibold flex items-center gap-1 ${isMe ? '' : 'text-sienna'}`}>
                             <Reply size={11} className="rotate-180" />
-                            <span>{msg.replyTo.userName}</span>
+                            <span className="truncate">{msg.replyTo.userName}</span>
                           </div>
-                          <p className={`truncate line-clamp-1 text-[11px] mt-0.5 font-medium ${isMe ? 'text-bg/90' : 'text-stone-800 dark:text-bone/90'}`}>
-                            {msg.replyTo.text || 'Photo attachment'}
+                          <p className="truncate text-[11px] mt-0.5 opacity-80">
+                            {msg.replyTo.text || 'Photo'}
                           </p>
                         </div>
                       )}
@@ -655,10 +706,10 @@ export function ClanDiscussionTab({
                           {(msg.images || (msg.imageUrl ? [msg.imageUrl] : [])).map((img, i) => (
                             <div
                               key={i}
-                              onClick={() => setLightboxImage(img)}
-                              className="relative aspect-video sm:aspect-square bg-black/20 rounded-lg overflow-hidden cursor-pointer group/img"
+                              onClick={(e) => { e.stopPropagation(); setLightboxImage(img); }}
+                              className="relative aspect-video sm:aspect-square bg-black/20 rounded-lg overflow-hidden cursor-pointer"
                             >
-                              <img src={img} alt="attachment" className="w-full h-full object-cover group-hover/img:scale-105 transition-transform" />
+                              <img src={img} alt="attachment" className="w-full h-full object-cover" />
                             </div>
                           ))}
                         </div>
@@ -671,16 +722,14 @@ export function ClanDiscussionTab({
 
                       {/* Footer: Time + Edited badge + Status Checkmarks */}
                       <div
-                        className={`flex items-center justify-end gap-1.5 mt-0.5 text-[10px] font-mono ${
-                          isMe ? 'text-bg/80' : 'text-stone-600 dark:text-bone-dim'
-                        }`}
+                        className={`cx-bubble-meta flex items-center justify-end gap-1.5 mt-0.5 text-[10px] tabular-nums`}
                       >
-                        {msg.isEdited && !msg.isDeleted && <span>(edited)</span>}
+                        {msg.isEdited && !msg.isDeleted && <span>Edited</span>}
                         <span>{formatMessageTime(msg.createdAt)}</span>
                         {isMe && (
                           msg.readBy && msg.readBy.length > 0
-                            ? <CheckCheck size={13} className="text-[#3b82f6] drop-shadow-sm" /> 
-                            : <Check size={13} className="text-bg/90" />
+                            ? <CheckCheck size={13} className="text-sky-300" aria-label="Read" />
+                            : <Check size={13} aria-label="Sent" />
                         )}
                       </div>
                     </motion.div>
@@ -694,13 +743,12 @@ export function ClanDiscussionTab({
                             <button
                               key={emoji}
                               type="button"
-                              onClick={() => handleToggleReaction(msg.id!, emoji)}
-                              className={`text-[11px] flex items-center gap-1 bg-white dark:bg-ink-2 border rounded-full px-2 py-0.5 shadow-sm hover:scale-105 active:scale-95 transition-transform ${
-                                iReacted ? 'border-sienna/50 text-sienna font-bold' : 'border-line/30 text-stone-600 dark:text-bone-dim'
-                              }`}
+                              aria-pressed={iReacted}
+                              onClick={(e) => { e.stopPropagation(); handleToggleReaction(msg.id!, emoji); }}
+                              className="cx-reaction active:scale-95 transition-transform"
                             >
                               <span>{emoji}</span>
-                              <span className="font-mono">{userIds.length}</span>
+                              <span className="tabular-nums">{userIds.length}</span>
                             </button>
                           );
                         })}
@@ -710,11 +758,12 @@ export function ClanDiscussionTab({
                     {/* Quick Hover / Action Bar */}
                     {!msg.isDeleted && (
                       <div
-                        className={`transition-all duration-150 flex items-center gap-1 px-1 mt-0.5 ${
-                          showReactionPicker
+                        className={`transition-opacity duration-150 flex items-center gap-0.5 mt-1 ${
+                          showReactionPicker || isSelected
                             ? 'opacity-100'
-                            : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-h-0 group-hover:max-h-8 overflow-hidden group-hover:overflow-visible'
+                            : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-h-0 group-hover:max-h-8 focus-within:max-h-8 overflow-hidden group-hover:overflow-visible'
                         } ${isMe ? 'justify-end' : 'justify-start'}`}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         {/* Reaction Trigger Button */}
                         <button
@@ -723,24 +772,26 @@ export function ClanDiscussionTab({
                             e.stopPropagation();
                             setActiveReactionMessageId(activeReactionMessageId === msg.id ? null : msg.id!);
                           }}
-                          className={`p-1 rounded-full transition-colors ${
+                          className={`w-7 h-7 inline-flex items-center justify-center rounded-full transition-colors !shadow-none ${
                             showReactionPicker
-                              ? 'text-sienna bg-ink-2 shadow-sm'
+                              ? 'text-bone bg-ink-2'
                               : 'text-bone-dim hover:text-bone hover:bg-ink-2'
                           }`}
+                          aria-label="React"
                           title="React"
                         >
-                          <Smile size={13} />
+                          <Smile size={14} />
                         </button>
 
                         {/* Reply Button */}
                         <button
                           type="button"
                           onClick={() => startReply(msg)}
-                          className="p-1 rounded-full text-bone-dim hover:text-bone hover:bg-ink-2 transition-colors"
+                          className="w-7 h-7 inline-flex items-center justify-center rounded-full text-bone-dim hover:text-bone hover:bg-ink-2 transition-colors !shadow-none"
+                          aria-label="Reply"
                           title="Reply"
                         >
-                          <Reply size={13} className="rotate-180" />
+                          <Reply size={14} className="rotate-180" />
                         </button>
 
                         {/* Edit Button (Author only) */}
@@ -748,10 +799,11 @@ export function ClanDiscussionTab({
                           <button
                             type="button"
                             onClick={() => startEdit(msg)}
-                            className="p-1 rounded-full text-bone-dim hover:text-bone hover:bg-ink-2 transition-colors"
+                            className="w-7 h-7 inline-flex items-center justify-center rounded-full text-bone-dim hover:text-bone hover:bg-ink-2 transition-colors !shadow-none"
+                            aria-label="Edit"
                             title="Edit"
                           >
-                            <Edit2 size={13} />
+                            <Edit2 size={14} />
                           </button>
                         )}
 
@@ -759,11 +811,12 @@ export function ClanDiscussionTab({
                         {canManageMsg && (
                           <button
                             type="button"
-                            onClick={() => handleDeleteMessage(msg)}
-                            className="p-1 rounded-full text-bone-dim hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            onClick={() => { setSelectedMessageId(null); handleDeleteMessage(msg); }}
+                            className="w-7 h-7 inline-flex items-center justify-center rounded-full text-bone-dim hover:text-danger hover:bg-danger/10 transition-colors !shadow-none"
+                            aria-label="Delete"
                             title="Delete"
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={14} />
                           </button>
                         )}
                       </div>
@@ -785,7 +838,8 @@ export function ClanDiscussionTab({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             onClick={scrollToBottom}
-            className="absolute bottom-20 right-6 p-2.5 rounded-full bg-ink-2 text-bone border border-line/30 shadow-xl hover:bg-ink-3 transition-colors z-30"
+            aria-label="Scroll to latest"
+            className="absolute bottom-24 right-4 w-10 h-10 inline-flex items-center justify-center rounded-full bg-ink text-bone border border-line shadow-lg hover:bg-ink-2 transition-colors z-30"
           >
             <ChevronDown size={18} />
           </motion.button>
@@ -799,25 +853,23 @@ export function ClanDiscussionTab({
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="px-4 py-2.5 bg-ink-2 border-t border-line/20 flex items-center justify-between z-20"
+            className="cx-composer px-4 py-2.5 flex items-center justify-between gap-3 z-20"
           >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="p-1.5 rounded-lg bg-sienna/20 text-sienna shrink-0">
-                {editingMessage ? <Edit2 size={14} /> : <Reply size={14} className="rotate-180" />}
+            <div className="min-w-0 flex-1 border-l-[3px] border-sienna pl-3">
+              <div className="text-xs font-semibold text-sienna flex items-center gap-1.5">
+                {editingMessage ? <Edit2 size={12} /> : <Reply size={12} className="rotate-180" />}
+                {editingMessage ? 'Editing message' : `Replying to ${replyingTo?.userName}`}
               </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-sienna">
-                  {editingMessage ? 'Editing Message' : `Replying to ${replyingTo?.userName}`}
-                </div>
-                <p className="text-[11px] text-bone-dim truncate line-clamp-1">
-                  {editingMessage ? editingMessage.text : replyingTo?.text || 'Attached photo'}
-                </p>
-              </div>
+              <p className="text-xs text-bone-dim truncate mt-0.5">
+                {editingMessage ? editingMessage.text : replyingTo?.text || 'Photo'}
+              </p>
             </div>
 
             <button
+              type="button"
               onClick={cancelReplyOrEdit}
-              className="p-1 rounded-full text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors"
+              aria-label="Cancel"
+              className="w-8 h-8 inline-flex items-center justify-center rounded-full text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors shrink-0 !shadow-none"
             >
               <X size={16} />
             </button>
@@ -827,14 +879,15 @@ export function ClanDiscussionTab({
 
       {/* ─── ATTACHED IMAGE PREVIEWS ─── */}
       {images.length > 0 && (
-        <div className="px-4 py-2 bg-ink-2 border-t border-line/20 flex items-center gap-2 overflow-x-auto z-20">
+        <div className="cx-composer px-4 py-2.5 flex items-center gap-2 overflow-x-auto z-20">
           {images.map((img, idx) => (
-            <div key={idx} className="relative w-14 h-14 rounded-xl overflow-hidden bg-ink-3 border border-line/20 shrink-0">
+            <div key={idx} className="relative w-14 h-14 rounded-xl overflow-hidden bg-ink-3 border border-line shrink-0">
               <img src={img} alt="attachment" className="w-full h-full object-cover" />
               <button
                 type="button"
                 onClick={() => removeImage(idx)}
-                className="absolute top-1 right-1 p-0.5 rounded-full bg-black/70 text-white hover:bg-red-500 transition-colors"
+                aria-label="Remove image"
+                className="absolute top-1 right-1 p-0.5 rounded-full bg-black/70 text-white hover:bg-black transition-colors !shadow-none"
               >
                 <X size={12} />
               </button>
@@ -846,22 +899,26 @@ export function ClanDiscussionTab({
       {/* ─── CHAT INPUT BAR ─── */}
       <form
         onSubmit={handleSendMessage}
-        className="p-2 sm:p-3 bg-ink-2/95 border-t border-line/20 backdrop-blur-md flex items-center gap-2 z-20 shrink-0"
+        className="cx-composer px-2 pt-2 sm:px-3 flex items-end gap-2 z-20 shrink-0"
+        style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
       >
-        {/* Attachment Button */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={images.length >= 3 || isProcessingImage}
-          className="w-10 h-10 flex items-center justify-center rounded-2xl bg-ink-3 hover:bg-ink text-bone-dim hover:text-sienna border border-line/20 transition-colors disabled:opacity-50 shrink-0 shadow-sm"
-          title="Attach Image"
-        >
-          {isProcessingImage ? (
-            <Loader2 size={18} className="animate-spin text-sienna" />
-          ) : (
-            <ImageIcon size={18} />
-          )}
-        </button>
+        {/* Attachment Button (images can't be added while editing) */}
+        {!editingMessage && (
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={images.length >= 3 || isProcessingImage || isSending}
+            className="w-10 h-10 flex items-center justify-center rounded-full text-bone-dim hover:text-bone hover:bg-ink-3 transition-colors disabled:opacity-40 shrink-0 !shadow-none"
+            aria-label="Attach image"
+            title="Attach image"
+          >
+            {isProcessingImage ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <ImageIcon size={20} />
+            )}
+          </button>
+        )}
         <input
           id="chat-image-upload"
           name="chat-image-upload"
@@ -875,7 +932,7 @@ export function ClanDiscussionTab({
         />
 
         {/* Text Input */}
-        <div className="flex-1 relative flex items-center">
+        <div className="cx-composer-field flex-1 min-w-0 flex items-center">
           <label htmlFor="chat-message-input" className="sr-only">Message</label>
           <textarea
             id="chat-message-input"
@@ -885,21 +942,22 @@ export function ClanDiscussionTab({
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={editingMessage ? 'Edit your message...' : 'Message the clan...'}
+            placeholder={editingMessage ? 'Edit your message' : 'Message'}
             rows={1}
             maxLength={1000}
-            className="w-full bg-ink-3 border border-line/25 rounded-2xl px-4 py-2 min-h-[40px] text-sm text-bone placeholder:text-bone-dim/40 resize-none focus:outline-none focus:border-sienna/80 transition-colors leading-relaxed shadow-inner max-h-28 flex items-center [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
+            className="w-full bg-transparent px-4 py-2 min-h-[40px] text-sm text-bone placeholder:text-bone-dim/70 resize-none focus:outline-none leading-relaxed max-h-28 select-text [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
           />
         </div>
 
         {/* Send Button */}
         <button
           type="submit"
-          disabled={(!inputText.trim() && images.length === 0) || isProcessingImage}
-          className="w-10 h-10 flex items-center justify-center rounded-2xl bg-sienna hover:bg-sienna/90 text-bg font-bold disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(205,111,72,0.3)] transition-all active:scale-95 shrink-0"
-          title="Send"
+          disabled={(!inputText.trim() && images.length === 0) || isProcessingImage || isSending}
+          className="w-10 h-10 flex items-center justify-center rounded-full bg-sienna disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-95 shrink-0 !shadow-none"
+          aria-label={editingMessage ? 'Save edit' : 'Send message'}
+          title={editingMessage ? 'Save' : 'Send'}
         >
-          <Send size={16} className="-ml-0.5" />
+          {isSending ? <Loader2 size={16} className="animate-spin" /> : editingMessage ? <Check size={17} /> : <Send size={16} className="-ml-0.5" />}
         </button>
       </form>
 
@@ -911,8 +969,11 @@ export function ClanDiscussionTab({
             className="fixed inset-0 z-[700] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
           >
             <button
+              type="button"
               onClick={() => setLightboxImage(null)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+              aria-label="Close image"
+              className="absolute right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors !shadow-none"
+              style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
             >
               <X size={24} />
             </button>

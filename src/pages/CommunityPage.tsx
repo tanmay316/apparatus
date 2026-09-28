@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Shield, Target, CalendarDays, Sparkles } from 'lucide-react';
+import { Plus, Shield, Target, CalendarDays, Sparkles, X, ChevronRight } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
-import { useUIStore } from '@/stores/ui-store';
 
 import { ClansTab } from '@/components/community/ClansTab';
 import { EventsTab } from '@/components/community/EventsTab';
@@ -13,6 +12,14 @@ import { CreateChallengeSheet } from '@/components/community/CreateChallengeShee
 import { CreateEventSheet } from '@/components/community/CreateEventSheet';
 import { CreatePersonalChallengeSheet } from '@/components/community/CreatePersonalChallengeSheet';
 import { UpcomingReminderWidget } from '@/components/community/UpcomingReminderWidget';
+import { Eyebrow, Segmented } from '@/components/community/ui';
+
+const CREATE_OPTIONS = [
+  { type: 'clan', icon: Shield, title: 'Clan', description: 'Build a group around a sport, gym or city' },
+  { type: 'event', icon: CalendarDays, title: 'Event', description: 'Host a virtual or in-person meetup' },
+  { type: 'challenge', icon: Target, title: 'Community challenge', description: 'Set a goal with a public leaderboard' },
+  { type: 'personal_challenge', icon: Sparkles, title: 'Personal challenge', description: 'Track a goal just for yourself' },
+] as const;
 
 export function CommunityPage() {
   const [activeTab, setActiveTab] = useState<'clans' | 'events' | 'challenges'>('clans');
@@ -20,7 +27,6 @@ export function CommunityPage() {
   const [createType, setCreateType] = useState<'clan' | 'challenge' | 'event' | 'personal_challenge' | null>(null);
   
   const { user } = useAuthStore();
-  const isDark = useUIStore(s => s.theme === 'dark');
 
   useEffect(() => {
     document.body.classList.toggle('community-create-open', showCreateMenu || createType !== null);
@@ -28,75 +34,51 @@ export function CommunityPage() {
   }, [showCreateMenu, createType]);
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-[1200px] mx-auto w-full pb-28">
-      
-      {/* Header with + Create Button on the Right Corner */}
-      <div className="px-4 py-6 border-b border-line">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="font-mono text-sienna text-xs tracking-widest uppercase">Connect & Compete</div>
-            <h1 className="font-display text-3xl sm:text-4xl text-bone">Community</h1>
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="cx pro-scope max-w-[1200px] mx-auto w-full pb-28">
+
+      {/* Header */}
+      <div className="px-4 pt-6 pb-4">
+        <div className="flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <Eyebrow>Connect & compete</Eyebrow>
+            <h1 className="mt-1 font-display text-3xl sm:text-4xl tracking-wide text-bone">Community</h1>
+            <p className="mt-1.5 max-w-xl text-sm text-bone-dim">
+              Clans, events and challenges from athletes like you.
+            </p>
           </div>
 
           {user && (
-            <button 
-              onClick={() => setShowCreateMenu(true)} 
-              className="w-10 h-10 rounded-full bg-sienna/20 hover:bg-sienna/30 text-sienna border border-sienna/40 flex items-center justify-center transition-all hover:scale-105 active:scale-95 shrink-0 shadow-sm"
-              title="Create Clan, Event or Challenge"
+            <button
+              type="button"
+              onClick={() => setShowCreateMenu(true)}
+              className="cx-btn bg-sienna shrink-0"
+              aria-label="Create clan, event or challenge"
             >
-              <Plus size={22} />
+              <Plus size={18} />
+              <span className="hidden sm:inline">Create</span>
             </button>
           )}
         </div>
-        <p className="text-bone-dim mt-2 text-xs sm:text-sm max-w-xl">
-          Join clans, attend community events, and push your limits in fitness challenges.
-        </p>
       </div>
 
-      {/* Primary Tabs (Clans -> Events -> Challenges) */}
-      <div className="sticky top-[72px] z-30 bg-bg/80 backdrop-blur-xl border-b border-line px-4 pt-4 pb-0 flex gap-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {/* 1. Clans Tab */}
-        <button
-          onClick={() => setActiveTab('clans')}
-          className={`pb-4 relative font-display text-lg tracking-wide whitespace-nowrap transition-colors ${
-            activeTab === 'clans' ? 'text-bone font-bold' : 'text-bone-dim hover:text-bone'
-          }`}
-        >
-          Clans
-          {activeTab === 'clans' && (
-            <motion.div className="absolute bottom-0 left-0 right-0 h-1 bg-sienna rounded-t-full" />
-          )}
-        </button>
-
-        {/* 2. Events Tab */}
-        <button
-          onClick={() => setActiveTab('events')}
-          className={`pb-4 relative font-display text-lg tracking-wide whitespace-nowrap transition-colors ${
-            activeTab === 'events' ? 'text-bone font-bold' : 'text-bone-dim hover:text-bone'
-          }`}
-        >
-          Events
-          {activeTab === 'events' && (
-            <motion.div className="absolute bottom-0 left-0 right-0 h-1 bg-sienna rounded-t-full" />
-          )}
-        </button>
-
-        {/* 3. Challenges Tab */}
-        <button
-          onClick={() => setActiveTab('challenges')}
-          className={`pb-4 relative font-display text-lg tracking-wide whitespace-nowrap transition-colors ${
-            activeTab === 'challenges' ? 'text-bone font-bold' : 'text-bone-dim hover:text-bone'
-          }`}
-        >
-          Challenges
-          {activeTab === 'challenges' && (
-            <motion.div className="absolute bottom-0 left-0 right-0 h-1 bg-sienna rounded-t-full" />
-          )}
-        </button>
+      {/* Primary tabs */}
+      <div className="sticky top-[72px] z-30 px-4 py-3 bg-ink/90 backdrop-blur-xl border-b border-line">
+        <Segmented
+          layoutId="community-primary-tab"
+          fullWidth
+          className="sm:max-w-md"
+          value={activeTab}
+          onChange={setActiveTab}
+          options={[
+            { value: 'clans', label: 'Clans' },
+            { value: 'events', label: 'Events' },
+            { value: 'challenges', label: 'Challenges' },
+          ]}
+        />
       </div>
 
       {/* Tab Content Body */}
-      <div className="px-4 py-6">
+      <div className="px-4 py-5">
         {activeTab === 'clans' && <ClansTab />}
         {activeTab === 'events' && <EventsTab />}
         {activeTab === 'challenges' && <ChallengesTab />}
@@ -106,64 +88,49 @@ export function CommunityPage() {
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {showCreateMenu && (
-            <div className="fixed inset-0 z-[600] flex flex-col justify-end">
-              <motion.div 
+            <div className="cx pro-scope fixed inset-0 z-[600] flex flex-col justify-end sm:items-center sm:justify-center">
+              <motion.div
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 onClick={() => setShowCreateMenu(false)}
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
               />
-              <motion.div 
-                initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-                className="relative bg-ink border-t border-line rounded-t-[32px] p-6 pb-safe overflow-hidden text-bone"
+              <motion.div
+                role="dialog"
+                aria-modal="true"
+                aria-label="Create new"
+                initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.35 }}
+                className="relative w-full sm:max-w-md bg-ink border-t sm:border border-line rounded-t-[28px] sm:rounded-[28px] px-5 pt-3 pb-safe text-bone"
               >
-                <div className="w-12 h-1.5 bg-line rounded-full mx-auto mb-6" />
-                
-                <h2 className="font-display text-2xl text-bone mb-6">Create New</h2>
-                
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <button 
-                    onClick={() => { setShowCreateMenu(false); setCreateType('clan'); }}
-                    className="card p-4 flex flex-col items-center text-center hover:border-sienna/50 transition-colors group"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-sienna/20 text-sienna flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                      <Shield size={22} />
-                    </div>
-                    <h3 className="font-display text-sm text-bone mb-1">Clan</h3>
-                    <p className="text-[11px] text-bone-dim leading-tight">Build your community</p>
-                  </button>
+                <div className="w-10 h-1 bg-line-solid rounded-full mx-auto mb-4 sm:hidden" />
 
-                  <button 
-                    onClick={() => { setShowCreateMenu(false); setCreateType('event'); }}
-                    className="card p-4 flex flex-col items-center text-center hover:border-blue-500/50 transition-colors group"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                      <CalendarDays size={22} />
-                    </div>
-                    <h3 className="font-display text-sm text-bone mb-1">Event</h3>
-                    <p className="text-[11px] text-bone-dim leading-tight">Virtual or real meetup</p>
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-bone">Create</h2>
+                    <p className="text-xs text-bone-dim mt-0.5">What would you like to start?</p>
+                  </div>
+                  <button type="button" onClick={() => setShowCreateMenu(false)} className="cx-icon-btn w-9 h-9" aria-label="Close">
+                    <X size={18} />
                   </button>
+                </div>
 
-                  <button 
-                    onClick={() => { setShowCreateMenu(false); setCreateType('challenge'); }}
-                    className="card p-4 flex flex-col items-center text-center hover:border-emerald-500/50 transition-colors group"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                      <Target size={22} />
-                    </div>
-                    <h3 className="font-display text-sm text-bone mb-1">Challenge</h3>
-                    <p className="text-[11px] text-bone-dim leading-tight">Community fitness goal</p>
-                  </button>
-
-                  <button 
-                    onClick={() => { setShowCreateMenu(false); setCreateType('personal_challenge'); }}
-                    className="card p-4 flex flex-col items-center text-center hover:border-violet-500/50 transition-colors group"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-violet-500/20 text-violet-400 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
-                      <Sparkles size={22} />
-                    </div>
-                    <h3 className="font-display text-sm text-bone mb-1">Personal</h3>
-                    <p className="text-[11px] text-bone-dim leading-tight">Your own challenge</p>
-                  </button>
+                <div className="cx-surface overflow-hidden divide-y divide-line mb-5">
+                  {CREATE_OPTIONS.map(opt => (
+                    <button
+                      key={opt.type}
+                      type="button"
+                      onClick={() => { setShowCreateMenu(false); setCreateType(opt.type); }}
+                      className="w-full flex items-center gap-3.5 px-4 py-3.5 text-left hover:bg-ink-3 transition-colors !border-0 !rounded-none"
+                    >
+                      <span className="w-10 h-10 rounded-xl bg-ink border border-line flex items-center justify-center text-sienna shrink-0">
+                        <opt.icon size={19} />
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-semibold text-bone">{opt.title}</span>
+                        <span className="block text-xs text-bone-dim mt-0.5">{opt.description}</span>
+                      </span>
+                      <ChevronRight size={18} className="text-bone-dim shrink-0" />
+                    </button>
+                  ))}
                 </div>
               </motion.div>
             </div>

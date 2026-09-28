@@ -1,10 +1,12 @@
 import { create } from 'zustand';
-import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult, signOut as firebaseSignOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult, signOut as firebaseSignOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile as updateAuthProfile } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { SocialLogin } from '@capgo/capacitor-social-login';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { deleteField, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider, ADMIN_EMAIL } from '@/lib/firebase';
 import { sanitizeUsername, validateDisplayName } from '@/lib/validation';
+import { STATS_VERSION, emptyStats } from '@/lib/stats';
+import { getProfileVisibility } from '@/lib/privacy';
 import { useUIStore } from '@/stores/ui-store';
 import type { UserProfile, UserStats } from '@/types';
 
@@ -26,19 +28,7 @@ interface AuthState {
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
 }
 
-const DEFAULT_STATS: UserStats = {
-  totalWorkouts: 0,
-  totalCalories: 0,
-  totalDurationMin: 0,
-  totalVolume: 0,
-  currentStreak: 0,
-  longestStreak: 0,
-  lastWorkoutDate: null,
-  xp: 0,
-  prCount: 0,
-  bestHold: 0,
-  badges: [],
-};
+const DEFAULT_STATS: UserStats = { ...emptyStats(), statsVersion: STATS_VERSION };
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs = 8000, errorMsg = 'Operation timed out'): Promise<T> {
   return Promise.race([
@@ -80,6 +70,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               profile.photoURL = firebaseUser.photoURL;
               setDoc(profileRef, { photoURL: firebaseUser.photoURL }, { merge: true }).catch(() => {});
             }
+            // Profiles are readable by every signed-in user, so never keep the email
+            // or device push tokens there (tokens now live in users/{uid}/private/push).
+            const privateKeys = ['email', 'fcmToken', 'fcmTokens', 'lastFcmRegisteredAt'].filter(k => k in profile);
+            if (privateKeys.length) {
+              const cleanup: Record<string, unknown> = {};
+              for (const k of privateKeys) { delete (profile as any)[k]; cleanup[k] = deleteField(); }
+              setDoc(profileRef, cleanup, { merge: true }).catch(() => {});
+            }
           } else {
             // First sign-in: create profile
             const usernameBase = sanitizeUsername(
@@ -95,7 +93,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               username,
               usernameLower: username,
               displayNameLower: safeDisplayName.toLowerCase(),
-              email: firebaseUser.email || '',
               photoURL: firebaseUser.photoURL || '',
               bio: '',
               height: null,
@@ -163,6 +160,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           }
 
           set({ user: firebaseUser, profile, stats, loading: false, initialized: true });
+          // Heal accounts that renamed before Settings synced the Auth profile.
+          syncAuthIdentity(profile.displayName || undefined, profile.photoURL || undefined);
+          runAccountMaintenance(firebaseUser.uid, profile, stats);
         } else {
           set({ user: null, profile: null, stats: null, loading: false, initialized: true });
         }
@@ -333,5 +333,46 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     };
     await setDoc(profileRef, updates, { merge: true });
     set({ profile: { ...profile, ...data } });
+    await syncAuthIdentity(data.displayName, data.photoURL);
+    // Strength rank is relative to bodyweight.
+    const { stats } = get();
+    if (data.weight !== undefined && stats) {
+      import('@/services/stats').then(({ syncAthleteRank }) => syncAthleteRank(user.uid, stats, { notify: false })).catch(() => {});
+    }
   },
 }));
+
+/** One-off background repairs: rebuild stale stats and hide public content of private profiles. */
+function runAccountMaintenance(uid: string, profile: UserProfile, stats: UserStats) {
+  if ((stats.statsVersion || 0) < STATS_VERSION) {
+    import('@/services/stats').then(({ scheduleStatsReconcile }) => scheduleStatsReconcile(uid)).catch(() => {});
+  }
+  const flag = `apparatus_privacy_synced_${uid}`;
+  if (getProfileVisibility(profile) !== 'public' && !localStorage.getItem(flag)) {
+    import('@/services/social')
+      .then(({ restrictPublicContent }) => restrictPublicContent(uid))
+      .then(() => localStorage.setItem(flag, '1'))
+      .catch(err => console.warn('[privacy] could not restrict public content', err));
+  }
+}
+
+/** New posts/comments read `user.displayName`, so the Auth profile must follow Settings edits. */
+async function syncAuthIdentity(displayName?: string, photoURL?: string) {
+  const current = auth.currentUser;
+  if (!current) return;
+  const patch: { displayName?: string; photoURL?: string | null } = {};
+  if (displayName !== undefined && displayName !== current.displayName) patch.displayName = displayName;
+  if (photoURL !== undefined) {
+    // Compressed data-URL avatars live only in Firestore (Auth rejects long URLs);
+    // clear the Auth photo so stale provider photos aren't copied into new posts.
+    const authPhoto = /^https?:\/\//.test(photoURL) && photoURL.length < 1500 ? photoURL : null;
+    if (authPhoto !== current.photoURL) patch.photoURL = authPhoto;
+  }
+  if (Object.keys(patch).length === 0) return;
+  try {
+    await updateAuthProfile(current, patch);
+    useAuthStore.setState({ user: auth.currentUser });
+  } catch (err) {
+    console.warn('[auth] could not sync Auth profile', err);
+  }
+}

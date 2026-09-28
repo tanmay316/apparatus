@@ -13,8 +13,9 @@ import {
   updateDoc,
   limit,
 } from 'firebase/firestore';
-import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { deleteObject, ref } from 'firebase/storage';
 import { db, storage, ADMIN_EMAIL } from '@/lib/firebase';
+import { compressImageFile } from '@/utils/image-compression';
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -302,6 +303,8 @@ export async function deleteAccountData(uid: string, username?: string, onProgre
 
   // Also delete the user profile doc itself
   refs.push(doc(db, 'users', uid));
+  refs.push(doc(db, 'users', uid, 'private', 'push'));
+  refs.push(doc(db, 'users', uid, 'private', 'api_keys'));
   if (username) refs.push(doc(db, 'usernames', username));
 
   // Decrement member counts before deleting
@@ -354,18 +357,39 @@ export async function resetUserData(uid: string, onProgress?: (msg: string, pct:
 
 // ─── Avatar ───────────────────────────────────────────────────
 
-export async function uploadAvatar(uid: string, file: File) {
-  if (!file.type.startsWith('image/')) throw new Error('Choose an image file.');
-  if (file.size > 5 * 1024 * 1024) throw new Error('Profile images must be smaller than 5 MB.');
-  const avatarRef = ref(storage, `avatars/${uid}/profile`);
-  await uploadBytes(avatarRef, file, { contentType: file.type, cacheControl: 'public,max-age=3600' });
-  return getDownloadURL(avatarRef);
+/**
+ * Profile images are compressed on-device into small WebP/JPEG data URLs and
+ * stored on the user document (no Firebase Storage bucket required).
+ * Each pass shrinks quality/size until the result fits the byte budget.
+ */
+async function compressToBudget(
+  file: File,
+  passes: Array<[number, number, number]>,
+  maxChars: number,
+  label: string,
+) {
+  if (!file.type.startsWith('image/')) throw new Error('Choose an image file (JPG, PNG, or WebP).');
+  if (file.size > 20 * 1024 * 1024) throw new Error(`${label} must be smaller than 20 MB.`);
+  let result = '';
+  for (const [w, h, q] of passes) {
+    result = await compressImageFile(file, w, h, q);
+    if (result.length <= maxChars) return result;
+  }
+  throw new Error(`${label} is too detailed to compress. Try a different image.`);
+}
+
+export async function uploadAvatar(_uid: string, file: File) {
+  // ~10–30 KB
+  return compressToBudget(file, [[256, 256, 0.72], [200, 200, 0.6], [160, 160, 0.5]], 60_000, 'Profile photo');
+}
+
+export async function uploadProfileCover(_uid: string, file: File) {
+  // ~30–80 KB
+  return compressToBudget(file, [[1000, 400, 0.62], [800, 320, 0.55], [640, 256, 0.5]], 140_000, 'Header image');
 }
 
 export async function deleteAvatar(uid: string) {
-  try {
-    await deleteObject(ref(storage, `avatars/${uid}/profile`));
-  } catch (error: any) {
-    if (error?.code !== 'storage/object-not-found') throw error;
-  }
+  // Legacy cleanup for avatars uploaded to Storage; never block the caller.
+  const attempt = deleteObject(ref(storage, `avatars/${uid}/profile`)).catch(() => undefined);
+  await Promise.race([attempt, new Promise((r) => setTimeout(r, 4000))]);
 }

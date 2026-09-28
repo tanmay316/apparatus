@@ -13,14 +13,17 @@ import { Timestamp } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/auth-store';
 import { requestNotificationPermission } from '@/utils/notifications';
 import { useUIStore } from '@/stores/ui-store';
-import { useCardioStore, startGpsWatch, stopGpsWatch, finishTracking } from '@/stores/cardio-store';
+import { useCardioStore, startGpsWatch, stopGpsWatch, finishTracking, checkGpsStaleness, getCardioActiveSec } from '@/stores/cardio-store';
 import { usePedometerStore } from '@/stores/pedometer-store';
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { saveCardioActivity, getUserCardioActivities } from '@/services/cardio';
-import { calculateCardioCalories } from '@/lib/calories';
+import { CALORIE_MODEL_VERSION, calculateCardioCalories } from '@/lib/calories';
 import { startActiveSession, endActiveSession, postActivity } from '@/services/social';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
+import { SwipeToStart } from '@/components/cardio/SwipeToStart';
+import { NowPlayingCard } from '@/components/cardio/NowPlayingCard';
+import { getLiveSteps } from '@/lib/cardio-steps';
 import { updateUserChallengeProgress } from '@/services/community';
 import { calculateCorrectedElevation } from '@/services/elevation-service';
 import { NativeWorkoutLocation } from '@/utils/native-workout-location';
@@ -71,29 +74,13 @@ function getCardioNotificationContent(st: ReturnType<typeof useCardioStore.getSt
   return { title, body, isPaused };
 }
 
-function getLiveSteps(
-  type: CardioActivityType | null, 
-  distKm: number, 
-  pedStore: { isSessionActive: boolean, sessionSteps: number, stepSource: string }
-): number | undefined {
-  if (type !== 'walk' && type !== 'run') return undefined;
-  
-  if (pedStore.isSessionActive && (pedStore.stepSource === 'native' || pedStore.stepSource === 'motion_estimate')) {
-    return pedStore.sessionSteps;
-  }
-  
-  if (distKm < 0.01) return 0;
-  const estSteps = Math.round(distKm * 1000 / (type === 'run' ? 1.0 : 0.762));
-  return estSteps;
-}
-
 const ACTIVITY_OPTIONS: { type: CardioActivityType | 'workout'; label: string; tag: string; icon: React.ReactNode; color: string; bgGradient: string; description: string }[] = [
   { 
     type: 'workout' as any, 
     label: 'Strength Workout', 
     tag: 'GYM & REPS',
     icon: <Dumbbell size={28} />, 
-    color: 'from-orange-500 to-amber-500', 
+    color: 'text-orange-500', 
     bgGradient: 'from-orange-500/10 via-amber-500/5 to-transparent',
     description: 'Weight training, routines and logged sets' 
   },
@@ -102,7 +89,7 @@ const ACTIVITY_OPTIONS: { type: CardioActivityType | 'workout'; label: string; t
     label: 'Outdoor Walk', 
     tag: 'STEPS & GPS',
     icon: <Footprints size={28} />, 
-    color: 'from-emerald-500 to-teal-500', 
+    color: 'text-emerald-500', 
     bgGradient: 'from-emerald-500/10 via-teal-500/5 to-transparent',
     description: 'Track steps, pace and scenic walking route' 
   },
@@ -111,7 +98,7 @@ const ACTIVITY_OPTIONS: { type: CardioActivityType | 'workout'; label: string; t
     label: 'Running Session', 
     tag: 'TEMPO & DISTANCE',
     icon: <Zap size={28} />, 
-    color: 'from-cyan-500 to-blue-600', 
+    color: 'text-cyan-500', 
     bgGradient: 'from-cyan-500/10 via-blue-600/5 to-transparent',
     description: 'Live pace, interval splits and GPS track' 
   },
@@ -120,7 +107,7 @@ const ACTIVITY_OPTIONS: { type: CardioActivityType | 'workout'; label: string; t
     label: 'Cycling & Ride', 
     tag: 'SPEED & ELEVATION',
     icon: <Bike size={28} />, 
-    color: 'from-purple-500 to-rose-500', 
+    color: 'text-purple-500', 
     bgGradient: 'from-purple-500/10 via-rose-500/5 to-transparent',
     description: 'Speedometer, max speed and elevation gain' 
   },
@@ -174,10 +161,10 @@ export function CardioTracker() {
     return 'select';
   });
   
-  // Map layer state — default to street, persist in localStorage
+  // Map layer state - default to street, persist in localStorage
   const [mapLayer, _setMapLayer] = useState<MapThemeKey>(() => {
     const saved = localStorage.getItem('apparatus_map_layer');
-    return (saved as MapThemeKey) || 'street';
+    return saved && saved in MAP_THEMES ? saved as MapThemeKey : 'street';
   });
 
   const setMapLayer = (layer: MapThemeKey) => {
@@ -238,6 +225,18 @@ export function CardioTracker() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [recenterTrigger, setRecenterTrigger] = useState(0);
 
+  // Live sheet height so the floating map buttons always sit just above it.
+  const [sheetEl, setSheetEl] = useState<HTMLDivElement | null>(null);
+  const [sheetH, setSheetH] = useState(260);
+  useEffect(() => {
+    if (!sheetEl) return;
+    const update = () => setSheetH(sheetEl.getBoundingClientRect().height);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(sheetEl);
+    return () => ro.disconnect();
+  }, [sheetEl]);
+
   const { heading, requestPermission, visualHeadingRef } = useCompassHeading({
     movementBearing: store.currentLocation?.heading,
     speedKmh: store.currentSpeedKmh
@@ -280,17 +279,12 @@ export function CardioTracker() {
     };
   }, [recentActivities]);
 
-  // Timer — counts up continuously when active, halts cleanly when manually paused or auto-paused
+  // Timer - counts up continuously when active, halts cleanly when manually paused or auto-paused
   useEffect(() => {
     if (!store.isTracking || !store.startedAt) return;
     const interval = setInterval(() => {
-      const st = useCardioStore.getState();
-      if (!st.isPaused && st.autoPauseStatus !== 'PAUSED') {
-        const autoPauseAdd = st.autoPausedAt ? (Date.now() - st.autoPausedAt) : 0;
-        const totalPause = st.totalPausedMs + autoPauseAdd;
-        const raw = Date.now() - st.startedAt! - totalPause;
-        setElapsedSec(Math.max(0, Math.floor(raw / 1000)));
-      }
+      checkGpsStaleness();
+      setElapsedSec(getCardioActiveSec(useCardioStore.getState()));
     }, 500);
     return () => clearInterval(interval);
   }, [store.isTracking, store.startedAt, store.isPaused, store.autoPauseStatus]);
@@ -301,10 +295,7 @@ export function CardioTracker() {
       if (document.visibilityState === 'visible') {
         const st = useCardioStore.getState();
         if (st.isTracking && st.startedAt) {
-          const autoPauseAdd = (st.autoPauseStatus === 'PAUSED' && st.autoPausedAt) ? (Date.now() - st.autoPausedAt) : 0;
-          const totalPause = st.totalPausedMs + autoPauseAdd;
-          const raw = Date.now() - st.startedAt - totalPause;
-          setElapsedSec(Math.max(0, Math.floor(raw / 1000)));
+          setElapsedSec(getCardioActiveSec(st));
         }
       }
     };
@@ -314,14 +305,13 @@ export function CardioTracker() {
 
   const handleBackgroundSave = async () => {
     if (!store.isTracking || !store.activityType) return;
+    const activeSecAtStop = getCardioActiveSec(useCardioStore.getState());
     const finalStore = await finishTracking();
     const startedAt = finalStore.startedAt;
-    // Prefer native movingDurationSec (accurate, accounts for auto-pause)
-    const durationSec = finalStore.movingDurationSec > 0
-      ? finalStore.movingDurationSec
-      : (startedAt
-        ? Math.max(0, Math.floor((Date.now() - startedAt - finalStore.totalPausedMs) / 1000))
-        : elapsedSec);
+    const durationSec = Math.min(
+      finalStore.movingDurationSec > 0 ? finalStore.movingDurationSec : activeSecAtStop,
+      activeSecAtStop
+    );
     const dist = finalStore.distanceKm;
     const type = finalStore.activityType;
     if (!type) return;
@@ -337,9 +327,11 @@ export function CardioTracker() {
       const durationMin = durationSec / 60;
       const movingDurationSec = durationSec;
       const elapsedDurationSec = Math.max(0, Math.floor((Date.now() - startedAt!) / 1000));
-      const pausedDurationSec = Math.floor(finalStore.totalPausedMs / 1000);
+      const pausedDurationSec = Math.max(0, elapsedDurationSec - activeSecAtStop);
       const avgSpeedKmh = movingDurationSec > 0 ? (dist / movingDurationSec) * 3600 : 0;
-      const calories = calculateCardioCalories(type, dist, durationMin, userWeight || 70, avgSpeedKmh);
+      const calories = calculateCardioCalories({
+        type, distanceKm: dist, movingMin: durationMin, bodyWeightKg: userWeight, elevationGainM: elevation, route,
+      });
 
       await saveCardioActivity(user.uid, {
         userId: user.uid,
@@ -358,13 +350,15 @@ export function CardioTracker() {
         maxSpeedKmh: Math.round(maxSpeed * 10) / 10,
         avgPace: formatPace(dist, durationSec),
         calories,
+        caloriesVersion: CALORIE_MODEL_VERSION,
+        bodyweight: userWeight || undefined,
         elevationGainM: Math.round(elevation),
         route,
         visibility: 'followers',
         notes: 'Auto-saved session',
         steps: getLiveSteps(type, dist, usePedometerStore.getState()),
         stepSource: usePedometerStore.getState().stepSource,
-      }).catch(console.error);
+      }).then(() => useAuthStore.getState().refreshProfile()).catch(console.error);
     }
   };
 
@@ -434,45 +428,48 @@ export function CardioTracker() {
       await pedometerStore.stopSession();
     }
 
+    // Measure before finishTracking(): stopping clears an in-progress pause without crediting it.
+    const activeSecAtStop = getCardioActiveSec(useCardioStore.getState());
     const finalStore = await finishTracking();
 
     if (user) {
       endActiveSession(user.uid, 'cardio').catch(console.error);
     }
 
-    const movingDurationSec = finalStore.movingDurationSec > 0
-      ? finalStore.movingDurationSec
-      : (finalStore.startedAt
-        ? Math.max(0, Math.floor((Date.now() - finalStore.startedAt - finalStore.totalPausedMs) / 1000))
-        : elapsedSec);
+    const movingDurationSec = Math.min(
+      finalStore.movingDurationSec > 0 ? finalStore.movingDurationSec : activeSecAtStop,
+      activeSecAtStop
+    );
     const elapsedDurationSec = Math.max(0, Math.floor((Date.now() - (finalStore.startedAt || Date.now())) / 1000));
-    const pausedDurationSec = Math.floor(finalStore.totalPausedMs / 1000);
+    const pausedDurationSec = Math.max(0, elapsedDurationSec - activeSecAtStop);
     const durationMin = movingDurationSec / 60;
     const dist = finalStore.distanceKm;
     const avgSpeed = movingDurationSec > 0 ? (dist / movingDurationSec) * 3600 : 0;
     const pace = formatPace(dist, movingDurationSec);
-    const calories = calculateCardioCalories(
-      finalStore.activityType!,
-      dist,
-      durationMin,
-      userWeight || 70,
-      avgSpeed
-    );
 
     const steps = getLiveSteps(finalStore.activityType!, dist, pedometerStore);
 
-    // Compute DEM-corrected elevation gain from full route points
+    // Recompute elevation gain from the full route (DEM lookup, or noise-filtered
+    // GPS altitude). Its result is authoritative even when 0 - flat routes must
+    // not fall back to the live GPS counter, which can drift on noisy altitude.
     let finalElevationGain = Math.round(finalStore.elevationGainM);
     if (finalStore.routePoints && finalStore.routePoints.length > 2) {
       try {
         const demResult = await calculateCorrectedElevation(finalStore.routePoints);
-        if (demResult.correctedElevationGainM > 0) {
-          finalElevationGain = demResult.correctedElevationGainM;
-        }
+        finalElevationGain = demResult.correctedElevationGainM;
       } catch (err) {
         console.warn('DEM elevation calculation fallback to GPS:', err);
       }
     }
+
+    const calories = calculateCardioCalories({
+      type: finalStore.activityType!,
+      distanceKm: dist,
+      movingMin: durationMin,
+      bodyWeightKg: userWeight,
+      elevationGainM: finalElevationGain,
+      route: finalStore.routePoints,
+    });
 
     const data: Partial<CardioActivity> = {
       type: finalStore.activityType!,
@@ -514,6 +511,8 @@ export function CardioTracker() {
           maxSpeedKmh: data.maxSpeedKmh!,
           avgPace: `${pace} /km`,
           calories: calories,
+          caloriesVersion: CALORIE_MODEL_VERSION,
+          bodyweight: userWeight || undefined,
           elevationGainM: finalElevationGain,
           route: finalStore.routePoints,
           visibility: 'followers',
@@ -543,6 +542,10 @@ export function CardioTracker() {
               maxSpeedKmh: data.maxSpeedKmh,
               elevationGainM: data.elevationGainM,
               route: data.route,
+              steps: steps ?? null,
+              movingDurationSec,
+              elapsedDurationSec,
+              pausedDurationSec,
             },
             visibility: 'followers',
             likesCount: 0,
@@ -562,6 +565,7 @@ export function CardioTracker() {
           console.error('Failed to update challenges:', err);
         }
 
+        useAuthStore.getState().refreshProfile().catch(() => {});
         showToast('Workout saved to logbook!');
       } catch (err) {
         console.error('Failed to save activity:', err);
@@ -603,14 +607,17 @@ export function CardioTracker() {
     setScreen('select');
   };
 
+  // Live estimate must use the AVERAGE moving speed - instantaneous speed drops
+  // to 0 at every stop, which made the calorie counter flash back to 0.
+  const liveMovingSec = store.movingDurationSec > 0 ? store.movingDurationSec : elapsedSec;
   const calories = store.activityType
-    ? calculateCardioCalories(
-        store.activityType,
-        store.distanceKm,
-        elapsedSec / 60,
-        userWeight || 70,
-        store.currentSpeedKmh
-      )
+    ? calculateCardioCalories({
+        type: store.activityType,
+        distanceKm: store.distanceKm,
+        movingMin: liveMovingSec / 60,
+        bodyWeightKg: userWeight,
+        elevationGainM: store.elevationGainM,
+      })
     : 0;
 
   // ─── Screen 1: Select Screen ───
@@ -678,7 +685,7 @@ export function CardioTracker() {
               className={`relative overflow-hidden flex flex-col gap-3.5 p-5 rounded-[2rem] bg-gradient-to-br ${opt.bgGradient} bg-[var(--card)]/90 backdrop-blur-xl border border-[var(--border)] hover:border-sienna/50 transition-all text-left group shadow-lg shadow-black/5`}
             >
               <div className="flex items-center justify-between w-full">
-                <div className={`w-13 h-13 p-3 rounded-2xl bg-gradient-to-br ${opt.color} flex items-center justify-center text-white shrink-0 group-hover:scale-110 group-hover:-rotate-3 transition-all duration-300 shadow-md`}>
+                <div className={`flex items-center justify-center shrink-0 ${opt.color}`}>
                   {opt.icon}
                 </div>
                 <div className="flex items-center gap-2">
@@ -717,7 +724,7 @@ export function CardioTracker() {
                     className="p-4 rounded-2xl bg-[var(--card)]/80 backdrop-blur-md border border-[var(--border)] flex items-center justify-between shadow-sm hover:border-sienna/40 transition-all"
                   >
                     <div className="flex items-center gap-3.5">
-                      <div className="w-10 h-10 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex items-center justify-center shrink-0">
+                      <div className="w-6 flex items-center justify-center shrink-0">
                         {typeIcon}
                       </div>
                       <div>
@@ -794,7 +801,7 @@ export function CardioTracker() {
   // ─── Screen 2: Ready Screen ───
   if (screen === 'ready' && urlType) {
     const typeLabel = urlType === 'walk' ? 'Walking' : urlType === 'run' ? 'Running' : 'Cycling';
-    const typeIcon = urlType === 'walk' ? <Footprints size={32} /> : urlType === 'run' ? <Zap size={32} /> : <Bike size={32} />;
+    const typeIcon = urlType === 'walk' ? <Footprints size={44} strokeWidth={2.2} /> : urlType === 'run' ? <Zap size={44} strokeWidth={2.2} /> : <Bike size={44} strokeWidth={2.2} />;
 
     return createPortal(
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="cardio-ready-screen fixed inset-0 z-[9999] bg-[#090605] flex flex-col h-screen overflow-hidden" style={themeStyles}>
@@ -848,28 +855,20 @@ export function CardioTracker() {
         {/* Content HUD Overlay */}
         <div className="relative z-10 flex-1 flex flex-col justify-end p-8 pb-16 pointer-events-none">
           <div className="pointer-events-auto text-center mb-8">
-            <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-sienna to-amber-500 text-white flex items-center justify-center mx-auto mb-3 shadow-[0_10px_30px_rgba(235,89,60,0.4)]">
+            <div className="flex items-center justify-center mx-auto mb-3 text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.6)]">
               {typeIcon}
             </div>
             <h1 className="font-sans text-4xl sm:text-5xl font-black tracking-tight text-white drop-shadow-md mb-2">
               {typeLabel} Ready
             </h1>
             <p className="text-xs font-mono font-bold text-white/70 tracking-widest uppercase bg-black/60 px-4 py-1.5 rounded-full inline-block backdrop-blur-md border border-white/10">
-              High Precision GPS Active · Tap Play
+              High Precision GPS Active
             </p>
           </div>
           
-          {/* Big Pulsing Start Button */}
-          <div className="relative flex items-center justify-center mx-auto pointer-events-auto">
-            <div className="absolute w-32 h-32 rounded-full bg-sienna/25 animate-ping" />
-            <div className="absolute w-28 h-28 rounded-full bg-amber-500/20 animate-pulse" />
-            
-            <button
-              onClick={handleStartTracking}
-              className="relative w-24 h-24 rounded-full bg-gradient-to-tr from-sienna via-amber-500 to-rose-500 text-white flex items-center justify-center shadow-[0_12px_40px_rgba(235,89,60,0.6)] hover:scale-105 transition-all active:scale-95 z-10 group"
-            >
-              <Play size={42} fill="currentColor" className="ml-1.5 group-hover:scale-110 transition-transform" />
-            </button>
+          {/* Swipe-to-start */}
+          <div className="pointer-events-auto w-full">
+            <SwipeToStart onComplete={handleStartTracking} />
           </div>
         </div>
       </motion.div>,
@@ -892,7 +891,7 @@ export function CardioTracker() {
           <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} cardioType={store.activityType as any} heading={heading} mapRotationMode={mapRotationMode} visualHeadingRef={visualHeadingRef} />
         </div>
 
-        {/* Recovery Overlay — shows when replaying native buffer after background */}
+        {/* Recovery Overlay - shows when replaying native buffer after background */}
         <AnimatePresence>
           {store.isRecovering && (
             <motion.div
@@ -911,7 +910,7 @@ export function CardioTracker() {
         {/* Top Header */}
         <div className="absolute top-6 left-4 right-4 z-20 safe-top pointer-events-none flex justify-between items-start">
           <div className="flex items-center gap-3">
-            {/* Back Button — safe navigation with confirmation during active tracking */}
+            {/* Back Button - safe navigation with confirmation during active tracking */}
             <button 
               onClick={() => {
                 if (store.isTracking) {
@@ -999,7 +998,7 @@ export function CardioTracker() {
         </AnimatePresence>
 
         {/* Floating Actions */}
-        <div className="absolute right-4 bottom-[230px] z-10 pointer-events-auto flex flex-col gap-3 transition-all" style={{ transform: isExpanded ? 'translateY(-290px)' : 'translateY(0)' }}>
+        <div className="absolute right-4 z-10 pointer-events-auto flex flex-col gap-3" style={{ bottom: sheetH + 16, transition: 'bottom 0.25s ease-out' }}>
           {/* True North-Pointing Compass Rose Widget */}
           <button
             onClick={toggleMapRotation}
@@ -1040,11 +1039,10 @@ export function CardioTracker() {
         </div>
 
         {/* Expandable Bottom Sheet */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 pointer-events-auto">
-          <motion.div 
-            animate={{ height: isExpanded ? 520 : 220 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-            className="cardio-live-panel relative bg-[var(--card)]/95 backdrop-blur-2xl text-[var(--text)] border-t border-[var(--border)] rounded-t-[32px] shadow-[0_-15px_50px_rgba(0,0,0,0.35)] flex flex-col overflow-hidden"
+        <div ref={setSheetEl} className="absolute bottom-0 left-0 right-0 z-20 pointer-events-auto">
+          <div 
+            className="cardio-live-panel pro-scope relative text-[var(--text)] border-t border-[var(--border)] rounded-t-[32px] flex flex-col overflow-hidden max-h-[82vh]"
+            style={{ background: 'var(--card)', boxShadow: '0 -15px 50px rgba(0,0,0,0.35)', paddingBottom: 'max(14px, env(safe-area-inset-bottom))' }}
           >
             {/* Drag Handle & Toggle */}
             <button 
@@ -1064,6 +1062,8 @@ export function CardioTracker() {
                 )}
               </div>
             </button>
+
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
             {/* Auto-Pause & Status Indicator Banner */}
             <AnimatePresence>
@@ -1093,185 +1093,127 @@ export function CardioTracker() {
               )}
             </AnimatePresence>
 
-            {/* Core Stats Hero Row (Clean Text Without Icons, Responsive Spacing) */}
-            <div className="px-4 sm:px-6 pt-1 pb-3 shrink-0" onClick={() => !isExpanded && setIsExpanded(true)}>
-              <div className="grid grid-cols-3 gap-2 sm:gap-4 items-center">
+            {/* Now playing (Android: mirrors Spotify / any music app) */}
+            <NowPlayingCard className="mx-4 sm:mx-6 mb-3" />
+
+            {/* Core KPI row */}
+            <div className="px-3 sm:px-6 pt-1 pb-3 shrink-0" onClick={() => !isExpanded && setIsExpanded(true)}>
+              <div className="grid grid-cols-3 items-stretch">
                 {/* Timer */}
-                <div className="flex flex-col min-w-0 pr-1">
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] truncate flex items-center gap-1.5">
+                <div className="cardio-kpi-cell flex flex-col items-center text-center min-w-0 px-1 py-1">
+                  <div className="text-[12px] font-medium text-[var(--muted)] truncate flex items-center justify-center gap-1.5">
                     Time {store.autoPauseStatus === 'PAUSED' && <span className="px-1.5 py-0.2 rounded text-[8.5px] font-mono font-extrabold bg-amber-500/20 text-amber-500 border border-amber-500/30">PAUSED</span>}
                   </div>
-                  <div className={`font-mono text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight mt-0.5 tabular-nums truncate transition-colors ${store.autoPauseStatus === 'PAUSED' ? 'text-amber-500 animate-pulse' : store.isPaused ? 'text-sienna' : 'text-[var(--text)]'}`}>
+                  <div className={`text-[26px] sm:text-[32px] font-bold tracking-tight mt-1 leading-none tabular-nums truncate transition-colors ${store.autoPauseStatus === 'PAUSED' ? 'text-amber-500 animate-pulse' : store.isPaused ? 'text-sienna' : 'text-[var(--text)]'}`}>
                     {formatDuration(elapsedSec)}
                   </div>
                 </div>
 
                 {/* Distance */}
-                <div className="flex flex-col items-center min-w-0 px-1">
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] truncate">
+                <div className="cardio-kpi-cell flex flex-col items-center text-center min-w-0 px-1 py-1">
+                  <div className="text-[12px] font-medium text-[var(--muted)] truncate">
                     Distance
                   </div>
-                  <div className="flex items-baseline gap-0.5 sm:gap-1 mt-0.5 truncate">
-                    <span className="font-mono text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-[var(--text)] tabular-nums">
+                  <div className="flex items-baseline justify-center gap-1 mt-1 leading-none truncate">
+                    <span className="text-[26px] sm:text-[32px] font-bold tracking-tight text-[var(--text)] tabular-nums">
                       {store.distanceKm.toFixed(2)}
                     </span>
-                    <span className="text-[10px] sm:text-xs font-mono font-bold text-[var(--muted)]">km</span>
+                    <span className="text-[11px] sm:text-xs font-medium text-[var(--muted)]">km</span>
                   </div>
                 </div>
 
-                {/* Pace / Speed */}
-                <div className="flex flex-col items-end min-w-0 pl-1">
-                  <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-[var(--muted)] truncate">
-                    {activityType === 'cycle' ? 'Speed' : 'Pace'}
+                {/* Pace (speed stays in the expanded row to avoid a duplicate KPI) */}
+                <div className="cardio-kpi-cell flex flex-col items-center text-center min-w-0 px-1 py-1">
+                  <div className="text-[12px] font-medium text-[var(--muted)] truncate">
+                    Pace
                   </div>
-                  <div className="font-mono text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-[var(--text)] mt-0.5 tabular-nums truncate">
-                    {activityType === 'cycle' ? `${store.currentSpeedKmh.toFixed(1)}` : currentPace}
-                    <span className="text-[9px] sm:text-[11px] font-sans font-normal text-[var(--muted)] ml-0.5">
-                      {activityType === 'cycle' ? 'km/h' : '/km'}
+                  <div className="flex items-baseline justify-center gap-1 mt-1 leading-none truncate">
+                    <span className="text-[26px] sm:text-[32px] font-bold tracking-tight text-[var(--text)] tabular-nums">
+                      {currentPace}
+                    </span>
+                    <span className="text-[11px] sm:text-xs font-medium text-[var(--muted)]">
+                      /km
                     </span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Collapsed Controls (Fast Access) */}
-            {!isExpanded && (
-              <div className="px-6 pt-1 pb-4 flex items-center justify-center gap-6 shrink-0">
-                <button
-                  onClick={store.isPaused ? handleResume : handlePause}
-                  className="w-12 h-12 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] hover:border-sienna shadow-sm active:scale-95 transition-all"
-                  title={store.isPaused ? "Resume" : "Pause"}
+            {/* Expanded KPIs - same metrics, same data */}
+            <AnimatePresence initial={false}>
+              {isExpanded && (
+                <motion.div
+                  key="expanded-kpis"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ type: 'spring', damping: 30, stiffness: 280 }}
+                  className="overflow-hidden"
                 >
-                  {store.isPaused ? <Play size={20} fill="currentColor" className="ml-0.5 text-sienna" /> : <Pause size={20} fill="currentColor" />}
-                </button>
-
-                <button
-                  onClick={handleStop}
-                  className="px-6 h-12 rounded-full bg-gradient-to-r from-rose-600 via-red-500 to-rose-500 text-white font-bold text-sm flex items-center gap-2 shadow-[0_8px_20px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95 transition-all"
-                  title="Finish & Save"
-                >
-                  <Square size={16} fill="currentColor" /> Finish
-                </button>
-
-                <button
-                  onClick={handleDiscard}
-                  className="w-12 h-12 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-red-500 hover:border-red-500/50 shadow-sm active:scale-95 transition-all"
-                  title="Discard"
-                >
-                  <RotateCcw size={18} />
-                </button>
-              </div>
-            )}
-
-            {/* Expanded Metrics Dashboard (Clean Text Without Icons) */}
-            {isExpanded && (
-              <div className="px-6 flex-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden pt-2 pb-6">
-                <div className="grid grid-cols-3 gap-2.5 mb-5">
-                  {/* Current Speed */}
-                  <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
-                      Speed
-                    </div>
-                    <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
-                      {store.currentSpeedKmh.toFixed(1)} <span className="text-[10px] text-[var(--muted)]">km/h</span>
-                    </div>
-                  </div>
-
-                  {/* Avg Speed */}
-                  <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
-                      Avg Spd
-                    </div>
-                    <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
-                      {avgSpeed} <span className="text-[10px] text-[var(--muted)]">km/h</span>
-                    </div>
-                  </div>
-
-                  {/* Max Speed */}
-                  <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
-                      Max Spd
-                    </div>
-                    <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
-                      {store.maxSpeedKmh.toFixed(1)} <span className="text-[10px] text-[var(--muted)]">km/h</span>
-                    </div>
-                  </div>
-
-                  {/* Calories */}
-                  <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
-                      Calories
-                    </div>
-                    <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
-                      {calories} <span className="text-[10px] text-[var(--muted)]">kcal</span>
-                    </div>
-                  </div>
-
-                  {/* Elevation Gain */}
-                  <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                    <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
-                      Elevation
-                    </div>
-                    <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
-                      {Math.round(store.elevationGainM)} <span className="text-[10px] text-[var(--muted)]">m</span>
-                    </div>
-                  </div>
-
-                  {/* Live Steps or Route Pts */}
-                  {(activityType === 'walk' || activityType === 'run') ? (
-                    <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                      <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
-                        Steps
+                  <div className="cardio-kpi-rows mx-3 sm:mx-6 mb-2 border-t border-dashed border-[var(--border)]">
+                    {[
+                      [
+                        { label: 'Speed', value: store.currentSpeedKmh.toFixed(1), unit: 'km/h' },
+                        { label: 'Avg Spd', value: avgSpeed, unit: 'km/h' },
+                        { label: 'Max Spd', value: store.maxSpeedKmh.toFixed(1), unit: 'km/h' },
+                      ],
+                      [
+                        { label: 'Calories', value: String(calories), unit: 'kcal' },
+                        { label: 'Elevation', value: String(Math.round(store.elevationGainM)), unit: 'm' },
+                        (activityType === 'walk' || activityType === 'run')
+                          ? { label: 'Steps', value: getLiveSteps(store.activityType, store.distanceKm, pedometerStore)?.toLocaleString() || '0', unit: '' }
+                          : { label: 'Moving Time', value: formatDuration(Math.min(store.movingDurationSec, elapsedSec)), unit: '' },
+                      ],
+                    ].map((row, ri) => (
+                      <div key={ri} className="cardio-kpi-row grid grid-cols-3 py-3">
+                        {row.map((kpi) => (
+                          <div key={kpi.label} className="cardio-kpi-cell flex flex-col items-center text-center min-w-0 px-1">
+                            <div className="text-[11px] font-medium text-[var(--muted)] truncate">{kpi.label}</div>
+                            <div className="flex items-baseline justify-center gap-1 mt-1 leading-none truncate">
+                              <span className="text-[20px] font-bold tracking-tight text-[var(--text)] tabular-nums">{kpi.value}</span>
+                              {kpi.unit && <span className="text-[10px] font-medium text-[var(--muted)]">{kpi.unit}</span>}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
-                        {getLiveSteps(store.activityType, store.distanceKm, pedometerStore)?.toLocaleString() || 0}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-3 rounded-2xl bg-[var(--bg)]/80 border border-[var(--border)] flex flex-col shadow-sm">
-                      <div className="text-[9px] font-mono font-bold uppercase text-[var(--muted)]">
-                        Points
-                      </div>
-                      <div className="font-mono text-lg font-bold text-[var(--text)] mt-1">
-                        {store.routePoints.length}
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            </div>
 
-                {/* Pro Controls Bar */}
-                <div className="flex items-center justify-center gap-7 pt-1 pb-4">
-                  {/* Pause / Resume */}
-                  <button
-                    onClick={store.isPaused ? handleResume : handlePause}
-                    className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] hover:border-sienna shadow-md active:scale-95 transition-all"
-                    title={store.isPaused ? "Resume" : "Pause"}
-                  >
-                    {store.isPaused ? <Play size={24} fill="currentColor" className="ml-1 text-sienna" /> : <Pause size={24} fill="currentColor" />}
-                  </button>
+            {/* Controls: Discard · Pause/Resume · Finish */}
+            <div className="px-6 pt-2 pb-1 flex items-center justify-center gap-7 shrink-0">
+              <button
+                onClick={handleDiscard}
+                className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-red-500 active:scale-95 transition-all"
+                title="Discard Session"
+                aria-label="Discard session"
+              >
+                <RotateCcw size={22} />
+              </button>
 
-                  {/* Finish Workout (Primary Center Button) */}
-                  <button
-                    onClick={handleStop}
-                    className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-600 via-red-500 to-rose-500 text-white flex items-center justify-center shadow-[0_10px_25px_rgba(239,68,68,0.45)] hover:scale-105 active:scale-95 transition-all relative group"
-                    title="Finish & Save"
-                  >
-                    <div className="absolute inset-0 rounded-full bg-rose-500 animate-ping opacity-25" />
-                    <Square size={26} fill="currentColor" className="relative z-10" />
-                  </button>
+              <button
+                onClick={store.isPaused ? handleResume : handlePause}
+                className="relative w-[76px] h-[76px] rounded-full flex items-center justify-center text-white active:scale-95 transition-transform"
+                style={{ background: 'var(--sienna)', boxShadow: '0 10px 26px rgba(235, 89, 60, 0.42)' }}
+                title={store.isPaused ? 'Resume' : 'Pause'}
+                aria-label={store.isPaused ? 'Resume' : 'Pause'}
+              >
+                {store.isPaused ? <Play size={32} fill="currentColor" className="ml-1" /> : <Pause size={32} fill="currentColor" />}
+              </button>
 
-                  {/* Discard */}
-                  <button
-                    onClick={handleDiscard}
-                    className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-red-500 hover:border-red-500/50 shadow-md active:scale-95 transition-all"
-                    title="Discard Session"
-                  >
-                    <RotateCcw size={22} />
-                  </button>
-                </div>
-              </div>
-            )}
-          </motion.div>
+              <button
+                onClick={handleStop}
+                className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] active:scale-95 transition-all"
+                title="Finish & Save"
+                aria-label="Finish and save"
+              >
+                <Square size={20} fill="currentColor" className="rounded-[3px]" />
+              </button>
+            </div>
+          </div>
         </div>
       </motion.div>,
       document.body

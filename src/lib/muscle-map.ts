@@ -43,18 +43,49 @@ export interface MuscleScore {
   role: 'primary' | 'secondary' | 'stabilizer';
 }
 
+export const MUSCLE_LABELS: Record<MuscleRegion, string> = {
+  chest: 'Chest',
+  upper_chest: 'Upper chest',
+  lower_chest: 'Lower chest',
+  abs: 'Abs',
+  lower_abs: 'Lower abs',
+  obliques: 'Obliques',
+  quads: 'Quads',
+  biceps: 'Biceps',
+  forearms: 'Forearms',
+  front_delts: 'Front delts',
+  side_delts: 'Side delts',
+  rear_delts: 'Rear delts',
+  hip_flexors: 'Hip flexors',
+  traps: 'Traps',
+  lats: 'Lats',
+  rhomboids: 'Mid back',
+  triceps: 'Triceps',
+  lower_back: 'Lower back',
+  glutes: 'Glutes',
+  hamstrings: 'Hamstrings',
+  calves: 'Calves',
+  adductors: 'Adductors',
+};
+
+const WARMUP_PATTERN = new RegExp(
+  [
+    'warm ?up', 'cool ?down', 'mobility', 'stretch', 'breathing', 'breath', 'meditation',
+    'shodhana', 'bhastrika', 'bhramari', 'pranayama', 'salutation', 'namaskar', 'dislocat',
+    'pull-apart', 'wrist circle', 'arm circle', 'circles', 'prep', 'fold', 'spinal twist',
+    'supine twist', 'seated twist', 'opener', 'downward dog', 'upward dog', 'flow', 'scapular',
+    'foam roll', 'german hang', "child'?s pose", 'pigeon pose', 'cobra', 'cat cow', 'cat-cow',
+  ].map(k => `\\b${k}`).join('|'),
+  'i',
+);
+// Skills whose names contain yoga words but are real training.
+const NOT_WARMUP = /\b(crow|crane|handstand|russian twist)\b/i;
+
 export const isWarmupOrCooldown = (name: string, section?: string): boolean => {
   if (section === 'warmup' || section === 'cooldown') return true;
   const nameLower = name.toLowerCase();
-  const keywords = [
-    'warmup', 'warm-up', 'warm up',
-    'cooldown', 'cool-down', 'cool down',
-    'mobility', 'stretch', 'stretching',
-    'breathing', 'breath', 'meditation', 'shodhana', 'bhastrika', 'bhramari', 'pranayama',
-    'salutation', 'dislocation', 'pull-apart', 'wrist circle', 'arm circle', 'circles', 'prep',
-    'pose', 'fold', 'twist', 'opener', 'dog', 'flow', 'scapular'
-  ];
-  if (keywords.some(k => nameLower.includes(k))) return true;
+  if (NOT_WARMUP.test(nameLower)) return false;
+  if (WARMUP_PATTERN.test(nameLower) || /\bpose\b/.test(nameLower)) return true;
 
   const found = COMPACT_LIBRARY.find(ex => ex.name.toLowerCase() === nameLower);
   if (found && found.tags) {
@@ -68,14 +99,32 @@ export const isWarmupOrCooldown = (name: string, section?: string): boolean => {
   return false;
 };
 
+const SINGULAR_EXCEPTIONS: Record<string, string> = { calves: 'calf', ups: 'up', abs: 'abs', press: 'press', plus: 'plus' };
+
+function singular(word: string): string {
+  if (SINGULAR_EXCEPTIONS[word]) return SINGULAR_EXCEPTIONS[word];
+  if (word.length <= 3) return word;
+  if (word.endsWith('ies')) return `${word.slice(0, -3)}y`;
+  if (/(ch|sh|ss|x)es$/.test(word)) return word.slice(0, -2);
+  if (/(ss|us|is)$/.test(word)) return word;
+  return word.endsWith('s') ? word.slice(0, -1) : word;
+}
+
+/** Lower case, singular, compound words joined ("Push-Ups" → "pushup", "Dumbbell" → "db"). */
 export function normalizeExerciseName(name: string): string {
   return name
     .toLowerCase()
-    .replace(/\bdumbbells?\b/g, "db")
-    .replace(/\bbarbells?\b/g, "bb")
-    .replace(/\bresistance bands?\b/g, "band")
-    .replace(/\s+/g, " ")
-    .replace(/[^a-z0-9 ]/g, "")
+    .replace(/[-_/+&()[\]{}.,:;!?]/g, ' ')
+    .replace(/[^a-z0-9 ]/g, '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(singular)
+    .join(' ')
+    .replace(/\bdumbbell\b/g, 'db')
+    .replace(/\bbarbell\b/g, 'bb')
+    .replace(/\bresistance band\b/g, 'band')
+    .replace(/\b(push|pull|chin|sit|step|muscle|press) up\b/g, '$1up')
+    .replace(/\b(pull|push) down\b/g, '$1down')
     .trim();
 }
 
@@ -85,69 +134,38 @@ export function normalizeExerciseName(name: string): string {
 export function resolveExercise(name: string): MuscleScore[] {
   const norm = normalizeExerciseName(name);
 
-  const matchedModifiers = Object.keys(MODIFIERS).filter(mod =>
-    norm.includes(mod.replace('_', ' '))
-  );
+  // 1-3. Exact id, canonical name or alias of a curated lift.
+  const def =
+    EXERCISE_ONTOLOGY.find(ex => ex.id === norm.replace(/ /g, '_')) ||
+    EXERCISE_ONTOLOGY.find(ex => normalizeExerciseName(ex.name) === norm) ||
+    EXERCISE_ONTOLOGY.find(ex => ex.aliases.some(alias => normalizeExerciseName(alias) === norm));
+  if (def) return buildScores(definitionMuscles(def), norm);
 
-  // 1. Exact ID match
-  let def = EXERCISE_ONTOLOGY.find(ex => ex.id === norm);
-
-  // 2. Exact canonical name match
-  if (!def) {
-    def = EXERCISE_ONTOLOGY.find(ex => normalizeExerciseName(ex.name) === norm);
-  }
-
-  // 3. Alias match
-  if (!def) {
-    def = EXERCISE_ONTOLOGY.find(ex => ex.aliases.some(alias => normalizeExerciseName(alias) === norm));
-  }
-
-  // 4. Base exercise match — whole-word only, so "bench press" still matches
-  // "paused bench press" but "dip" no longer matches "dipping bird pose".
-  if (!def) {
-    const sortedOntology = [...EXERCISE_ONTOLOGY].sort((a, b) => b.name.length - a.name.length);
-    def = sortedOntology.find(ex =>
-      containsPhrase(norm, normalizeExerciseName(ex.name)) ||
-      ex.aliases.some(a => containsPhrase(norm, normalizeExerciseName(a)))
-    );
-  }
-
-  if (def) {
-    const scoresMap = new Map<MuscleRegion, MuscleScore>();
-
-    const addScore = (mw: MuscleWeight, role: 'primary' | 'secondary' | 'stabilizer') => {
-      scoresMap.set(mw.muscle, {
-        muscle: mw.muscle,
-        score: mw.weight,
-        role
-      });
-    };
-
-    def.muscles.primary.forEach(m => addScore(m, 'primary'));
-    def.muscles.secondary.forEach(m => addScore(m, 'secondary'));
-    if (def.muscles.stabilizers) {
-      def.muscles.stabilizers.forEach(m => addScore(m, 'stabilizer'));
-    }
-
-    applyModifiers(scoresMap, matchedModifiers);
-    return finalizeScores(scoresMap);
-  }
-
-  // 5. Movement-pattern inference from the name. Covers the long tail of
-  // variations the curated ontology doesn't list (e.g. "Australian Row").
+  // 4. Movement pattern read from the name. Runs before loose ontology matching so
+  // "pike push-up" is a shoulder press, not a push-up, and "leg curl" is not a biceps curl.
   const inferred = inferMusclesFromName(norm);
-  if (inferred && Object.keys(inferred).length > 0) {
-    return buildScores(inferred, matchedModifiers);
-  }
+  if (inferred && Object.keys(inferred).length > 0) return buildScores(inferred, norm);
 
-  // 6. Library fallback — coarse muscle-group labels, used only when the name
-  // itself reveals no movement pattern.
+  // 5. A curated lift named inside a longer name ("paused bench press").
+  const sortedOntology = [...EXERCISE_ONTOLOGY].sort((a, b) => b.name.length - a.name.length);
+  const loose = sortedOntology.find(ex =>
+    containsPhrase(norm, normalizeExerciseName(ex.name)) ||
+    ex.aliases.some(a => containsPhrase(norm, normalizeExerciseName(a)))
+  );
+  if (loose) return buildScores(definitionMuscles(loose), norm);
+
+  // 6. Library fallback - coarse muscle-group labels.
   const libraryMuscles = resolveFromLibrary(norm);
-  if (libraryMuscles) {
-    return buildScores(libraryMuscles, matchedModifiers);
-  }
+  if (libraryMuscles) return buildScores(libraryMuscles, norm);
 
   return [];
+}
+
+function definitionMuscles(def: (typeof EXERCISE_ONTOLOGY)[number]): MuscleMap {
+  const map: MuscleMap = {};
+  [...def.muscles.primary, ...def.muscles.secondary, ...(def.muscles.stabilizers || [])]
+    .forEach((mw: MuscleWeight) => { map[mw.muscle] = mw.weight; });
+  return map;
 }
 
 /** Whole-word phrase containment, avoiding accidental substring matches. */
@@ -160,39 +178,23 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function buildScores(muscles: MuscleMap, modifiers: string[]): MuscleScore[] {
-  const scoresMap = new Map<MuscleRegion, MuscleScore>();
-  Object.entries(muscles).forEach(([region, weight]) => {
-    const w = weight as number;
-    scoresMap.set(region as MuscleRegion, {
-      muscle: region as MuscleRegion,
-      score: w,
-      role: w >= 0.85 ? 'primary' : w >= 0.5 ? 'secondary' : 'stabilizer',
-    });
-  });
-  applyModifiers(scoresMap, modifiers);
-  return finalizeScores(scoresMap);
-}
-
-function applyModifiers(scoresMap: Map<MuscleRegion, MuscleScore>, modifiers: string[]) {
-  modifiers.forEach(mod => {
-    const adjustments = MODIFIERS[mod];
-    if (!adjustments) return;
-    Object.entries(adjustments).forEach(([region, delta]) => {
+function buildScores(muscles: MuscleMap, norm: string): MuscleScore[] {
+  const weights: MuscleMap = { ...muscles };
+  for (const mod of MODIFIERS) {
+    if (!mod.match.test(norm) || !mod.requires.some(m => (weights[m] ?? 0) > 0)) continue;
+    Object.entries(mod.adjust).forEach(([region, delta]) => {
       const m = region as MuscleRegion;
-      if (scoresMap.has(m)) {
-        scoresMap.get(m)!.score += (delta as number);
-      } else if ((delta as number) > 0) {
-        scoresMap.set(m, { muscle: m, score: (delta as number), role: 'stabilizer' });
-      }
+      weights[m] = Math.min(1, Math.max(0, (weights[m] ?? 0) + (delta as number)));
     });
-  });
-}
-
-function finalizeScores(scoresMap: Map<MuscleRegion, MuscleScore>): MuscleScore[] {
-  // 0.3 keeps genuine secondaries (pull-up traps/forearms sit at 0.4) while dropping
-  // trivial stabilisers. The old 0.7 cutoff silently discarded most secondary work.
-  return Array.from(scoresMap.values()).filter(s => s.score >= 0.3);
+  }
+  // 0.3 keeps genuine secondaries (pull-up traps sit at 0.4) while dropping trivial stabilisers.
+  return Object.entries(weights)
+    .map(([region, w]) => ({
+      muscle: region as MuscleRegion,
+      score: w as number,
+      role: ((w as number) >= 0.85 ? 'primary' : (w as number) >= 0.5 ? 'secondary' : 'stabilizer') as MuscleScore['role'],
+    }))
+    .filter(s => s.score >= 0.3);
 }
 
 /** Maps a library entry's muscle-group labels onto anatomical regions. */
@@ -270,23 +272,44 @@ export function getActiveMuscleScores(exerciseNames: string[]): MuscleScore[] {
   return aggregateWorkoutMuscles(exerciseNames.map(n => ({ name: n, sets: 1 })));
 }
 
+const FOCUS_GROUP: Partial<Record<MuscleRegion, MuscleRegion>> = { upper_chest: 'chest', lower_chest: 'chest', lower_abs: 'abs' };
+
+/** Top trained muscles for display, with chest/abs sub-regions merged and % of the top muscle. */
+export function muscleFocus(scores: MuscleScore[], count: number): { muscle: MuscleRegion; label: string; pct: number }[] {
+  const merged = new Map<MuscleRegion, number>();
+  for (const s of scores) {
+    const key = FOCUS_GROUP[s.muscle] ?? s.muscle;
+    merged.set(key, Math.max(merged.get(key) || 0, s.score));
+  }
+  const sorted = [...merged.entries()].sort((a, b) => b[1] - a[1]);
+  const top = sorted[0]?.[1] || 1;
+  return sorted.slice(0, count).map(([muscle, score]) => ({ muscle, label: MUSCLE_LABELS[muscle], pct: Math.round((score / top) * 100) }));
+}
+
 export function getActiveMuscles(exerciseNames: string[]): Set<MuscleRegion> {
   const aggregated = getActiveMuscleScores(exerciseNames);
   return new Set(aggregated.map(a => a.muscle));
 }
 
 /**
- * Determine activated regions from workout logs.
+ * Determine activated regions from workout logs, weighted by logged sets.
  */
 export function getActiveMusclesFromLogs(
-  exerciseLogs: Array<{ name: string; sets: Array<{ completed?: boolean }> }>
+  exerciseLogs: Array<{ name: string; section?: string; sets: Array<{ completed?: boolean; reps?: number; weight?: number; seconds?: number }> }>
 ): MuscleScore[] {
   const exercises = exerciseLogs.map(log => ({
     name: log.name,
-    sets: log.sets.filter(s => s.completed).length
+    isWarmup: isWarmupOrCooldown(log.name, log.section),
+    sets: (log.sets || []).filter(isCountedSet).length,
   }));
 
   return aggregateWorkoutMuscles(exercises);
+}
+
+/** Ticked sets, or legacy sets that have data and were never explicitly unticked. */
+function isCountedSet(set: { completed?: boolean; reps?: number; weight?: number; seconds?: number }): boolean {
+  if (set.completed === false) return false;
+  return set.completed === true || Number(set.reps) > 0 || Number(set.weight) > 0 || Number(set.seconds) > 0;
 }
 
 // ─── Bodyweight exercises for volume calculation ─────────────

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Users, ArrowRight } from 'lucide-react';
+import { Users, ChevronRight } from 'lucide-react';
 import { ActivityPostCard } from '@/components/social/ActivityPostCard';
 import { ClanPostItem } from '@/components/community/ClanPostItem';
 import { SinglePostSheet } from '@/components/community/SinglePostSheet';
@@ -22,19 +22,16 @@ export function ActivityFeed({ activities, onShare }: ActivityFeedProps) {
 
   return (
     <>
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35 }}
-        className="mb-3"
+        transition={{ delay: 0.2 }}
+        aria-label="Activity feed"
       >
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Users size={14} className="text-[#979799]" />
-            <h3 className="font-sans text-xs font-medium text-[#777b86] tracking-wider uppercase">Activity Feed</h3>
-          </div>
-          <Link to="/feed" className="flex items-center gap-1 text-xs text-[#17191c] font-sans font-medium hover:underline">
-            View all activity →
+          <h3 className="dx-section-title">Activity</h3>
+          <Link to="/feed" className="dx-link">
+            See all <ChevronRight size={14} />
           </Link>
         </div>
 
@@ -54,29 +51,23 @@ export function ActivityFeed({ activities, onShare }: ActivityFeedProps) {
               );
             })}
 
-            {/* Bottom link to view full feed */}
-            <div className="text-center pt-2">
-              <Link
-                to="/feed"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#17191c] text-white font-sans text-xs font-medium hover:opacity-90 transition-all"
-              >
-                View all activity <ArrowRight size={14} />
-              </Link>
-            </div>
+            <Link to="/feed" className="dx-btn-secondary w-full">
+              View all activity <ChevronRight size={16} />
+            </Link>
           </div>
         ) : (
-          <div className="rounded-[16px] border border-[#ececec] p-4 text-center bg-[#fafafb]">
-            <Users size={24} className="text-[#979799] mx-auto mb-2" />
-            <p className="text-xs text-[#777b86] mb-3 font-sans">No recent activity from followed athletes.</p>
-            <Link
-              to="/explore"
-              className="inline-flex items-center gap-1 text-xs text-[#17191c] font-sans font-medium hover:underline"
-            >
-              Find athletes to follow →
+          <div className="dx-card p-6 text-center">
+            <div className="w-11 h-11 rounded-2xl mx-auto mb-3 flex items-center justify-center" style={{ background: 'var(--dx-card-2)' }}>
+              <Users size={20} className="dx-muted" />
+            </div>
+            <p className="text-[14px] font-semibold">No recent activity</p>
+            <p className="text-[12.5px] dx-muted mt-1 mb-4">Activity from athletes you follow shows up here.</p>
+            <Link to="/explore" className="dx-btn-secondary">
+              Find athletes to follow
             </Link>
           </div>
         )}
-      </motion.div>
+      </motion.section>
 
       <SinglePostSheet post={selectedPost} isOpen={!!selectedPost} onClose={() => setSelectedPost(null)} />
       <SingleActivitySheet activity={selectedActivity} isOpen={!!selectedActivity} onClose={() => setSelectedActivity(null)} />

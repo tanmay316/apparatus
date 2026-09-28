@@ -6,6 +6,8 @@ alembic
 pydantic
 pydantic-settings
 firebase-admin
+google-auth
+requests
 langgraph
 langchain
 langchain-openai

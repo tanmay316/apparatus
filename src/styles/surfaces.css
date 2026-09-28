@@ -1,0 +1,490 @@
+/* ═══════════════════════════════════════════════════════════════
+   APPARATUS — App surfaces (.dx)
+   Mobile-first design layer for the dashboard and profile.
+   Own tokens so legacy global dark overrides don't leak in.
+   ═══════════════════════════════════════════════════════════════ */
+
+.dx {
+  --dx-canvas: #fafafb;
+  --dx-card: #ffffff;
+  --dx-card-2: #f4f3f1;
+  --dx-border: rgba(23, 25, 28, 0.07);
+  --dx-border-strong: rgba(23, 25, 28, 0.16);
+  --dx-text: #17191c;
+  --dx-muted: #6f7380;
+  --dx-accent: #5d2a1a;
+  --dx-accent-soft: rgba(93, 42, 26, 0.08);
+  --dx-on-accent: #fbe1d1;
+  --dx-ink: #17191c;
+  --dx-on-ink: #ffffff;
+  --dx-success: #047857;
+  --dx-success-soft: rgba(4, 120, 87, 0.1);
+  --dx-warning: #b45309;
+  --dx-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px -12px rgba(16, 24, 40, 0.12);
+  --dx-hero-from: #3a1a10;
+  --dx-hero-to: #6e3522;
+  --dx-hero-text: #fdf3ec;
+  --dx-hero-btn: #fbe1d1;
+  --dx-hero-btn-text: #3a1a10;
+
+  /* Variables consumed by shared widgets (Live Training strip). */
+  --bg: var(--dx-canvas);
+  --text: var(--dx-text);
+  --muted: var(--dx-muted);
+
+  color: var(--dx-text);
+  font-family: var(--font-sans);
+}
+
+[data-theme='dark'] .dx {
+  --dx-canvas: #090605;
+  --dx-card: #140b08;
+  --dx-card-2: #1e120e;
+  --dx-border: rgba(255, 228, 210, 0.08);
+  --dx-border-strong: rgba(255, 228, 210, 0.2);
+  --dx-text: #f7f2ee;
+  --dx-muted: #b9a397;
+  --dx-accent: #efad80;
+  --dx-accent-soft: rgba(239, 173, 128, 0.12);
+  --dx-on-accent: #21130f;
+  --dx-ink: #f7f2ee;
+  --dx-on-ink: #17191c;
+  --dx-success: #34d399;
+  --dx-success-soft: rgba(52, 211, 153, 0.12);
+  --dx-warning: #fbbf24;
+  --dx-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --dx-hero-from: #2a140e;
+  --dx-hero-to: #4d2518;
+  --dx-hero-text: #fdf3ec;
+  --dx-hero-btn: #efad80;
+  --dx-hero-btn-text: #21130f;
+}
+
+.dx h1, .dx h2, .dx h3, .dx h4 {
+  font-family: var(--font-sans);
+}
+
+.dx .tabular { font-variant-numeric: tabular-nums; }
+
+/* ─── Surfaces ─────────────────────────────────────────────── */
+.dx-card {
+  background: var(--dx-card);
+  border: 1px solid var(--dx-border);
+  border-radius: 20px;
+  box-shadow: var(--dx-shadow);
+}
+
+.dx-inset {
+  background: var(--dx-card-2);
+  border-radius: 14px;
+}
+
+.dx-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  color: var(--dx-hero-text);
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(255, 214, 190, 0.16) 0%, transparent 55%),
+    linear-gradient(150deg, var(--dx-hero-from) 0%, var(--dx-hero-to) 100%);
+  box-shadow: 0 18px 40px -20px rgba(58, 26, 16, 0.55);
+}
+
+[data-theme='dark'] .dx-hero {
+  box-shadow: 0 0 0 1px rgba(239, 173, 128, 0.12) inset;
+}
+
+/* ─── Type ─────────────────────────────────────────────────── */
+.dx-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dx-muted);
+}
+
+.dx-section-title {
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--dx-text);
+}
+
+.dx-muted { color: var(--dx-muted); }
+.dx-accent { color: var(--dx-accent); }
+.dx-stat-icon { color: var(--tint); }
+[data-theme='dark'] .dx-stat-icon { color: var(--tint-dark); }
+
+/* ─── Controls ─────────────────────────────────────────────── */
+.dx-btn,
+.dx-btn-secondary,
+.dx-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: transform 0.15s ease, opacity 0.15s ease, background-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+
+.dx-btn { padding: 0 18px; background: var(--dx-accent); color: var(--dx-on-accent); }
+.dx-btn-secondary { padding: 0 16px; background: var(--dx-card-2); color: var(--dx-text); border: 1px solid var(--dx-border); }
+.dx-icon-btn { width: 44px; padding: 0; background: var(--dx-card-2); color: var(--dx-text); border: 1px solid var(--dx-border); flex-shrink: 0; }
+.dx-icon-btn--sm { width: 36px; height: 36px; border-radius: 12px; }
+
+.dx-btn:active,
+.dx-btn-secondary:active,
+.dx-icon-btn:active { transform: scale(0.97); }
+
+.dx-btn:disabled,
+.dx-btn-secondary:disabled { opacity: 0.55; }
+
+.dx-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dx-accent);
+}
+
+.dx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 9999px;
+  background: var(--dx-card-2);
+  color: var(--dx-text);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dx-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.dx-pill--success { background: var(--dx-success-soft); color: var(--dx-success); }
+.dx-pill--accent { background: var(--dx-accent-soft); color: var(--dx-accent); }
+.dx-pill--neutral { background: var(--dx-card-2); color: var(--dx-muted); }
+
+.dx-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--dx-card-2);
+  overflow: hidden;
+}
+
+.dx-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--dx-accent);
+  transition: width 0.6s ease;
+}
+
+.dx-progress--ink > span { background: var(--dx-ink); }
+
+/* Segmented control (profile sections, post tabs). */
+.dx-segment {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 14px;
+  background: var(--dx-card-2);
+}
+
+.dx-segment > button {
+  flex: 1;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dx-muted);
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.dx-segment > button[aria-selected='true'] {
+  background: var(--dx-card);
+  color: var(--dx-text);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+[data-theme='dark'] .dx-segment > button[aria-selected='true'] {
+  background: #2a1a14;
+  box-shadow: none;
+}
+
+/* Hero (today's focus) controls. */
+.dx-hero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 18px;
+  border-radius: 14px;
+  background: var(--dx-hero-btn);
+  color: var(--dx-hero-btn-text);
+  font-size: 15px;
+  font-weight: 650;
+  transition: transform 0.15s ease;
+}
+
+.dx-hero-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--dx-hero-text);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+
+.dx-hero-btn:active,
+.dx-hero-icon:active { transform: scale(0.97); }
+
+@media (hover: hover) {
+  .dx-btn:hover { opacity: 0.92; }
+  .dx-btn-secondary:hover,
+  .dx-icon-btn:hover { background: var(--dx-border); }
+  .dx-hero-icon:hover { background: rgba(255, 255, 255, 0.2); }
+  .dx-link:hover { text-decoration: underline; }
+}
+
+/* Profile keeps its internal var(--*) names; point them at the shared palette. */
+.dx-profile {
+  --bg: var(--dx-card-2);
+  --card: var(--dx-card);
+  --border: var(--dx-border);
+  --text: var(--dx-text);
+  --muted: var(--dx-muted);
+  --teal: var(--dx-accent);
+  --amber: #c98a1f;
+}
+
+[data-theme='dark'] .dx-profile { --amber: #d9a441; }
+
+/* Horizontal rail that becomes a grid on wide screens. */
+.dx-rail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  margin: 0;
+  padding: 2px 2px 6px;
+}
+
+.dx-rail::-webkit-scrollbar { display: none; }
+.dx-rail > * { scroll-snap-align: start; flex-shrink: 0; }
+
+@media (min-width: 1024px) {
+  .dx-rail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .dx-rail { margin: 0; padding: 2px 2px 6px; }
+}
+
+/* ─── Lists, tags, checks ──────────────────────────────────── */
+.dx-list > * + * { border-top: 1px solid var(--dx-border); }
+
+.dx-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: var(--dx-card-2);
+  color: var(--dx-muted);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.dx-tag strong { color: var(--dx-text); font-weight: 600; }
+
+.dx-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: 2px solid var(--dx-border-strong);
+  color: transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.dx-check[aria-pressed='true'] {
+  background: var(--dx-success);
+  border-color: var(--dx-success);
+  color: #fff;
+}
+
+.dx-check:active { transform: scale(0.9); }
+
+.dx-badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--dx-accent-soft);
+  color: var(--dx-accent);
+}
+
+/* ─── Forms ────────────────────────────────────────────────── */
+.dx-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dx-muted);
+}
+
+.dx-input,
+.dx .input-field {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--dx-card-2);
+  border: 1px solid transparent;
+  box-shadow: none;
+  color: var(--dx-text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+textarea.dx-input { min-height: 84px; line-height: 1.45; resize: vertical; }
+.dx-input::placeholder { color: var(--dx-muted); opacity: 0.75; }
+
+.dx-input:focus,
+.dx .input-field:focus {
+  --tw-ring-color: transparent;
+  border-color: var(--dx-accent);
+  background: var(--dx-card);
+  box-shadow: 0 0 0 3px var(--dx-accent-soft);
+}
+
+.dx-input:disabled { opacity: 0.6; }
+
+/* ─── Overlays (bottom sheet on mobile, dialog on desktop) ─── */
+.dx-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.dx-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(12, 8, 6, 0.5);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.dx-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 92dvh;
+  overflow: hidden;
+  background: var(--dx-card);
+  color: var(--dx-text);
+  border: 1px solid var(--dx-border);
+  border-bottom: 0;
+  border-radius: 28px 28px 0 0;
+  box-shadow: 0 -16px 48px -16px rgba(16, 24, 40, 0.3);
+}
+
+.dx-sheet-handle { display: flex; justify-content: center; padding-top: 10px; }
+.dx-sheet-handle::before { content: ''; width: 40px; height: 4px; border-radius: 9999px; background: var(--dx-border-strong); }
+
+.dx-sheet-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 20px 14px;
+  border-bottom: 1px solid var(--dx-border);
+}
+
+.dx-sheet-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 18px 20px; }
+
+.dx-sheet-footer {
+  border-top: 1px solid var(--dx-border);
+  padding: 12px 20px max(14px, env(safe-area-inset-bottom));
+}
+
+@media (min-width: 640px) {
+  .dx-overlay { align-items: center; padding: 16px; }
+  .dx-sheet { border-bottom: 1px solid var(--dx-border); border-radius: 24px; max-height: 88vh; box-shadow: 0 24px 64px -24px rgba(16, 24, 40, 0.4); }
+  .dx-sheet-handle { display: none; }
+  .dx-sheet-header { padding-top: 20px; }
+  .dx-sheet-footer { padding-bottom: 16px; }
+}
+
+/* Fixed bottom action bar for full-screen flows. */
+.dx-actionbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: center;
+  padding: 10px 12px max(12px, env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.dx-actionbar > * {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 560px;
+  padding: 8px;
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--dx-card) 88%, transparent);
+  border: 1px solid var(--dx-border);
+  box-shadow: 0 12px 32px -12px rgba(16, 24, 40, 0.28);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}

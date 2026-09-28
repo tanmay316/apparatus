@@ -413,11 +413,11 @@ export function MeasurementsPage() {
                         {log.date}
                       </td>
                       <td className="py-3 text-right font-bold text-sienna">{log.weight} kg</td>
-                      <td className="py-3 text-right text-amber">{log.bodyfat ? `${log.bodyfat}%` : '—'}</td>
-                      <td className="py-3 text-right text-bone-dim hidden sm:table-cell">{log.waist ? `${log.waist}cm` : '—'}</td>
-                      <td className="py-3 text-right text-bone-dim hidden sm:table-cell">{log.chest ? `${log.chest}cm` : '—'}</td>
-                      <td className="py-3 text-right text-bone-dim hidden md:table-cell">{log.arms ? `${log.arms}cm` : '—'}</td>
-                      <td className="py-3 text-right text-bone-dim hidden md:table-cell">{log.shoulders ? `${log.shoulders}cm` : '—'}</td>
+                      <td className="py-3 text-right text-amber">{log.bodyfat ? `${log.bodyfat}%` : '-'}</td>
+                      <td className="py-3 text-right text-bone-dim hidden sm:table-cell">{log.waist ? `${log.waist}cm` : '-'}</td>
+                      <td className="py-3 text-right text-bone-dim hidden sm:table-cell">{log.chest ? `${log.chest}cm` : '-'}</td>
+                      <td className="py-3 text-right text-bone-dim hidden md:table-cell">{log.arms ? `${log.arms}cm` : '-'}</td>
+                      <td className="py-3 text-right text-bone-dim hidden md:table-cell">{log.shoulders ? `${log.shoulders}cm` : '-'}</td>
                       <td className="py-3 text-right">
                         <button
                           onClick={() => log.id && handleDelete(log.id)}

@@ -107,7 +107,14 @@ public final class WorkoutLocationService extends Service {
     private int consecutiveMovingSamples = 0;
     private int consecutiveStillSamples = 0;
     private final List<Double> altBuffer = new ArrayList<>();
+    private Double altEma = null;
     private Double lastElevationAnchor = null;
+    private double distSinceElevAnchorM = 0d;
+    /** GPS altitude jitters several metres; only rises beyond this count as climb. */
+    private static final double ELEVATION_HYSTERESIS_M = 4.0;
+    /** Rises steeper than this over the horizontal run are GPS jumps, not terrain. */
+    private static final double ELEVATION_MAX_GRADE = 0.35;
+    private static final float MAX_VERTICAL_ACCURACY_M = 12f;
     private long lastMovementTimeMs = 0L;
     private final GpsKalmanFilter gpsKalman = new GpsKalmanFilter();
 
@@ -222,6 +229,8 @@ public final class WorkoutLocationService extends Service {
         if (reset || (!hasActiveSession && prefs.getLong(KEY_STARTED_AT, 0L) == 0L)) {
             database.beginNewSession();
             altBuffer.clear();
+            altEma = null;
+            distSinceElevAnchorM = 0d;
             lastElevationAnchor = null;
             lastAcceptedLocation = null;
             lastRawLocation = null;
@@ -299,9 +308,12 @@ public final class WorkoutLocationService extends Service {
 
         lastElevationAnchor = null;
         altBuffer.clear();
+        altEma = null;
+        distSinceElevAnchorM = 0d;
         if (lastAcceptedLocation != null && lastAcceptedLocation.hasAltitude()) {
             lastElevationAnchor = lastAcceptedLocation.getAltitude();
             altBuffer.add(lastElevationAnchor);
+            altEma = lastElevationAnchor;
         }
         // Do not start a new 6s session settling window after process death.
         sessionSettleUntil = 0L;
@@ -497,6 +509,10 @@ public final class WorkoutLocationService extends Service {
             if (nativeSpeedKmh >= 2.0f) {
                 // High-confidence Doppler — most reliable signal
                 candidateSpeedKmh = nativeSpeedKmh;
+            } else if (rawDopplerKmh >= 0f && rawDopplerKmh < 1.5f) {
+                // Doppler reports standing still: any coordinate drift is jitter, so trust it.
+                // Without this, 1-4 km/h drift kept the MOVING state alive and blocked auto-pause.
+                candidateSpeedKmh = 0f;
             } else if (rawDopplerKmh >= 0f && rawDopplerKmh < 2.0f && derivedSpeedKmh > 4.0f) {
                 // Doppler says nearly stopped but derived says fast → GPS coordinate jitter.
                 // Clamp hard. This is the key fix for the "stopped but showing 5-10 km/h" bug.
@@ -601,25 +617,32 @@ public final class WorkoutLocationService extends Service {
                 }
 
                 // Elevation Gain Accumulation (only on real horizontal movement)
-                if (location.hasAltitude()) {
+                if (hasUsableAltitude(location)) {
                     double smoothedAlt = smoothAltitude(location.getAltitude());
+                    distSinceElevAnchorM += addedDistanceM;
                     if (lastElevationAnchor != null) {
                         double altDiff = smoothedAlt - lastElevationAnchor;
-                        if (altDiff >= 1.5 && altDiff < 80.0) {
-                            elevationGainM += (float) altDiff;
+                        if (altDiff >= ELEVATION_HYSTERESIS_M) {
+                            if (altDiff / Math.max(1d, distSinceElevAnchorM) <= ELEVATION_MAX_GRADE) {
+                                elevationGainM += (float) altDiff;
+                            }
                             lastElevationAnchor = smoothedAlt;
-                        } else if (altDiff <= -1.5 && altDiff > -80.0) {
+                            distSinceElevAnchorM = 0d;
+                        } else if (altDiff <= -ELEVATION_HYSTERESIS_M) {
                             lastElevationAnchor = smoothedAlt;
+                            distSinceElevAnchorM = 0d;
                         }
                     } else {
                         lastElevationAnchor = smoothedAlt;
+                        distSinceElevAnchorM = 0d;
                     }
                 }
             } else if (isSettling) {
                 // During settling, update anchor without distance accumulation
                 lastAcceptedLocation = smoothedLoc;
-                if (location.hasAltitude()) {
+                if (hasUsableAltitude(location)) {
                     lastElevationAnchor = smoothAltitude(location.getAltitude());
+                    distSinceElevAnchorM = 0d;
                 }
             }
             
@@ -641,8 +664,9 @@ public final class WorkoutLocationService extends Service {
                 isCurrentlyMoving = false;
             }
             isMoving = isCurrentlyMoving;
-            if (location.hasAltitude()) {
+            if (hasUsableAltitude(location)) {
                 lastElevationAnchor = smoothAltitude(location.getAltitude());
+                distSinceElevAnchorM = 0d;
             }
         }
 
@@ -717,12 +741,23 @@ public final class WorkoutLocationService extends Service {
         } catch (Exception ignored) {}
     }
 
+    private boolean hasUsableAltitude(Location location) {
+        if (!location.hasAltitude()) return false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasVerticalAccuracy()) {
+            return location.getVerticalAccuracyMeters() <= MAX_VERTICAL_ACCURACY_M;
+        }
+        return true;
+    }
+
+    /** Median-of-7 spike rejection followed by an EMA to damp slow GPS altitude wander. */
     private double smoothAltitude(double alt) {
         altBuffer.add(alt);
-        if (altBuffer.size() > 5) altBuffer.remove(0);
+        if (altBuffer.size() > 7) altBuffer.remove(0);
         List<Double> sorted = new ArrayList<>(altBuffer);
         Collections.sort(sorted);
-        return sorted.get(sorted.size() / 2);
+        double median = sorted.get(sorted.size() / 2);
+        altEma = altEma == null ? median : 0.25 * median + 0.75 * altEma;
+        return altEma;
     }
 
     private void startForegroundNotification() {

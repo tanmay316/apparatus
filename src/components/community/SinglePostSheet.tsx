@@ -12,8 +12,9 @@ import {
   getPostComments, createPostComment, deleteClanPost,
   toggleLikeClanPost, toggleLikePostComment, toggleDislikePostComment, deletePostComment
 } from '@/services/community';
-import { compressImageFile } from '@/utils/image-compression';
+import { compressImageFile, shareablePhotoURL } from '@/utils/image-compression';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
+import { LiveUserAvatar, LiveUserName } from '@/components/ui/LiveUser';
 import { CommunityPost, PostComment } from '@/types';
 import { useNavigate } from 'react-router-dom';
 import { CelebrationPodiumCard } from './CelebrationPodiumCard';
@@ -203,8 +204,8 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
       await createPostComment({
         postId: post.id,
         userId: user.uid,
-        userName: user.displayName || 'Athlete',
-        userPhoto: user.photoURL || '',
+        userName: profile?.displayName || user.displayName || 'Athlete',
+        userPhoto: shareablePhotoURL(profile?.photoURL, user.photoURL),
         text: commentText.trim(),
         images: commentImages.length > 0 ? commentImages : undefined,
         parentId: replyingTo?.commentId || null,
@@ -375,7 +376,7 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
   return createPortal(
     <AnimatePresence>
       {isOpen && post && (
-        <div className="fixed inset-0 z-[600] flex flex-col justify-end sm:justify-center sm:items-center sm:p-3">
+        <div className="cx pro-scope fixed inset-0 z-[600] flex flex-col justify-end sm:justify-center sm:items-center sm:p-3">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -452,16 +453,10 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                   className="flex items-center gap-2.5 cursor-pointer group"
                 >
                   <div className="w-9 h-9 rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold text-sm overflow-hidden group-hover:border-sienna/50 transition-colors shrink-0">
-                    {post.authorPhoto ? (
-                      <img src={post.authorPhoto} alt={post.authorName} className="w-full h-full object-cover" />
-                    ) : (
-                      post.authorName?.charAt(0)?.toUpperCase() || '?'
-                    )}
+                    <LiveUserAvatar userId={post.authorId} fallbackName={post.authorName} fallbackPhoto={post.authorPhoto} className="w-full h-full object-cover" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-bone font-bold text-sm truncate group-hover:text-sienna transition-colors">
-                      {post.authorName}
-                    </div>
+                    <LiveUserName userId={post.authorId} fallbackName={post.authorName} className="block text-bone font-bold text-sm truncate group-hover:text-sienna transition-colors" />
                     <div className="text-[11px] text-bone-dim font-mono">{timeAgo(post.createdAt)}</div>
                   </div>
                 </div>
@@ -622,18 +617,14 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
 
                             {/* Root Avatar */}
                             <div className="w-7 h-7 rounded-full bg-ink-3 border border-line/20 flex items-center justify-center text-bone font-bold text-[10px] shrink-0 overflow-hidden z-10 mt-0.5">
-                              {rootComment.userPhoto ? (
-                                <img src={rootComment.userPhoto} alt={rootComment.userName} className="w-full h-full object-cover" />
-                              ) : (
-                                rootComment.userName?.charAt(0)?.toUpperCase() || '?'
-                              )}
+                              <LiveUserAvatar userId={rootComment.userId} fallbackName={rootComment.userName} fallbackPhoto={rootComment.userPhoto} className="w-full h-full object-cover" />
                             </div>
 
                             {/* Comment Bubble */}
                             <div className="flex-1 bg-ink-2/60 border border-line/15 rounded-2xl p-2.5 sm:p-3 shadow-sm space-y-1.5">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-bone">{rootComment.userName}</span>
+                                  <LiveUserName userId={rootComment.userId} fallbackName={rootComment.userName} className="text-xs font-bold text-bone" />
                                   <span className="text-[10px] text-bone-dim font-mono">{timeAgo(rootComment.createdAt)}</span>
                                 </div>
 
@@ -722,20 +713,16 @@ export function SinglePostSheet({ post, isOpen, onClose }: SinglePostSheetProps)
                                 return (
                                   <div key={reply.id} className="flex gap-2">
                                     <div className="w-6 h-6 rounded-full bg-ink-3 border border-line/20 flex items-center justify-center text-bone font-bold text-[9px] shrink-0 overflow-hidden mt-0.5">
-                                      {reply.userPhoto ? (
-                                        <img src={reply.userPhoto} alt={reply.userName} className="w-full h-full object-cover" />
-                                      ) : (
-                                        reply.userName?.charAt(0)?.toUpperCase() || '?'
-                                      )}
+                                      <LiveUserAvatar userId={reply.userId} fallbackName={reply.userName} fallbackPhoto={reply.userPhoto} className="w-full h-full object-cover" />
                                     </div>
 
                                     <div className="flex-1 bg-ink-2/40 border border-line/15 rounded-2xl p-2.5 shadow-sm space-y-1">
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-1.5">
-                                          <span className="text-[11px] font-bold text-bone">{reply.userName}</span>
+                                          <LiveUserName userId={reply.userId} fallbackName={reply.userName} className="text-[11px] font-bold text-bone" />
                                           {reply.replyToUserName && (
                                             <span className="text-[10px] text-sienna font-mono">
-                                              @{reply.replyToUserName}
+                                              @<LiveUserName userId={reply.replyToUserId} fallbackName={reply.replyToUserName} />
                                             </span>
                                           )}
                                           <span className="text-[9px] text-bone-dim font-mono">{timeAgo(reply.createdAt)}</span>

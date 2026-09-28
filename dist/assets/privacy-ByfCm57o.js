@@ -1,0 +1,1 @@
+function e(e){return e?.privacySettings?.profileVisibility||(e?.isPublic===!1?`private`:`public`)}function t(t){return e(t)===`private`}export{e as n,t};

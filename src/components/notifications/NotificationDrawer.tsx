@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, X, Calendar, Ticket, CheckCircle2, AlertCircle, Sparkles, Megaphone, Check, MessageCircle, CheckSquare, UserPlus } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { getUserNotifications, markNotificationAsRead } from '@/services/notifications';
+import { safeInternalPath } from '@/lib/validation';
 import type { AppNotificationItem, AppNotificationType } from '@/types';
 
 export function NotificationDrawer({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
@@ -47,8 +48,9 @@ export function NotificationDrawer({ isOpen, onClose }: { isOpen: boolean; onClo
     if (n.id && !n.read) {
       markReadMutation.mutate(n.id);
     }
-    if (n.link) {
-      navigate(n.link);
+    const link = safeInternalPath(n.link);
+    if (link) {
+      navigate(link);
       onClose();
     }
   };

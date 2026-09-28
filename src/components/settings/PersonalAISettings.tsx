@@ -27,7 +27,7 @@ export default function PersonalAISettings() {
       if (!user) return;
       try {
         // Check if global mode is on
-        const globalDoc = await getDoc(doc(db, 'admin_settings', 'api_keys'));
+        const globalDoc = await getDoc(doc(db, 'admin_settings', 'ai_mode'));
         if (globalDoc.exists() && globalDoc.data().use_admin_keys) {
           setGlobalMode(true);
         }

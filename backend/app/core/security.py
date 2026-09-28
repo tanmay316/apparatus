@@ -1,8 +1,12 @@
-import base64
 import json
 import logging
+import threading
+import time
+
 import firebase_admin
+import requests
 from firebase_admin import credentials, auth
+from google.auth import jwt as google_jwt
 from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.config import settings
@@ -30,43 +34,54 @@ init_firebase()
 
 security = HTTPBearer()
 
-def _decode_jwt_payload_fallback(token: str) -> dict:
-    try:
-        parts = token.split(".")
-        if len(parts) == 3:
-            payload_b64 = parts[1]
-            padded = payload_b64 + "=" * (-len(payload_b64) % 4)
-            decoded_bytes = base64.urlsafe_b64decode(padded)
-            payload = json.loads(decoded_bytes.decode("utf-8"))
-            if "uid" not in payload:
-                payload["uid"] = payload.get("user_id") or payload.get("sub", "unknown_user")
-            return payload
-    except Exception as err:
-        logger.error(f"JWT fallback decode error: {err}")
-    return {"uid": "unknown_user"}
+PROJECT_ID = "apparatus-46b1b"
+_CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
+_certs_cache: dict = {"certs": None, "expires": 0.0}
+_certs_lock = threading.Lock()
+
+
+def _google_certs() -> dict:
+    with _certs_lock:
+        if _certs_cache["certs"] and time.time() < _certs_cache["expires"]:
+            return _certs_cache["certs"]
+        resp = requests.get(_CERTS_URL, timeout=5)
+        resp.raise_for_status()
+        _certs_cache["certs"] = resp.json()
+        _certs_cache["expires"] = time.time() + 3600
+        return _certs_cache["certs"]
+
+
+def _verify_firebase_token(token: str) -> dict:
+    # The Admin SDK path needs Google credentials; without a service account we
+    # verify the RS256 signature against Google's published certs ourselves.
+    if settings.FIREBASE_SERVICE_ACCOUNT_JSON:
+        return auth.verify_id_token(token)
+    claims = google_jwt.decode(token, certs=_google_certs(), audience=PROJECT_ID)
+    if claims.get("iss") != f"https://securetoken.google.com/{PROJECT_ID}":
+        raise ValueError("Unexpected token issuer")
+    if not claims.get("sub") or len(claims["sub"]) > 128:
+        raise ValueError("Missing subject")
+    if claims.get("auth_time", 0) > time.time() + 300:
+        raise ValueError("auth_time in the future")
+    claims["uid"] = claims["sub"]
+    return claims
 
 
 def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)):
-    token = credentials.credentials
-    # Fast path: direct JWT decode when service account JSON is not configured
-    if not settings.FIREBASE_SERVICE_ACCOUNT_JSON:
-        payload = _decode_jwt_payload_fallback(token)
-        if payload.get("uid") and payload["uid"] != "unknown_user":
-            payload["_token"] = token
-            return payload
+    """Verifies the Firebase ID token signature, expiry, audience and issuer.
 
+    Never decode a token without verifying it: an unsigned payload lets anyone
+    claim any uid.
+    """
+    token = credentials.credentials
     try:
-        decoded_token = auth.verify_id_token(token)
-        decoded_token["_token"] = token
-        return decoded_token
+        decoded_token = _verify_firebase_token(token)
     except Exception as e:
-        payload = _decode_jwt_payload_fallback(token)
-        if payload.get("uid") and payload["uid"] != "unknown_user":
-            payload["_token"] = token
-            return payload
-            
+        logger.info("Rejected ID token: %s", type(e).__name__)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid authentication credentials: {e}",
+            detail="Invalid or expired authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    decoded_token["_token"] = token
+    return decoded_token

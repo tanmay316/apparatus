@@ -8,7 +8,7 @@ interface MedalIconProps {
 
 /**
  * Compact real medal artwork (outer ring + rim + face + icon) matching the detailed
- * medal shown in MedalShareModal — used anywhere a small "real" badge icon is needed
+ * medal shown in MedalShareModal - used anywhere a small "real" badge icon is needed
  * instead of a flat colored box with a generic lucide icon.
  */
 export function MedalIcon({ rank, size = 48, className = '' }: MedalIconProps) {

@@ -58,7 +58,7 @@ export async function getSystemLogs(limitCount = 100): Promise<SystemLog[]> {
 }
 
 export async function clearAllSystemLogs(): Promise<void> {
-  // Firestore writeBatch supports max 500 operations — paginate deletes.
+  // Firestore writeBatch supports max 500 operations - paginate deletes.
   let snap = await getDocs(query(collection(db, 'systemLogs'), limit(450)));
   while (snap.size > 0) {
     const batch = writeBatch(db);

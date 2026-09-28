@@ -118,6 +118,22 @@ if (fs.existsSync(podfile)) {
   fs.writeFileSync(podfile, content, 'utf8');
 }
 
+// Camera and photo-library privacy strings required by @capacitor/camera.
+const infoPlist = path.join(ROOT, 'ios', 'App', 'App', 'Info.plist');
+if (fs.existsSync(infoPlist)) {
+  let plist = fs.readFileSync(infoPlist, 'utf8');
+  if (!plist.includes('NSCameraUsageDescription')) {
+    plist = plist.replace('</dict>', `
+	<key>NSCameraUsageDescription</key>
+	<string>Take a photo of a meal for nutrition analysis.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Choose a meal photo for nutrition analysis.</string>
+</dict>`);
+    fs.writeFileSync(infoPlist, plist, 'utf8');
+    console.log('✔ Added camera privacy descriptions to Info.plist');
+  }
+}
+
 // 5. Patch ios/App/App.xcodeproj/project.pbxproj if it exists
 const pbxPath = path.join(ROOT, 'ios', 'App', 'App.xcodeproj', 'project.pbxproj');
 if (fs.existsSync(pbxPath)) {

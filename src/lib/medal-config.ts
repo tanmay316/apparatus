@@ -1,6 +1,6 @@
 import { Crown, Trophy, Award } from 'lucide-react';
 
-// Shared gold/silver/bronze medal styling — the single source of truth for what a
+// Shared gold/silver/bronze medal styling - the single source of truth for what a
 // "real" rank badge looks like across the app (profile podium list, share card, etc.)
 // so every surface renders the same artwork instead of a generic placeholder icon.
 export interface MedalConfig {

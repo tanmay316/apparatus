@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Zap, TrendingUp, Clock, Flame } from 'lucide-react';
+import { Dumbbell, Flame, Clock } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 interface StatsPillsProps {
@@ -10,7 +10,6 @@ interface StatsPillsProps {
 
 function AnimatedCounter({ value, formatter }: { value: number; formatter?: (v: number) => string | number }) {
   const [displayed, setDisplayed] = useState(0);
-  const ref = useRef<HTMLSpanElement>(null);
   const hasAnimated = useRef(false);
 
   useEffect(() => {
@@ -22,77 +21,53 @@ function AnimatedCounter({ value, formatter }: { value: number; formatter?: (v: 
     const duration = 800;
     const steps = 30;
     const increment = value / steps;
-    let current = 0;
     let step = 0;
     const interval = setInterval(() => {
       step++;
-      current = Math.min(increment * step, value);
-      setDisplayed(current);
+      setDisplayed(Math.min(increment * step, value));
       if (step >= steps) clearInterval(interval);
     }, duration / steps);
     return () => clearInterval(interval);
   }, [value]);
 
-  const displayValue = formatter ? formatter(displayed) : Math.round(displayed).toLocaleString();
-  return <span ref={ref}>{displayValue}</span>;
+  return <span>{formatter ? formatter(displayed) : Math.round(displayed).toLocaleString()}</span>;
 }
 
 export function StatsPills({ totalWorkouts, totalCalories, totalHours }: StatsPillsProps) {
   const cards = [
+    { key: 'workouts', label: 'Workouts', value: totalWorkouts, icon: Dumbbell, tint: '#5d2a1a', tintDark: '#efad80' },
     {
-      key: 'workouts',
-      label: 'Workouts',
-      value: totalWorkouts,
-      emoji: '🔥',
-      gradient: 'from-[#ff6b6b]/10 to-transparent',
+      key: 'calories', label: 'Calories', value: totalCalories, icon: Flame, tint: '#c2410c', tintDark: '#fb923c',
+      formatter: (v: number) => {
+        const r = Math.round(v);
+        return r >= 10000 ? `${(r / 1000).toFixed(1)}k` : r.toLocaleString();
+      },
     },
     {
-      key: 'calories',
-      label: 'Calories',
-      value: totalCalories,
-      emoji: '⚡',
-      formatter: (v: number) => `${Math.round(v).toLocaleString()}`,
-      gradient: 'from-[#ffbe0b]/10 to-transparent',
-    },
-    {
-      key: 'hours',
-      label: 'Hours',
-      value: totalHours,
-      emoji: '⏱',
+      key: 'hours', label: 'Hours', value: totalHours, icon: Clock, tint: '#0f766e', tintDark: '#5eead4',
       formatter: (v: number) => v < 1 ? `${Math.round(v * 60)}m` : `${v.toFixed(1)}h`,
-      gradient: 'from-[#4ea8de]/10 to-transparent',
-    }
+    },
   ];
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 14 }}
+    <motion.section
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.15 }}
-      className="grid grid-cols-3 gap-2 sm:gap-3 mb-8"
+      transition={{ delay: 0.1 }}
+      className="dx-card grid grid-cols-3"
+      aria-label="Lifetime totals"
     >
-      {cards.map((card) => (
-          <motion.div
-            key={card.key}
-            whileHover={{ y: -4, scale: 1.02 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className={`rounded-2xl bg-[var(--card)] p-2 sm:p-4 flex items-center shadow-lg relative overflow-hidden bg-gradient-to-br ${card.gradient}`}
-          >
-            <div className="flex items-center gap-1.5 sm:gap-3 w-full">
-              <span className="text-lg sm:text-2xl w-7 h-7 sm:w-10 sm:h-10 rounded-xl bg-[var(--bg)] flex items-center justify-center shadow-inner shrink-0">
-                {card.emoji}
-              </span>
-              <div className="flex flex-col justify-center min-w-0 flex-1" style={{ containerType: 'inline-size' }}>
-                <span className="font-mono text-[var(--muted)] uppercase tracking-wider sm:tracking-widest truncate" style={{ fontSize: 'clamp(7px, 10cqw, 11px)' }}>
-                  {card.label}
-                </span>
-                <span className="font-mono font-bold text-[var(--text)] leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(10px, 13cqw, 20px)' }}>
-                  <AnimatedCounter value={card.value} formatter={card.formatter} />
-                </span>
-              </div>
-            </div>
-          </motion.div>
+      {cards.map((card, i) => (
+        <div key={card.key} className={`px-3 py-4 sm:px-4 min-w-0 ${i > 0 ? 'border-l' : ''}`} style={{ borderColor: 'var(--dx-border)' }}>
+          <div className="flex items-center gap-1.5 text-[12px] font-medium dx-muted">
+            <card.icon size={14} className="shrink-0 dx-stat-icon" style={{ ['--tint' as any]: card.tint, ['--tint-dark' as any]: card.tintDark }} />
+            <span className="truncate">{card.label}</span>
+          </div>
+          <div className="mt-1.5 text-[20px] sm:text-[23px] font-semibold leading-none tracking-tight tabular truncate">
+            <AnimatedCounter value={card.value} formatter={card.formatter} />
+          </div>
+        </div>
       ))}
-    </motion.div>
+    </motion.section>
   );
 }

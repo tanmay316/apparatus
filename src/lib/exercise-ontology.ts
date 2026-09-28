@@ -64,7 +64,7 @@ export const MOVEMENT_DEFAULTS: Record<MovementPattern, Partial<Record<MuscleReg
   anti_extension: { abs: 1.0, obliques: 0.6 },
   anti_rotation: { obliques: 1.0, abs: 0.6 },
   rotation: { obliques: 1.0 },
-  hip_flexion: { hip_flexors: 1.0, abs: 0.6 },
+  hip_flexion: { abs: 1.0, hip_flexors: 0.8, obliques: 0.3 },
   carry: { traps: 1.0, forearms: 1.0, obliques: 0.8, abs: 0.6 },
   calisthenics_skill: {},
   isolation: {},
@@ -164,7 +164,7 @@ export const EXERCISE_ONTOLOGY: ExerciseDefinition[] = [
   {
     id: "bicep_curl",
     name: "Bicep Curl",
-    aliases: ["dumbbell curl", "db curl", "barbell curl", "bb curl", "cable curl", "hammer curl", "curl", "curls"],
+    aliases: ["dumbbell curl", "db curl", "barbell curl", "bb curl", "cable curl", "ez bar curl", "preacher curl", "concentration curl"],
     pattern: "elbow_flexion",
     muscles: {
       primary: [{ muscle: "biceps", weight: 1.0 }],
@@ -188,7 +188,7 @@ export const EXERCISE_ONTOLOGY: ExerciseDefinition[] = [
     pattern: "knee_flexion",
     muscles: {
       primary: [{ muscle: "hamstrings", weight: 1.0 }],
-      secondary: [{ muscle: "glutes", weight: 0.2 }]
+      secondary: [{ muscle: "calves", weight: 0.3 }]
     }
   },
   {
@@ -204,7 +204,7 @@ export const EXERCISE_ONTOLOGY: ExerciseDefinition[] = [
   {
     id: "calf_raise",
     name: "Calf Raise",
-    aliases: ["standing calf raise", "seated calf raise", "calf raises", "calf"],
+    aliases: ["standing calf raise", "seated calf raise", "calf raises"],
     pattern: "plantar_flexion",
     muscles: {
       primary: [{ muscle: "calves", weight: 1.0 }],
@@ -214,7 +214,7 @@ export const EXERCISE_ONTOLOGY: ExerciseDefinition[] = [
   {
     id: "plank",
     name: "Plank",
-    aliases: ["forearm plank", "high plank", "core"],
+    aliases: ["forearm plank", "high plank", "front plank", "plank hold"],
     pattern: "anti_extension",
     muscles: {
       primary: [{ muscle: "abs", weight: 1.0 }],
@@ -224,7 +224,7 @@ export const EXERCISE_ONTOLOGY: ExerciseDefinition[] = [
   {
     id: "crunch",
     name: "Crunch",
-    aliases: ["crunches", "reverse crunch", "reverse crunches", "bicycle crunch", "sit up", "sit ups"],
+    aliases: ["crunches", "reverse crunch", "reverse crunches", "sit up", "sit ups"],
     pattern: "spinal_flexion",
     muscles: {
       primary: [{ muscle: "abs", weight: 1.0 }],
@@ -234,11 +234,11 @@ export const EXERCISE_ONTOLOGY: ExerciseDefinition[] = [
   {
     id: "leg_raise",
     name: "Leg Raise",
-    aliases: ["hanging leg raise", "lying leg raise", "leg raises", "knee raise", "knee raises", "captains chair"],
+    aliases: ["hanging leg raise", "lying leg raise", "leg raises", "knee raise", "knee raises", "captains chair", "hanging knee raise"],
     pattern: "hip_flexion",
     muscles: {
-      primary: [{ muscle: "abs", weight: 1.0 }, { muscle: "hip_flexors", weight: 1.0 }],
-      secondary: []
+      primary: [{ muscle: "abs", weight: 1.0 }],
+      secondary: [{ muscle: "hip_flexors", weight: 0.8 }, { muscle: "obliques", weight: 0.3 }]
     }
   },
   {
@@ -263,21 +263,31 @@ export const EXERCISE_ONTOLOGY: ExerciseDefinition[] = [
   }
 ];
 
-export const MODIFIERS: Record<string, Partial<Record<MuscleRegion, number>>> = {
-  incline: { upper_chest: 0.3, front_delts: 0.2, chest: -0.2 },
-  decline: { lower_chest: 0.3, front_delts: -0.1, chest: 0.1 },
-  close_grip: { triceps: 0.3, chest: -0.2 },
-  wide_grip: { chest: 0.2, lats: 0.2, triceps: -0.2, biceps: -0.2 },
-  reverse_grip: { biceps: 0.3, lower_chest: 0.2 }
-};
+export type MuscleMap = Partial<Record<MuscleRegion, number>>;
+
+/**
+ * Grip/angle variations. A modifier only applies when the exercise already
+ * works one of `requires`, so "incline curl" never gains upper chest and
+ * "close grip pulldown" never gains triceps.
+ */
+export interface Modifier {
+  match: RegExp;
+  requires: MuscleRegion[];
+  adjust: MuscleMap;
+}
+
+export const MODIFIERS: Modifier[] = [
+  { match: /\bincline\b/, requires: ['chest'], adjust: { upper_chest: 0.9, chest: -0.3, front_delts: 0.15 } },
+  { match: /\bdecline\b/, requires: ['chest'], adjust: { lower_chest: 0.9, chest: -0.1, front_delts: -0.1 } },
+  { match: /\b(close grip|narrow grip|diamond)\b/, requires: ['chest'], adjust: { triceps: 0.3, chest: -0.2 } },
+  { match: /\bwide grip\b/, requires: ['chest'], adjust: { chest: 0.1, triceps: -0.2 } },
+  { match: /\bwide grip\b/, requires: ['lats'], adjust: { lats: 0.1, biceps: -0.2 } },
+  { match: /\b(reverse grip|underhand|supinated)\b/, requires: ['lats'], adjust: { biceps: 0.3 } },
+];
 
 // ─── Name-based movement inference ───────────────────────────────
-// The curated ontology above only covers a handful of canonical lifts. Every other
-// variation ("Australian Row", "Meadows Row", "Pendlay Row", …) is resolved here by
-// reading the movement pattern out of the exercise name, so it highlights
-// anatomically correct muscles instead of nothing at all.
-
-export type MuscleMap = Partial<Record<MuscleRegion, number>>;
+// Names are normalised first (lower case, singular, "push-ups" → "pushup",
+// dumbbell → db, barbell → bb), so these patterns only need singular forms.
 
 interface InferenceRule {
   match: RegExp;
@@ -286,65 +296,117 @@ interface InferenceRule {
 
 const D = MOVEMENT_DEFAULTS;
 
+const HAND_BALANCE: MuscleMap = { front_delts: 1.0, triceps: 0.6, traps: 0.5, forearms: 0.5, abs: 0.5 };
+const RUNNING: MuscleMap = { calves: 1.0, quads: 0.8, hamstrings: 0.8, glutes: 0.7, hip_flexors: 0.5 };
+
 /**
- * Ordered most-specific-first; the first matching rule wins. Ordering matters a lot:
- * "upright row" and "rear delt row" are shoulder movements, not horizontal pulls,
- * so they must be tested before the generic `row` rule.
+ * Ordered most-specific-first; the first matching rule wins. Skills and compound
+ * names ("pike push-up", "leg curl", "rear delt fly") must come before the
+ * generic word they contain ("push-up", "curl", "fly").
  */
 export const INFERENCE_RULES: InferenceRule[] = [
+  // ── Calisthenics skills ──
+  { match: /\bmuscleup\b/, muscles: { lats: 1.0, triceps: 0.7, chest: 0.6, biceps: 0.6, front_delts: 0.4, abs: 0.3 } },
+  { match: /\bplanche\b/, muscles: { front_delts: 1.0, chest: 0.7, triceps: 0.6, abs: 0.7, biceps: 0.3 } },
+  { match: /\bfront lever\b/, muscles: { lats: 1.0, abs: 0.9, rhomboids: 0.6, rear_delts: 0.5, traps: 0.4, biceps: 0.4 } },
+  { match: /\bback lever\b/, muscles: { lats: 1.0, chest: 0.6, biceps: 0.6, abs: 0.7, lower_back: 0.6, rear_delts: 0.5 } },
+  { match: /\bhuman flag\b|\b(tuck|straddle|vertical) flag\b/, muscles: { obliques: 1.0, lats: 0.8, side_delts: 0.6, abs: 0.6 } },
+  { match: /\b(handstand|pike)\b.*\b(pushup|push|press)\b|\bhspu\b|\bwall walk\b/, muscles: { front_delts: 1.0, triceps: 0.75, traps: 0.5, side_delts: 0.4, upper_chest: 0.3 } },
+  { match: /\belbow lever\b/, muscles: { abs: 1.0, obliques: 0.6, forearms: 0.6, front_delts: 0.5, triceps: 0.4 } },
+  { match: /\b(handstand|headstand|crow|crane|frog stand|tripod|kick up)\b/, muscles: HAND_BALANCE },
+  { match: /\bl sit dip\b/, muscles: { triceps: 1.0, chest: 0.7, abs: 0.6, hip_flexors: 0.5, front_delts: 0.5 } },
+  { match: /\bl sit (pullup|chinup)\b/, muscles: { lats: 1.0, abs: 0.8, biceps: 0.65, hip_flexors: 0.6, traps: 0.35 } },
+  { match: /\b(l sit|v sit|manna)\b/, muscles: { abs: 1.0, hip_flexors: 0.8, triceps: 0.6, quads: 0.4, lats: 0.3 } },
+  { match: /\bdragon flag\b/, muscles: { abs: 1.0, obliques: 0.5, lats: 0.5, hip_flexors: 0.4 } },
+  { match: /\bskin the cat\b/, muscles: { lats: 0.9, abs: 1.0, biceps: 0.5, front_delts: 0.4 } },
+
+  // ── Core variations that contain generic words ──
+  { match: /\bcopenhagen\b/, muscles: { adductors: 1.0, obliques: 0.7, abs: 0.4 } },
+  { match: /\bside plank\b/, muscles: { obliques: 1.0, abs: 0.5, glutes: 0.35 } },
+  { match: /\bbicycle crunch\b/, muscles: { abs: 1.0, obliques: 0.9 } },
+  { match: /\b(pallof|anti rotation)\b/, muscles: D.anti_rotation },
+
+  // ── Conditioning ──
+  { match: /\bburpee\b/, muscles: { quads: 0.8, chest: 0.6, glutes: 0.6, front_delts: 0.5, abs: 0.5, triceps: 0.4, calves: 0.4 } },
+  { match: /\bmountain climber\b/, muscles: { abs: 1.0, hip_flexors: 0.8, front_delts: 0.5, quads: 0.4, obliques: 0.4 } },
+  { match: /\b(jumping jack|star jump|seal jack|high knee|butt kick)\b/, muscles: { calves: 1.0, quads: 0.6, glutes: 0.5, hip_flexors: 0.5, side_delts: 0.3 } },
+  { match: /\b(box jump|broad jump|tuck jump|jump squat|squat jump|jump lunge|lunge jump|split jump|skater|bound|pogo|plyo)\b/, muscles: { quads: 1.0, glutes: 0.8, calves: 0.7, hamstrings: 0.4 } },
+  { match: /\b(wall ball|thruster)\b/, muscles: { quads: 1.0, glutes: 0.7, front_delts: 0.7, triceps: 0.4, abs: 0.3 } },
+  { match: /\b(clean|snatch|jerk)\b/, muscles: { glutes: 1.0, hamstrings: 0.9, quads: 0.8, traps: 0.8, lower_back: 0.6, front_delts: 0.4 } },
+  { match: /\bsled push\b/, muscles: { quads: 1.0, glutes: 0.8, calves: 0.6, triceps: 0.3, chest: 0.3 } },
+  { match: /\bsled (pull|drag)\b/, muscles: { hamstrings: 0.8, glutes: 0.8, lats: 0.6, quads: 0.5, biceps: 0.5, forearms: 0.5 } },
+  { match: /\bski ?erg\b/, muscles: { lats: 1.0, triceps: 0.7, abs: 0.6, glutes: 0.4 } },
+  { match: /\b(rowing|rower|row erg|row machine|ergometer|concept 2)\b/, muscles: { quads: 0.8, lats: 0.8, glutes: 0.6, hamstrings: 0.5, rhomboids: 0.5, biceps: 0.4 } },
+  { match: /\bbattle rope\b/, muscles: { front_delts: 0.9, forearms: 0.6, abs: 0.6, biceps: 0.4, triceps: 0.4 } },
+
   // ── Shoulder-dominant movements that contain pull/row/raise words ──
   { match: /\bupright row\b/, muscles: { side_delts: 1.0, traps: 0.9, front_delts: 0.5, biceps: 0.35 } },
-  { match: /\b(rear[\s-]?delt|reverse)\s*(row|fly|flye|raise|pull)/, muscles: D.shoulder_horizontal_abduction },
-  { match: /\bface pull/, muscles: D.shoulder_horizontal_abduction },
-  { match: /\b(lateral|side)\s*(raise|delt)/, muscles: D.shoulder_abduction },
+  { match: /\brear delt\b|\breverse (db |bb |cable |band |machine )?(fly|flye|pec deck)\b|\bpull apart\b|\b(ytwl|ytw|prone y|y raise|t raise|w raise)\b/, muscles: D.shoulder_horizontal_abduction },
+  { match: /\bface pull\b/, muscles: D.shoulder_horizontal_abduction },
+  { match: /\b(lateral|side) (db |cable |band |machine )?(raise|delt)\b|\blateral raise\b/, muscles: D.shoulder_abduction },
   { match: /\bfront raise\b/, muscles: D.shoulder_flexion },
-  { match: /\bshrug/, muscles: { traps: 1.0, forearms: 0.4 } },
+  { match: /\bshrug\b/, muscles: { traps: 1.0, forearms: 0.4 } },
+
+  // ── Movements that must beat the generic curl / press / bench rules ──
+  { match: /\b(leg|hamstring|nordic|slider|glute ham|swiss ball|stability ball)\b.*\bcurl\b|\bglute ham raise\b|\bghr\b|\bnordic\b/, muscles: { hamstrings: 1.0, calves: 0.3 } },
+  { match: /\bwrist\b.*\b(curl|extension|roller)\b|\bwrist roller\b/, muscles: { forearms: 1.0 } },
+  { match: /\breverse (grip )?(db |bb |ez bar |cable )?curl\b/, muscles: { forearms: 1.0, biceps: 0.85 } },
+  { match: /\b(hammer|zottman) curl\b/, muscles: { biceps: 1.0, forearms: 0.7 } },
+  { match: /\btricep\b|\bskull ?crusher\b|\bjm press\b|\btate press\b|\bfrench press\b/, muscles: D.elbow_extension },
+  { match: /\b(glute|donkey|hip) kickback\b|\bdonkey kick\b|\bfire hydrant\b|\bclamshell\b|\bmonster walk\b|\b(lateral|banded) (band )?walk\b/, muscles: { glutes: 1.0 } },
+  { match: /\bcalf\b/, muscles: D.plantar_flexion },
+  { match: /\b(leg press|hack squat)\b/, muscles: { quads: 1.0, glutes: 0.7, hamstrings: 0.3 } },
+  { match: /\bleg extension\b/, muscles: D.knee_extension },
 
   // ── Vertical pulls ──
-  { match: /\b(pull[\s-]?up|chin[\s-]?up|pull[\s-]?down|pulldown|lat pull|muscle[\s-]?up)/, muscles: D.vertical_pull },
-  { match: /\bpullover/, muscles: { lats: 1.0, chest: 0.5, triceps: 0.4 } },
+  { match: /\bstraight arm\b.*\b(pulldown|pushdown|pullover)\b/, muscles: { lats: 1.0, rear_delts: 0.4, abs: 0.3 } },
+  { match: /\bchinup\b/, muscles: { lats: 1.0, biceps: 0.9, traps: 0.3, forearms: 0.3 } },
+  { match: /\b(pullup|pulldown|lat pull)\b/, muscles: D.vertical_pull },
+  { match: /\bpullover\b/, muscles: { lats: 1.0, chest: 0.5, triceps: 0.4 } },
 
   // ── Horizontal pulls (rows). Covers australian/inverted/body rows. ──
-  { match: /\b(row|rows|rowing)\b/, muscles: D.horizontal_pull },
-  { match: /\b(front|back)\s*lever/, muscles: { lats: 1.0, lower_back: 0.7, abs: 0.9, rhomboids: 0.6, traps: 0.5 } },
+  { match: /\brow\b/, muscles: D.horizontal_pull },
 
   // ── Vertical pushes ──
-  { match: /\b(overhead|shoulder|military|arnold|pike|handstand|z)\s*(press|push)/, muscles: D.vertical_push },
-  { match: /\b(ohp|hspu)\b/, muscles: D.vertical_push },
+  { match: /\b(overhead|shoulder|military|arnold|z|landmine|push) press\b|\bohp\b/, muscles: D.vertical_push },
 
-  // ── Horizontal pushes ──
-  { match: /\bdip/, muscles: { lower_chest: 1.0, triceps: 0.9, chest: 0.8, front_delts: 0.5 } },
-  { match: /\b(bench|chest|floor)\s*press/, muscles: D.horizontal_push },
-  { match: /\b(push[\s-]?up|pushup|press[\s-]?up)/, muscles: D.horizontal_push },
-  { match: /\b(fly|flye|flies|crossover|pec deck|svend)/, muscles: { chest: 1.0, front_delts: 0.45 } },
-  { match: /\bplanche/, muscles: { front_delts: 1.0, chest: 0.8, abs: 0.9, triceps: 0.6 } },
+  // ── Dips and horizontal pushes ──
+  { match: /\bdip\b/, muscles: { triceps: 1.0, chest: 0.8, lower_chest: 0.6, front_delts: 0.6 } },
+  { match: /\b(bench|chest|floor|incline|decline)\b.*\bpress\b|\b(db|bb|smith|machine|cable) press\b|\bbench\b(?!.*\b(step|jump|hop|stepup|raise|crunch|situp|curl|row|leg|dip|extension)\b)/, muscles: D.horizontal_push },
+  { match: /\b(pushup|pressup)\b/, muscles: { chest: 1.0, triceps: 0.7, front_delts: 0.6, abs: 0.3 } },
+  { match: /\b(fly|flye|crossover|pec deck|svend)\b/, muscles: { chest: 1.0, front_delts: 0.45 } },
 
   // ── Arms ──
-  { match: /\b(leg|hamstring|nordic)\s*curl/, muscles: D.knee_flexion },
-  { match: /\bwrist\s*(curl|extension)/, muscles: { forearms: 1.0 } },
-  { match: /\b(curl|curls)\b/, muscles: D.elbow_flexion },
-  { match: /\b(tricep|triceps|skull|skullcrusher|kickback|pushdown|push[\s-]?down|overhead extension)/, muscles: D.elbow_extension },
-  { match: /\b(grip|farmer|wrist roller)/, muscles: { forearms: 1.0, traps: 0.6 } },
+  { match: /\bcurl\b/, muscles: D.elbow_flexion },
+  { match: /\b(kickback|pushdown|overhead extension)\b/, muscles: D.elbow_extension },
 
   // ── Legs ──
-  { match: /\bleg\s*press/, muscles: { quads: 1.0, glutes: 0.7, hamstrings: 0.3 } },
-  { match: /\bleg\s*extension/, muscles: D.knee_extension },
-  { match: /\bcalf\s*(raise|press)/, muscles: D.plantar_flexion },
-  { match: /\b(lunge|split squat|step[\s-]?up|bulgarian)/, muscles: D.lunge },
-  { match: /\b(squat|pistol|sissy|wall sit)/, muscles: D.squat },
-  { match: /\b(deadlift|rdl|romanian|good morning|hinge|clean|snatch|swing)/, muscles: D.hip_hinge },
-  { match: /\b(hip thrust|glute bridge|glute kickback|hip extension|reverse hyper)/, muscles: D.hip_extension },
-  { match: /\b(abduction|abductor)/, muscles: { glutes: 1.0 } },
-  { match: /\b(adduction|adductor)/, muscles: { adductors: 1.0, quads: 0.4 } },
-  { match: /\b(back extension|hyperextension)/, muscles: { lower_back: 1.0, glutes: 0.7, hamstrings: 0.6 } },
+  { match: /\bsissy\b/, muscles: { quads: 1.0 } },
+  { match: /\bwall sit\b/, muscles: { quads: 1.0, glutes: 0.5 } },
+  { match: /\b(lunge|split squat|stepup|bulgarian)\b/, muscles: D.lunge },
+  { match: /\b(squat|pistol)\b/, muscles: D.squat },
+  { match: /\b(hip thrust|glute bridge|bridge|hip extension|reverse hyper|frog pump|pull through)\b/, muscles: D.hip_extension },
+  { match: /\b(deadlift|rdl|romanian|good morning|hinge|swing)\b/, muscles: D.hip_hinge },
+  { match: /\b(abduction|abductor)\b/, muscles: { glutes: 1.0 } },
+  { match: /\b(adduction|adductor)\b/, muscles: { adductors: 1.0, quads: 0.3 } },
+  { match: /\b(back extension|hyperextension|superman)\b/, muscles: { lower_back: 1.0, glutes: 0.7, hamstrings: 0.5 } },
 
   // ── Core ──
-  { match: /\b(plank|hollow|ab wheel|ab rollout|rollout|l[\s-]?sit|dead bug)/, muscles: D.anti_extension },
-  { match: /\b(pallof|anti[\s-]?rotation)/, muscles: D.anti_rotation },
-  { match: /\b(russian twist|woodchop|wood chop|bicycle|side bend|windshield)/, muscles: D.rotation },
-  { match: /\b(leg raise|knee raise|knee[\s-]?up|toes to bar|hanging raise|dragon flag)/, muscles: D.hip_flexion },
-  { match: /\b(crunch|sit[\s-]?up|situp|v[\s-]?up|jackknife)/, muscles: D.spinal_flexion },
-  { match: /\b(carry|suitcase|yoke)\b/, muscles: D.carry },
+  { match: /\b(russian twist|woodchop|wood chop|side bend|windshield wiper|landmine rotation)\b/, muscles: { obliques: 1.0, abs: 0.5 } },
+  { match: /\b(leg raise|knee raise|knee up|toe to bar|knee to elbow|hanging raise|captain chair)\b/, muscles: D.hip_flexion },
+  { match: /\b(plank|hollow|ab wheel|rollout|dead bug|body saw|stir the pot)\b/, muscles: D.anti_extension },
+  { match: /\b(crunch|situp|v up|jackknife|toe touch)\b/, muscles: D.spinal_flexion },
+  { match: /\b(farmer|carry|suitcase|yoke)\b/, muscles: D.carry },
+  { match: /\b(grip trainer|gripper|plate pinch)\b/, muscles: { forearms: 1.0 } },
+  { match: /\b(dead hang|active hang|scapular hang|flexed arm hang|bar hang|towel hang)\b/, muscles: { forearms: 1.0, lats: 0.5, traps: 0.3 } },
+  { match: /\bcore\b/, muscles: { abs: 1.0, obliques: 0.6 } },
+
+  // ── Cardio blocks inside strength sessions ──
+  { match: /\b(sprint|run|jog|treadmill|interval|repeat)\b/, muscles: RUNNING },
+  { match: /\b(walk|hike|ruck|stair|stepmill)\b/, muscles: { calves: 0.9, quads: 0.7, glutes: 0.7, hamstrings: 0.5 } },
+  { match: /\b(bike|cycling|cycle|spin)\b/, muscles: { quads: 1.0, glutes: 0.6, calves: 0.5, hamstrings: 0.4 } },
+  { match: /\b(swim|swimming)\b/, muscles: { lats: 1.0, front_delts: 0.7, triceps: 0.5, abs: 0.4 } },
+  { match: /\b(elliptical|cross trainer)\b/, muscles: { quads: 0.8, glutes: 0.7, hamstrings: 0.5, calves: 0.4 } },
 ];
 
 /** Coarse fallback when only a library muscle-group label is known. */

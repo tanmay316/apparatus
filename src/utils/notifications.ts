@@ -3,6 +3,7 @@ import { PushNotifications } from '@capacitor/push-notifications';
 import { Capacitor } from '@capacitor/core';
 import { doc, setDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { safeInternalPath } from '@/lib/validation';
 
 export async function setupNotificationChannels() {
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
@@ -61,10 +62,9 @@ export async function initPushNotifications(userId: string) {
     await PushNotifications.addListener('registration', async (token) => {
       if (userId && token.value) {
         try {
-          await setDoc(doc(db, 'users', userId), {
-            fcmToken: token.value,
+          await setDoc(doc(db, 'users', userId, 'private', 'push'), {
             fcmTokens: arrayUnion(token.value),
-            lastFcmRegisteredAt: Date.now()
+            updatedAt: Date.now()
           }, { merge: true });
         } catch (e) {
           console.warn('Failed to save FCM token:', e);
@@ -75,10 +75,11 @@ export async function initPushNotifications(userId: string) {
     // User clicked notification banner
     await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
       const data = action.notification?.data;
-      if (data?.link) {
-        window.location.href = data.link;
-      } else if (data?.clanId) {
-        window.location.href = `/clan/${data.clanId}/chat`;
+      const link = safeInternalPath(data?.link);
+      if (link) {
+        window.location.href = link;
+      } else if (typeof data?.clanId === 'string' && data.clanId) {
+        window.location.href = `/clan/${encodeURIComponent(data.clanId)}/chat`;
       }
     });
   } catch (err) {

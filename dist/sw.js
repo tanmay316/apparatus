@@ -85,7 +85,12 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = event.notification.data?.link || '/';
+  let url = '/';
+  try {
+    const target = new URL(event.notification.data?.link || '/', self.location.origin);
+    // Only ever open our own origin; push payloads are not trusted.
+    if (target.origin === self.location.origin) url = target.href;
+  } catch {}
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {

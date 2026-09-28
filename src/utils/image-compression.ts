@@ -1,4 +1,13 @@
 /**
+ * Photo URL safe to copy into other documents (posts, comments, notifications).
+ * Inline data-URL avatars are resolved live from the user doc instead, so they
+ * are not duplicated across the database.
+ */
+export function shareablePhotoURL(...candidates: Array<string | null | undefined>): string {
+  return candidates.find((u) => !!u && !u.startsWith('data:')) || '';
+}
+
+/**
  * Client-side ultra-light image compressor.
  * Compresses images to ~20-40KB Data URLs so they can be stored directly
  * in Firestore documents for free without requiring paid Firebase Storage.

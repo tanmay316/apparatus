@@ -1,6 +1,8 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ─── Core helpers ───────────────────────────────────────────
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -10,53 +12,299 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && request.auth.token.email == 'tanmay.sharma4334@gmail.com';
+      return isAuthenticated()
+        && request.auth.token.email == 'tanmay.sharma4334@gmail.com'
+        && request.auth.token.email_verified == true;
+    }
+
+    function banPath() {
+      return /databases/$(database)/documents/bans/$(request.auth.uid);
+    }
+
+    // Suspended accounts can still read and delete their data, but cannot publish.
+    function notBanned() {
+      return !exists(banPath()) || get(banPath()).data.get('active', false) != true;
+    }
+
+    function canPost() {
+      return isAuthenticated() && notBanned();
+    }
+
+    function textOk(data, field, max) {
+      return !(field in data) || data[field] == null || (data[field] is string && data[field].size() <= max);
+    }
+
+    // In-app paths only ("/clan/x"). Rejects absolute, protocol-relative and javascript: links.
+    function linkOk(link) {
+      return link == null || (link is string && link.size() <= 300 && link.matches('/([^/\\\\ ][^\\\\ ]*)?'));
+    }
+
+    function selfToggledList(before, after) {
+      return after.toSet().difference(before.toSet()).hasOnly([request.auth.uid])
+        && before.toSet().difference(after.toSet()).hasOnly([request.auth.uid]);
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    function onlyChanged(keys) {
+      return changedKeys().hasOnly(keys);
+    }
+
+    function counterStep(field, maxStep) {
+      return math.abs(request.resource.data.get(field, 0) - resource.data.get(field, 0)) <= maxStep;
+    }
+
+    // The caller may only add or remove their own uid from a list field.
+    function onlySelfToggled(field) {
+      let before = resource.data.get(field, []).toSet();
+      let after = request.resource.data.get(field, []).toSet();
+      return after.difference(before).hasOnly([request.auth.uid])
+        && before.difference(after).hasOnly([request.auth.uid]);
+    }
+
+    function isSelfReactionUpdate() {
+      return isAuthenticated()
+        && onlyChanged(['likedUserIds', 'likesCount', 'dislikedUserIds', 'dislikesCount'])
+        && onlySelfToggled('likedUserIds')
+        && onlySelfToggled('dislikedUserIds')
+        && request.resource.data.get('likesCount', 0) == request.resource.data.get('likedUserIds', []).size()
+        && request.resource.data.get('dislikesCount', 0) == request.resource.data.get('dislikedUserIds', []).size();
+    }
+
+    // ─── Users / follow helpers ─────────────────────────────────
+    function profileOf(uid) {
+      return get(/databases/$(database)/documents/users/$(uid)).data;
+    }
+
+    // Mirrors the client: legacy profiles without privacySettings use isPublic.
+    function followNeedsApproval(uid) {
+      let p = profileOf(uid);
+      let legacy = p.get('isPublic', true) == false ? 'private' : 'public';
+      return p.get('privacySettings', {}).get('profileVisibility', legacy) == 'private';
+    }
+
+    function isFollowerOf(ownerUid) {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/followers/$(ownerUid)/followers/$(request.auth.uid));
+    }
+
+    // Visibility for workouts, activities and cardio sessions.
+    function canSeeContent(data) {
+      return isAuthenticated() && (
+        data.visibility == 'public'
+        || request.auth.uid == data.userId
+        || (data.visibility == 'followers' && isFollowerOf(data.userId))
+      );
+    }
+
+    function canSeeActivity(activityId) {
+      let activity = get(/databases/$(database)/documents/activities/$(activityId)).data;
+      return isAdmin() || (isAuthenticated() && activity.userId == 'system') || canSeeContent(activity);
+    }
+
+    // ─── Clan helpers ───────────────────────────────────────────
+    function membershipPath(clanId) {
+      return /databases/$(database)/documents/clan_memberships/$(clanId + '_' + request.auth.uid);
+    }
+
+    function clanOf(clanId) {
+      return get(/databases/$(database)/documents/clans_v2/$(clanId)).data;
+    }
+
+    function isClanLeader(clanId) {
+      return isAuthenticated() && clanOf(clanId).leaderId == request.auth.uid;
     }
 
     function isClanCoLeader(clanId) {
-      return isAuthenticated() && get(/databases/$(database)/documents/clan_memberships/$(clanId + '_' + request.auth.uid)).data.role == 'co_leader';
+      return isAuthenticated()
+        && exists(membershipPath(clanId))
+        && get(membershipPath(clanId)).data.role == 'co_leader'
+        && get(membershipPath(clanId)).data.status == 'active';
     }
 
-    function canReadPlan(planId) {
-      let plan = get(/databases/$(database)/documents/plans/$(planId)).data;
-      return plan.isPublic == true || isOwner(plan.ownerId);
+    function isClanMember(clanId) {
+      return isAuthenticated()
+        && exists(membershipPath(clanId))
+        && get(membershipPath(clanId)).data.status == 'active';
     }
 
-    function canReadWorkout(workoutId) {
-      let workout = get(/databases/$(database)/documents/workouts/$(workoutId)).data;
-      return workout.visibility == 'public'
-        || isOwner(workout.userId)
-        || (workout.visibility == 'followers' && isAuthenticated());
+    function isClanManager(clanId) {
+      return isAdmin() || isClanLeader(clanId) || isClanCoLeader(clanId);
     }
 
-    function canReadActivity(activityId) {
-      let activity = get(/databases/$(database)/documents/activities/$(activityId)).data;
-      return activity.visibility == 'public'
-        || isOwner(activity.userId)
-        || (activity.visibility == 'followers' && isAuthenticated());
+    function clanIsPublic(clanId) {
+      return clanOf(clanId).get('visibility', 'public') == 'public';
+    }
+
+    function canReadClan(clanId) {
+      return isAdmin() || clanIsPublic(clanId) || isClanMember(clanId) || isClanLeader(clanId);
+    }
+
+    // ─── Competition helpers (challenges_v2 / simple_events) ────
+    function competitionOf(sourceType, sourceId) {
+      return get(/databases/$(database)/documents/$(sourceType == 'event' ? 'simple_events' : 'challenges_v2')/$(sourceId)).data;
+    }
+
+    function isCompetitionManager(sourceType, sourceId) {
+      let c = competitionOf(sourceType, sourceId);
+      return isAdmin()
+        || (isAuthenticated() && c.get('createdBy', '') == request.auth.uid)
+        || (c.get('clanId', '') != '' && isClanManager(c.clanId));
+    }
+
+    function canManageSystemActivity(data) {
+      let details = data.get('details', {});
+      return isAdmin()
+        || (details.get('challengeId', '') != '' && isCompetitionManager('challenge', details.challengeId))
+        || (details.get('eventId', '') != '' && isCompetitionManager('event', details.eventId));
+    }
+
+    function canManageSystemPost(data) {
+      return isAdmin()
+        || (data.get('sourceId', '') != '' && isCompetitionManager(data.get('sourceType', 'challenge'), data.sourceId));
+    }
+
+    function isPostModerator(data) {
+      let clanId = data.get('communityId', data.get('clanId', ''));
+      return clanId != '' && isClanManager(clanId);
+    }
+
+    function canReadPost(data) {
+      return data.get('communityId', '') == '' || canReadClan(data.communityId);
+    }
+
+    function isParticipant(sourceType, sourceId, uid) {
+      return exists(/databases/$(database)/documents/$(sourceType == 'event' ? 'simple_event_participants' : 'challenge_participants')/$(sourceId + '_' + uid));
+    }
+
+    // A manager may add at most one medal (for their own competition, appended last)
+    // and remove at most three stale ones when re-ranking.
+    function medalChangeOk(sourceId) {
+      let before = resource.data.get('communityBadges', []);
+      let after = request.resource.data.get('communityBadges', []);
+      let added = after.toSet().difference(before.toSet());
+      let removed = before.toSet().difference(after.toSet());
+      let unseen = request.resource.data.get('unseenMedalAward', null);
+      return added.size() <= 1 && removed.size() <= 3
+        && (added.size() == 0 || (after[after.size() - 1].sourceId == sourceId && added == [after[after.size() - 1]].toSet()))
+        && (unseen == resource.data.get('unseenMedalAward', null) || (unseen != null && unseen.sourceId == sourceId));
+    }
+
+    // ─── Poll voting (a voter may only change their own vote) ───
+    function optVotes(opts, i) {
+      return i < opts.size() ? opts[i].votesCount : 0;
+    }
+
+    function totalVotesOf(o) {
+      return optVotes(o, 0) + optVotes(o, 1) + optVotes(o, 2) + optVotes(o, 3) + optVotes(o, 4)
+        + optVotes(o, 5) + optVotes(o, 6) + optVotes(o, 7) + optVotes(o, 8) + optVotes(o, 9);
+    }
+
+    function clanOptOk(o, n, i) {
+      return i >= n.size() || (
+        n[i].id == o[i].id && n[i].text == o[i].text
+        && selfToggledList(o[i].get('voterIds', []), n[i].get('voterIds', []))
+        && n[i].votesCount == n[i].get('voterIds', []).size()
+      );
+    }
+
+    function clanPollVoteOk() {
+      let before = resource.data.get('poll', null);
+      let after = request.resource.data.get('poll', null);
+      return before != null && after != null
+        && after.diff(before).affectedKeys().hasOnly(['options', 'totalVotes', 'votedUserIds', 'userVotes'])
+        && selfToggledList(before.get('votedUserIds', []), after.get('votedUserIds', []))
+        && after.get('userVotes', {}).diff(before.get('userVotes', {})).affectedKeys().hasOnly([request.auth.uid])
+        && after.options.size() == before.options.size() && after.options.size() <= 10
+        && clanOptOk(before.options, after.options, 0) && clanOptOk(before.options, after.options, 1)
+        && clanOptOk(before.options, after.options, 2) && clanOptOk(before.options, after.options, 3)
+        && clanOptOk(before.options, after.options, 4) && clanOptOk(before.options, after.options, 5)
+        && clanOptOk(before.options, after.options, 6) && clanOptOk(before.options, after.options, 7)
+        && clanOptOk(before.options, after.options, 8) && clanOptOk(before.options, after.options, 9)
+        && after.get('totalVotes', 0) == totalVotesOf(after.options);
+    }
+
+    function legacyOptOk(o, n, i, votedFor) {
+      return i >= n.size() || (
+        n[i].id == o[i].id && n[i].text == o[i].text
+        && n[i].votesCount == o[i].get('votesCount', 0) + (n[i].id == votedFor ? 1 : 0)
+      );
+    }
+
+    function legacyPollVoteOk() {
+      let o = resource.data.options;
+      let n = request.resource.data.options;
+      let votedFor = request.resource.data.userVotes[request.auth.uid];
+      return onlyChanged(['options', 'votedUserIds', 'userVotes'])
+        && request.resource.data.votedUserIds.toSet().difference(resource.data.get('votedUserIds', []).toSet()).hasOnly([request.auth.uid])
+        && resource.data.get('votedUserIds', []).toSet().difference(request.resource.data.votedUserIds.toSet()).size() == 0
+        && request.resource.data.userVotes.diff(resource.data.get('userVotes', {})).affectedKeys().hasOnly([request.auth.uid])
+        && n.size() == o.size() && n.size() <= 10
+        && legacyOptOk(o, n, 0, votedFor) && legacyOptOk(o, n, 1, votedFor) && legacyOptOk(o, n, 2, votedFor)
+        && legacyOptOk(o, n, 3, votedFor) && legacyOptOk(o, n, 4, votedFor) && legacyOptOk(o, n, 5, votedFor)
+        && legacyOptOk(o, n, 6, votedFor) && legacyOptOk(o, n, 7, votedFor) && legacyOptOk(o, n, 8, votedFor)
+        && legacyOptOk(o, n, 9, votedFor);
+    }
+
+    // Like counters must move together with the caller's like document.
+    function activityLikeOk(activityId) {
+      let likePath = /databases/$(database)/documents/activities/$(activityId)/likes/$(request.auth.uid);
+      let delta = request.resource.data.get('likesCount', 0) - resource.data.get('likesCount', 0);
+      return onlyChanged(['likesCount']) && (
+        delta == 0
+        || (delta == 1 && !exists(likePath) && existsAfter(likePath))
+        || (delta == -1 && exists(likePath) && !existsAfter(likePath))
+      );
     }
 
     // ─── Admin Settings ─────────────────────────────────────────
+    // api_keys holds provider secrets and is admin-only; the public on/off flag lives in ai_mode.
     match /admin_settings/{document} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin() || (isAuthenticated() && document != 'api_keys');
       allow write: if isAdmin();
     }
 
     // ─── User Profiles ──────────────────────────────────────────
-    // Profiles are public only when the owner opts in. Stats follow the same rule.
     match /users/{uid} {
       allow read: if isAuthenticated();
+
       allow create: if isOwner(uid) && request.resource.data.uid == uid
-        && (request.resource.data.isAdmin == false || isAdmin())
+        && (request.resource.data.get('isAdmin', false) == false || isAdmin())
+        && !request.resource.data.keys().hasAny(['communityBadges', 'badgeUpdate', 'unseenMedalAward', 'athleteRank'])
+        && request.resource.data.displayName is string
         && request.resource.data.displayName.size() <= 50
-        && request.resource.data.bio.size() <= 500;
+        && request.resource.data.bio.size() <= 500
+        && request.resource.data.username is string
+        && request.resource.data.username.matches('[a-z0-9_]{3,30}')
+        && request.resource.data.get('usernameLower', request.resource.data.username) == request.resource.data.username
+        && (!exists(/databases/$(database)/documents/usernames/$(request.resource.data.username))
+          || get(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == uid);
+
+      // Owners edit their own profile. Medals (communityBadges) can only be
+      // written by the manager of the competition named in badgeUpdate.
       allow update: if isAdmin()
-        || (isOwner(uid) && request.resource.data.uid == uid
-          && request.resource.data.isAdmin == resource.data.isAdmin
-          && request.resource.data.displayName.size() <= 50
-          && request.resource.data.bio.size() <= 500)
-        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['communityBadges', 'unseenMedalAward']));
-      allow delete: if isOwner(uid);
+        || (isOwner(uid)
+          && request.resource.data.uid == uid
+          && request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false)
+          && request.resource.data.get('displayName', '').size() <= 50
+          && request.resource.data.get('bio', '').size() <= 500
+          && !changedKeys().hasAny(['communityBadges', 'badgeUpdate', 'uid', 'username', 'usernameLower', 'createdAt']))
+        || (isAuthenticated()
+          && onlyChanged(['communityBadges', 'unseenMedalAward', 'badgeUpdate'])
+          && request.resource.data.badgeUpdate.sourceType in ['challenge', 'event']
+          && request.resource.data.badgeUpdate.sourceId is string
+          && isCompetitionManager(request.resource.data.badgeUpdate.sourceType, request.resource.data.badgeUpdate.sourceId)
+          && isParticipant(request.resource.data.badgeUpdate.sourceType, request.resource.data.badgeUpdate.sourceId, uid)
+          && medalChangeOk(request.resource.data.badgeUpdate.sourceId));
+
+      allow delete: if isOwner(uid) || isAdmin();
+
+      // Owner-only data: device push tokens, personal AI keys.
+      match /private/{docId} {
+        allow read, write: if isOwner(uid);
+      }
 
       match /stats/{statId} {
         allow read: if isAuthenticated();
@@ -76,8 +324,11 @@ service cloud.firestore {
     // ─── Username Reservation ───────────────────────────────────
     match /usernames/{username} {
       allow read: if true;
-      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
-      allow update: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      // A handle can only be reserved by the account whose profile already carries it.
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid'])
+        && profileOf(request.auth.uid).get('username', '') == username;
+      allow update: if false;
       allow delete: if isAuthenticated() && (resource == null || resource.data.uid == request.auth.uid);
     }
 
@@ -90,7 +341,9 @@ service cloud.firestore {
       allow delete: if isAdmin() || resource == null || isOwner(resource.data.ownerId);
 
       match /days/{dayId} {
-        allow read: if canReadPlan(planId);
+        allow read: if isAdmin()
+          || get(/databases/$(database)/documents/plans/$(planId)).data.isPublic == true
+          || isOwner(get(/databases/$(database)/documents/plans/$(planId)).data.ownerId);
         allow create, update: if isAdmin() || isOwner(
           getAfter(/databases/$(database)/documents/plans/$(planId)).data.ownerId
         );
@@ -104,9 +357,9 @@ service cloud.firestore {
     match /samplePlans/{planId} {
       allow read: if true;
       allow create, delete: if isAdmin();
-      // Usage is incremented by an authenticated importer. Content remains admin-only.
       allow update: if isAdmin()
-        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usageCount']));
+        || (isAuthenticated() && onlyChanged(['usageCount'])
+          && request.resource.data.usageCount == resource.data.get('usageCount', 0) + 1);
 
       match /days/{dayId} {
         allow read: if true;
@@ -116,67 +369,103 @@ service cloud.firestore {
 
     // ─── Workouts ───────────────────────────────────────────────
     match /workouts/{workoutId} {
-      allow read: if isAdmin() || resource.data.visibility == 'public'
-        || isOwner(resource.data.userId)
-        || (resource.data.visibility == 'followers' && isAuthenticated());
+      allow read: if isAdmin() || canSeeContent(resource.data);
       allow create: if isOwner(request.resource.data.userId)
         && request.resource.data.visibility in ['public', 'followers', 'private'];
       allow update: if isAdmin() || (isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId);
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.visibility in ['public', 'followers', 'private']);
       allow delete: if isAdmin() || resource == null || isOwner(resource.data.userId);
 
       match /exercises/{exerciseLogId} {
-        allow read: if canReadWorkout(workoutId);
-        allow write: if isOwner(
-          get(/databases/$(database)/documents/workouts/$(workoutId)).data.userId
-        );
+        allow read: if isAdmin() || canSeeContent(get(/databases/$(database)/documents/workouts/$(workoutId)).data);
+        allow write: if isOwner(get(/databases/$(database)/documents/workouts/$(workoutId)).data.userId);
       }
     }
 
     // ─── Follow System ──────────────────────────────────────────
+    // A follow edge can be created directly by the follower when the target
+    // does not require approval, or by the target when accepting a pending request.
     match /followers/{uid}/following/{followedUid} {
-      allow read: if true;
-      allow create: if (isOwner(uid) || isOwner(followedUid)) && uid != followedUid;
+      allow read: if isAuthenticated();
+      allow create: if uid != followedUid
+        && request.resource.data.uid == followedUid
+        && (
+          (isOwner(uid) && !followNeedsApproval(followedUid))
+          || (isOwner(followedUid) && exists(/databases/$(database)/documents/followers/$(followedUid)/requests/$(uid)))
+        );
       allow delete: if (isOwner(uid) || isOwner(followedUid)) && uid != followedUid;
     }
 
     match /followers/{uid}/followers/{followerUid} {
-      allow read: if true;
-      allow create: if (isOwner(followerUid) || isOwner(uid)) && uid != followerUid;
+      allow read: if isAuthenticated();
+      allow create: if uid != followerUid
+        && request.resource.data.uid == followerUid
+        && (
+          (isOwner(followerUid) && !followNeedsApproval(uid))
+          || (isOwner(uid) && exists(/databases/$(database)/documents/followers/$(uid)/requests/$(followerUid)))
+        );
       allow delete: if (isOwner(followerUid) || isOwner(uid)) && uid != followerUid;
     }
 
     match /followers/{uid}/requests/{requesterUid} {
       allow read: if isOwner(uid) || isOwner(requesterUid);
-      allow create: if isOwner(requesterUid) && uid != requesterUid;
+      allow create: if isOwner(requesterUid) && uid != requesterUid
+        && request.resource.data.uid == requesterUid;
       allow delete: if (isOwner(uid) || isOwner(requesterUid)) && uid != requesterUid;
     }
 
     // ─── Activity Feed ──────────────────────────────────────────
     match /activities/{activityId} {
-      allow read: if isAdmin() || resource.data.visibility == 'public'
-        || resource.data.userId == 'system'
-        || isOwner(resource.data.userId)
-        || (resource.data.visibility == 'followers' && isAuthenticated());
-      allow create: if (isOwner(request.resource.data.userId) || isAdmin() || (isAuthenticated() && request.resource.data.userId == 'system'))
-        && request.resource.data.visibility in ['public', 'followers', 'private'];
-      // Fix: explicit parentheses for operator precedence (owner OR counter update)
+      allow read: if isAdmin()
+        || (isAuthenticated() && resource.data.userId == 'system')
+        || canSeeContent(resource.data);
+
+      allow create: if request.resource.data.visibility in ['public', 'followers', 'private']
+        && canPost()
+        && request.resource.data.get('likesCount', 0) == 0
+        && request.resource.data.get('commentsCount', 0) == 0
+        && (
+          isOwner(request.resource.data.userId)
+          || (request.resource.data.userId == 'system' && canManageSystemActivity(request.resource.data))
+        );
+
       allow update: if isAdmin()
-        || (isOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId)
-        || (isAuthenticated() && canReadActivity(activityId)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount']));
-      allow delete: if isAdmin() || resource == null || isOwner(resource.data.userId) || resource.data.userId == 'system';
+        || (isOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId
+          && request.resource.data.visibility in ['public', 'followers', 'private']
+          && !changedKeys().hasAny(['likesCount', 'commentsCount']))
+        || (resource.data.userId == 'system' && request.resource.data.userId == 'system' && canManageSystemActivity(resource.data))
+        || (canSeeContent(resource.data) || (isAuthenticated() && resource.data.userId == 'system'))
+          && (activityLikeOk(activityId)
+            || (onlyChanged(['commentsCount']) && counterStep('commentsCount', 1)
+              && request.resource.data.commentsCount >= 0));
+
+      allow delete: if isAdmin() || resource == null || isOwner(resource.data.userId)
+        || (resource.data.userId == 'system' && canManageSystemActivity(resource.data));
 
       match /likes/{userId} {
-        allow read: if canReadActivity(activityId);
-        allow create, delete: if isOwner(userId) && canReadActivity(activityId);
+        allow read: if canSeeActivity(activityId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId && canSeeActivity(activityId);
+        allow delete: if isOwner(userId);
       }
 
       match /comments/{commentId} {
-        allow read: if canReadActivity(activityId);
-        allow create: if canReadActivity(activityId) && isOwner(request.resource.data.userId)
-          && request.resource.data.text.size() <= 1000;
-        allow update, delete: if isOwner(resource.data.userId);
+        allow read: if canSeeActivity(activityId);
+        allow create: if isOwner(request.resource.data.userId)
+          && canPost()
+          && canSeeActivity(activityId)
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 1000
+          && request.resource.data.get('likedUserIds', []).size() == 0
+          && request.resource.data.get('dislikedUserIds', []).size() == 0
+          && request.resource.data.get('likesCount', 0) == 0
+          && request.resource.data.get('dislikesCount', 0) == 0;
+        allow update: if (isOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId
+            && textOk(request.resource.data, 'text', 1000)
+            && !changedKeys().hasAny(['likedUserIds', 'likesCount', 'dislikedUserIds', 'dislikesCount']))
+          || isSelfReactionUpdate();
+        allow delete: if isOwner(resource.data.userId) || isAdmin()
+          || isOwner(get(/databases/$(database)/documents/activities/$(activityId)).data.userId);
       }
     }
 
@@ -194,14 +483,26 @@ service cloud.firestore {
       allow read: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
       allow update: if isAuthenticated()
         && resource.data.receiverId == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
-      allow create: if isAuthenticated() && request.resource.data.senderId == request.auth.uid;
+        && onlyChanged(['read']);
+      allow create: if canPost()
+        && request.resource.data.senderId == request.auth.uid
+        && request.resource.data.receiverId is string
+        && textOk(request.resource.data, 'message', 1000)
+        && textOk(request.resource.data, 'senderName', 80)
+        && (!('extra' in request.resource.data) || request.resource.data.extra == null
+          || linkOk(request.resource.data.extra.get('link', null)));
       allow delete: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
     }
 
     // ─── System Logs ────────────────────────────────────────────
     match /systemLogs/{logId} {
-      allow create: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.get('userId', null) == request.auth.uid
+        && textOk(request.resource.data, 'message', 4000)
+        && textOk(request.resource.data, 'stack', 16000)
+        && textOk(request.resource.data, 'context', 2000)
+        && textOk(request.resource.data, 'url', 2000)
+        && textOk(request.resource.data, 'userAgent', 1000);
       allow read, delete: if isAdmin();
       allow update: if false;
     }
@@ -210,10 +511,20 @@ service cloud.firestore {
     match /activeSessions/{sessionId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
-      
+      allow update: if isAuthenticated() && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if isAuthenticated() && resource.data.uid == request.auth.uid;
+
+      // Chat lives under activeSessions/{ownerUid}/chat.
       match /chat/{chatId} {
-        allow read, create, delete: if isAuthenticated();
+        allow read: if isAuthenticated();
+        allow create: if canPost()
+          && request.resource.data.senderUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 1000
+          && textOk(request.resource.data, 'senderName', 80);
+        allow delete: if isOwner(sessionId) || isAdmin()
+          || (isAuthenticated() && resource.data.senderUid == request.auth.uid);
       }
     }
 
@@ -223,157 +534,318 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ─── Communities & Events ───────────────────────────────────
+    // ─── Legacy Communities & Events ────────────────────────────
     match /communities/{communityId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isAdmin() || (isAuthenticated() && (
-        resource.data.ownerId == request.auth.uid
-        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['membersCount', 'isVerified'])
-      ));
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.get('isVerified', false) == false;
+      allow update: if isAdmin()
+        || (isAuthenticated() && resource.data.ownerId == request.auth.uid
+          && !changedKeys().hasAny(['isVerified', 'status', 'ownerId']))
+        || (isAuthenticated() && onlyChanged(['membersCount']) && counterStep('membersCount', 1));
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
     }
 
     match /community_members/{memberId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() || (isAuthenticated() && request.resource.data.userId == request.auth.uid);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid)
+        || isOwner(get(/databases/$(database)/documents/communities/$(resource.data.communityId)).data.ownerId);
     }
 
     match /events/{eventId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.organizerId == request.auth.uid;
-      allow update: if isAdmin() || (isAuthenticated() && (
-        resource.data.organizerId == request.auth.uid
-        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stats', 'status'])
-      ));
+      allow update: if isAdmin()
+        || (isAuthenticated() && resource.data.organizerId == request.auth.uid
+          && !changedKeys().hasAny(['status', 'organizerId']))
+        || (isAuthenticated() && onlyChanged(['stats']));
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.organizerId == request.auth.uid);
     }
 
     match /event_registrations/{registrationId} {
-      allow read: if isAuthenticated();
+      allow read: if isAdmin() || isOwner(resource.data.userId)
+        || isOwner(get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.organizerId);
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin() || isOwner(resource.data.userId)
+        || isOwner(get(/databases/$(database)/documents/events/$(resource.data.eventId)).data.organizerId);
+      allow delete: if isAdmin() || isOwner(resource.data.userId);
     }
 
     match /event_messages/{messageId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
 
     match /event_reviews/{reviewId} {
-      allow read: if true;
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
 
+    // Clan announcements (clanId/communityId = clan) and legacy community ones.
     match /community_announcements/{announcementId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.authorId == request.auth.uid
+        && (isClanManager(request.resource.data.communityId)
+          || isOwner(get(/databases/$(database)/documents/communities/$(request.resource.data.communityId)).data.ownerId));
+      allow update, delete: if isAdmin()
+        || (isAuthenticated() && resource.data.authorId == request.auth.uid)
+        || isClanManager(resource.data.communityId);
     }
 
     match /community_polls/{pollId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create: if isAdmin()
+        || isOwner(get(/databases/$(database)/documents/communities/$(request.resource.data.communityId)).data.ownerId);
+      allow update: if isAdmin()
+        || (isAuthenticated() && legacyPollVoteOk());
+      allow delete: if isAdmin()
+        || isOwner(get(/databases/$(database)/documents/communities/$(resource.data.communityId)).data.ownerId);
     }
 
     match /community_challenges/{challengeId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow create: if isAdmin()
+        || isClanManager(request.resource.data.communityId)
+        || isOwner(get(/databases/$(database)/documents/communities/$(request.resource.data.communityId)).data.ownerId);
+      allow update: if isAdmin()
+        || (isAuthenticated() && onlyChanged(['joinedUserIds', 'participantsCount', 'completedPercent'])
+          && request.resource.data.joinedUserIds.toSet().difference(resource.data.get('joinedUserIds', []).toSet()).hasOnly([request.auth.uid]));
+      allow delete: if isAdmin() || isClanManager(resource.data.communityId);
     }
 
-    // ─── Community V2 (Clans, Challenges, Events) ───────────────
+    // ─── Clans ──────────────────────────────────────────────────
     match /clans_v2/{clanId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && request.resource.data.leaderId == request.auth.uid;
-      allow update: if isOwner(resource.data.leaderId) || isAdmin() || isClanCoLeader(clanId)
-        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberCount']));
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.leaderId == request.auth.uid
+        && request.resource.data.memberCount == 1;
+      // Leader: full control (incl. transferring leadership). Co-leaders: settings only.
+      // Anyone joining/leaving may move memberCount by one.
+      allow update: if isAdmin()
+        || (isOwner(resource.data.leaderId) && request.resource.data.leaderId is string)
+        || (isClanCoLeader(clanId) && !changedKeys().hasAny(['leaderId', 'leaderName']))
+        || (isAuthenticated() && onlyChanged(['memberCount']) && counterStep('memberCount', 1));
       allow delete: if isOwner(resource.data.leaderId) || isAdmin();
     }
 
     match /clan_memberships/{membershipId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && (
-        request.resource.data.userId == request.auth.uid
-        || isOwner(get(/databases/$(database)/documents/clans_v2/$(request.resource.data.clanId)).data.leaderId)
-        || isClanCoLeader(request.resource.data.clanId)
-        || isAdmin()
-      );
-      allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']))
-        || isOwner(get(/databases/$(database)/documents/clans_v2/$(resource.data.clanId)).data.leaderId)
-        || isClanCoLeader(resource.data.clanId) || isAdmin();
-      allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid)
-        || isOwner(get(/databases/$(database)/documents/clans_v2/$(resource.data.clanId)).data.leaderId)
-        || isClanCoLeader(resource.data.clanId) || isAdmin();
-    }
-
-    match /challenges_v2/{challengeId} {
-      allow read: if true;
-      allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated();
-    }
-
-    match /challenge_participants/{participantId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
-    }
-
-    match /challenge_progress_logs/{logId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
-    }
-
-    match /simple_events/{eventId} {
-      allow read: if true;
-      allow create: if isAuthenticated();
-      allow update, delete: if isAuthenticated();
-    }
-
-    match /simple_event_participants/{participantId} {
-      allow read: if true;
-      allow create, update, delete: if isAuthenticated();
-    }
-
-    match /community_posts/{postId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && (request.resource.data.authorId == request.auth.uid || request.resource.data.authorId == 'system' || isAdmin());
-      allow update: if isOwner(resource.data.authorId) || isAdmin() || resource.data.authorId == 'system'
-        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'commentsCount', 'likedUserIds', 'poll']))
-        || (resource.data.clanId != null && (isOwner(get(/databases/$(database)/documents/clans_v2/$(resource.data.clanId)).data.leaderId) || isClanCoLeader(resource.data.clanId)));
-      allow delete: if resource == null || isOwner(resource.data.authorId) || isAdmin() || resource.data.authorId == 'system'
-        || (resource.data.clanId != null && (isOwner(get(/databases/$(database)/documents/clans_v2/$(resource.data.clanId)).data.leaderId) || isClanCoLeader(resource.data.clanId)));
-    }
-
-    match /community_post_comments/{commentId} {
-      allow read: if true;
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isOwner(resource.data.userId) || isAdmin()
-        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'likedUserIds', 'dislikesCount', 'dislikedUserIds']));
-      allow delete: if resource == null || isOwner(resource.data.userId) || isAdmin();
-    }
-
-    match /clan_messages/{messageId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update: if isOwner(resource.data.userId) || isAdmin()
-        || isOwner(get(/databases/$(database)/documents/clans_v2/$(resource.data.clanId)).data.leaderId)
-        || isClanCoLeader(resource.data.clanId)
-        || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions', 'readBy']));
-      allow delete: if resource == null || isOwner(resource.data.userId) || isAdmin()
-        || isOwner(get(/databases/$(database)/documents/clans_v2/$(resource.data.clanId)).data.leaderId)
-        || isClanCoLeader(resource.data.clanId);
+
+      allow create: if isAuthenticated()
+        && membershipId == request.resource.data.clanId + '_' + request.resource.data.userId
+        && request.resource.data.status == 'active'
+        && (
+          // Joining a public clan yourself
+          (request.resource.data.userId == request.auth.uid
+            && request.resource.data.role == 'member'
+            && clanIsPublic(request.resource.data.clanId))
+          // Clan creator registering as leader
+          || (request.resource.data.userId == request.auth.uid
+            && request.resource.data.role == 'leader'
+            && isClanLeader(request.resource.data.clanId))
+          // Leadership approving a join request
+          || (request.resource.data.role == 'member' && isClanManager(request.resource.data.clanId))
+        );
+
+      allow update: if request.resource.data.clanId == resource.data.clanId
+        && request.resource.data.userId == resource.data.userId
+        && (
+          isAdmin()
+          || isClanLeader(resource.data.clanId)
+          // Co-leaders can remove regular members but cannot change roles
+          || (isClanCoLeader(resource.data.clanId) && onlyChanged(['status']) && resource.data.role == 'member')
+          // Members can only leave
+          || (isOwner(resource.data.userId) && onlyChanged(['status']) && request.resource.data.status == 'left')
+        );
+
+      allow delete: if isOwner(resource.data.userId)
+        || isAdmin()
+        || isClanLeader(resource.data.clanId)
+        || (isClanCoLeader(resource.data.clanId) && resource.data.role == 'member');
     }
 
     match /clan_join_requests/{requestId} {
+      allow read: if isAdmin()
+        || isOwner(resource.data.userId)
+        || isClanManager(resource.data.clanId);
+      allow create: if isAuthenticated()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && clanOf(request.resource.data.clanId).get('visibility', 'public') != 'closed';
+      allow update: if isClanManager(resource.data.clanId)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.clanId == resource.data.clanId;
+      allow delete: if isOwner(resource.data.userId) || isClanManager(resource.data.clanId);
+    }
+
+    match /clan_messages/{messageId} {
+      allow read: if isAdmin()
+        || isClanMember(resource.data.clanId)
+        || isClanLeader(resource.data.clanId);
+      allow create: if canPost()
+        && request.resource.data.userId == request.auth.uid
+        && (isClanMember(request.resource.data.clanId) || isClanLeader(request.resource.data.clanId))
+        && textOk(request.resource.data, 'text', 4000);
+      allow update: if request.resource.data.userId == resource.data.userId
+        && request.resource.data.clanId == resource.data.clanId
+        && (
+          isOwner(resource.data.userId)
+          || isClanManager(resource.data.clanId)
+          || ((isClanMember(resource.data.clanId) || isClanLeader(resource.data.clanId))
+            && onlyChanged(['reactions', 'readBy']))
+        );
+      allow delete: if resource == null || isOwner(resource.data.userId)
+        || isClanManager(resource.data.clanId);
+    }
+
+    // ─── Challenges ─────────────────────────────────────────────
+    match /challenges_v2/{challengeId} {
+      allow read: if isAuthenticated();
+      // A challenge may only be attached to a clan the creator belongs to.
+      allow create: if canPost() && request.resource.data.createdBy == request.auth.uid
+        && (request.resource.data.get('clanId', '') == ''
+          || isClanMember(request.resource.data.clanId) || isClanLeader(request.resource.data.clanId));
+      allow update: if isCompetitionManager('challenge', challengeId)
+        || (isAuthenticated() && onlyChanged(['participantCount'])
+          && request.resource.data.participantCount is int
+          && request.resource.data.participantCount >= 0
+          && request.resource.data.participantCount <= resource.data.get('participantCount', 0) + 1);
+      allow delete: if isCompetitionManager('challenge', challengeId);
+    }
+
+    match /challenge_participants/{participantId} {
+      allow read: if isAuthenticated();
+      allow create: if (isAuthenticated()
+          && request.resource.data.userId == request.auth.uid
+          && participantId == request.resource.data.challengeId + '_' + request.auth.uid
+          && request.resource.data.get('rank', 0) == 0
+          && request.resource.data.get('isRanked', false) == false
+          && !request.resource.data.keys().hasAny(['badgeAwarded', 'customResult']))
+        || isCompetitionManager('challenge', request.resource.data.challengeId);
+      // Participants update their own progress; ranks and medals belong to managers.
+      allow update: if isCompetitionManager('challenge', resource.data.challengeId)
+        || (isOwner(resource.data.userId)
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.challengeId == resource.data.challengeId
+          && !changedKeys().hasAny(['rank', 'isRanked', 'badgeAwarded', 'customResult']));
+      allow delete: if resource == null || isOwner(resource.data.userId)
+        || isCompetitionManager('challenge', resource.data.challengeId);
+    }
+
+    match /challenge_progress_logs/{logId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthenticated();
+      allow update: if false;
+      allow delete: if isOwner(resource.data.userId) || isAdmin();
+    }
+
+    // ─── Clan Events ────────────────────────────────────────────
+    match /simple_events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if canPost() && request.resource.data.createdBy == request.auth.uid
+        && (request.resource.data.get('clanId', '') == ''
+          || isClanMember(request.resource.data.clanId) || isClanLeader(request.resource.data.clanId));
+      allow update: if isCompetitionManager('event', eventId)
+        || (isAuthenticated() && onlyChanged(['participantCount'])
+          && request.resource.data.participantCount is int
+          && request.resource.data.participantCount >= 0
+          && request.resource.data.participantCount <= resource.data.get('participantCount', 0) + 1);
+      allow delete: if isCompetitionManager('event', eventId);
+    }
+
+    match /simple_event_participants/{participantId} {
+      allow read: if isAuthenticated();
+      allow create: if (isAuthenticated()
+          && request.resource.data.userId == request.auth.uid
+          && participantId == request.resource.data.eventId + '_' + request.auth.uid
+          && request.resource.data.get('rank', 0) == 0
+          && request.resource.data.get('isRanked', false) == false
+          && !request.resource.data.keys().hasAny(['badgeAwarded', 'customResult']))
+        || isCompetitionManager('event', request.resource.data.eventId);
+      allow update: if isCompetitionManager('event', resource.data.eventId)
+        || (isOwner(resource.data.userId)
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.eventId == resource.data.eventId
+          && !changedKeys().hasAny(['rank', 'isRanked', 'badgeAwarded', 'customResult']));
+      allow delete: if resource == null || isOwner(resource.data.userId)
+        || isCompetitionManager('event', resource.data.eventId);
+    }
+
+    // ─── Clan Posts ─────────────────────────────────────────────
+    match /community_posts/{postId} {
+      allow read: if isAuthenticated()
+        && (resource.data.get('communityId', '') == '' || canReadClan(resource.data.communityId));
+
+      allow create: if canPost() && (
+        (request.resource.data.authorId == request.auth.uid
+          && (isAdmin()
+            || isClanMember(request.resource.data.communityId)
+            || isClanLeader(request.resource.data.communityId)))
+        || (request.resource.data.authorId == 'system' && canManageSystemPost(request.resource.data))
+      );
+
+      allow update: if isAdmin()
+        || (resource.data.authorId != 'system' && isOwner(resource.data.authorId)
+          && request.resource.data.authorId == resource.data.authorId
+          && !changedKeys().hasAny(['likedUserIds', 'likesCount']))
+        || (resource.data.authorId == 'system' && request.resource.data.authorId == 'system'
+          && canManageSystemPost(resource.data))
+        || (isPostModerator(resource.data) && request.resource.data.authorId == resource.data.authorId
+          && !changedKeys().hasAny(['likedUserIds', 'likesCount']))
+        || (isAuthenticated() && canReadPost(resource.data) && onlyChanged(['likedUserIds', 'likesCount'])
+          && onlySelfToggled('likedUserIds')
+          && request.resource.data.likesCount == request.resource.data.likedUserIds.size())
+        || (isAuthenticated() && canReadPost(resource.data) && onlyChanged(['commentsCount'])
+          && request.resource.data.commentsCount is int
+          && request.resource.data.commentsCount >= 0
+          && request.resource.data.commentsCount <= resource.data.get('commentsCount', 0) + 1)
+        || (isAuthenticated() && canReadPost(resource.data) && onlyChanged(['poll']) && clanPollVoteOk());
+
+      allow delete: if resource == null || isAdmin()
+        || (resource.data.authorId != 'system' && isOwner(resource.data.authorId))
+        || (resource.data.authorId == 'system' && canManageSystemPost(resource.data))
+        || isPostModerator(resource.data);
+    }
+
+    match /community_post_comments/{commentId} {
+      allow read: if isAuthenticated()
+        && canReadPost(get(/databases/$(database)/documents/community_posts/$(resource.data.postId)).data);
+      allow create: if canPost() && request.resource.data.userId == request.auth.uid
+        && request.resource.data.postId is string
+        && canReadPost(get(/databases/$(database)/documents/community_posts/$(request.resource.data.postId)).data)
+        && textOk(request.resource.data, 'text', 2000)
+        && request.resource.data.get('likedUserIds', []).size() == 0
+        && request.resource.data.get('dislikedUserIds', []).size() == 0
+        && request.resource.data.get('likesCount', 0) == 0
+        && request.resource.data.get('dislikesCount', 0) == 0;
+      allow update: if isAdmin()
+        || (isOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId
+          && textOk(request.resource.data, 'text', 2000)
+          && !changedKeys().hasAny(['likedUserIds', 'likesCount', 'dislikedUserIds', 'dislikesCount']))
+        || isSelfReactionUpdate();
+      // Authors, the post author, the parent comment's author and clan moderators can delete.
+      allow delete: if resource == null || isAdmin() || isOwner(resource.data.userId)
+        || isOwner(get(/databases/$(database)/documents/community_posts/$(resource.data.postId)).data.authorId)
+        || (resource.data.get('parentId', null) != null
+          && isOwner(get(/databases/$(database)/documents/community_post_comments/$(resource.data.parentId)).data.userId))
+        || isPostModerator(get(/databases/$(database)/documents/community_posts/$(resource.data.postId)).data);
     }
 
     match /app_notifications/{notifId} {
-      allow read, update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated();
+      allow read, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid
+        && onlyChanged(['read']);
+      allow create: if canPost()
+        && request.resource.data.userId is string
+        && request.resource.data.get('senderId', '') == request.auth.uid
+        && request.resource.data.get('read', false) == false
+        && textOk(request.resource.data, 'title', 150)
+        && textOk(request.resource.data, 'body', 1000)
+        && linkOk(request.resource.data.get('link', null));
     }
 
     // ─── Reports ────────────────────────────────────────────────
@@ -386,25 +858,28 @@ service cloud.firestore {
 
     // ─── Cardio / GPS Activities ────────────────────────────────
     match /cardioActivities/{activityId} {
-      allow read: if isAdmin() || resource.data.visibility == 'public'
-        || isOwner(resource.data.userId)
-        || (resource.data.visibility == 'followers' && isAuthenticated());
+      allow read: if isAdmin() || canSeeContent(resource.data);
       allow create: if isOwner(request.resource.data.userId)
         && request.resource.data.visibility in ['public', 'followers', 'private'];
       allow update: if isAdmin() || (isOwner(resource.data.userId)
-        && request.resource.data.userId == resource.data.userId);
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.visibility in ['public', 'followers', 'private']);
       allow delete: if isAdmin() || resource == null || isOwner(resource.data.userId);
     }
-    
+
     // ─── Video Resolver Cache ───────────────────────────────────
     match /exerciseVideoMappings/{mappingId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow write: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['youtubeId', 'exerciseName', 'title', 'status', 'source',
+          'nextPageToken', 'dislikedVideoIds', 'pageNumber', 'updatedAt', 'expiresAt'])
+        && request.resource.data.exerciseName == mappingId
+        && request.resource.data.status in ['found', 'not_found']
+        && (request.resource.data.youtubeId == null
+          || (request.resource.data.youtubeId is string && request.resource.data.youtubeId.matches('^[A-Za-z0-9_-]{11}$')));
     }
 
     // ─── Catch-All ──────────────────────────────────────────────
-    // Deny access to any collection not explicitly defined above.
-    // This prevents accidentally exposing new collections.
     match /{document=**} {
       allow read, write: if false;
     }

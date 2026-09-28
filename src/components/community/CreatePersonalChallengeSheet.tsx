@@ -218,7 +218,7 @@ export function CreatePersonalChallengeSheet({ onClose }: { onClose: () => void 
   const isCustomMetric = metric === 'other';
 
   return createPortal(
-    <div className="fixed inset-0 z-[600] flex flex-col justify-end">
+    <div className="cx pro-scope fixed inset-0 z-[600] flex flex-col justify-end">
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
@@ -241,7 +241,7 @@ export function CreatePersonalChallengeSheet({ onClose }: { onClose: () => void 
         </div>
 
         <form onSubmit={handleSubmit} className="px-5 py-4 overflow-y-auto space-y-4 flex-1">
-          {/* Category Selector — Horizontal Scroll */}
+          {/* Category Selector - Horizontal Scroll */}
           <div className="space-y-2">
             <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider">Category</label>
             <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -373,7 +373,7 @@ export function CreatePersonalChallengeSheet({ onClose }: { onClose: () => void 
             )}
           </div>
 
-          {/* Target & Unit — Only when not custom */}
+          {/* Target & Unit - Only when not custom */}
           {!isCustomMetric && (
             <div className="grid grid-cols-2 gap-2" id="input-target">
               <div>
@@ -466,7 +466,7 @@ export function CreatePersonalChallengeSheet({ onClose }: { onClose: () => void 
             </div>
           </div>
 
-          {/* Scope — Personal vs Clans */}
+          {/* Scope - Personal vs Clans */}
           <div className="space-y-2" id="input-clans">
             <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider">Who Can Join?</label>
             <div className="grid grid-cols-2 gap-2">

@@ -12,10 +12,11 @@ import {
   getComments, addComment,
   toggleLikeActivityComment, toggleDislikeActivityComment, deleteActivityComment
 } from '@/services/social';
-import { compressImageFile } from '@/utils/image-compression';
+import { compressImageFile, shareablePhotoURL } from '@/utils/image-compression';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import type { Activity, Comment } from '@/types';
 import { ActivityPostCard } from '@/components/social/ActivityPostCard';
+import { LiveUserAvatar, LiveUserName } from '@/components/ui/LiveUser';
 
 interface SingleActivitySheetProps {
   activity: Activity | null;
@@ -82,8 +83,8 @@ export function SingleActivitySheet({ activity, isOpen, onClose }: SingleActivit
       if (!user || (!commentText.trim() && commentImages.length === 0) || !activity?.id) return;
       await addComment(activity.id, {
         userId: user.uid,
-        userName: user.displayName || 'Athlete',
-        userPhoto: user.photoURL || '',
+        userName: profile?.displayName || user.displayName || 'Athlete',
+        userPhoto: shareablePhotoURL(profile?.photoURL, user.photoURL),
         text: commentText.trim(),
         images: commentImages.length > 0 ? commentImages : undefined,
         parentId: replyingTo?.commentId || null,
@@ -341,18 +342,14 @@ export function SingleActivitySheet({ activity, isOpen, onClose }: SingleActivit
 
                             {/* Root Avatar */}
                             <div className="w-7 h-7 rounded-full bg-ink-3 border border-line/20 flex items-center justify-center text-bone font-bold text-[10px] shrink-0 overflow-hidden z-10 mt-0.5">
-                              {rootComment.userPhoto ? (
-                                <img src={rootComment.userPhoto} alt={rootComment.userName} className="w-full h-full object-cover" />
-                              ) : (
-                                rootComment.userName?.charAt(0)?.toUpperCase() || '?'
-                              )}
+                              <LiveUserAvatar userId={rootComment.userId} fallbackName={rootComment.userName} fallbackPhoto={rootComment.userPhoto} className="w-full h-full object-cover" />
                             </div>
 
                             {/* Comment Bubble */}
                             <div className="flex-1 bg-ink-2/60 border border-line/15 rounded-2xl p-2.5 sm:p-3 shadow-sm space-y-1.5">
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-bone">{rootComment.userName}</span>
+                                  <LiveUserName userId={rootComment.userId} fallbackName={rootComment.userName} className="text-xs font-bold text-bone" />
                                   <span className="text-[10px] text-bone-dim font-mono">{timeAgo(rootComment.createdAt)}</span>
                                 </div>
 
@@ -441,20 +438,16 @@ export function SingleActivitySheet({ activity, isOpen, onClose }: SingleActivit
                                 return (
                                   <div key={reply.id} className="flex gap-2">
                                     <div className="w-6 h-6 rounded-full bg-ink-3 border border-line/20 flex items-center justify-center text-bone font-bold text-[9px] shrink-0 overflow-hidden mt-0.5">
-                                      {reply.userPhoto ? (
-                                        <img src={reply.userPhoto} alt={reply.userName} className="w-full h-full object-cover" />
-                                      ) : (
-                                        reply.userName?.charAt(0)?.toUpperCase() || '?'
-                                      )}
+                                      <LiveUserAvatar userId={reply.userId} fallbackName={reply.userName} fallbackPhoto={reply.userPhoto} className="w-full h-full object-cover" />
                                     </div>
 
                                     <div className="flex-1 bg-ink-2/40 border border-line/15 rounded-2xl p-2.5 shadow-sm space-y-1">
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-1.5">
-                                          <span className="text-[11px] font-bold text-bone">{reply.userName}</span>
+                                          <LiveUserName userId={reply.userId} fallbackName={reply.userName} className="text-[11px] font-bold text-bone" />
                                           {reply.replyToUserName && (
                                             <span className="text-[10px] text-sienna font-mono">
-                                              @{reply.replyToUserName}
+                                              @<LiveUserName userId={reply.replyToUserId} fallbackName={reply.replyToUserName} />
                                             </span>
                                           )}
                                           <span className="text-[9px] text-bone-dim font-mono">{timeAgo(reply.createdAt)}</span>

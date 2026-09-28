@@ -1,5 +1,5 @@
 import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, where, orderBy, limit, serverTimestamp, increment, setDoc, writeBatch, Timestamp, documentId, onSnapshot, arrayUnion } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, ChallengeProgressLog, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, ChallengeActivityFilter, SimpleEventStatus, CommunityPost, EarnedCommunityBadge, ClanPoll, ClanPollOption, ClanPollVoter, CommunityAnnouncement, ClanMessage, AppNotificationType, ClanJoinRequest } from '@/types';
 import { notify } from '@/services/social';
 
@@ -148,6 +148,14 @@ export async function disbandClan(id: string, reason?: string): Promise<void> {
 
 export async function joinClan(userId: string, userName: string, userPhoto: string, clanId: string): Promise<void> {
   const memberId = `${clanId}_${userId}`;
+  // Idempotency guard: never double-count an already active member
+  const existing = await getDoc(doc(db, 'clan_memberships', memberId));
+  if (existing.exists() && existing.data()?.status === 'active') return;
+  // Re-joining after leaving: rules only allow members to change `status` on update,
+  // so recreate the membership doc (delete + create) with a fresh role/joinedAt.
+  if (existing.exists()) {
+    await deleteDoc(doc(db, 'clan_memberships', memberId));
+  }
   await setDoc(doc(db, 'clan_memberships', memberId), {
     clanId,
     userId,
@@ -164,6 +172,9 @@ export async function joinClan(userId: string, userName: string, userPhoto: stri
 
 export async function leaveClan(userId: string, clanId: string): Promise<void> {
   const memberId = `${clanId}_${userId}`;
+  // Idempotency guard: only decrement when the membership is actually active
+  const existing = await getDoc(doc(db, 'clan_memberships', memberId));
+  if (!existing.exists() || existing.data()?.status !== 'active') return;
   await updateDoc(doc(db, 'clan_memberships', memberId), {
     status: 'left'
   });
@@ -377,7 +388,8 @@ export async function awardChallengeTop3Badges(challengeId: string): Promise<{ s
         const filtered = existingBadges.filter((b: any) => b.id !== badgeData.id);
         batch.set(userRef, { 
           communityBadges: [...filtered, badgeData],
-          unseenMedalAward: badgeData 
+          unseenMedalAward: badgeData,
+          badgeUpdate: { sourceType: 'challenge', sourceId: challengeId },
         }, { merge: true });
       }
     } catch { /* ignore user fetch err */ }
@@ -386,7 +398,7 @@ export async function awardChallengeTop3Badges(challengeId: string): Promise<{ s
     const noteRef = doc(collection(db, 'notifications'));
     batch.set(noteRef, {
       receiverId: pData.userId,
-      senderId: challenge.createdBy,
+      senderId: auth.currentUser?.uid || challenge.createdBy,
       senderName: challenge.creatorName,
       senderPhoto: challenge.creatorPhoto || '',
       type: 'achievement',
@@ -407,11 +419,14 @@ export async function awardChallengeTop3Badges(challengeId: string): Promise<{ s
       const postRef = doc(collection(db, 'community_posts'));
       batch.set(postRef, {
         communityId: challenge.clanId,
-        authorId: pData.userId,
-        authorName: pData.userName,
-        authorPhoto: pData.userPhoto || '',
+        clanName: challenge.clanName || '',
+        authorId: 'system',
+        authorName: 'Apparatus Arena',
+        authorPhoto: '',
         title: `🏆 Challenge Winner!`,
         text: `Congratulations to ${pData.userName} for placing #${rank} and winning the ${info.name} badge in "${challenge.title}"!`,
+        sourceType: 'challenge',
+        sourceId: challengeId,
         likesCount: 0,
         commentsCount: 0,
         likedUserIds: [],
@@ -420,17 +435,19 @@ export async function awardChallengeTop3Badges(challengeId: string): Promise<{ s
     } else {
       const activityRef = doc(collection(db, 'activities'));
       batch.set(activityRef, {
-        userId: pData.userId,
-        userName: pData.userName,
-        userPhoto: pData.userPhoto || '',
+        userId: 'system',
+        userName: 'Apparatus Arena',
+        userPhoto: '',
         type: 'achievement',
         workoutId: null,
-        summary: `Won ${info.name} in ${challenge.title}`,
+        summary: `${pData.userName} won ${info.name} in ${challenge.title}`,
         details: {
           challengeId,
           challengeTitle: challenge.title,
           clanId: '',
           rank,
+          winnerId: pData.userId,
+          winnerName: pData.userName,
           badgeName: info.name,
           badgeEmoji: info.emoji
         },
@@ -634,7 +651,7 @@ export async function getActiveAutoTrackChallenges(
       const challenge = { id: cDoc.id, ...cDoc.data() } as ChallengeV2;
       if (!challenge.autoTrack) continue;
 
-      // Activity filter matching — only count activities that match the challenge type
+      // Activity filter matching - only count activities that match the challenge type
       const filter = challenge.activityFilter || 'all';
       let matches = false;
 
@@ -811,7 +828,8 @@ export async function updateLeaderboardRanks(
 
         await setDoc(userRef, {
           communityBadges: [...filtered, badgeData],
-          unseenMedalAward: badgeData
+          unseenMedalAward: badgeData,
+          badgeUpdate: { sourceType: 'challenge', sourceId: challengeId },
         }, { merge: true });
         console.log('[updateLeaderboardRanks] Badge updated for user', item.userId, 'rank', badgeAward);
 
@@ -828,7 +846,7 @@ export async function updateLeaderboardRanks(
         // Notify the winner (fire-and-forget)
         addDoc(collection(db, 'notifications'), {
           receiverId: item.userId,
-          senderId: challengeData?.createdBy || item.userId,
+          senderId: auth.currentUser?.uid || challengeData?.createdBy || item.userId,
           senderName: challengeData?.creatorName || 'Apparatus Arena',
           senderPhoto: challengeData?.creatorPhoto || '',
           type: 'achievement',
@@ -842,7 +860,8 @@ export async function updateLeaderboardRanks(
         // If medal was removed or user is rank > 3, update badges without the stale challenge badge
         if (filtered.length !== existingBadges.length) {
           await setDoc(userRef, {
-            communityBadges: filtered
+            communityBadges: filtered,
+            badgeUpdate: { sourceType: 'challenge', sourceId: challengeId },
           }, { merge: true });
         }
       }
@@ -899,7 +918,11 @@ export async function updateLeaderboardRanks(
       if (challengeData?.clanId) {
         // Clan-specific challenge -> community_posts
         const existingPostsSnap = await getDocs(
-          query(collection(db, 'community_posts'), where('sourceId', '==', challengeId))
+          query(
+            collection(db, 'community_posts'),
+            where('communityId', '==', challengeData.clanId),
+            where('sourceId', '==', challengeId)
+          )
         );
 
         if (!existingPostsSnap.empty) {
@@ -933,7 +956,11 @@ export async function updateLeaderboardRanks(
       } else {
         // Public challenge -> activities
         const existingActsSnap = await getDocs(
-          query(collection(db, 'activities'), where('details.challengeId', '==', challengeId))
+          query(
+            collection(db, 'activities'),
+            where('userId', '==', 'system'),
+            where('details.challengeId', '==', challengeId)
+          )
         );
 
         if (!existingActsSnap.empty) {
@@ -1041,7 +1068,8 @@ export async function updateEventLeaderboardRanks(
 
         await setDoc(userRef, {
           communityBadges: [...filtered, badgeData],
-          unseenMedalAward: badgeData
+          unseenMedalAward: badgeData,
+          badgeUpdate: { sourceType: 'event', sourceId: eventId },
         }, { merge: true });
         console.log('[updateEventLeaderboardRanks] Badge updated for user', item.userId, 'rank', badgeAward);
 
@@ -1058,7 +1086,7 @@ export async function updateEventLeaderboardRanks(
         // Notify winner (fire-and-forget)
         addDoc(collection(db, 'notifications'), {
           receiverId: item.userId,
-          senderId: eventData?.createdBy || item.userId,
+          senderId: auth.currentUser?.uid || eventData?.createdBy || item.userId,
           senderName: eventData?.creatorName || 'Apparatus Arena',
           senderPhoto: '',
           type: 'achievement',
@@ -1072,7 +1100,8 @@ export async function updateEventLeaderboardRanks(
         // If medal was removed or user is rank > 3, update badges without the stale event badge
         if (filtered.length !== existingBadges.length) {
           await setDoc(userRef, {
-            communityBadges: filtered
+            communityBadges: filtered,
+            badgeUpdate: { sourceType: 'event', sourceId: eventId },
           }, { merge: true });
         }
       }
@@ -1144,7 +1173,9 @@ export async function updateUserChallengeProgress(userId: string, updates: { met
   const userChallenges = await getUserChallenges(userId);
   if (!userChallenges.length) return;
 
-  const activeChallenges = userChallenges.filter(c => c.status === 'active');
+  // Auto-track challenges are already credited (with their activity filter) when the
+  // workout/cardio session is saved, so only manual-tracking challenges are updated here.
+  const activeChallenges = userChallenges.filter(c => c.status === 'active' && !c.autoTrack);
   if (!activeChallenges.length) return;
 
   const batch = writeBatch(db);
@@ -1301,7 +1332,8 @@ export async function awardEventTop3Badges(
         const filtered = existingBadges.filter((b: any) => b.id !== badgeData.id);
         batch.set(userRef, { 
           communityBadges: [...filtered, badgeData],
-          unseenMedalAward: badgeData 
+          unseenMedalAward: badgeData,
+          badgeUpdate: { sourceType: 'event', sourceId: eventId },
         }, { merge: true });
       }
     } catch { /* ignore */ }
@@ -1310,7 +1342,7 @@ export async function awardEventTop3Badges(
     const noteRef = doc(collection(db, 'notifications'));
     batch.set(noteRef, {
       receiverId: winner.userId,
-      senderId: event.createdBy,
+      senderId: auth.currentUser?.uid || event.createdBy,
       senderName: event.creatorName,
       senderPhoto: event.creatorPhoto || '',
       type: 'achievement',
@@ -1325,11 +1357,14 @@ export async function awardEventTop3Badges(
       const postRef = doc(collection(db, 'community_posts'));
       batch.set(postRef, {
         communityId: event.clanId,
-        authorId: winner.userId,
-        authorName: winner.userName,
-        authorPhoto: winner.userPhoto || '',
+        clanName: event.clanName || '',
+        authorId: 'system',
+        authorName: 'Apparatus Arena',
+        authorPhoto: '',
         title: `🏆 ${info.name} Winner!`,
         text: `Congratulations to ${winner.userName} for placing #${winner.rank} and winning the ${info.name} badge in "${event.title}"!`,
+        sourceType: 'event',
+        sourceId: eventId,
         likesCount: 0,
         commentsCount: 0,
         likedUserIds: [],
@@ -1338,17 +1373,19 @@ export async function awardEventTop3Badges(
     } else {
       const activityRef = doc(collection(db, 'activities'));
       batch.set(activityRef, {
-        userId: winner.userId,
-        userName: winner.userName,
-        userPhoto: winner.userPhoto || '',
+        userId: 'system',
+        userName: 'Apparatus Arena',
+        userPhoto: '',
         type: 'achievement',
         workoutId: null,
-        summary: `Won ${info.name} in ${event.title}`,
+        summary: `${winner.userName} won ${info.name} in ${event.title}`,
         details: {
           eventId,
           eventTitle: event.title,
           clanId: '',
           rank: winner.rank,
+          winnerId: winner.userId,
+          winnerName: winner.userName,
           badgeName: info.name,
           badgeEmoji: info.emoji
         },
@@ -1443,16 +1480,17 @@ export const createClanPost = async (postData: Omit<CommunityPost, 'id' | 'likes
   }));
 
   // If this post includes a poll, notify clan members
-  if (postData.poll && postData.clanId) {
+  const postClanId = postData.clanId || postData.communityId;
+  if (postData.poll && postClanId) {
     notifyClanMembers({
-      clanId: postData.clanId,
+      clanId: postClanId,
       senderId: postData.authorId,
       senderName: postData.authorName,
       title: `📊 New Poll in Clan`,
-      body: `${postData.authorName}: "${postData.poll.question}" — Tap to vote!`,
+      body: `${postData.authorName}: "${postData.poll.question}" (Tap to vote!)`,
       type: 'clan_poll',
-      link: `/clan/${postData.clanId}`,
-      extraData: { postId: docRef.id, clanId: postData.clanId }
+      link: `/clan/${postClanId}`,
+      extraData: { postId: docRef.id, clanId: postClanId }
     }).catch(err => console.warn('Failed to notify clan members for poll:', err));
   }
 
@@ -1819,15 +1857,13 @@ export async function toggleDislikePostComment(commentId: string, userId: string
 }
 
 export async function deletePostComment(commentId: string, postId: string): Promise<void> {
-  // 1. Delete the comment
-  await deleteDoc(doc(db, 'community_post_comments', commentId));
-  
-  // 2. Also delete any nested child replies
-  const repliesSnap = await getDocs(query(collection(db, 'community_post_comments'), where('parentId', '==', commentId)));
+  // Parent and replies go in one batch so rules can still see the parent while checking replies.
+  const repliesSnap = await getDocs(query(collection(db, 'community_post_comments'), where('postId', '==', postId), where('parentId', '==', commentId)));
   const batch = writeBatch(db);
+  batch.delete(doc(db, 'community_post_comments', commentId));
   repliesSnap.docs.forEach(d => batch.delete(d.ref));
-  await batch.commit().catch(() => {});
-  
+  await batch.commit();
+
   const totalDeleted = 1 + repliesSnap.size;
   
   // 3. Decrement commentsCount on the post
@@ -2526,17 +2562,28 @@ export function subscribeClanMessages(
   onMessages: (messages: ClanMessage[]) => void,
   onError?: (error: any) => void
 ): () => void {
-  const q = query(
+  // Newest 150 messages (ordered server-side). Without orderBy, Firestore returns an
+  // arbitrary 150 docs by id, so recent messages could silently disappear in busy clans.
+  const orderedQ = query(
+    collection(db, 'clan_messages'),
+    where('clanId', '==', clanId),
+    orderBy('createdAt', 'desc'),
+    limit(150)
+  );
+  const fallbackQ = query(
     collection(db, 'clan_messages'),
     where('clanId', '==', clanId),
     limit(150)
   );
 
-  return onSnapshot(
+  let unsub: () => void = () => {};
+  let cancelled = false;
+
+  const listen = (q: typeof orderedQ, isFallback: boolean) => onSnapshot(
     q,
     (snap) => {
       const msgs = snap.docs
-        .map(d => ({ id: d.id, ...d.data() } as ClanMessage))
+        .map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) } as ClanMessage))
         .sort((a, b) => {
           const getTime = (val: any) => {
             if (!val) return 0;
@@ -2553,10 +2600,22 @@ export function subscribeClanMessages(
       onMessages(msgs);
     },
     (err) => {
+      // Composite index missing/building → fall back to the unordered query
+      if (!isFallback && !cancelled && (err as any)?.code === 'failed-precondition') {
+        console.warn('Clan chat ordered query unavailable, using fallback:', err);
+        unsub = listen(fallbackQ, true);
+        return;
+      }
       console.error('Error in clan chat subscription:', err);
       onError?.(err);
     }
   );
+
+  unsub = listen(orderedQ, false);
+  return () => {
+    cancelled = true;
+    unsub();
+  };
 }
 
 export async function sendClanMessage(
@@ -2693,6 +2752,7 @@ export async function requestToJoinClan(
     const notifPromises = leadership.map(leader =>
       addDoc(collection(db, 'app_notifications'), cleanDoc({
         userId: leader.userId,
+        senderId: user.uid,
         title: `🛡️ Join Request: ${clanName}`,
         body: `${requesterName} requested to join your clan${trimmedMsg ? `: "${trimmedMsg}"` : '.'} Tap to review.`,
         type: 'clan_join_request',
@@ -2786,19 +2846,20 @@ export async function acceptClanJoinRequest(
   clanName: string,
   requester: { userId: string; userName: string; userPhoto: string }
 ): Promise<void> {
-  // 1. Update request status to accepted
+  // 1. Add as active clan member first so a failed join never leaves an "accepted" orphan request
+  await joinClan(requester.userId, requester.userName, requester.userPhoto, clanId);
+
+  // 2. Update request status to accepted
   const reqRef = doc(db, 'clan_join_requests', requestId);
   await updateDoc(reqRef, {
     status: 'accepted',
     updatedAt: serverTimestamp(),
   });
 
-  // 2. Add as active clan member
-  await joinClan(requester.userId, requester.userName, requester.userPhoto, clanId);
-
   // 3. Notify the requester
   await addDoc(collection(db, 'app_notifications'), {
     userId: requester.userId,
+    senderId: auth.currentUser?.uid || '',
     title: `🎉 Clan Request Accepted!`,
     body: `You are now a member of ${clanName}! Welcome to the clan.`,
     type: 'clan_join_accepted',
@@ -2828,6 +2889,7 @@ export async function declineClanJoinRequest(
   // 2. Notify the requester
   await addDoc(collection(db, 'app_notifications'), {
     userId: requesterId,
+    senderId: auth.currentUser?.uid || '',
     title: `Clan Request Update`,
     body: `Your request to join ${clanName} was declined by the leadership.`,
     type: 'clan_join_request',

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -49,15 +49,15 @@ const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle') => {
 };
 
 // All available map themes with tile URLs (CORS-enabled, free, no API key required)
+// maxNativeZoom = deepest level the provider actually serves; beyond it Leaflet
+// upscales instead of fetching "Map data not yet available" placeholder tiles.
 export const MAP_THEMES = {
-  street: { label: 'Street', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', bg: '#f5f5f5' },
-  dark: { label: 'Dark', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', bg: '#121212' },
-  light: { label: 'Light', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', bg: '#f5f5f5' },
-  google: { label: 'Google', url: 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', bg: '#f5f5f5' },
-  satellite: { label: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', bg: '#0a0a0a' },
-  terrain: { label: 'Terrain', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', bg: '#e8e4d8' },
-  toner: { label: 'Minimal', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', bg: '#ffffff' },
-  cyclosm: { label: 'CyclOSM', url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', bg: '#f5f5f5' },
+  street: { label: 'Street', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', bg: '#f5f5f5', maxNativeZoom: 19 },
+  dark: { label: 'Dark', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', bg: '#121212', maxNativeZoom: 16 },
+  light: { label: 'Light', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', bg: '#f5f5f5', maxNativeZoom: 16 },
+  satellite: { label: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', bg: '#0a0a0a', maxNativeZoom: 17 },
+  terrain: { label: 'Terrain', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', bg: '#e8e4d8', maxNativeZoom: 17 },
+  cyclosm: { label: 'CyclOSM', url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', bg: '#f5f5f5', maxNativeZoom: 18 },
 } as const;
 
 export type MapThemeKey = keyof typeof MAP_THEMES;
@@ -85,6 +85,10 @@ interface Props {
   heading?: number | null;
   mapRotationMode?: boolean;
   visualHeadingRef?: React.MutableRefObject<number | null>;
+  /** Set false for static previews (feed cards) so page scrolling is untouched. */
+  interactive?: boolean;
+  /** `card` = compact feed preview with start/finish pins. */
+  variant?: 'default' | 'card';
 }
 
 function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive, mapRotationMode }: { route: RoutePoint[], recenterTrigger?: number, currentLocation?: { lat: number, lng: number } | null, isLive?: boolean, mapRotationMode?: boolean }) {
@@ -94,24 +98,31 @@ function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive, mapRot
   const initialized = useRef(false);
   const isFollowing = useRef(true);
 
-  // Disable following when user drags the map
+  // Any user pan breaks "follow me" (pinch-zoom keeps following, like
+  // navigation apps). The gesture layer reads `_apFollow` to decide whether
+  // pinches should zoom around the user or around the fingers.
   useEffect(() => {
-    const handleDrag = () => {
+    const m = map as any;
+    m._apFollow = true;
+    const handlePan = () => {
       isFollowing.current = false;
+      m._apFollow = false;
     };
-    map.on('dragstart', handleDrag);
+    map.on('ap:userpan', handlePan);
     return () => {
-      map.off('dragstart', handleDrag);
+      map.off('ap:userpan', handlePan);
     };
   }, [map]);
 
   useEffect(() => {
+    const m = map as any;
     let shouldCenter = false;
 
     // Center if recenterTrigger is updated (user explicitly clicked recenter)
     if (recenterTrigger !== lastRecenter.current) {
       shouldCenter = true;
       isFollowing.current = true; // Re-enable following
+      m._apFollow = true;
     }
     
     // Automatically flag for centering if we get new points or location updates while following
@@ -119,23 +130,26 @@ function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive, mapRot
       shouldCenter = true;
     }
 
-    if (currentLocation && isFollowing.current) {
-      const currentCenter = map.getCenter();
-      const dist = currentCenter.distanceTo([currentLocation.lat, currentLocation.lng]);
-      const currentZoom = map.getZoom();
-      
-      // If map is zoomed out (e.g. default country overview at zoom 5) or first fix
-      if (currentZoom < 14 || !initialized.current) {
-        map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: false });
+    // Never fight the user's fingers mid-gesture.
+    if (currentLocation && isFollowing.current && !m._apGesture) {
+      const target = L.latLng(currentLocation.lat, currentLocation.lng);
+      const dist = map.getCenter().distanceTo(target);
+
+      if (!initialized.current) {
+        map.setView(target, 16.5, { animate: false });
         initialized.current = true;
       }
-      // If map is rotating, stay centered without animation
+      // Explicit recenter restores the default follow zoom.
+      else if (recenterTrigger !== lastRecenter.current) {
+        map.setView(target, Math.max(map.getZoom(), 16.5), { animate: true, duration: 0.45 } as any);
+      }
+      // If map is rotating, stay centered without animation (keeps user zoom)
       else if (mapRotationMode) {
-        map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: false });
-      } 
-      // Smooth follow if moved more than 12m or recenter button tapped
+        map.setView(target, map.getZoom(), { animate: false });
+      }
+      // Smooth follow if moved more than 12m - keep whatever zoom the user chose
       else if (dist > 12 || shouldCenter) {
-        map.setView([currentLocation.lat, currentLocation.lng], 16.5, { animate: true });
+        map.panTo(target, { animate: true, duration: 0.6, easeLinearity: 0.35 });
       }
     }
 
@@ -254,11 +268,386 @@ function ShareZoomControls() {
   return (
     <div className="leaflet-top leaflet-left">
       <div className="leaflet-control leaflet-bar !m-3 !overflow-hidden !rounded-xl !border !border-white/50 !bg-black/55 !shadow-lg !backdrop-blur-md">
-        <button type="button" aria-label="Zoom in" onPointerDown={stopGesture} onClick={(event) => { event.preventDefault(); event.stopPropagation(); map.zoomIn(); }} className="!flex !h-10 !w-10 !items-center !justify-center !border-0 !border-b !border-white/20 !bg-transparent !text-xl !font-medium !text-white hover:!bg-white/20 active:!bg-white/30">+</button>
-        <button type="button" aria-label="Zoom out" onPointerDown={stopGesture} onClick={(event) => { event.preventDefault(); event.stopPropagation(); map.zoomOut(); }} className="!flex !h-10 !w-10 !items-center !justify-center !border-0 !bg-transparent !text-xl !font-medium !text-white hover:!bg-white/20 active:!bg-white/30">−</button>
+        <button type="button" aria-label="Zoom in" onPointerDown={stopGesture} onClick={(event) => { event.preventDefault(); event.stopPropagation(); map.zoomIn(1); }} className="!flex !h-10 !w-10 !items-center !justify-center !border-0 !border-b !border-white/20 !bg-transparent !text-xl !font-medium !text-white hover:!bg-white/20 active:!bg-white/30">+</button>
+        <button type="button" aria-label="Zoom out" onPointerDown={stopGesture} onClick={(event) => { event.preventDefault(); event.stopPropagation(); map.zoomOut(1); }} className="!flex !h-10 !w-10 !items-center !justify-center !border-0 !bg-transparent !text-xl !font-medium !text-white hover:!bg-white/20 active:!bg-white/30">−</button>
       </div>
     </div>
   );
+}
+
+type Pt = { x: number; y: number };
+
+/**
+ * Unified touch / mouse / wheel gesture engine.
+ *
+ * Leaflet's built-in handlers assume an un-transformed container, so on the
+ * live map (rotated for compass mode) and inside the scaled share preview they
+ * pan in the wrong direction and pinch around the wrong point. This handler
+ * converts every screen point into the map's local frame (undoing rotation and
+ * ancestor scale), keeps the geographic point under the fingers pinned there,
+ * and drives Leaflet's own pinch pipeline (`_move` with `pinch: true`) so tiles
+ * scale on the GPU exactly like native pinch-zoom. Adds momentum panning,
+ * fractional zoom, double-tap zoom and an optional two-finger rotate that only
+ * engages after a deliberate twist (so pinching never rotates by accident).
+ */
+function SmoothGestures({
+  wrapperRef,
+  rotorRef,
+  allowRotate,
+  onRotate,
+}: {
+  wrapperRef: React.RefObject<HTMLDivElement>;
+  rotorRef: React.RefObject<HTMLDivElement>;
+  allowRotate: boolean;
+  onRotate: (deg: number) => void;
+}) {
+  const map = useMap();
+  const allowRotateRef = useRef(allowRotate);
+  allowRotateRef.current = allowRotate;
+  const onRotateRef = useRef(onRotate);
+  onRotateRef.current = onRotate;
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    const rotor = rotorRef.current;
+    if (!wrapper || !rotor) return;
+    const m = map as any;
+
+    const pointers = new Map<number, Pt>();
+    let base: {
+      anchor: L.LatLng;
+      zoom: number;
+      mid: Pt;
+      dist: number;
+      angle: number;
+      rot: number;
+      twistFrom: number | null;
+      centered: boolean;
+    } | null = null;
+    let active = false;
+    let moved = false;
+    let zoomed = false;
+    let manualRot: number | null = null;
+    let frame = 0;
+    let inertiaFrame = 0;
+    let animFrame = 0;
+    let wheelTimer = 0;
+    let samples: { x: number; y: number; t: number }[] = [];
+    let downAt: { x: number; y: number; t: number } | null = null;
+    let lastTap: { x: number; y: number; t: number } | null = null;
+
+    const readRotation = () => {
+      if (manualRot !== null) return manualRot;
+      const tr = getComputedStyle(rotor).transform;
+      if (!tr || tr === 'none') return 0;
+      try {
+        const mx = new DOMMatrixReadOnly(tr);
+        return Math.atan2(mx.b, mx.a) * (180 / Math.PI);
+      } catch {
+        return 0;
+      }
+    };
+
+    /** Screen (client) point → Leaflet container point. */
+    const toLocal = (pt: Pt, rotDeg: number) => {
+      const r = rotor.getBoundingClientRect();
+      const wr = wrapper.getBoundingClientRect();
+      const scale = wrapper.offsetWidth ? wr.width / wrapper.offsetWidth : 1;
+      const dx = (pt.x - (r.left + r.width / 2)) / (scale || 1);
+      const dy = (pt.y - (r.top + r.height / 2)) / (scale || 1);
+      const t = (rotDeg * Math.PI) / 180;
+      const c = Math.cos(t);
+      const s = Math.sin(t);
+      const size = map.getSize();
+      return L.point(dx * c + dy * s + size.x / 2, -dx * s + dy * c + size.y / 2);
+    };
+
+    const clampZoom = (z: number) => Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), z));
+
+    /** Pin `anchor` under container point `local` at zoom `z`. */
+    const applyView = (anchor: L.LatLng, local: L.Point, z: number) => {
+      const zoom = clampZoom(z);
+      const half = map.getSize().divideBy(2);
+      const centerPx = map.project(anchor, zoom).subtract(local).add(half);
+      if (Math.abs(zoom - map.getZoom()) < 1e-4) {
+        const offset = centerPx.subtract(map.project(map.getCenter(), zoom));
+        if (Math.abs(offset.x) >= 0.5 || Math.abs(offset.y) >= 0.5) {
+          m._rawPanBy(offset);
+          map.fire('move');
+        }
+      } else {
+        zoomed = true;
+        m._move(map.unproject(centerPx, zoom), zoom, { pinch: true, round: false });
+      }
+    };
+
+    const midOf = (pts: Pt[]) => ({
+      x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+      y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+    });
+
+    const following = () => Boolean(m._apFollow);
+
+    const rebase = () => {
+      const pts = [...pointers.values()];
+      if (!pts.length) { base = null; return; }
+      const mid = midOf(pts);
+      const rot = readRotation();
+      const centered = pts.length > 1 && following();
+      const size = map.getSize();
+      const local = centered ? L.point(size.x / 2, size.y / 2) : toLocal(mid, rot);
+      base = {
+        anchor: map.containerPointToLatLng(local),
+        zoom: map.getZoom(),
+        mid,
+        dist: pts.length > 1 ? Math.max(1, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y)) : 1,
+        angle: pts.length > 1 ? Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x) * (180 / Math.PI) : 0,
+        rot,
+        twistFrom: null,
+        centered,
+      };
+    };
+
+    const stopAnimations = () => {
+      cancelAnimationFrame(inertiaFrame);
+      cancelAnimationFrame(animFrame);
+      inertiaFrame = 0;
+      animFrame = 0;
+    };
+
+    const begin = () => {
+      if (active) return;
+      active = true;
+      moved = false;
+      zoomed = false;
+      m._apGesture = true;
+      m._stop?.();
+      // Settle any in-flight Leaflet zoom animation so it can't snap back later.
+      if (m._animatingZoom) m._onZoomTransitionEnd?.();
+      map.fire('movestart');
+    };
+
+    const finish = () => {
+      if (manualRot !== null) {
+        rotor.style.transition = 'transform 0.5s ease-out';
+        manualRot = null;
+      }
+      if (zoomed) {
+        if (map.options.zoomAnimation && m._zoomAnimated) {
+          m._animateZoom(map.getCenter(), map.getZoom(), true, false);
+        } else {
+          m._resetView(map.getCenter(), map.getZoom());
+        }
+      } else if (moved) {
+        map.fire('moveend');
+      }
+      active = false;
+      moved = false;
+      zoomed = false;
+      m._apGesture = false;
+    };
+
+    const markPanned = () => {
+      if (!moved) {
+        moved = true;
+        map.fire('ap:userpan');
+      }
+    };
+
+    const step = () => {
+      frame = 0;
+      if (!base || !pointers.size) return;
+      const pts = [...pointers.values()];
+      const mid = midOf(pts);
+      let rot = readRotation();
+
+      if (pts.length === 1) {
+        if (!moved && Math.hypot(mid.x - base.mid.x, mid.y - base.mid.y) < 3) return;
+        markPanned();
+        applyView(base.anchor, toLocal(mid, rot), base.zoom);
+      } else {
+        const dist = Math.max(1, Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y));
+        const angle = Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x) * (180 / Math.PI);
+        const zoom = base.zoom + Math.log2(dist / base.dist);
+
+        if (allowRotateRef.current) {
+          let twist = angle - base.angle;
+          twist = ((twist + 540) % 360) - 180;
+          if (base.twistFrom === null && Math.abs(twist) > 14) {
+            base.twistFrom = angle;
+            base.rot = rot;
+            rotor.style.transition = 'none';
+          }
+          if (base.twistFrom !== null) {
+            let d = angle - base.twistFrom;
+            d = ((d + 540) % 360) - 180;
+            rot = base.rot + d;
+            manualRot = rot;
+            onRotateRef.current(rot);
+          }
+        }
+
+        if (base.centered && following()) {
+          const size = map.getSize();
+          applyView(base.anchor, L.point(size.x / 2, size.y / 2), zoom);
+        } else {
+          if (Math.hypot(mid.x - base.mid.x, mid.y - base.mid.y) > 8) markPanned();
+          applyView(base.anchor, toLocal(mid, rot), zoom);
+        }
+      }
+    };
+
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(step);
+    };
+
+    const isUiTarget = (target: EventTarget | null) =>
+      target instanceof Element && Boolean(target.closest('.leaflet-control, button, a, input, [data-map-ignore]'));
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (isUiTarget(e.target)) return;
+      stopAnimations();
+      try { wrapper.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      if (e.pointerType === 'mouse') e.preventDefault();
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      begin();
+      rebase();
+      samples = [{ x: e.clientX, y: e.clientY, t: performance.now() }];
+      downAt = pointers.size === 1 ? { x: e.clientX, y: e.clientY, t: performance.now() } : null;
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1) {
+        const now = performance.now();
+        samples.push({ x: e.clientX, y: e.clientY, t: now });
+        while (samples.length > 2 && now - samples[0].t > 100) samples.shift();
+      }
+      schedule();
+    };
+
+    const zoomAnimated = (anchor: L.LatLng, local: L.Point, from: number, to: number, durationMs = 260) => {
+      stopAnimations();
+      begin();
+      const start = performance.now();
+      const tick = () => {
+        const p = Math.min(1, (performance.now() - start) / durationMs);
+        const eased = 1 - Math.pow(1 - p, 3);
+        applyView(anchor, local, from + (to - from) * eased);
+        if (p < 1) animFrame = requestAnimationFrame(tick);
+        else { animFrame = 0; finish(); }
+      };
+      animFrame = requestAnimationFrame(tick);
+    };
+
+    const onUp = (e: PointerEvent) => {
+      if (!pointers.has(e.pointerId)) return;
+      const wasSingle = pointers.size === 1;
+      // Flush the pending frame with the current pointer set before removing one.
+      if (frame) { cancelAnimationFrame(frame); step(); }
+      pointers.delete(e.pointerId);
+      try { wrapper.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+
+      if (pointers.size) {
+        rebase();
+        samples = [];
+        return;
+      }
+
+      const now = performance.now();
+
+      // Tap / double-tap zoom
+      if (wasSingle && !moved && downAt && now - downAt.t < 250 && e.type === 'pointerup') {
+        const tap = { x: e.clientX, y: e.clientY, t: now };
+        if (lastTap && now - lastTap.t < 320 && Math.hypot(tap.x - lastTap.x, tap.y - lastTap.y) < 30) {
+          lastTap = null;
+          active = false;
+          m._apGesture = false;
+          const rot = readRotation();
+          const size = map.getSize();
+          const local = following() ? L.point(size.x / 2, size.y / 2) : toLocal(tap, rot);
+          const z = map.getZoom();
+          zoomAnimated(map.containerPointToLatLng(local), local, z, clampZoom(z + 1));
+          return;
+        }
+        lastTap = tap;
+      }
+
+      // Momentum
+      if (wasSingle && moved && samples.length >= 2 && base) {
+        const first = samples[0];
+        const last = samples[samples.length - 1];
+        const dt = last.t - first.t;
+        if (dt > 0 && now - last.t < 60) {
+          let vx = (last.x - first.x) / dt;
+          let vy = (last.y - first.y) / dt;
+          const speed = Math.hypot(vx, vy);
+          if (speed > 0.25) {
+            const cap = 2.6;
+            if (speed > cap) { vx = (vx / speed) * cap; vy = (vy / speed) * cap; }
+            const anchor = base.anchor;
+            const zoom = map.getZoom();
+            let pt = { x: last.x, y: last.y };
+            let prev = performance.now();
+            const glide = () => {
+              const t = performance.now();
+              const elapsed = Math.min(40, t - prev);
+              prev = t;
+              const decay = Math.exp(-elapsed / 325);
+              vx *= decay;
+              vy *= decay;
+              pt = { x: pt.x + vx * elapsed, y: pt.y + vy * elapsed };
+              applyView(anchor, toLocal(pt, readRotation()), zoom);
+              if (Math.hypot(vx, vy) > 0.02) inertiaFrame = requestAnimationFrame(glide);
+              else { inertiaFrame = 0; finish(); }
+            };
+            inertiaFrame = requestAnimationFrame(glide);
+            base = null;
+            return;
+          }
+        }
+      }
+
+      base = null;
+      finish();
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      if (isUiTarget(e.target)) return;
+      e.preventDefault();
+      stopAnimations();
+      begin();
+      const unit = e.deltaMode === 1 ? 32 : e.deltaMode === 2 ? 600 : 1;
+      const delta = Math.max(-0.6, Math.min(0.6, (-e.deltaY * unit) / 260));
+      const rot = readRotation();
+      const size = map.getSize();
+      const local = following() ? L.point(size.x / 2, size.y / 2) : toLocal({ x: e.clientX, y: e.clientY }, rot);
+      applyView(map.containerPointToLatLng(local), local, map.getZoom() + delta);
+      window.clearTimeout(wheelTimer);
+      wheelTimer = window.setTimeout(finish, 160);
+    };
+
+    wrapper.addEventListener('pointerdown', onDown);
+    wrapper.addEventListener('pointermove', onMove);
+    wrapper.addEventListener('pointerup', onUp);
+    wrapper.addEventListener('pointercancel', onUp);
+    wrapper.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      stopAnimations();
+      cancelAnimationFrame(frame);
+      window.clearTimeout(wheelTimer);
+      wrapper.removeEventListener('pointerdown', onDown);
+      wrapper.removeEventListener('pointermove', onMove);
+      wrapper.removeEventListener('pointerup', onUp);
+      wrapper.removeEventListener('pointercancel', onUp);
+      wrapper.removeEventListener('wheel', onWheel);
+      m._apGesture = false;
+    };
+  }, [map, wrapperRef, rotorRef]);
+
+  return null;
 }
 
 export function RouteMap({
@@ -281,10 +670,20 @@ export function RouteMap({
   showZoomControls = false,
   heading,
   mapRotationMode = false,
-  visualHeadingRef
+  visualHeadingRef,
+  interactive = true,
+  variant = 'default',
 }: Props) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const manualRotationRef = useRef(0);
+  const tileErrorCountRef = useRef(0);
+  const [useStreetFallback, setUseStreetFallback] = useState(false);
+
+  useEffect(() => {
+    tileErrorCountRef.current = 0;
+    setUseStreetFallback(false);
+  }, [theme]);
 
   const applyManualRotation = () => {
     if (!mapRotationMode && mapContainerRef.current) {
@@ -292,44 +691,10 @@ export function RouteMap({
     }
   };
 
-  // Two fingers rotate the map even when compass mode is off. Single-finger
-  // gestures remain available to Leaflet for normal panning.
-  useEffect(() => {
-    const element = mapContainerRef.current;
-    if (!element) return;
-    let startAngle: number | null = null;
-    let startRotation = 0;
-    const getAngle = (touches: TouchList) => Math.atan2(
-      touches[1].clientY - touches[0].clientY,
-      touches[1].clientX - touches[0].clientX
-    ) * (180 / Math.PI);
-    const onTouchStart = (event: TouchEvent) => {
-      if (!mapRotationMode && event.touches.length === 2) {
-        startAngle = getAngle(event.touches);
-        startRotation = manualRotationRef.current;
-      }
-    };
-    const onTouchMove = (event: TouchEvent) => {
-      if (!mapRotationMode && startAngle !== null && event.touches.length === 2) {
-        event.preventDefault();
-        manualRotationRef.current = startRotation + getAngle(event.touches) - startAngle;
-        applyManualRotation();
-      }
-    };
-    const onTouchEnd = (event: TouchEvent) => {
-      if (event.touches.length < 2) startAngle = null;
-    };
-    element.addEventListener('touchstart', onTouchStart, { passive: true });
-    element.addEventListener('touchmove', onTouchMove, { passive: false });
-    element.addEventListener('touchend', onTouchEnd, { passive: true });
-    element.addEventListener('touchcancel', onTouchEnd, { passive: true });
-    return () => {
-      element.removeEventListener('touchstart', onTouchStart);
-      element.removeEventListener('touchmove', onTouchMove);
-      element.removeEventListener('touchend', onTouchEnd);
-      element.removeEventListener('touchcancel', onTouchEnd);
-    };
-  }, [mapRotationMode]);
+  const handleGestureRotate = (deg: number) => {
+    manualRotationRef.current = deg;
+    applyManualRotation();
+  };
 
   // Recenter resets manual rotation whether or not compass mode was enabled.
   useEffect(() => {
@@ -349,14 +714,14 @@ export function RouteMap({
     const animate = () => {
       const vHead = visualHeadingRef.current;
       if (mapContainerRef.current) {
-        // Map Container Rotation — only update if heading changed meaningfully
+        // Map Container Rotation - only update if heading changed meaningfully
         const targetMapHeading = mapRotationMode && vHead !== null ? -vHead : manualRotationRef.current;
         if (lastAppliedMapHeading === null || Math.abs(targetMapHeading - lastAppliedMapHeading) > HEADING_CHANGE_THRESHOLD) {
           mapContainerRef.current.style.transform = `translateZ(0) rotate(${targetMapHeading}deg)`;
           lastAppliedMapHeading = targetMapHeading;
         }
           
-        // Icon/Cone Rotation — guard with threshold to prevent sub-pixel jitter
+        // Icon/Cone Rotation - guard with threshold to prevent sub-pixel jitter
         const validHeading = vHead !== null ? vHead : currentLocation?.heading;
         
         if (validHeading != null) {
@@ -435,8 +800,9 @@ export function RouteMap({
 
   const zoom = (positions.length > 0 || currentLocation) ? 16.5 : 5;
 
-  const themeData = MAP_THEMES[theme] || MAP_THEMES.street;
-  const isDarkMap = theme === 'dark' || theme === 'satellite';
+  const requestedThemeData = MAP_THEMES[theme] || MAP_THEMES.street;
+  const themeData = useStreetFallback ? MAP_THEMES.street : requestedThemeData;
+  const isDarkMap = !useStreetFallback && (theme === 'dark' || theme === 'satellite');
 
   const isGradient = highlightColor === 'url(#route-gradient)';
   const startColor = isGradient ? '#fbbf24' : highlightColor || '#fbbf24';
@@ -444,21 +810,35 @@ export function RouteMap({
 
   const strokeColor = isGradient ? 'url(#route-gradient)' : (highlightColor || (isLive ? '#8b5cf6' : '#a855f7'));
 
-  const startIcon = useMemo(() => new L.DivIcon({
+  const startIcon = useMemo(() => variant === 'card'
+    ? new L.DivIcon({
+        html: `<div style="width:26px;height:26px;border-radius:9999px;display:flex;align-items:center;justify-content:center;background:${isDarkMap ? '#f7f5f2' : '#17191c'};box-shadow:0 0 0 3px ${isDarkMap ? 'rgba(247,245,242,0.25)' : 'rgba(23,25,28,0.18)'},0 4px 10px rgba(0,0,0,0.25);"><svg width="11" height="11" viewBox="0 0 24 24" fill="${isDarkMap ? '#17191c' : '#ffffff'}"><path d="M7 4.5v15a1 1 0 0 0 1.52.85l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5Z"/></svg></div>`,
+        className: '',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      })
+    : new L.DivIcon({
     html: `<div style="width: 16px; height: 16px; background: ${startColor}; border: 3px solid white; border-radius: 50%; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>`,
     className: '',
     iconSize: [16, 16],
     iconAnchor: [8, 8]
-  }), [startColor]);
+  }), [startColor, variant, isDarkMap]);
 
-  const endIcon = useMemo(() => new L.DivIcon({
+  const endIcon = useMemo(() => variant === 'card'
+    ? new L.DivIcon({
+        html: `<div style="width:26px;height:26px;border-radius:9999px;display:flex;align-items:center;justify-content:center;background:${isDarkMap ? '#f7f5f2' : '#17191c'};box-shadow:0 4px 10px rgba(0,0,0,0.3);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="${isDarkMap ? '#17191c' : '#ffffff'}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5" fill="${isDarkMap ? '#17191c' : '#ffffff'}"/></svg></div>`,
+        className: '',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      })
+    : new L.DivIcon({
     html: `<div style="width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; color: ${endColor}; filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.3));">
       ${getCardioSvg(cardioType)}
     </div>`,
     className: '',
     iconSize: [28, 28],
     iconAnchor: [14, 14]
-  }), [endColor, cardioType]);
+  }), [endColor, cardioType, variant, isDarkMap]);
 
   const liveIcon = useMemo(() => getCurrentIcon(cardioType), [cardioType]);
 
@@ -474,7 +854,7 @@ export function RouteMap({
   const mapTop = isFullScreen ? 'calc(50vh - 90px - 75vmax)' : '0';
 
   return (
-    <div className={`w-full ${height !== '100%' ? 'rounded-2xl' : ''} overflow-hidden shadow-sm relative ${isLive ? 'ring-2 ring-[var(--border)]' : ''} ${hideMap ? '[&_.leaflet-container]:!bg-transparent [&_.leaflet-map-pane]:!bg-transparent [&_.leaflet-pane]:!bg-transparent' : ''}`} style={{ height, background: hideMap ? 'transparent' : themeData.bg }}>
+    <div ref={wrapperRef} className={`w-full ${height !== '100%' ? 'rounded-2xl' : ''} overflow-hidden ${variant === 'card' ? '' : 'shadow-sm'} relative ${isLive ? 'ring-2 ring-[var(--border)]' : ''} ${hideMap ? '[&_.leaflet-container]:!bg-transparent [&_.leaflet-map-pane]:!bg-transparent [&_.leaflet-pane]:!bg-transparent' : ''}`} style={{ height, background: hideMap ? 'transparent' : themeData.bg, touchAction: interactive ? 'none' : undefined }}>
       <div ref={mapContainerRef} className="compass-map-container" style={{
         position: 'absolute',
         width: mapWidth,
@@ -491,14 +871,56 @@ export function RouteMap({
           style={{ height: '100%', width: '100%', background: hideMap ? 'transparent' : themeData.bg }}
           zoomControl={false}
           attributionControl={false}
+          // Leaflet's stock handlers are replaced by <SmoothGestures/>, which is
+          // rotation/scale aware. Fractional zoom keeps pinches continuous.
+          dragging={false}
+          touchZoom={false}
+          scrollWheelZoom={false}
+          doubleClickZoom={false}
+          boxZoom={false}
+          keyboard={interactive}
+          zoomSnap={0}
+          zoomDelta={1}
+          minZoom={3}
+          maxZoom={19}
+          bounceAtZoomLimits={false}
+          fadeAnimation
+          zoomAnimation
+          markerZoomAnimation
         >
           <InjectGradient />
+          {interactive && (
+            <SmoothGestures
+              wrapperRef={wrapperRef}
+              rotorRef={mapContainerRef}
+              allowRotate={isFullScreen && !mapRotationMode}
+              onRotate={handleGestureRotate}
+            />
+          )}
           {showZoomControls && <ShareZoomControls />}
-          {!hideMap && <TileLayer key={themeData.url} url={themeData.url} crossOrigin="anonymous" />}
+          {!hideMap && (
+            <TileLayer
+              key={themeData.url}
+              url={themeData.url}
+              // CORS is only needed when the map is rasterised (share cards); some providers reject it.
+              crossOrigin={fitToContainer || isCapturing ? 'anonymous' : undefined}
+              maxNativeZoom={themeData.maxNativeZoom}
+              maxZoom={19}
+              keepBuffer={4}
+              eventHandlers={{
+                tileerror: () => {
+                  tileErrorCountRef.current += 1;
+                  if (theme !== 'street' && tileErrorCountRef.current >= 2) {
+                    setUseStreetFallback(true);
+                  }
+                },
+              }}
+            />
+          )}
 
           {positions.length > 1 && (
             <>
-              {isDarkMap && !hideMap && (
+              {isDarkMap && !hideMap && !noGlow && (
                 <>
                   {/* Outer Glow effect for dark maps */}
                   <Polyline
@@ -529,7 +951,7 @@ export function RouteMap({
                 positions={positions}
                 pathOptions={{
                   color: strokeColor,
-                  weight: 5,
+                  weight: variant === 'card' ? 4 : 5,
                   opacity: 1,
                   lineCap: 'round',
                   lineJoin: 'round',
@@ -540,24 +962,27 @@ export function RouteMap({
 
           {/* Start marker */}
           {!hideMarkers && !hideStartMarker && positions.length > 0 && (
-            <Marker position={positions[0]} icon={startIcon} />
+            <Marker position={positions[0]} icon={startIcon} interactive={false} />
           )}
 
           {/* Current position marker */}
           {!hideMarkers && (isLive || currentLocation) && (
             currentLocation ? (
-              <Marker position={[currentLocation.lat, currentLocation.lng]} icon={liveIcon} />
+              <Marker position={[currentLocation.lat, currentLocation.lng]} icon={liveIcon} interactive={false} />
             ) : positions.length > 0 ? (
-              <Marker position={positions[positions.length - 1]} icon={liveIcon} />
+              <Marker position={positions[positions.length - 1]} icon={liveIcon} interactive={false} />
             ) : null
           )}
 
           {/* End marker (only in static mode) */}
           {!hideMarkers && !isLive && positions.length > 1 && (
-            <Marker position={positions[positions.length - 1]} icon={endIcon} />
+            <Marker position={positions[positions.length - 1]} icon={endIcon} interactive={false} />
           )}
 
-          {(isLive || currentLocation) && !hideMarkers && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} currentLocation={currentLocation} isLive={isLive} mapRotationMode={mapRotationMode} />}
+          {/* Follow the user only while live, or before a route exists (ready
+              screen). Static routes (share/feed/history) fit their bounds once
+              and never snap back after the user pans or zooms. */}
+          {(isLive || (currentLocation && positions.length < 2)) && !hideMarkers && <MapAutoCenter route={route} recenterTrigger={recenterTrigger} currentLocation={currentLocation} isLive={isLive} mapRotationMode={mapRotationMode} />}
           {!isLive && positions.length > 1 && <FitBounds positions={positions} recenterTrigger={recenterTrigger} paddingBottomRight={mapPaddingBottomRight} paddingTopLeft={mapPaddingTopLeft} />}
         </MapContainer>
       </div>

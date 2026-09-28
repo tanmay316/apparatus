@@ -1,5 +1,5 @@
 import { collection, doc, addDoc, getDocs, updateDoc, query, where, serverTimestamp, orderBy, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import type { AppNotificationItem, AppNotificationType } from '@/types';
 
 export async function createNotification(notif: {
@@ -11,6 +11,7 @@ export async function createNotification(notif: {
 }): Promise<string> {
   const docRef = await addDoc(collection(db, 'app_notifications'), {
     ...notif,
+    senderId: auth.currentUser?.uid || '',
     read: false,
     createdAt: serverTimestamp(),
   });

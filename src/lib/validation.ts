@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
- * APPARATUS — Input Validation & Sanitization
+ * APPARATUS - Input Validation & Sanitization
  * ═══════════════════════════════════════════════════════════════
  * Centralized validation for all user-generated content before
  * it reaches Firestore. Prevents XSS, abuse, and data corruption.
@@ -19,7 +19,7 @@ export function sanitizeUsername(input: string, maxLength = 25): string {
     .slice(0, maxLength);
 }
 
-/** Validate a display name — non-empty and bounded. */
+/** Validate a display name - non-empty and bounded. */
 export function validateDisplayName(name: string): string {
   const sanitized = sanitizeText(name, 50);
   return sanitized || 'Athlete';
@@ -37,12 +37,12 @@ export function validateMeasurement(
   return Math.round(num * 100) / 100; // two decimal places
 }
 
-/** Validate workout notes — bounded length. */
+/** Validate workout notes - bounded length. */
 export function validateWorkoutNotes(text: string): string {
   return sanitizeText(text, 2000);
 }
 
-/** Validate a URL (basic check — protocol + domain). */
+/** Validate a URL (basic check - protocol + domain). */
 export function isValidUrl(url: string): boolean {
   if (!url) return false;
   try {
@@ -51,6 +51,17 @@ export function isValidUrl(url: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Returns the link only if it is an in-app path like "/clan/abc/chat".
+ * Notification links are written by other users, so absolute URLs,
+ * protocol-relative "//host" and javascript: links must never be followed.
+ */
+export function safeInternalPath(link: unknown): string | null {
+  if (typeof link !== 'string' || link.length > 300) return null;
+  if (!/^\/(?![\/\\])[^\s\\]*$/.test(link)) return null;
+  return link;
 }
 
 /** Validate a bio field. */

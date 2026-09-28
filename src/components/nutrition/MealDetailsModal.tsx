@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Apple, Check, Trash2, MoreVertical, Flame, ArrowRight, ChevronDown, Beef, Droplet, Wheat, Activity } from 'lucide-react';
-import { CustomSelect } from '@/components/ui/CustomSelect';
+import { X, Apple, Check, Flame, Beef, Droplet, Wheat, Activity } from 'lucide-react';
 import { getNutritionImage, updateMealType } from '@/services/nutrition-api';
 
 interface MealDetailsModalProps {
@@ -48,103 +47,100 @@ export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetail
     }
   };
 
+  const gradeTone = ['A+', 'A'].includes(meal.health_grade)
+    ? { background: 'var(--dx-success-soft)', color: 'var(--dx-success)' }
+    : ['B+', 'B'].includes(meal.health_grade)
+      ? { background: 'rgba(234, 179, 8, 0.16)', color: 'var(--dx-warning)' }
+      : { background: 'rgba(249, 115, 22, 0.16)', color: '#ea580c' };
+  const macros = [
+    { label: 'Protein', value: meal.protein, color: '#c87941', icon: Beef },
+    { label: 'Carbs', value: meal.carbs, color: '#eab308', icon: Wheat },
+    { label: 'Fat', value: meal.fat, color: '#06b6d4', icon: Droplet },
+    { label: 'Fiber', value: meal.fiber, color: '#10b981', icon: Activity },
+  ];
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="dx pro-scope dx-overlay z-[100]">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="dx-backdrop"
       />
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="relative w-full max-w-lg bg-ink-2 border border-line rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Meal details"
+        className="dx-sheet sm:max-w-lg"
       >
-        <div className="flex items-center justify-between p-5 border-b border-line/50 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-ink border border-line flex items-center justify-center">
-              <Apple className="text-sienna w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5 relative">
-                <div className="relative z-10 w-[220px]">
-                  <CustomSelect
-                    className={`w-full ${isUpdating ? 'opacity-50 pointer-events-none' : ''}`}
-                    value={mealType}
-                    onChange={(val) => handleTypeChange({ target: { value: val } } as any)}
-                    options={[
-                      { value: 'breakfast', label: 'Breakfast Details' },
-                      { value: 'lunch', label: 'Lunch Details' },
-                      { value: 'dinner', label: 'Dinner Details' },
-                      { value: 'snack', label: 'Snack Details' }
-                    ]}
-                  />
-                </div>
-                {hasChanged && (
-                  <button 
-                    onClick={handleSave}
-                    disabled={isUpdating}
-                    className="ml-2 px-3 py-1 bg-sienna/20 text-sienna hover:bg-sienna/30 text-xs font-display tracking-wide uppercase font-bold rounded-lg transition-colors border border-sienna/30 disabled:opacity-50"
-                  >
-                    {isUpdating ? 'Saving' : 'Save'}
-                  </button>
-                )}
-              </div>
-              <p className="text-xs text-bone-dim">{new Date(meal.logged_at).toLocaleString()}</p>
-            </div>
+        <div className="dx-sheet-handle" aria-hidden />
+        <div className="dx-sheet-header items-center">
+          <span className="dx-badge-icon"><Apple size={18} /></span>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[18px] font-semibold tracking-tight capitalize truncate">{mealType}</h2>
+            <p className="text-[12px] dx-muted">{new Date(meal.logged_at).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
           </div>
-          <button onClick={onClose} className="p-2 text-bone-dim hover:text-bone hover:bg-ink rounded-full transition-colors">
-            <X size={20} />
+          <button onClick={onClose} className="dx-icon-btn dx-icon-btn--sm" aria-label="Close">
+            <X size={17} />
           </button>
         </div>
 
-        <div className="overflow-y-auto p-5 space-y-6">
+        <div className="dx-sheet-body space-y-5">
           {imageUrl && (
-            <div className="w-full aspect-video rounded-2xl overflow-hidden border border-line/50 relative">
+            <div className="w-full aspect-video rounded-2xl overflow-hidden relative" style={{ background: 'var(--dx-card-2)' }}>
               <img src={imageUrl} alt="Meal" className="w-full h-full object-cover" />
               {meal.health_grade && (
-                <div className={`absolute top-3 right-3 px-3 py-1 rounded-xl font-display font-bold text-sm backdrop-blur-md border ${
-                  ['A+', 'A'].includes(meal.health_grade) ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' :
-                  ['B+', 'B'].includes(meal.health_grade) ? 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' :
-                  'bg-orange-500/20 text-orange-400 border-orange-500/30'
-                }`}>
+                <span className="absolute top-3 right-3 dx-pill h-7 px-3 text-[12px] backdrop-blur-md" style={gradeTone}>
                   Grade {meal.health_grade}
-                </div>
+                </span>
               )}
             </div>
           )}
 
+          {/* Meal type */}
+          <div>
+            <div className="dx-eyebrow mb-2">Meal type</div>
+            <div className={`dx-segment ${isUpdating ? 'opacity-50 pointer-events-none' : ''}`} role="tablist">
+              {['breakfast', 'lunch', 'dinner', 'snack'].map(type => (
+                <button
+                  key={type}
+                  role="tab"
+                  aria-selected={mealType === type}
+                  onClick={() => handleTypeChange({ target: { value: type } } as any)}
+                  className="capitalize !px-1 !text-[12px] sm:!text-[13px]"
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+            {hasChanged && (
+              <button onClick={handleSave} disabled={isUpdating} className="dx-btn w-full h-10 mt-2.5 text-[13px]">
+                <Check size={15} /> {isUpdating ? 'Saving…' : 'Save meal type'}
+              </button>
+            )}
+          </div>
+
           {/* Totals */}
           <div>
-            <h3 className="text-xs font-display uppercase tracking-wider text-bone-dim mb-3">Total Macros</h3>
-            <div className="grid grid-cols-5 gap-2">
-              <div className="bg-ink rounded-xl p-3 border border-line/30 flex flex-col items-center justify-center text-center">
-                <Flame className="text-sienna mb-1 w-4 h-4" />
-                <span className="text-xs text-bone-dim font-medium uppercase tracking-wider">Cals</span>
-                <span className="text-sm font-mono font-bold text-bone">{meal.calories?.toFixed(0)}</span>
+            <div className="dx-eyebrow mb-2">Nutrition</div>
+            <div className="dx-inset p-4">
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-2 text-[13px] dx-muted"><Flame size={16} className="dx-accent" /> Calories</span>
+                <span className="text-[22px] font-semibold tabular leading-none">{meal.calories?.toFixed(0)} <span className="text-[12px] font-medium dx-muted">kcal</span></span>
               </div>
-              <div className="bg-ink rounded-xl p-3 border border-line/30 flex flex-col items-center justify-center text-center">
-                <Beef className="text-sienna mb-1 w-4 h-4" />
-                <span className="text-xs text-bone-dim font-medium uppercase tracking-wider">Pro</span>
-                <span className="text-sm font-mono font-bold text-bone">{meal.protein?.toFixed(0)}</span>
-              </div>
-              <div className="bg-ink rounded-xl p-3 border border-line/30 flex flex-col items-center justify-center text-center">
-                <Wheat className="text-yellow-500 mb-1 w-4 h-4" />
-                <span className="text-xs text-bone-dim font-medium uppercase tracking-wider">Carb</span>
-                <span className="text-sm font-mono font-bold text-bone">{meal.carbs?.toFixed(0)}</span>
-              </div>
-              <div className="bg-ink rounded-xl p-3 border border-line/30 flex flex-col items-center justify-center text-center">
-                <Droplet className="text-cyan-500 mb-1 w-4 h-4" />
-                <span className="text-xs text-bone-dim font-medium uppercase tracking-wider">Fat</span>
-                <span className="text-sm font-mono font-bold text-bone">{meal.fat?.toFixed(0)}</span>
-              </div>
-              <div className="bg-ink rounded-xl p-3 border border-line/30 flex flex-col items-center justify-center text-center">
-                <Activity className="text-emerald-500 mb-1 w-4 h-4" />
-                <span className="text-xs text-bone-dim font-medium uppercase tracking-wider">Fib</span>
-                <span className="text-sm font-mono font-bold text-bone">{meal.fiber?.toFixed(0)}</span>
+              <div className="mt-4 grid grid-cols-4 gap-2">
+                {macros.map(({ label, value, color, icon: MacroIcon }) => (
+                  <div key={label} className="rounded-xl p-2.5 text-center" style={{ background: 'var(--dx-card)' }}>
+                    <MacroIcon size={15} className="mx-auto" style={{ color }} />
+                    <div className="mt-1.5 text-[15px] font-semibold tabular leading-none">{value?.toFixed(0)}<span className="text-[11px] dx-muted">g</span></div>
+                    <div className="mt-1 text-[10.5px] dx-muted">{label}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -152,20 +148,20 @@ export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetail
           {/* Items */}
           {meal.items && meal.items.length > 0 && (
             <div>
-              <h3 className="text-xs font-display uppercase tracking-wider text-bone-dim mb-3">Ingredients</h3>
-              <div className="space-y-2">
+              <div className="dx-eyebrow mb-2">Ingredients · {meal.items.length}</div>
+              <div className="dx-inset dx-list overflow-hidden">
                 {meal.items.map((item: any, i: number) => (
-                  <div key={i} className="bg-ink border border-line/30 rounded-xl p-3 flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium text-bone capitalize">{item.food_name}</h4>
-                      <p className="text-xs text-bone-dim">{item.weight_grams}g</p>
+                  <div key={i} className="flex items-center justify-between gap-3 px-3.5 py-3">
+                    <div className="min-w-0">
+                      <h4 className="text-[14px] font-semibold capitalize truncate">{item.food_name}</h4>
+                      <p className="text-[12px] dx-muted tabular">{item.weight_grams}g</p>
                     </div>
-                    <div className="text-right text-xs font-mono text-bone-dim space-y-1">
-                      <div><span className="text-bone font-medium">{item.calories.toFixed(0)}</span> kcal</div>
-                      <div className="flex gap-2">
-                        <span className="text-sienna">{item.protein.toFixed(1)}g P</span>
-                        <span className="text-yellow-500">{item.carbs.toFixed(1)}g C</span>
-                        <span className="text-cyan-500">{item.fat.toFixed(1)}g F</span>
+                    <div className="text-right shrink-0">
+                      <div className="text-[14px] font-semibold tabular">{item.calories.toFixed(0)} <span className="text-[11px] font-medium dx-muted">kcal</span></div>
+                      <div className="mt-0.5 flex gap-2 text-[11px] tabular dx-muted">
+                        <span>P {item.protein.toFixed(1)}</span>
+                        <span>C {item.carbs.toFixed(1)}</span>
+                        <span>F {item.fat.toFixed(1)}</span>
                       </div>
                     </div>
                   </div>

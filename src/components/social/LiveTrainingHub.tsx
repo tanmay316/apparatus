@@ -7,7 +7,13 @@ import { getFollowing, type ActiveSession } from '@/services/social';
 import { getAvatarUrl } from '@/lib/avatar';
 import { useUIStore } from '@/stores/ui-store';
 import { LiveSessionModal } from './LiveSessionModal';
-import { Activity, Dumbbell, Zap } from 'lucide-react';
+import { Bike, Dumbbell, Footprints, Zap } from 'lucide-react';
+
+const STALE_AFTER_MS = 5 * 60_000;
+
+function isSessionPaused(s?: ActiveSession) {
+  return s?.status === 'paused' || s?.status === 'auto_paused';
+}
 
 export interface GroupedLiveSession {
   uid: string;
@@ -43,11 +49,12 @@ export function LiveTrainingHub() {
       unsubscribe = onSnapshot(q, async (snap) => {
         const now = Date.now();
         const sessions = snap.docs
-          .map(d => d.data() as ActiveSession)
+          .map(d => d.data({ serverTimestamps: 'estimate' }) as ActiveSession)
           .filter(s => {
             if (!s.updatedAt) return false;
             const updateTime = s.updatedAt.toMillis ? s.updatedAt.toMillis() : (s.updatedAt.seconds * 1000) || now;
-            return now - updateTime < 120000; // 2 minutes
+            // Heartbeats are 10-15s; allow for Android throttling a locked phone's WebView.
+            return now - updateTime < STALE_AFTER_MS;
           });
         // Group by user
         const grouped: Record<string, GroupedLiveSession> = {};
@@ -81,52 +88,65 @@ export function LiveTrainingHub() {
   return (
     <>
       <div className="-mt-2 mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Activity size={16} className="text-sienna animate-pulse" />
+        <div className="flex items-center gap-2 mb-3">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-600" />
+          </span>
           <h3 className="font-sans text-xs font-semibold text-[var(--muted)] tracking-wider uppercase">Live Training</h3>
         </div>
         
-        <div className="flex gap-4 overflow-x-auto pb-4 pt-2 px-2 -mx-2 snap-x snap-mandatory touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          {groupedSessions.map((session) => (
-            <motion.button
-              key={session.uid}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setSelectedUid(session.uid)}
-              className="flex flex-col items-center gap-2 shrink-0 snap-start"
-            >
-              <div className="relative w-[56px] h-[56px]">
-                {/* Gradient Border */}
-                <div className="absolute -inset-1 bg-gradient-to-tr from-sienna to-amber rounded-full animate-spin-slow opacity-75 blur-[2px]" />
-                <div className="absolute inset-0 bg-gradient-to-tr from-sienna to-amber rounded-full p-[2px]">
-                  <div className="w-full h-full bg-[var(--bg)] rounded-full flex items-center justify-center p-0.5">
-                    <img 
-                      src={session.photoURL || getAvatarUrl(session.displayName, theme)} 
-                      alt={session.displayName} 
-                      className="w-full h-full rounded-full object-cover border border-[var(--bg)]"
+        <div className="flex gap-4 overflow-x-auto pb-3 pt-1 px-1 -mx-1 snap-x snap-mandatory touch-pan-x [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          {groupedSessions.map((session) => {
+            const allPaused = [session.workout, session.cardio].filter(Boolean).every(isSessionPaused);
+            const CardioIcon = session.cardio?.activityType === 'cycle' ? Bike : session.cardio?.activityType === 'walk' ? Footprints : Zap;
+            const cardioShort = session.cardio?.activityType === 'cycle' ? 'Ride' : session.cardio?.activityType === 'walk' ? 'Walk' : 'Run';
+            const label = allPaused
+              ? 'Paused'
+              : [session.workout && 'Lift', session.cardio && cardioShort].filter(Boolean).join(' · ');
+            const badges = [
+              session.workout && { key: 'workout', Icon: Dumbbell, paused: isSessionPaused(session.workout) },
+              session.cardio && { key: 'cardio', Icon: CardioIcon, paused: isSessionPaused(session.cardio) },
+            ].filter(Boolean) as { key: string; Icon: typeof Dumbbell; paused: boolean }[];
+            return (
+              <motion.button
+                key={session.uid}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setSelectedUid(session.uid)}
+                className="flex flex-col items-center gap-1.5 shrink-0 snap-start w-[68px]"
+                aria-label={`${session.displayName} is ${allPaused ? 'paused' : 'training live'}: ${label}`}
+              >
+                <div className="relative w-[60px] h-[60px]">
+                  <div
+                    className={`absolute inset-[3px] rounded-full p-[2px] ${allPaused ? 'live-avatar-paused' : 'live-avatar-active'}`}
+                    style={{ background: 'var(--bg)' }}
+                  >
+                    <img
+                      src={session.photoURL || getAvatarUrl(session.displayName, theme)}
+                      alt=""
+                      className="w-full h-full rounded-full object-cover"
                     />
                   </div>
+                  <div className="absolute -bottom-1 -right-1.5 flex -space-x-1.5">
+                    {badges.map(({ key, Icon, paused }) => (
+                      <span
+                        key={key}
+                        className={`w-[21px] h-[21px] rounded-full border-2 border-[var(--bg)] flex items-center justify-center text-white ${paused ? 'bg-amber-500' : 'bg-emerald-700'}`}
+                      >
+                        <Icon size={10} strokeWidth={2.6} />
+                      </span>
+                    ))}
+                  </div>
                 </div>
-
-                {/* Activity Badges Overlay */}
-                <div className="absolute -bottom-1 -right-1 flex gap-0.5">
-                  {session.workout && (
-                    <div className="w-5 h-5 rounded-full bg-emerald-500 border-2 border-[var(--bg)] flex items-center justify-center text-white shadow-sm">
-                      <Dumbbell size={10} />
-                    </div>
-                  )}
-                  {session.cardio && (
-                    <div className="w-5 h-5 rounded-full bg-blue-500 border-2 border-[var(--bg)] flex items-center justify-center text-white shadow-sm">
-                      <Zap size={10} />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <span className="text-[10px] font-mono font-medium text-[var(--text)] truncate max-w-[64px]">
-                {session.displayName.split(' ')[0]}
-              </span>
-            </motion.button>
-          ))}
+                <span className="text-[11px] font-medium text-[var(--text)] truncate max-w-full leading-tight">
+                  {session.displayName.split(' ')[0]}
+                </span>
+                <span className={`text-[9.5px] font-semibold uppercase tracking-wide leading-none truncate max-w-full ${allPaused ? 'text-amber-600' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                  {label}
+                </span>
+              </motion.button>
+            );
+          })}
         </div>
       </div>
 

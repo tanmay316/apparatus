@@ -19,6 +19,7 @@ import {
 } from '@/services/community';
 import { ChallengeV2, ChallengeParticipant, ChallengeProgressLog } from '@/types';
 import { useUIStore } from '@/stores/ui-store';
+import { LiveUserName } from '@/components/ui/LiveUser';
 import { useNavigate } from 'react-router-dom';
 import { formatChallengeGoal } from './UpcomingReminderWidget';
 
@@ -241,7 +242,9 @@ export function PersonalChallengeDetailSheet({ challengeId, onClose }: { challen
       queryClient.invalidateQueries({ queryKey: ['isJoinedChallenge', challengeId, user?.uid] });
       showToast('Left challenge');
     },
-    onError: () => {}
+    onError: (err: any) => {
+      if (err?.message !== 'Cancelled') showToast(err?.message || 'Failed to leave challenge', 'error');
+    }
   });
 
   // Log progress mutation
@@ -284,14 +287,15 @@ export function PersonalChallengeDetailSheet({ challengeId, onClose }: { challen
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['challengeParticipants', challengeId] });
       showToast('Privacy updated');
-    }
+    },
+    onError: (err: any) => showToast(err?.message || 'Failed to update privacy', 'error')
   });
 
   const CategoryIcon = CATEGORY_ICONS[challenge?.category || ''] || Target;
 
   if (isLoading || !challenge) {
     return createPortal(
-      <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/80">
+      <div className="cx fixed inset-0 z-[600] flex items-center justify-center bg-black/70">
         <div className="w-8 h-8 border-[3px] border-bone/20 border-t-bone/80 rounded-full animate-spin" />
       </div>,
       document.body
@@ -299,7 +303,7 @@ export function PersonalChallengeDetailSheet({ challengeId, onClose }: { challen
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[600] flex flex-col justify-end">
+    <div className="cx pro-scope fixed inset-0 z-[600] flex flex-col justify-end">
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
@@ -493,7 +497,7 @@ export function PersonalChallengeDetailSheet({ challengeId, onClose }: { challen
                         >
                           <img src={p.userPhoto || '/default-avatar.png'} className="w-7 h-7 rounded-full object-cover" alt="" />
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs text-bone truncate">{p.userName}</div>
+                            <LiveUserName userId={p.userId} fallbackName={p.userName} className="block text-xs text-bone truncate" />
                             {p.progressPrivacy !== 'private' && (
                               <div className="text-[10px] text-bone-dim font-mono">{(p.progress || 0).toFixed(1)} {challenge.unit}</div>
                             )}
@@ -563,7 +567,7 @@ export function PersonalChallengeDetailSheet({ challengeId, onClose }: { challen
                       <img src={p.userPhoto || '/default-avatar.png'} className="w-8 h-8 rounded-full object-cover shrink-0" alt="" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-xs truncate ${isMe ? 'text-sienna font-bold' : 'text-bone'}`}>{p.userName}</span>
+                          <LiveUserName userId={p.userId} fallbackName={p.userName} className={`text-xs truncate ${isMe ? 'text-sienna font-bold' : 'text-bone'}`} />
                           {isMe && <span className="text-[9px] bg-sienna/20 text-sienna px-1 py-0.5 rounded font-mono">YOU</span>}
                           {p.userId === challenge.createdBy && <Crown size={10} className="text-amber-400" />}
                         </div>
@@ -587,7 +591,7 @@ export function PersonalChallengeDetailSheet({ challengeId, onClose }: { challen
                         )}
                       </div>
 
-                      <span className="text-xs font-mono text-bone-dim shrink-0">{isPrivate ? '—' : `${Math.round(pct)}%`}</span>
+                      <span className="text-xs font-mono text-bone-dim shrink-0">{isPrivate ? '-' : `${Math.round(pct)}%`}</span>
                     </motion.div>
                   );
                 })
@@ -612,7 +616,7 @@ export function PersonalChallengeDetailSheet({ challengeId, onClose }: { challen
                     <img src={log.userPhoto || '/default-avatar.png'} className="w-7 h-7 rounded-full object-cover mt-0.5 shrink-0" alt="" />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-medium text-bone">{log.userName}</span>
+                        <LiveUserName userId={log.userId} fallbackName={log.userName} className="text-xs font-medium text-bone" />
                         <span className="text-[9px] font-mono text-bone-dim">{timeAgo(log.createdAt)}</span>
                       </div>
                       <div className="text-sm text-bone mt-0.5">

@@ -1,6 +1,6 @@
 import { db } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { EXERCISE_ONTOLOGY } from './exercise-ontology';
 
 const YT_WEB_KEY = 'AIzaSyA3NioUdgkc2Lh9YBxtl5ZgSctL2-izpII';
@@ -253,52 +253,222 @@ export function scoreVideo(title: string, exerciseName: string): number {
   return score;
 }
 
+// ─── Network helpers ──────────────────────────────────────────
+
+/** The web API key is restricted to the hosting origin. */
+const WEB_REFERER = 'https://apparatus-46b1b.web.app/';
+const ANDROID_PACKAGE = 'com.tms.apparatus';
+/** A "not found" result is retried after this long instead of blocking for days. */
+const NOT_FOUND_RETRY_MS = 6 * 60 * 60 * 1000;
+const FOUND_TTL_MS = 2 * 365 * 24 * 60 * 60 * 1000;
+
+function anySignal(signals: (AbortSignal | undefined)[]): AbortSignal {
+  const list = signals.filter(Boolean) as AbortSignal[];
+  const native = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any;
+  if (typeof native === 'function') return native(list);
+  const ctrl = new AbortController();
+  list.forEach(s => (s.aborted ? ctrl.abort() : s.addEventListener('abort', () => ctrl.abort(), { once: true })));
+  return ctrl.signal;
+}
+
+export function parseYoutubeId(link?: string | null): string | null {
+  if (!link) return null;
+  const trimmed = link.trim();
+  if (/^[\w-]{11}$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(/(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/))([\w-]{11})/i);
+  return match?.[1] ?? null;
+}
+
+const playableCache = new Map<string, boolean>();
+
+/**
+ * Checks that a YouTube video still exists. Removed/invalid IDs return YouTube's
+ * 120px-wide placeholder thumbnail. Slow networks resolve as playable (and are
+ * not cached) so a video is never hidden just because the check timed out.
+ */
+export function isPlayableYoutubeId(id: string, timeoutMs = 5000): Promise<boolean> {
+  if (!/^[\w-]{11}$/.test(id)) return Promise.resolve(false);
+  const known = playableCache.get(id);
+  if (known !== undefined) return Promise.resolve(known);
+  if (typeof Image === 'undefined') return Promise.resolve(true);
+
+  return new Promise(resolve => {
+    let done = false;
+    const img = new Image();
+    const finish = (ok: boolean, cache: boolean) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (cache) playableCache.set(id, ok);
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(true, false), timeoutMs);
+    img.onload = () => finish(img.naturalWidth > 120, true);
+    img.onerror = () => finish(!navigator.onLine, navigator.onLine);
+    img.referrerPolicy = 'no-referrer';
+    img.src = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+  });
+}
+
+interface YtSearchResult {
+  /** False when the request itself failed (network/quota), not "zero results". */
+  ok: boolean;
+  items: { id: string; title: string }[];
+  nextPageToken: string | null;
+}
+
+async function youtubeSearch(q: string, pageToken: string | null, signal?: AbortSignal): Promise<YtSearchResult> {
+  const fail: YtSearchResult = { ok: false, items: [], nextPageToken: null };
+  const params = new URLSearchParams({
+    part: 'snippet',
+    maxResults: '8',
+    q,
+    type: 'video',
+    videoEmbeddable: 'true',
+    videoSyndicated: 'true',
+    order: 'relevance',
+    relevanceLanguage: 'en',
+    safeSearch: 'strict',
+  });
+  if (pageToken) params.set('pageToken', pageToken);
+
+  const attempt = async (key: string, androidHeaders: boolean): Promise<{ status: number; data: any }> => {
+    params.set('key', key);
+    const url = `https://www.googleapis.com/youtube/v3/search?${params.toString()}`;
+    if (Capacitor.isNativePlatform()) {
+      // The WebView's fetch() sends the app's local origin as Referer, which the
+      // key doesn't allow (this is why videos were missing in the APK). Native
+      // HTTP can send the headers the keys are actually restricted to.
+      const res = await CapacitorHttp.get({
+        url,
+        headers: androidHeaders ? { 'X-Android-Package': ANDROID_PACKAGE } : { Referer: WEB_REFERER },
+        connectTimeout: 5000,
+        readTimeout: 5000,
+      });
+      let data = res.data;
+      if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch { data = null; }
+      }
+      return { status: res.status, data };
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    try {
+      const res = await fetch(url, { signal: anySignal([signal, ctrl.signal]) });
+      return { status: res.status, data: res.ok ? await res.json() : null };
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  try {
+    let r = await attempt(YT_WEB_KEY, false);
+    if ((r.status === 403 || r.status === 400) && Capacitor.isNativePlatform()) {
+      r = await attempt(YT_ANDROID_KEY, true);
+    }
+    if (r.status < 200 || r.status >= 300 || !r.data) return fail;
+    const items = (Array.isArray(r.data.items) ? r.data.items : [])
+      .map((it: any) => ({ id: it.id?.videoId as string, title: (it.snippet?.title as string) || '' }))
+      .filter((it: { id: string }) => !!it.id);
+    return { ok: true, items, nextPageToken: r.data.nextPageToken || null };
+  } catch {
+    return fail;
+  }
+}
+
+async function invidiousSearch(q: string, page: number, signal?: AbortSignal): Promise<{ id: string; title: string }[]> {
+  const attempts = INVIDIOUS_INSTANCES.map(async instance => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
+    try {
+      const res = await fetch(
+        `${instance}/api/v1/search?q=${encodeURIComponent(q)}&type=video&sort_by=relevance&page=${page}`,
+        { signal: anySignal([signal, ctrl.signal]) }
+      );
+      if (!res.ok) throw new Error('Bad response');
+      const results = await res.json();
+      if (!Array.isArray(results) || results.length === 0) throw new Error('No results');
+      return results
+        .filter((it: any) => it.videoId)
+        .map((it: any) => ({ id: it.videoId as string, title: (it.title as string) || '' }));
+    } finally {
+      clearTimeout(timer);
+    }
+  });
+  try {
+    return await Promise.any(attempts);
+  } catch {
+    return [];
+  }
+}
+
+/** Ranks search hits by title relevance, dropping clearly unrelated ones. */
+function rankCandidates(items: { id: string; title: string }[], exerciseName: string, exclude: Set<string>) {
+  return items
+    .filter(it => !exclude.has(it.id))
+    .map(it => ({ ...it, score: scoreVideo(it.title, exerciseName) }))
+    .filter(it => it.score > -100)
+    .sort((a, b) => b.score - a.score);
+}
+
+async function readMapping(norm: string): Promise<any | null> {
+  try {
+    const snap = await getDoc(doc(db, 'exerciseVideoMappings', norm));
+    return snap.exists() ? snap.data() : null;
+  } catch (err) {
+    console.warn('Failed to read video cache:', err);
+    return null;
+  }
+}
+
+function searchQueryFor(exerciseName: string) {
+  return `${cleanExerciseName(exerciseName) || exerciseName} exercise form tutorial`;
+}
+
+/**
+ * Resolves a playable technique video for an exercise. Every candidate is
+ * checked for availability before being returned, so a dead curated/cached ID
+ * falls through to the next source instead of leaving the player empty.
+ */
 export async function resolveExerciseVideo(exerciseName: string, directYtLink?: string, signal?: AbortSignal): Promise<string | null> {
   if (signal?.aborted) return null;
 
-  // 1. Check direct link
-  if (directYtLink) {
-    const match = directYtLink.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/i);
-    if (match?.[1]) return match[1];
-  }
+  const tried = new Set<string>();
+  const playable = async (id?: string | null) => {
+    if (!id || tried.has(id) || signal?.aborted) return false;
+    tried.add(id);
+    return isPlayableYoutubeId(id);
+  };
+
+  // 1. Direct link set on the exercise
+  const direct = parseYoutubeId(directYtLink);
+  if (direct && await playable(direct)) return direct;
 
   const norm = normalizeExerciseName(exerciseName);
-  const curated = findCuratedVideo(exerciseName);
+  const cached = await readMapping(norm);
+  const disliked = new Set<string>(Array.isArray(cached?.dislikedVideoIds) ? cached.dislikedVideoIds : []);
+  const cachedId: string | null = cached?.status === 'found' && cached.expiresAt > Date.now() ? cached.youtubeId : null;
 
-  if (signal?.aborted) return null;
+  // 2. A video the user explicitly picked via "change video"
+  const userPinned = cached?.source === 'user-refreshed' || disliked.size > 0;
+  if (userPinned && await playable(cachedId)) return cachedId;
 
-  // 2. Check Firestore Cache
-  try {
-    const docRef = doc(db, 'exerciseVideoMappings', norm);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      if (data.expiresAt > Date.now()) {
-        // If explicitly refreshed or customized by user, respect user choice
-        if (data.source === 'user-refreshed' || (Array.isArray(data.dislikedVideoIds) && data.dislikedVideoIds.length > 0)) {
-          return data.status === 'found' ? data.youtubeId : null;
-        }
-        // If we have a verified curated video, use it over unvetted search results
-        if (curated) {
-          return curated;
-        }
-        return data.status === 'found' ? data.youtubeId : null;
-      }
-    }
-  } catch (err) {
-    console.warn("Failed to check cache:", err);
+  // 3. Curated catalogue
+  for (const id of getAllCuratedVideos(exerciseName)) {
+    if (disliked.has(id)) continue;
+    if (await playable(id)) return id;
   }
 
+  // 4. Previously found search result
+  if (await playable(cachedId)) return cachedId;
+
   if (signal?.aborted) return null;
 
-  // 3. Check Curated Catalog (instant high quality match)
-  if (curated) {
-    return curated;
+  // Don't hammer the API if a search came back empty very recently.
+  if (cached?.status === 'not_found' && Date.now() - (cached.updatedAt || 0) < NOT_FOUND_RETRY_MS) {
+    return null;
   }
 
-  if (signal?.aborted) return null;
-  
-  // Helper to cache success and return video
   const cacheAndReturn = (videoId: string, title: string, source: string, nextPageToken?: string | null) => {
     setDoc(doc(db, 'exerciseVideoMappings', norm), {
       youtubeId: videoId,
@@ -307,157 +477,40 @@ export async function resolveExerciseVideo(exerciseName: string, directYtLink?: 
       status: 'found',
       source,
       nextPageToken: nextPageToken || null,
-      dislikedVideoIds: [],
+      dislikedVideoIds: Array.from(disliked),
       updatedAt: Date.now(),
-      expiresAt: Date.now() + 2 * 365 * 24 * 60 * 60 * 1000 
+      expiresAt: Date.now() + FOUND_TTL_MS
     }, { merge: true }).catch(console.warn);
     return videoId;
   };
 
-  const searchQuery = `${cleanExerciseName(exerciseName) || exerciseName} exercise form tutorial`;
+  const searchQuery = searchQueryFor(exerciseName);
 
-  // 4. Try YouTube Data API (fetching top 5 with relevance order)
-  try {
-    const apiKey = Capacitor.isNativePlatform() ? YT_ANDROID_KEY : YT_WEB_KEY;
-    const params = new URLSearchParams({
-      part: 'snippet',
-      maxResults: '5',
-      q: searchQuery,
-      type: 'video',
-      videoEmbeddable: 'true',
-      videoSyndicated: 'true',
-      order: 'relevance',
-      relevanceLanguage: 'en',
-      key: apiKey,
-    });
-    
-    const ytAbort = new AbortController();
-    const timeout = setTimeout(() => ytAbort.abort(), 4000);
-    
-    const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`, { 
-      signal: signal ? AbortSignal.any([signal, ytAbort.signal]) : ytAbort.signal 
-    });
-    clearTimeout(timeout);
-    
-    if (res.ok) {
-      const data = await res.json();
-      if (data.items && data.items.length > 0) {
-        let bestVideo: string | null = null;
-        let maxScore = -999;
-        let bestTitle = '';
-
-        data.items.forEach((item: any) => {
-          const vId = item.id?.videoId;
-          if (!vId) return;
-          const score = scoreVideo(item.snippet?.title || '', exerciseName);
-          if (score > maxScore) {
-            maxScore = score;
-            bestVideo = vId;
-            bestTitle = item.snippet?.title || '';
-          }
-        });
-
-        if (bestVideo && maxScore > -100) {
-          return cacheAndReturn(bestVideo, bestTitle, 'youtube', data.nextPageToken);
-        }
-        // No item scored well enough — fall through to the Invidious fallback below
-        // instead of giving up, so a weak/no match doesn't hide the video entirely.
-      }
-      // Note: don't cache a "not_found" result yet — the Invidious fallback below
-      // still gets a chance to find a video before we give up for real.
-    } else if (res.status === 403 || res.status === 400) {
-      // Quota exceeded or key restricted for this platform — retry once with the other key.
-      const altKey = apiKey === YT_ANDROID_KEY ? YT_WEB_KEY : YT_ANDROID_KEY;
-      try {
-        const altParams = new URLSearchParams(params);
-        altParams.set('key', altKey);
-        const altRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${altParams.toString()}`, { signal });
-        if (altRes.ok) {
-          const altData = await altRes.json();
-          if (altData.items && altData.items.length > 0) {
-            let bestVideo: string | null = null;
-            let maxScore = -999;
-            let bestTitle = '';
-            altData.items.forEach((item: any) => {
-              const vId = item.id?.videoId;
-              if (!vId) return;
-              const score = scoreVideo(item.snippet?.title || '', exerciseName);
-              if (score > maxScore) {
-                maxScore = score;
-                bestVideo = vId;
-                bestTitle = item.snippet?.title || '';
-              }
-            });
-            if (bestVideo && maxScore > -100) {
-              return cacheAndReturn(bestVideo, bestTitle, 'youtube', altData.nextPageToken);
-            }
-          }
-        }
-      } catch (altErr) {
-        console.warn('Alternate YouTube API key also failed:', altErr);
-      }
-    }
-  } catch (err) {
-    console.warn("YouTube API request failed, falling back:", err);
+  // 5. YouTube Data API
+  const yt = await youtubeSearch(searchQuery, null, signal);
+  for (const c of rankCandidates(yt.items, exerciseName, disliked)) {
+    if (await playable(c.id)) return cacheAndReturn(c.id, c.title, 'youtube', yt.nextPageToken);
   }
 
   if (signal?.aborted) return null;
 
-  // 5. Fallback to Invidious
-  const fallbackPromises = INVIDIOUS_INSTANCES.map(async (instance) => {
-    const invAbort = new AbortController();
-    const timeout = setTimeout(() => invAbort.abort(), 6000);
-    
-    try {
-      const res = await fetch(
-        `${instance}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video&sort_by=relevance`,
-        { signal: signal ? AbortSignal.any([signal, invAbort.signal]) : invAbort.signal }
-      );
-      if (!res.ok) throw new Error('Bad response');
-      const results = await res.json();
-      
-      if (results && results.length > 0) {
-        let bestVideo: string | null = null;
-        let maxScore = -999;
-        let bestTitle = '';
-        
-        results.slice(0, 5).forEach((item: any) => {
-          if (!item.videoId) return;
-          const score = scoreVideo(item.title || '', exerciseName);
-          if (score > maxScore) {
-            maxScore = score;
-            bestVideo = item.videoId;
-            bestTitle = item.title;
-          }
-        });
-        
-        if (bestVideo && maxScore > -100) {
-          return { videoId: bestVideo, title: bestTitle };
-        }
-      }
-      throw new Error('No results');
-    } finally {
-      clearTimeout(timeout);
-    }
-  });
-
-  try {
-    const fastestResult = await Promise.any(fallbackPromises);
-    if (fastestResult) {
-      return cacheAndReturn(fastestResult.videoId, fastestResult.title, 'invidious');
-    }
-  } catch (e) {
-    console.warn("All Invidious fallback instances failed.");
+  // 6. Invidious fallback
+  const inv = await invidiousSearch(searchQuery, 1, signal);
+  for (const c of rankCandidates(inv.slice(0, 8), exerciseName, disliked)) {
+    if (await playable(c.id)) return cacheAndReturn(c.id, c.title, 'invidious');
   }
 
-  // Nothing found anywhere — cache the miss briefly so we don't hammer the APIs again immediately.
-  setDoc(doc(db, 'exerciseVideoMappings', norm), {
-    youtubeId: null,
-    exerciseName: norm,
-    status: 'not_found',
-    updatedAt: Date.now(),
-    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
-  }, { merge: true }).catch(console.warn);
+  // Only remember a miss when the search actually ran - a network/quota error
+  // must not hide the video for every user.
+  if (yt.ok || inv.length > 0) {
+    setDoc(doc(db, 'exerciseVideoMappings', norm), {
+      youtubeId: null,
+      exerciseName: norm,
+      status: 'not_found',
+      updatedAt: Date.now(),
+      expiresAt: Date.now() + NOT_FOUND_RETRY_MS
+    }, { merge: true }).catch(console.warn);
+  }
 
   return null;
 }
@@ -476,238 +529,89 @@ export async function refreshExerciseVideo(
   if (signal?.aborted) return null;
 
   const norm = normalizeExerciseName(exerciseName);
+  const cached = await readMapping(norm);
+  const disliked = new Set<string>(Array.isArray(cached?.dislikedVideoIds) ? cached.dislikedVideoIds : []);
+  const existingPageToken: string | null = cached?.nextPageToken || null;
+  const pageNumber: number = typeof cached?.pageNumber === 'number' ? cached.pageNumber : 1;
 
-  // 1. Fetch current Firestore cache document for this exercise to get previous state
-  let dislikedList: string[] = [];
-  let existingPageToken: string | null = null;
-  let pageNumber = 1;
+  if (currentVideoId) disliked.add(currentVideoId);
+  const direct = parseYoutubeId(directYtLink);
+  if (direct && direct !== currentVideoId) disliked.delete(direct);
 
-  try {
-    const docRef = doc(db, 'exerciseVideoMappings', norm);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data();
-      if (Array.isArray(data.dislikedVideoIds)) {
-        dislikedList = [...data.dislikedVideoIds];
-      }
-      if (data.nextPageToken) {
-        existingPageToken = data.nextPageToken;
-      }
-      if (typeof data.pageNumber === 'number') {
-        pageNumber = data.pageNumber;
-      }
-    }
-  } catch (err) {
-    console.warn("Failed to read existing cache before refresh:", err);
-  }
-
-  // Add current video to disliked list
-  if (currentVideoId && !dislikedList.includes(currentVideoId)) {
-    dislikedList.push(currentVideoId);
-  }
-
-  const apiKey = Capacitor.isNativePlatform() ? YT_ANDROID_KEY : YT_WEB_KEY;
   const cleanedName = cleanExerciseName(exerciseName) || exerciseName;
-  const searchQuery = `${cleanedName} exercise form tutorial`;
+  const searchQuery = searchQueryFor(exerciseName);
 
-  // Helper to save to Firestore and return
-  const saveAndReturn = async (newVideoId: string, title: string, source: string, nextPageToken?: string | null, newPageNum?: number) => {
-    const updatedDisliked = Array.from(new Set(dislikedList));
-    if (!updatedDisliked.includes(newVideoId)) {
-      // do not add newVideoId to disliked yet, only when refreshed again
-    }
+  const tried = new Set<string>();
+  const playable = async (id?: string | null) => {
+    if (!id || id === currentVideoId || tried.has(id) || signal?.aborted) return false;
+    tried.add(id);
+    return isPlayableYoutubeId(id);
+  };
+
+  const saveAndReturn = async (newVideoId: string, title: string, nextPageToken?: string | null, newPageNum?: number) => {
     try {
       await setDoc(doc(db, 'exerciseVideoMappings', norm), {
         youtubeId: newVideoId,
         exerciseName: norm,
-        title: title,
+        title,
         status: 'found',
-        source,
-        dislikedVideoIds: updatedDisliked,
+        source: 'user-refreshed',
+        dislikedVideoIds: Array.from(disliked),
         nextPageToken: nextPageToken || null,
         pageNumber: newPageNum || pageNumber + 1,
         updatedAt: Date.now(),
-        expiresAt: Date.now() + 2 * 365 * 24 * 60 * 60 * 1000 // 2 years TTL
+        expiresAt: Date.now() + FOUND_TTL_MS
       }, { merge: true });
     } catch (e) {
-      console.warn("Failed to write refreshed video to Firestore:", e);
+      console.warn('Failed to write refreshed video to Firestore:', e);
     }
     return { youtubeId: newVideoId, title };
   };
 
-  // 2. CHECK CURATED ALTERNATIVES FIRST!
-  // If we have verified curated alternative videos that haven't been shown yet, return next one instantly!
+  // 1. Unused curated alternatives (skipping any that no longer exist)
   const curatedVideos = getAllCuratedVideos(exerciseName);
-  if (curatedVideos.length > 0) {
-    const unusedCurated = curatedVideos.find(id => !dislikedList.includes(id));
-    if (unusedCurated) {
-      return await saveAndReturn(unusedCurated, `${cleanedName} technique demonstration`, 'curated-alternate');
-    }
+  for (const id of curatedVideos) {
+    if (disliked.has(id)) continue;
+    if (await playable(id)) return saveAndReturn(id, `${cleanedName} technique demonstration`);
+    disliked.add(id);
   }
 
-  // 3. Query YouTube Data API
-  try {
-    const searchYouTube = async (token?: string | null, keyOverride?: string) => {
-      const params = new URLSearchParams({
-        part: 'snippet',
-        maxResults: '5',
-        q: searchQuery,
-        type: 'video',
-        videoEmbeddable: 'true',
-        videoSyndicated: 'true',
-        order: 'relevance',
-        relevanceLanguage: 'en',
-        key: keyOverride || apiKey,
-      });
-      if (token) {
-        params.set('pageToken', token);
+  // 2. YouTube search - continue from the stored page, then from the top.
+  const tokens: (string | null)[] = existingPageToken ? [existingPageToken, null] : [null];
+  for (const start of tokens) {
+    let token = start;
+    for (let page = 0; page < 2; page++) {
+      if (signal?.aborted) return null;
+      const yt = await youtubeSearch(searchQuery, token, signal);
+      if (!yt.ok) break;
+      for (const c of rankCandidates(yt.items, exerciseName, disliked)) {
+        if (await playable(c.id)) return saveAndReturn(c.id, c.title, yt.nextPageToken);
+        disliked.add(c.id);
       }
-
-      const ytAbort = new AbortController();
-      const timeout = setTimeout(() => ytAbort.abort(), 4000);
-      const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params.toString()}`, {
-        signal: signal ? AbortSignal.any([signal, ytAbort.signal]) : ytAbort.signal
-      });
-      clearTimeout(timeout);
-
-      if (!res.ok) {
-        // Quota exceeded or key restricted — retry once with the other platform's key.
-        if ((res.status === 403 || res.status === 400) && !keyOverride) {
-          const altKey = apiKey === YT_ANDROID_KEY ? YT_WEB_KEY : YT_ANDROID_KEY;
-          return await searchYouTube(token, altKey);
-        }
-        return null;
-      }
-      return await res.json();
-    };
-
-    let ytData = await searchYouTube(existingPageToken);
-
-    if ((!ytData || !ytData.items || ytData.items.length === 0) && existingPageToken) {
-      ytData = await searchYouTube(null);
+      if (!yt.nextPageToken) break;
+      token = yt.nextPageToken;
     }
-
-    if (ytData && ytData.items && ytData.items.length > 0) {
-      const candidateItems = ytData.items.filter((item: any) => {
-        const vId = item.id?.videoId;
-        return vId && !dislikedList.includes(vId);
-      });
-
-      if (candidateItems.length > 0) {
-        let bestVideo = candidateItems[0].id.videoId;
-        let maxScore = -999;
-        let bestTitle = candidateItems[0].snippet?.title || '';
-
-        candidateItems.forEach((item: any) => {
-          const score = scoreVideo(item.snippet?.title || '', exerciseName);
-          if (score > maxScore) {
-            maxScore = score;
-            bestVideo = item.id.videoId;
-            bestTitle = item.snippet?.title || '';
-          }
-        });
-
-        if (bestVideo && maxScore > -100) {
-          return await saveAndReturn(bestVideo, bestTitle, 'youtube', ytData.nextPageToken);
-        }
-      } else if (ytData.nextPageToken) {
-        const nextPageData = await searchYouTube(ytData.nextPageToken);
-        if (nextPageData && nextPageData.items && nextPageData.items.length > 0) {
-          const nextCandidates = nextPageData.items.filter((item: any) => {
-            const vId = item.id?.videoId;
-            return vId && !dislikedList.includes(vId);
-          });
-          if (nextCandidates.length > 0) {
-            let bestVideo = nextCandidates[0].id.videoId;
-            let maxScore = -999;
-            let bestTitle = nextCandidates[0].snippet?.title || '';
-            nextCandidates.forEach((item: any) => {
-              const score = scoreVideo(item.snippet?.title || '', exerciseName);
-              if (score > maxScore) {
-                maxScore = score;
-                bestVideo = item.id.videoId;
-                bestTitle = item.snippet?.title || '';
-              }
-            });
-            if (bestVideo && maxScore > -100) {
-              return await saveAndReturn(bestVideo, bestTitle, 'youtube', nextPageData.nextPageToken);
-            }
-          }
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("YouTube API refresh search failed, falling back:", err);
   }
 
   if (signal?.aborted) return null;
 
-  // 4. Fallback to Invidious
+  // 3. Invidious fallback
   const nextPage = pageNumber + 1;
-  const fallbackPromises = INVIDIOUS_INSTANCES.map(async (instance) => {
-    const invAbort = new AbortController();
-    const timeout = setTimeout(() => invAbort.abort(), 6000);
-    try {
-      const res = await fetch(
-        `${instance}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video&sort_by=relevance&page=${nextPage}`,
-        { signal: signal ? AbortSignal.any([signal, invAbort.signal]) : invAbort.signal }
-      );
-      if (!res.ok) throw new Error('Bad response');
-      const results = await res.json();
-      if (results && results.length > 0) {
-        const top5 = results.slice(0, 5);
-        const candidates = top5.filter((item: any) => item.videoId && !dislikedList.includes(item.videoId));
-        if (candidates.length > 0) {
-          let bestVideo = candidates[0].videoId;
-          let maxScore = -999;
-          let bestTitle = candidates[0].title || '';
-          candidates.forEach((item: any) => {
-            const score = scoreVideo(item.title || '', exerciseName);
-            if (score > maxScore) {
-              maxScore = score;
-              bestVideo = item.videoId;
-              bestTitle = item.title || '';
-            }
-          });
-          if (bestVideo && maxScore > -100) {
-            return { videoId: bestVideo, title: bestTitle, page: nextPage };
-          }
-        }
-      }
-      throw new Error('No new candidates on this page');
-    } finally {
-      clearTimeout(timeout);
-    }
-  });
-
-  try {
-    const fastestResult = await Promise.any(fallbackPromises);
-    if (fastestResult) {
-      return await saveAndReturn(fastestResult.videoId, fastestResult.title, 'invidious', null, fastestResult.page);
-    }
-  } catch (e) {
-    console.warn("Invidious fallback refresh instances failed or no new candidates.");
+  const inv = await invidiousSearch(searchQuery, nextPage, signal);
+  for (const c of rankCandidates(inv.slice(0, 8), exerciseName, disliked)) {
+    if (await playable(c.id)) return saveAndReturn(c.id, c.title, null, nextPage);
   }
 
-  // 5. Guaranteed Cycle Fallback: If we have curated videos, cycle back to the other curated video!
-  if (curatedVideos.length > 0) {
-    const cycleVid = curatedVideos.find(id => id !== currentVideoId) || curatedVideos[0];
-    if (cycleVid && cycleVid !== currentVideoId) {
-      dislikedList = currentVideoId ? [currentVideoId] : [];
-      return await saveAndReturn(cycleVid, `${cleanedName} technique demonstration`, 'curated-cycle', null, 1);
-    }
-  }
-
-  // 6. Final Cycle fallback for uncurated exercises
-  if (dislikedList.length > 1) {
-    dislikedList = currentVideoId ? [currentVideoId] : [];
-    try {
-      const fallbackVid = await resolveExerciseVideo(exerciseName, directYtLink, signal);
-      if (fallbackVid && fallbackVid !== currentVideoId) {
-        return await saveAndReturn(fallbackVid, `${cleanedName} demonstration`, 'youtube-cycle', null, 1);
-      }
-    } catch (cycleErr) {
-      console.warn("Cycle refresh failed:", cycleErr);
+  // 4. Every alternative has been seen - cycle back through earlier picks
+  //    (direct link, curated, previously skipped) so the button always works.
+  const cycle = [direct, ...curatedVideos, ...Array.from(disliked)];
+  for (const id of cycle) {
+    if (!id || id === currentVideoId) continue;
+    tried.delete(id);
+    if (await playable(id)) {
+      disliked.clear();
+      if (currentVideoId) disliked.add(currentVideoId);
+      return saveAndReturn(id, `${cleanedName} demonstration`, null, 1);
     }
   }
 

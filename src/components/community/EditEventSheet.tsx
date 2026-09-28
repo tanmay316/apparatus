@@ -140,7 +140,7 @@ export function EditEventSheet({ event, isOpen, onClose }: EditEventSheetProps) 
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[700] flex flex-col justify-end">
+    <div className="cx pro-scope fixed inset-0 z-[700] flex flex-col justify-end">
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}

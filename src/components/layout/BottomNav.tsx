@@ -79,33 +79,34 @@ export function BottomNav() {
   return (
     <>
       <style>{`
-        .nav-tab-icon-active { color: #5d2a1a; }
-        .dark .nav-tab-icon-active { color: #ffffff; }
-        .nav-tab-icon-inactive { color: rgba(93, 42, 26, 0.7); }
-        .dark .nav-tab-icon-inactive { color: rgba(255, 255, 255, 0.6); }
+        .bottom-app-nav {
+          background: #ffffff;
+          border: 1px solid rgba(23, 25, 28, 0.07);
+          box-shadow: 0 12px 32px -10px rgba(23, 25, 28, 0.22), 0 2px 8px rgba(23, 25, 28, 0.06);
+        }
+        .bn-tab { color: #7a7e88; -webkit-tap-highlight-color: transparent; }
+        .bn-tab .bn-pill { transition: background-color .2s ease, transform .2s ease; }
+        .bn-tab[aria-current='page'] { color: rgb(var(--color-sienna)); }
+        .bn-tab[aria-current='page'] .bn-pill { background: rgb(var(--color-sienna) / 0.1); }
+        .bn-tab:active .bn-pill { transform: scale(0.92); }
+        [data-theme='dark'] .bn-tab { color: #b99a8a; }
+        [data-theme='dark'] .bn-tab[aria-current='page'] { color: #ffd1b5; }
+        [data-theme='dark'] .bn-tab[aria-current='page'] .bn-pill { background: rgba(239, 173, 128, 0.16); }
 
         @keyframes pulseActiveGlow {
-          0%, 100% {
-            box-shadow: 0 0 15px rgba(16, 185, 129, 0.7), 0 0 30px rgba(16, 185, 129, 0.3);
-            transform: scale(1);
-          }
-          50% {
-            box-shadow: 0 0 25px rgba(16, 185, 129, 1), 0 0 45px rgba(16, 185, 129, 0.5);
-            transform: scale(1.05);
-          }
+          0%, 100% { box-shadow: 0 0 0 0 rgba(4, 120, 87, 0.5); }
+          50% { box-shadow: 0 0 0 6px rgba(4, 120, 87, 0); }
         }
         .animate-active-glow {
           animation: pulseActiveGlow 2s infinite ease-in-out;
         }
       `}</style>
-      <div className="bottom-nav-shell fixed bottom-[calc(env(safe-area-inset-bottom,0px)+12px)] left-1/2 -translate-x-1/2 w-[92%] max-w-[420px] z-[500]">
+      <div className="bottom-nav-shell fixed bottom-[calc(env(safe-area-inset-bottom,0px)+10px)] left-1/2 -translate-x-1/2 w-[calc(100%-24px)] max-w-[440px] z-[500]">
         <nav
-          className="bottom-app-nav bg-gradient-to-r from-[#5d2a1a]/10 to-[#d9a441]/10 dark:from-ink-2/90 dark:to-ink/90 backdrop-blur-xl border border-[#5d2a1a]/20 dark:border-white/20 rounded-[32px] shadow-2xl p-2"
-          style={
-            { "--component-active-color": "var(--sienna)" } as React.CSSProperties
-          }
+          className="bottom-app-nav rounded-[26px] px-1.5 py-1.5"
+          aria-label="Primary"
         >
-          <div className="flex items-center justify-between h-[64px] relative gap-1">
+          <div className="flex items-center justify-between h-[60px] relative">
             {TABS.map((tab, index) => {
               const isAction = tab.id === "action";
               const isActive = index === activeIndex;
@@ -116,51 +117,37 @@ export function BottomNav() {
                   <div key={tab.id} className="flex-1 flex items-center justify-center h-full">
                     <button
                       onClick={() => setSheetOpen(true)}
-                      className={`relative flex flex-col items-center justify-center w-full h-full rounded-[24px] transition-all duration-300 active:scale-95 border border-transparent ${sheetOpen
-                          ? "bg-black/10 dark:bg-white/20 border-black/10 dark:border-white/40"
-                          : "hover:bg-black/5 dark:hover:bg-white/10"
-                        }`}
+                      aria-label="Start activity"
+                      className="relative flex items-center justify-center w-full h-full active:scale-95 transition-transform"
                     >
-                      {hasActiveSession ? (
-                        <div className="relative flex items-center justify-center">
-                          {/* Vibrant Animated Pulse Glow */}
-                          <span className="absolute -inset-2 rounded-full bg-emerald-500/40 blur-md animate-pulse"></span>
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-sienna to-emerald-600 flex items-center justify-center text-white shadow-xl relative z-10 border-2 border-emerald-400 animate-active-glow">
-                            <IconComponent size={20} strokeWidth={2.5} />
-                          </div>
-                          {/* Live Radar Ping */}
-                          <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 z-20">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-85"></span>
-                            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white dark:border-ink"></span>
+                      <span
+                        className={`relative w-12 h-12 rounded-full flex items-center justify-center ${hasActiveSession ? 'bg-emerald-700 text-white animate-active-glow' : 'bg-sienna'}`}
+                        style={hasActiveSession ? undefined : { boxShadow: '0 6px 16px -4px rgb(var(--color-sienna) / 0.55)' }}
+                      >
+                        <IconComponent size={21} strokeWidth={2.4} />
+                        {hasActiveSession && (
+                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-70"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-600 border-2 border-white"></span>
                           </span>
-                        </div>
-                      ) : (
-                        <div className="w-10 h-10 rounded-full bg-sienna flex items-center justify-center text-white shadow-lg">
-                          <IconComponent size={20} strokeWidth={2.5} />
-                        </div>
-                      )}
+                        )}
+                      </span>
                     </button>
                   </div>
                 );
               }
 
               return (
-                <div key={tab.id} className="flex-1 flex items-center justify-center h-full">
+                <div key={tab.id} className="flex-1 flex items-center justify-center h-full min-w-0">
                   <Link
                     to={tab.path}
-                    className={`relative flex flex-col items-center justify-center w-full h-full rounded-[28px] transition-all duration-300 ease-out border ${isActive
-                      ? "bg-white/40 dark:bg-white/15 border-sienna dark:border-white/30 shadow-[0_2px_10px_rgba(0,0,0,0.05)] dark:shadow-[0_0_15px_rgba(255,255,255,0.1)] nav-tab-icon-active"
-                      : "bg-transparent border-transparent hover:bg-black/5 dark:hover:bg-white/5 nav-tab-icon-inactive"
-                      }`}
+                    aria-current={isActive ? 'page' : undefined}
+                    className="bn-tab flex flex-col items-center justify-center gap-1 w-full h-full min-w-0"
                   >
-                    <IconComponent
-                      size={20}
-                      strokeWidth={isActive ? 2.5 : 2}
-                      className="transition-all duration-300 mb-0.5"
-                    />
-                    <span
-                      className="text-[10px] font-sans font-medium tracking-wide transition-all duration-300"
-                    >
+                    <span className="bn-pill flex items-center justify-center w-14 h-8 rounded-full">
+                      <IconComponent size={21} strokeWidth={isActive ? 2.4 : 2} />
+                    </span>
+                    <span className={`text-[10.5px] leading-none tracking-tight truncate ${isActive ? 'font-semibold' : 'font-medium'}`}>
                       {tab.label}
                     </span>
                   </Link>
@@ -226,16 +213,14 @@ export function BottomNav() {
                       {isThisActive && (
                         <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-emerald-500/20 rounded-full blur-xl pointer-events-none" />
                       )}
-                      <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-transform ${
-                        isThisActive
-                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]"
-                          : "bg-orange-500/10 text-orange-500 group-hover:scale-110"
+                      <div className={`relative w-8 h-12 flex items-center justify-center shrink-0 ${
+                        isThisActive ? "text-emerald-500" : "text-orange-500"
                       }`}>
                         <Dumbbell size={22} className={isThisActive ? "animate-pulse" : ""} />
                         {isThisActive && (
-                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white border border-emerald-600"></span>
+                          <span className="absolute top-2 -right-1 flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                           </span>
                         )}
                       </div>
@@ -278,16 +263,14 @@ export function BottomNav() {
                       {isThisActive && (
                         <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-emerald-500/20 rounded-full blur-xl pointer-events-none" />
                       )}
-                      <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-transform ${
-                        isThisActive
-                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.5)]"
-                          : "bg-blue-500/10 text-blue-500 group-hover:scale-110"
+                      <div className={`relative w-8 h-12 flex items-center justify-center shrink-0 ${
+                        isThisActive ? "text-emerald-500" : "text-blue-500"
                       }`}>
                         <Zap size={22} className={isThisActive ? "animate-pulse" : ""} />
                         {isThisActive && (
-                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white border border-emerald-600"></span>
+                          <span className="absolute top-2 -right-1 flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                           </span>
                         )}
                       </div>
@@ -330,16 +313,14 @@ export function BottomNav() {
                       {isThisActive && (
                         <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-emerald-500/20 rounded-full blur-xl pointer-events-none" />
                       )}
-                      <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-transform ${
-                        isThisActive
-                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(10,185,129,0.5)]"
-                          : "bg-emerald-500/10 text-emerald-500 group-hover:scale-110"
+                      <div className={`relative w-8 h-12 flex items-center justify-center shrink-0 ${
+                        isThisActive ? "text-emerald-500" : "text-emerald-500"
                       }`}>
                         <Footprints size={22} className={isThisActive ? "animate-pulse" : ""} />
                         {isThisActive && (
-                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white border border-emerald-600"></span>
+                          <span className="absolute top-2 -right-1 flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                           </span>
                         )}
                       </div>
@@ -382,16 +363,14 @@ export function BottomNav() {
                       {isThisActive && (
                         <div className="absolute -right-6 -bottom-6 w-28 h-28 bg-emerald-500/20 rounded-full blur-xl pointer-events-none" />
                       )}
-                      <div className={`relative w-12 h-12 rounded-full flex items-center justify-center shrink-0 transition-transform ${
-                        isThisActive
-                          ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(10,185,129,0.5)]"
-                          : "bg-purple-500/10 text-purple-500 group-hover:scale-110"
+                      <div className={`relative w-8 h-12 flex items-center justify-center shrink-0 ${
+                        isThisActive ? "text-emerald-500" : "text-purple-500"
                       }`}>
                         <Bike size={22} className={isThisActive ? "animate-pulse" : ""} />
                         {isThisActive && (
-                          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-white border border-emerald-600"></span>
+                          <span className="absolute top-2 -right-1 flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                           </span>
                         )}
                       </div>

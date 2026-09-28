@@ -20,20 +20,20 @@ class WorkoutDay(BaseModel):
 
 class WorkoutPlanRequest(BaseModel):
     # Core
-    goal: str
-    days: int
-    equipment: str
-    customInfo: str = ""
+    goal: str = Field(..., max_length=200)
+    days: int = Field(..., ge=1, le=7)
+    equipment: str = Field(..., max_length=300)
+    customInfo: str = Field("", max_length=2000)
     
     # Extended user context (all optional for backwards compat)
-    experience: str = ""          # beginner / intermediate / advanced
-    gender: str = ""
-    age: int = 0
-    weight: float = 0
-    sessionDuration: int = 60     # minutes
-    injuries: str = ""
-    trainingStyle: str = ""       # bodybuilding, powerlifting, calisthenics, hybrid
-    fitnessGoal: str = ""         # from user profile
+    experience: str = Field("", max_length=40)
+    gender: str = Field("", max_length=40)
+    age: int = Field(0, ge=0, le=120)
+    weight: float = Field(0, ge=0, le=500)
+    sessionDuration: int = Field(60, ge=10, le=300)
+    injuries: str = Field("", max_length=500)
+    trainingStyle: str = Field("", max_length=60)
+    fitnessGoal: str = Field("", max_length=120)
 
 class WorkoutPlanResponse(BaseModel):
     title: str

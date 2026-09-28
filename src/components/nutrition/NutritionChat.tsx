@@ -29,19 +29,20 @@ interface NutritionChatProps {
 function ReasoningCard({ reasoning }: { reasoning: string }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="mb-2 rounded-2xl bg-sienna/10 border border-sienna/20 overflow-hidden text-xs">
+    <div className="rounded-2xl overflow-hidden text-[12px]" style={{ background: 'var(--dx-card-2)' }}>
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-3 py-2 text-sienna font-medium hover:bg-sienna/10 transition-colors"
+        aria-expanded={expanded}
+        className="w-full flex items-center justify-between px-3 py-2 font-semibold dx-muted"
       >
         <div className="flex items-center gap-1.5">
-          <Brain size={14} className="animate-pulse" />
-          <span>Thought Process (Reasoning)</span>
+          <Brain size={14} />
+          <span>Thought process</span>
         </div>
         {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
       </button>
       {expanded && (
-        <div className="px-3 pb-3 pt-1 text-bone-dim text-[11px] font-mono leading-relaxed whitespace-pre-wrap border-t border-sienna/15 bg-black/20">
+        <div className="px-3 pb-3 pt-2 dx-muted text-[11.5px] leading-relaxed whitespace-pre-wrap border-t" style={{ borderColor: 'var(--dx-border)' }}>
           {reasoning}
         </div>
       )}
@@ -479,47 +480,41 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
-          className="fixed inset-0 h-[100dvh] z-[999] flex flex-col bg-ink/70 backdrop-blur-2xl sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[420px] sm:h-[600px] sm:max-h-[calc(100vh-120px)] sm:rounded-3xl sm:border sm:border-white/10 sm:shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden"
+          transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+          className="dx pro-scope fixed inset-0 h-[100dvh] z-[999] flex flex-col sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[420px] sm:h-[640px] sm:max-h-[calc(100vh-120px)] sm:rounded-3xl overflow-hidden sm:shadow-[0_24px_64px_-24px_rgba(16,24,40,0.45)]"
+          style={{ background: 'var(--dx-canvas)', border: '1px solid var(--dx-border)' }}
         >
-          {/* Subtle Ambient Background Gradients */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full blur-[80px] pointer-events-none" />
-          <div className="absolute bottom-1/4 -left-1/4 w-64 h-64 bg-sienna/20 rounded-full blur-[80px] pointer-events-none" />
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 bg-white/[0.03] border-b border-white/[0.05] relative z-10">
-        <div className="flex items-center gap-3 relative z-10">
-          <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-sienna to-orange-500 p-[1px]">
-            <div className="w-full h-full rounded-2xl bg-ink-2 flex items-center justify-center">
-              <Sparkles size={18} className="text-sienna" />
-            </div>
+      <div className="flex items-center justify-between gap-2 px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] sm:pt-3 relative z-10 border-b" style={{ background: 'var(--dx-card)', borderColor: 'var(--dx-border)' }}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' }}>
+            <Sparkles size={17} />
           </div>
-          <div>
-            <h3 className="text-sm font-display font-semibold text-bone">Astra AI</h3>
-            <div className="text-[10px] text-bone-dim flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-              Ready to help
+          <div className="min-w-0">
+            <h3 className="text-[15px] font-semibold leading-tight">Astra AI</h3>
+            <div className="text-[11.5px] dx-muted flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--dx-success)' }} />
+              Nutrition coach
             </div>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center gap-1 relative z-10">
-          <button 
-            onClick={handleNewChat} 
-            title="New Chat"
-            className="px-2.5 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/10 text-bone border border-white/10 transition-all flex items-center gap-1 text-xs font-medium"
-          >
-            <Plus size={15} className="text-sienna" />
-            <span>New</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={handleNewChat} title="New chat" className="dx-chip font-semibold h-9 px-3">
+            <Plus size={14} /> New
           </button>
-          <button 
-            onClick={() => { setShowHistory(!showHistory); if (!showHistory) loadSessions(); }} 
-            title="Chat History"
-            className={`p-2 rounded-xl transition-all border ${showHistory ? 'bg-sienna text-white border-sienna' : 'bg-white/[0.04] text-bone-dim hover:text-bone hover:bg-white/10 border-white/10'}`}
+          <button
+            onClick={() => { setShowHistory(!showHistory); if (!showHistory) loadSessions(); }}
+            title="Chat history"
+            aria-pressed={showHistory}
+            className="dx-icon-btn dx-icon-btn--sm"
+            style={showHistory ? { background: 'var(--dx-accent)', color: 'var(--dx-on-accent)', borderColor: 'transparent' } : undefined}
           >
             <History size={16} />
           </button>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-white/10 transition-colors ml-1">
-            <X size={18} className="text-bone-dim hover:text-bone" />
+          <button onClick={onClose} className="dx-icon-btn dx-icon-btn--sm" aria-label="Close chat">
+            <X size={17} />
           </button>
         </div>
       </div>
@@ -531,50 +526,41 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="bg-ink-2/95 border-b border-line/30 p-4 max-h-[300px] overflow-y-auto backdrop-blur-md relative z-20 scrollbar-thin shadow-2xl"
+            className="border-b max-h-[320px] overflow-y-auto relative z-20 scrollbar-thin"
+            style={{ background: 'var(--dx-card)', borderColor: 'var(--dx-border)' }}
           >
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
-              <span className="text-xs font-semibold text-bone flex items-center gap-1.5">
-                <History size={14} className="text-sienna" /> Past Conversations
-              </span>
-              <button
-                onClick={handleNewChat}
-                className="text-[11px] px-2.5 py-1 rounded-lg bg-sienna text-white hover:bg-sienna/90 transition-all flex items-center gap-1 font-medium shadow-sm"
-              >
-                <Plus size={12} /> New Chat
-              </button>
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+              <span className="dx-eyebrow">Past conversations</span>
             </div>
 
             {loadingHistory ? (
-              <div className="py-6 text-center text-xs text-bone-dim flex items-center justify-center gap-2">
-                <Loader2 size={14} className="animate-spin text-sienna" /> Loading history...
+              <div className="py-6 text-center text-[13px] dx-muted flex items-center justify-center gap-2">
+                <Loader2 size={14} className="animate-spin" /> Loading history…
               </div>
             ) : sessions.length === 0 ? (
-              <div className="py-6 text-center text-xs text-bone-dim">
-                No past chat history found.
+              <div className="py-6 text-center text-[13px] dx-muted">
+                No past conversations yet.
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="px-2 pb-2 space-y-0.5">
                 {sessions.map(s => (
                   <div
                     key={s.id}
                     onClick={() => handleSelectSession(s.id)}
-                    className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer text-xs transition-all ${
-                      sessionId === s.id
-                        ? 'bg-sienna/20 border border-sienna/40 text-white font-medium shadow-sm'
-                        : 'bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-bone-dim hover:text-bone'
-                    }`}
+                    className="group flex items-center justify-between gap-2 px-2.5 py-2.5 rounded-xl cursor-pointer text-[13px] transition-colors hover:bg-[var(--dx-card-2)]"
+                    style={sessionId === s.id ? { background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)', fontWeight: 600 } : undefined}
                   >
-                    <div className="flex items-center gap-2 min-w-0 pr-2">
-                      <MessageSquare size={14} className={sessionId === s.id ? 'text-sienna' : 'text-bone-dim'} />
-                      <span className="truncate">{s.title || "Chat session"}</span>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <MessageSquare size={15} className={sessionId === s.id ? '' : 'dx-muted'} />
+                      <span className="truncate">{s.title || 'Chat session'}</span>
                     </div>
                     <button
                       onClick={(e) => handleDeleteSession(e, s.id)}
-                      className="p-1.5 rounded-lg opacity-80 group-hover:opacity-100 hover:bg-red-500/20 text-bone-dim hover:text-red-400 transition-all shrink-0"
-                      title="Delete Chat"
+                      className="p-1.5 rounded-lg dx-muted hover:!text-red-500 transition-colors shrink-0"
+                      title="Delete chat"
+                      aria-label="Delete chat"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 ))}
@@ -585,34 +571,28 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       </AnimatePresence>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6 scrollbar-thin bg-transparent relative z-10">
+      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5 scrollbar-thin relative z-10">
         {messages.map((msg, idx) => (
           <motion.div
             key={msg.id}
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className={`group flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
+            className={`group flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : ''}`}
           >
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-1 ${
-              msg.role === 'user' ? 'bg-sienna/20 shadow-lg shadow-sienna/10' : 'bg-gradient-to-tr from-sienna to-orange-500 shadow-sm shadow-sienna/20'
-            }`}>
-              {msg.role === 'user'
-                ? <User size={14} className="text-sienna" />
-                : <Sparkles size={14} className="text-white" />
-              }
-            </div>
-            
-            <div className="max-w-[85%] flex flex-col gap-2">
+            {msg.role === 'assistant' && (
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' }}>
+                <Sparkles size={13} />
+              </div>
+            )}
+
+            <div className={`flex flex-col gap-2 min-w-0 ${msg.role === 'user' ? 'max-w-[82%] items-end' : 'max-w-[88%] flex-1'}`}>
               {/* Image Thumbnail (User) */}
               {msg.isImage && msg.imageUrl && (
-                <div className="rounded-2xl overflow-hidden border border-white/10 max-w-xs self-end relative group">
+                <div className="rounded-2xl overflow-hidden max-w-[220px] self-end" style={{ border: '1px solid var(--dx-border)' }}>
                   <img src={msg.imageUrl} alt="Uploaded food" className="w-full h-auto object-cover" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
-                    <span className="text-[10px] text-white/80 font-medium">Scanned Food</span>
-                  </div>
                 </div>
               )}
-              
+
               {/* Reasoning Block */}
               {msg.role === 'assistant' && msg.reasoning && (
                 <ReasoningCard reasoning={msg.reasoning} />
@@ -620,15 +600,16 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
               {/* Text Content */}
               {msg.content && (
-                <div className={`rounded-3xl px-4 py-3 text-[14px] leading-relaxed shadow-sm ${
-                  msg.role === 'user'
-                    ? 'bg-gradient-to-tr from-sienna to-orange-500 text-white rounded-tr-sm self-end'
-                    : 'bg-white/[0.05] backdrop-blur-md border border-white/10 text-bone rounded-tl-sm self-start w-full sm:w-auto shadow-[0_4px_12px_rgba(0,0,0,0.1)]'
-                }`}>
+                <div
+                  className={`px-4 py-2.5 text-[14px] leading-relaxed ${msg.role === 'user' ? 'rounded-[20px] rounded-br-md self-end' : 'rounded-[20px] rounded-tl-md self-start'}`}
+                  style={msg.role === 'user'
+                    ? { background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' }
+                    : { background: 'var(--dx-card)', border: '1px solid var(--dx-border)' }}
+                >
                   {msg.role === 'user' ? (
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                   ) : (
-                    <div className="text-[14px] leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:ml-5 [&>ul]:mb-3 [&>ol]:list-decimal [&>ol]:ml-5 [&>ol]:mb-3 [&>li]:mb-1 [&>h1]:font-semibold [&>h1]:text-bone [&>h1]:mb-2 [&>h2]:font-semibold [&>h2]:text-bone [&>h2]:mb-2 [&>h3]:font-semibold [&>h3]:text-bone [&>h3]:mb-2 [&_strong]:text-bone [&_strong]:font-semibold [&_table]:w-full [&_table]:text-[13px] [&_table]:text-left [&_table]:border-collapse [&_table]:mb-3 [&_th]:border-b [&_th]:border-white/10 [&_th]:pb-2 [&_th]:font-semibold [&_th]:min-w-[90px] [&_td]:py-2 [&_td]:border-b [&_td]:border-white/5">
+                    <div className="text-[14px] leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:ml-5 [&>ul]:mb-3 [&>ol]:list-decimal [&>ol]:ml-5 [&>ol]:mb-3 [&>li]:mb-1 [&>h1]:font-semibold [&>h1]:mb-2 [&>h2]:font-semibold [&>h2]:mb-2 [&>h3]:font-semibold [&>h3]:mb-2 [&_strong]:font-semibold [&_table]:w-full [&_table]:text-[13px] [&_table]:text-left [&_table]:border-collapse [&_table]:mb-3 [&_th]:border-b [&_th]:border-[var(--dx-border-strong)] [&_th]:pb-2 [&_th]:font-semibold [&_th]:min-w-[90px] [&_td]:py-2 [&_td]:border-b [&_td]:border-[var(--dx-border)]">
                       <ReactMarkdown 
                         remarkPlugins={[remarkGfm]}
                         components={{
@@ -648,24 +629,21 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
               {/* Rich UI Cards (Assistant) */}
               {msg.nutritionData && (
-                <div className="w-full mt-2 self-start animate-in slide-in-from-bottom-2 fade-in duration-300">
+                <div className="w-full mt-1 self-start">
                   <NutritionResultCard result={msg.nutritionData} onClose={() => {}} />
-                  <div className="mt-2 flex justify-end">
+                  <div className="mt-2.5 flex justify-end">
                     <button
                       onClick={() => handleLogMeal(msg.id, msg.nutritionData)}
                       disabled={msg.logged || loggingMessageId === msg.id}
-                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm transition-all shadow-sm ${
-                        msg.logged 
-                          ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
-                          : 'bg-sienna text-white hover:bg-sienna/90 shadow-[0_0_15px_rgba(200,121,65,0.3)]'
-                      }`}
+                      className="dx-btn h-10 text-[13px]"
+                      style={msg.logged ? { background: 'var(--dx-success-soft)', color: 'var(--dx-success)', opacity: 1 } : undefined}
                     >
                       {loggingMessageId === msg.id ? (
-                        <><Loader2 size={16} className="animate-spin" /> Tracking...</>
+                        <><Loader2 size={15} className="animate-spin" /> Tracking…</>
                       ) : msg.logged ? (
-                        <><CheckCircle2 size={16} /> Tracked</>
+                        <><CheckCircle2 size={15} /> Tracked</>
                       ) : (
-                        <>Track Meal</>
+                        <><Plus size={15} /> Track meal</>
                       )}
                     </button>
                   </div>
@@ -674,20 +652,22 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
               {/* Assistant message actions */}
               {msg.role === 'assistant' && msg.id !== 'welcome' && !msg.nutritionData && msg.content && (
-                <div className="flex items-center gap-1 mt-1 self-start opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <div className="flex items-center gap-0.5 self-start opacity-60 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                   <button
                     onClick={() => handleCopy(msg.id, msg.content)}
                     title="Copy"
-                    className="p-1.5 rounded-lg text-bone-dim hover:text-bone hover:bg-white/10 transition-colors"
+                    aria-label="Copy message"
+                    className="p-1.5 rounded-lg dx-muted hover:bg-[var(--dx-card-2)] transition-colors"
                   >
-                    {copiedId === msg.id ? <Check size={13} className="text-green-400" /> : <Copy size={13} />}
+                    {copiedId === msg.id ? <Check size={13} style={{ color: 'var(--dx-success)' }} /> : <Copy size={13} />}
                   </button>
                   {idx === messages.length - 1 && (
                     <button
                       onClick={handleRegenerate}
                       disabled={loading}
                       title="Regenerate response"
-                      className="p-1.5 rounded-lg text-bone-dim hover:text-bone hover:bg-white/10 transition-colors disabled:opacity-40"
+                      aria-label="Regenerate response"
+                      className="p-1.5 rounded-lg dx-muted hover:bg-[var(--dx-card-2)] transition-colors disabled:opacity-40"
                     >
                       <RefreshCw size={13} />
                     </button>
@@ -701,27 +681,28 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         {/* Loading Indicator */}
         {loading && (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex gap-3"
+            className="flex gap-2.5"
           >
-            <div className="w-8 h-8 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center shrink-0">
-              {isWakingUp ? <Loader2 size={14} className="text-sienna animate-spin" /> : <Bot size={14} className="text-bone-dim" />}
+            <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--dx-card-2)' }}>
+              {isWakingUp ? <Loader2 size={13} className="animate-spin dx-accent" /> : <Bot size={13} className="dx-muted" />}
             </div>
-            <div className={`bg-white/[0.04] border border-white/[0.06] rounded-3xl rounded-tl-sm px-5 py-4 self-start ${isWakingUp ? 'w-64' : ''}`}>
+            <div className={`rounded-[20px] rounded-tl-md px-4 py-3.5 self-start ${isWakingUp ? 'w-64' : ''}`} style={{ background: 'var(--dx-card)', border: '1px solid var(--dx-border)' }}>
               {!isWakingUp ? (
                 <div className="flex items-center gap-1.5">
-                  <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0 }} className="w-2 h-2 rounded-full bg-sienna" />
-                  <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0.2 }} className="w-2 h-2 rounded-full bg-sienna" />
-                  <motion.div animate={{ scale: [1, 1.3, 1], opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay: 0.4 }} className="w-2 h-2 rounded-full bg-sienna" />
+                  {[0, 0.2, 0.4].map(delay => (
+                    <motion.div key={delay} animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay }} className="w-2 h-2 rounded-full" style={{ background: 'var(--dx-muted)' }} />
+                  ))}
                 </div>
               ) : (
-                <div className="flex flex-col gap-2">
-                  <span className="text-sm font-medium text-bone">Waking up AI server...</span>
-                  <span className="text-xs text-bone-dim leading-relaxed">Hang tight for about 60s while it boots!</span>
-                  <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden mt-1 relative">
-                    <motion.div 
-                      className="absolute left-0 top-0 h-full bg-gradient-to-r from-sienna to-orange-500 rounded-full" 
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[13px] font-semibold">Waking up AI server…</span>
+                  <span className="text-[12px] dx-muted leading-relaxed">This can take about 60 seconds on first use.</span>
+                  <div className="w-full h-1.5 rounded-full overflow-hidden mt-1 relative" style={{ background: 'var(--dx-card-2)' }}>
+                    <motion.div
+                      className="absolute left-0 top-0 h-full rounded-full"
+                      style={{ background: 'var(--dx-accent)' }}
                       initial={{ width: '0%' }}
                       animate={{ width: '95%' }}
                       transition={{ duration: 60, ease: "linear" }}
@@ -738,28 +719,18 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
       {/* Quick actions (Collapsible Suggestions) */}
       {!previewImage && messages.length <= 2 && !loading && (
-        <div className="px-4 py-1.5 bg-ink-2/95 border-t border-white/[0.04] relative z-10">
+        <div className="px-3 pt-2 relative z-10">
           <button
             type="button"
             onClick={() => setShowSuggestions(prev => !prev)}
-            className="w-full flex items-center justify-between py-1.5 px-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.05] transition-all group"
+            aria-expanded={showSuggestions}
+            className="w-full flex items-center justify-between h-9 px-3 rounded-xl text-[12px] font-semibold transition-colors"
+            style={{ background: 'var(--dx-card)', border: '1px solid var(--dx-border)' }}
           >
-            <div className="flex items-center gap-1.5 text-bone-dim group-hover:text-bone">
-              <Sparkles size={12} className="text-sienna group-hover:scale-110 transition-transform" />
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-bone-dim/80 group-hover:text-bone">
-                Try one of these
-              </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-white/[0.04] text-bone-dim font-mono">
-                {quickActions.length}
-              </span>
-            </div>
-            <div className="flex items-center gap-1 text-[11px] text-bone-dim/60 group-hover:text-bone-dim">
-              <span>{showSuggestions ? 'Collapse' : 'Expand'}</span>
-              <ChevronDown
-                size={14}
-                className={`transform transition-transform duration-200 ${showSuggestions ? 'rotate-180' : ''}`}
-              />
-            </div>
+            <span className="inline-flex items-center gap-1.5">
+              <Sparkles size={13} className="dx-accent" /> Try a suggestion
+            </span>
+            <ChevronDown size={15} className={`dx-muted transition-transform duration-200 ${showSuggestions ? 'rotate-180' : ''}`} />
           </button>
 
           <AnimatePresence>
@@ -784,14 +755,15 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
                           if (a.action === 'camera') { setShowCamera(true); return; }
                           if (a.send) { handleSend(a.prompt); } else { setInput(a.prompt || ''); }
                         }}
-                        className={`group flex items-start gap-2.5 p-2.5 rounded-2xl bg-white/[0.03] border border-white/[0.06] text-left hover:bg-white/[0.07] hover:border-sienna/30 active:scale-[0.97] transition-all ${isWide ? 'col-span-2' : ''}`}
+                        className={`flex items-center gap-2.5 p-2.5 rounded-2xl text-left transition-colors active:scale-[0.98] hover:bg-[var(--dx-card-2)] ${isWide ? 'col-span-2' : ''}`}
+                        style={{ background: 'var(--dx-card)', border: '1px solid var(--dx-border)' }}
                       >
-                        <span className="w-7 h-7 rounded-xl bg-sienna/15 border border-sienna/20 flex items-center justify-center shrink-0 group-hover:bg-sienna/25 transition-colors">
-                          <Icon size={14} className="text-sienna" />
+                        <span className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)' }}>
+                          <Icon size={15} />
                         </span>
                         <span className="min-w-0 flex-1">
-                          <span className="block text-[12px] font-semibold text-bone leading-tight truncate">{a.label}</span>
-                          <span className="block text-[10px] text-bone-dim mt-0.5 truncate">{a.hint}</span>
+                          <span className="block text-[12.5px] font-semibold leading-tight truncate">{a.label}</span>
+                          <span className="block text-[11px] dx-muted mt-0.5 truncate">{a.hint}</span>
                         </span>
                       </button>
                     );
@@ -804,20 +776,22 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       )}
 
       {/* Input Area */}
-      <div className="p-3 sm:p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-4 bg-white/[0.03] backdrop-blur-lg border-t border-white/[0.05] relative z-10">
-        
+      <div className="px-3 pt-2.5 pb-[max(12px,env(safe-area-inset-bottom))] sm:pb-3 relative z-10">
+
         {/* Image Preview Area */}
         <AnimatePresence>
           {previewImage && (
             <motion.div
               initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-              animate={{ opacity: 1, height: 'auto', marginBottom: 12 }}
+              animate={{ opacity: 1, height: 'auto', marginBottom: 10 }}
               exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-              className="relative rounded-2xl overflow-hidden border border-white/10 max-w-[120px]"
+              className="relative rounded-2xl overflow-hidden max-w-[110px]"
+              style={{ border: '1px solid var(--dx-border)' }}
             >
               <img src={previewImage.url} alt="Preview" className="w-full h-auto object-cover" />
               <button
                 onClick={() => setPreviewImage(null)}
+                aria-label="Remove image"
                 className="absolute top-1 right-1 w-6 h-6 bg-black/60 backdrop-blur-md rounded-full flex items-center justify-center text-white hover:bg-black"
               >
                 <X size={12} />
@@ -828,25 +802,27 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
 
         <form
           onSubmit={e => { e.preventDefault(); handleSend(); }}
-          className="flex items-center gap-1 sm:gap-2 bg-white/[0.03] border border-white/[0.06] rounded-[24px] p-1.5 focus-within:border-sienna/50 focus-within:bg-white/[0.05] transition-colors w-full"
+          className="flex items-center gap-1 rounded-[22px] p-1.5 transition-shadow w-full focus-within:shadow-[0_0_0_3px_var(--dx-accent-soft)]"
+          style={{ background: 'var(--dx-card)', border: '1px solid var(--dx-border)' }}
         >
-          {/* Attachment Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] text-bone-dim hover:bg-white/10 hover:text-bone transition-colors shrink-0 flex items-center justify-center"
+            aria-label="Attach photo"
+            className="w-10 h-10 rounded-2xl dx-muted hover:bg-[var(--dx-card-2)] transition-colors shrink-0 flex items-center justify-center"
           >
-            <Paperclip size={20} />
+            <Paperclip size={19} />
           </button>
-          
+
           <button
             type="button"
             onClick={() => setShowCamera(true)}
-            className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] text-bone-dim hover:bg-white/10 hover:text-sienna transition-colors shrink-0 flex items-center justify-center"
+            aria-label="Scan food with camera"
+            className="w-10 h-10 rounded-2xl dx-muted hover:bg-[var(--dx-card-2)] transition-colors shrink-0 flex items-center justify-center"
           >
-            <Camera size={20} />
+            <Camera size={19} />
           </button>
-          
+
           <input
             type="file"
             ref={fileInputRef}
@@ -860,26 +836,30 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
-            placeholder={previewImage ? "Add a message..." : "Message Astra AI..."}
+            placeholder={previewImage ? "Add a note (e.g. 2 rotis)…" : "Message Astra…"}
             disabled={loading}
-            className="flex-1 min-w-0 bg-transparent px-2 py-2.5 text-[15px] text-bone placeholder-bone-dim focus:outline-none"
+            className="flex-1 min-w-0 bg-transparent px-1.5 py-2.5 text-[15px] placeholder:text-[var(--dx-muted)] focus:outline-none"
           />
-          
+
           {loading ? (
             <button
               type="button"
               onClick={handleStop}
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 hover:text-red-300 active:scale-95 transition-all shrink-0 flex items-center justify-center"
+              aria-label="Stop generating"
+              className="w-10 h-10 rounded-2xl active:scale-95 transition-transform shrink-0 flex items-center justify-center"
+              style={{ background: 'var(--dx-card-2)', color: 'var(--dx-text)' }}
             >
-              <Square size={16} fill="currentColor" />
+              <Square size={14} fill="currentColor" />
             </button>
           ) : (
             <button
               type="submit"
               disabled={!input.trim() && !previewImage}
-              className="w-10 h-10 sm:w-11 sm:h-11 rounded-[16px] bg-sienna text-white shadow-[0_0_15px_rgba(200,121,65,0.3)] disabled:opacity-30 disabled:shadow-none disabled:cursor-not-allowed hover:bg-sienna/90 active:scale-95 transition-all shrink-0 flex items-center justify-center"
+              aria-label="Send message"
+              className="w-10 h-10 rounded-2xl disabled:opacity-35 disabled:cursor-not-allowed active:scale-95 transition-all shrink-0 flex items-center justify-center"
+              style={{ background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' }}
             >
-              <Send size={20} />
+              <Send size={18} />
             </button>
           )}
         </form>

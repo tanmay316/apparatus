@@ -13,7 +13,7 @@ const REMINDER_MESSAGES: Record<'5am' | '8am' | '5pm' | '8pm', string[]> = {
     "While you sleep on your goals, someone else is working on theirs. Log your workout today!"
   ],
   '8am': [
-    "8 AM. The day has officially started, but have you? Don't let your streak die—log today's workout!",
+    "8 AM. The day has officially started, but have you? Do not let your streak die, log today's workout!",
     "Are you actually training today or just pretending to care about your fitness? Show some discipline and log it!",
     "8 AM and zero sweat? No excuses. Get to work and make sure to log it today!",
     "Your streak is waiting. Log today's session and show up for yourself!"

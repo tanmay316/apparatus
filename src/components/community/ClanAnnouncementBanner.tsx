@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Megaphone, Pin, ChevronRight } from 'lucide-react';
 import type { CommunityAnnouncement } from '@/types';
+import { LiveUserName } from '@/components/ui/LiveUser';
 
 interface ClanAnnouncementBannerProps {
   announcement: CommunityAnnouncement;
@@ -28,7 +29,7 @@ export function ClanAnnouncementBanner({
           <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1">
             <Pin size={10} className="fill-current" /> Important Notice
           </span>
-          <span className="text-[10px] font-mono text-bone-dim">by {announcement.authorName}</span>
+          <span className="text-[10px] font-mono text-bone-dim">by <LiveUserName userId={announcement.authorId} fallbackName={announcement.authorName} /></span>
         </div>
 
         <h4 className="text-xs sm:text-sm font-bold text-bone truncate group-hover:text-amber-300 transition-colors">

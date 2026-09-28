@@ -310,7 +310,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
 
       const fileName = `apparatus_medal_${badge.rank}_${Date.now()}.png`;
 
-      // 1. Native Mobile (Capacitor) — save directly to device storage, no share sheet.
+      // 1. Native Mobile (Capacitor) - save directly to device storage, no share sheet.
       if (Capacitor.isNativePlatform()) {
         try {
           const base64Data = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');

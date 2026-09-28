@@ -45,6 +45,7 @@ export default function AdminNutritionSettings() {
     setMessage('');
     try {
       await setDoc(doc(db, 'admin_settings', 'api_keys'), settings);
+      await setDoc(doc(db, 'admin_settings', 'ai_mode'), { use_admin_keys: settings.use_admin_keys });
       setMessage('Settings saved successfully!');
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {

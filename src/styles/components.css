@@ -7,6 +7,29 @@
 
 @layer components {
 
+  /* ─── Live training avatar glow (no outer ring) ─────────── */
+  .live-avatar-active {
+    animation: live-avatar-glow 2s ease-in-out infinite;
+  }
+
+  .live-avatar-paused {
+    animation: live-avatar-glow-paused 2.6s ease-in-out infinite;
+  }
+
+  @keyframes live-avatar-glow {
+    0%, 100% { box-shadow: 0 0 6px 1px rgba(16, 185, 129, 0.45); }
+    50% { box-shadow: 0 0 14px 4px rgba(16, 185, 129, 0.7); }
+  }
+
+  @keyframes live-avatar-glow-paused {
+    0%, 100% { box-shadow: 0 0 4px 1px rgba(245, 158, 11, 0.3); }
+    50% { box-shadow: 0 0 10px 2px rgba(245, 158, 11, 0.5); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .live-avatar-active, .live-avatar-paused { animation: none; box-shadow: 0 0 8px 2px rgba(16, 185, 129, 0.5); }
+  }
+
   /* ─── Brand ─────────────────────────────────────────────── */
   .brand-wordmark {
     font-family: var(--font-brand);
@@ -984,4 +1007,180 @@
   [data-theme='dark'] [class*='drop-shadow'] {
     box-shadow: none !important;
   }
+}
+
+/* ─── Pro surfaces (Progress page & share editor) ─────────────────
+   Theme-driven primitives: every colour resolves from tokens so the
+   same markup reads correctly in both light and dark themes. */
+.pro-panel {
+  background: rgb(var(--color-ink));
+  border: 1px solid rgb(var(--color-line));
+  border-radius: 24px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 6px 18px rgba(16, 24, 40, 0.04);
+}
+
+.pro-tile {
+  background: rgb(var(--color-ink-2));
+  border-radius: 16px;
+}
+
+.pro-track {
+  background: rgb(var(--color-bone) / 0.06);
+}
+
+.pro-thumb {
+  background: rgb(var(--color-ink));
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.1), 0 0 0 1px rgb(var(--color-line));
+}
+
+.pro-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(var(--color-bone-dim));
+}
+
+.pro-checker {
+  background-color: #2b2b2b;
+  background-image: conic-gradient(#3b3b3b 25%, transparent 0 50%, #3b3b3b 0 75%, transparent 0);
+  background-size: 12px 12px;
+}
+
+[data-theme='dark'] .pro-panel {
+  background: linear-gradient(160deg, #26150f 0%, #170c09 100%);
+  border-color: rgba(239, 202, 177, 0.12);
+  box-shadow: 0 1px 0 rgba(255, 232, 214, 0.05) inset, 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='dark'] .pro-tile {
+  background: rgba(255, 232, 214, 0.045);
+}
+
+[data-theme='dark'] .pro-thumb {
+  background: rgba(255, 232, 214, 0.14);
+  box-shadow: none;
+}
+
+/* Opt pro-scoped controls out of the global dark-mode button glow. */
+[data-theme='dark'] .pro-scope button:hover:not(:disabled) {
+  box-shadow: none !important;
+}
+
+/* ─── Cardio feed post (neumorphic, matches the strength post cards) ─── */
+.cardio-post-map {
+  background: #fdfbfb;
+  box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.06), -3px -3px 8px rgba(255, 255, 255, 1);
+}
+
+.cardio-post-stat {
+  border-radius: 16px;
+  background: #fdfbfb;
+  box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.05), -3px -3px 8px rgba(255, 255, 255, 1);
+}
+
+.cardio-post-chip {
+  background: rgba(253, 251, 251, 0.94);
+  color: #17191c;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.1), -1px -1px 4px rgba(255, 255, 255, 0.9);
+}
+
+.cardio-post-badge {
+  background: #fdfbfb;
+  color: #777b86;
+  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.05), inset -2px -2px 4px rgba(255, 255, 255, 1);
+}
+
+.cardio-post-divider {
+  height: 1px;
+  background: rgb(var(--color-line));
+}
+
+[data-theme='dark'] .cardio-post-map {
+  background: #1a0f0c;
+  box-shadow: 0 0 0 1px rgba(239, 202, 177, 0.1), 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme='dark'] .cardio-post-stat {
+  background: #35211c;
+  box-shadow: var(--neo-shadow-inset-sm);
+}
+
+[data-theme='dark'] .cardio-post-chip {
+  background: rgba(23, 12, 9, 0.85);
+  color: #f7e9e1;
+  box-shadow: 0 0 0 1px rgba(239, 202, 177, 0.18);
+}
+
+[data-theme='dark'] .cardio-post-badge {
+  background: rgba(239, 173, 128, 0.12);
+  color: #efad80;
+  box-shadow: none;
+}
+
+[data-theme='dark'] .cardio-post-divider {
+  background: rgba(239, 202, 177, 0.14);
+}
+
+/* ─── Strength feed post (shares the cardio post neumorphic surfaces) ─── */
+.strength-post-eyebrow { color: #c24e2c; }
+
+.strength-post-pr {
+  color: #8a3a1f;
+  background: #fdfbfb;
+  box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.08), -2px -2px 5px rgba(255, 255, 255, 1);
+}
+
+.strength-post-track {
+  background: #fdfbfb;
+  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.08), inset -2px -2px 4px rgba(255, 255, 255, 1);
+}
+
+.strength-post-fill { background: linear-gradient(90deg, #e2825d, #c24e2c); }
+
+.strength-post-row + .strength-post-row { border-top: 1px solid rgba(23, 25, 28, 0.06); }
+
+[data-theme='dark'] .strength-post-eyebrow { color: #efad80; }
+
+[data-theme='dark'] .strength-post-pr {
+  color: #ffd9c2;
+  background: rgba(239, 173, 128, 0.16);
+  box-shadow: 0 0 0 1px rgba(239, 173, 128, 0.3);
+}
+
+[data-theme='dark'] .strength-post-track {
+  background: #24150f;
+  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.45), inset -1px -1px 3px rgba(255, 220, 200, 0.05);
+}
+
+[data-theme='dark'] .strength-post-fill { background: linear-gradient(90deg, #b8664a, #efad80); }
+
+[data-theme='dark'] .strength-post-row + .strength-post-row { border-top-color: rgba(239, 202, 177, 0.1); }
+
+/* ─── Cardio tracker: swipe-to-start + live KPI sheet ─────────────── */
+.swipe-start-track {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.cardio-kpi-cell {
+  position: relative;
+}
+
+.cardio-kpi-cell + .cardio-kpi-cell::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 14%;
+  bottom: 14%;
+  width: 2px;
+  background-image: radial-gradient(circle, var(--muted) 1px, transparent 1.4px);
+  background-size: 2px 6px;
+  background-repeat: repeat-y;
+  opacity: 0.45;
+}
+
+.cardio-kpi-rows > .cardio-kpi-row + .cardio-kpi-row {
+  border-top: 1px dashed var(--border);
 }

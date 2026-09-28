@@ -7,6 +7,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
+import { safeInternalPath } from '@/lib/validation';
+import { LiveSenderMessage } from '@/components/ui/LiveUser';
 import { getNotifications, markNotificationRead, markAllNotificationsRead, searchUsers } from '@/services/social';
 import { COMPACT_LIBRARY } from '@/services/library';
 import { getSamplePlans } from '@/services/plans';
@@ -62,8 +64,9 @@ export function Topbar() {
     if (notification.id && !notification.read) await readMutation.mutateAsync(notification.id);
     setNotificationsOpen(false);
     
-    if (notification.extra?.link) {
-      navigate(notification.extra.link);
+    const link = safeInternalPath(notification.extra?.link);
+    if (link) {
+      navigate(link);
     } else if (notification.type === 'follow_request') {
       navigate(`/profile/${profile?.username}?modal=followers`);
     } else if (notification.type === 'follow' || notification.type === 'unfollow') {
@@ -89,7 +92,7 @@ export function Topbar() {
       style={{ paddingTop: Capacitor.getPlatform() === 'android' ? '0px' : 'env(safe-area-inset-top, 0px)' }}
     >
       <div className="max-w-[1440px] mx-auto px-4 sm:px-5 h-14 flex items-center justify-between gap-3">
-        {/* Left — Collapse + Logo */}
+        {/* Left - Collapse + Logo */}
         <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={toggleSidebar}
@@ -104,7 +107,7 @@ export function Topbar() {
           </Link>
         </div>
 
-        {/* Center — Desktop Search Bar Redirect */}
+        {/* Center - Desktop Search Bar Redirect */}
         <div className="flex-1 max-w-md mx-auto relative hidden md:block">
           <div
             className="flex items-center gap-2.5 h-9 px-3.5 rounded-xl border border-line bg-white/[0.03] hover:border-bone/40 cursor-pointer transition-all duration-200"
@@ -116,7 +119,7 @@ export function Topbar() {
           </div>
         </div>
 
-        {/* Right — Actions & Profile */}
+        {/* Right - Actions & Profile */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Mobile search toggle button */}
           <button
@@ -161,7 +164,7 @@ export function Topbar() {
                             onClick={() => handleNotificationClick(notification)}
                             className={`w-full text-left px-2 py-3 rounded-lg hover:bg-bone/[0.05] transition-colors ${!notification.read ? 'bg-bone/5' : ''}`}
                           >
-                            <div className="text-xs text-bone">{notification.message}</div>
+                            <LiveSenderMessage senderId={notification.senderId} senderName={notification.senderName} message={notification.message} className="block text-xs text-bone" />
                             <div className="font-mono text-[10px] text-bone-dim mt-1">
                               {notification.createdAt?.toDate ? notification.createdAt.toDate().toLocaleDateString() : 'Recently'} · Click to open
                             </div>

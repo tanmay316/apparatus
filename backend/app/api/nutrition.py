@@ -133,7 +133,7 @@ async def analyze_food(
     chat_repo = ChatRepository(db)
     if req.session_id:
         session = chat_repo.get_session(req.session_id)
-        if not session:
+        if not session or session.user_id != uid:
             session = chat_repo.create_session(uid, title="Food Analysis")
     else:
         session = chat_repo.create_session(uid, title="Food Analysis")
@@ -160,11 +160,11 @@ async def analyze_food(
 
 # ─── POST /food/log ──────────────────────────────────────────────
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 class LogMealRequest(BaseModel):
-    meal_type: str = "snack"
+    meal_type: str = Field("snack", max_length=20)
     vision_data: dict
-    message_id: Optional[str] = None
+    message_id: Optional[str] = Field(None, max_length=40)
     image_id: Optional[int] = None
 
 @router.post("/food/log")
@@ -175,6 +175,13 @@ async def log_food(
 ):
     """Manually log an analyzed meal to the database."""
     uid = current_user["uid"]
+
+    image_id = req.image_id
+    if image_id is not None:
+        from app.repositories.image_repository import ImageRepository
+        img = ImageRepository(db).get_image(image_id)
+        if not img or img.user_id != uid:
+            image_id = None
     
     user_repo = UserRepository(db)
     goals = user_repo.get_goals(uid)
@@ -190,19 +197,22 @@ async def log_food(
         nutrition_dict = req.vision_data.get("nutrition", {})
         
         # 1. Create the MealLog
-        meal = meal_repo.create_meal(user_id=uid, meal_type=req.meal_type, image_id=req.image_id)
+        meal = meal_repo.create_meal(user_id=uid, meal_type=req.meal_type, image_id=image_id)
         
         # 2. Add meal items
         nutrition_inner = nutrition_dict.get("nutrition", {})
         items = nutrition_inner.get("items", [])
         
         if items:
+            allowed = {"food_name", "weight_grams", "calories", "protein", "carbs", "fat", "fiber", "confidence", "category"}
             mapped_items = []
-            for it in items:
+            for it in items[:50]:
+                if not isinstance(it, dict):
+                    continue
                 mapped = it.copy()
                 if "name" in mapped and "food_name" not in mapped:
                     mapped["food_name"] = mapped.pop("name")
-                mapped_items.append(mapped)
+                mapped_items.append({k: v for k, v in mapped.items() if k in allowed})
             meal_repo.add_meal_items(meal.id, mapped_items)
             
         # 3. Update totals
@@ -229,11 +239,12 @@ async def log_food(
             # Remove the 'msg-' prefix if it exists
             db_msg_id = int(req.message_id.replace("msg-", "")) if str(req.message_id).startswith("msg-") else None
             if db_msg_id:
-                msg = chat_repo.get_message(db_msg_id) # Need to implement this or just do query directly
-                pass # Wait, let's just do it directly on db
                 db.execute(
-                    text("UPDATE chat_messages SET metadata = json_insert(metadata, '$.logged', true) WHERE id = :mid"),
-                    {"mid": db_msg_id}
+                    text(
+                        "UPDATE chat_messages SET metadata = json_insert(metadata, '$.logged', true) "
+                        "WHERE id = :mid AND session_id IN (SELECT id FROM chat_sessions WHERE user_id = :uid)"
+                    ),
+                    {"mid": db_msg_id, "uid": uid}
                 )
 
         db.commit()
@@ -244,7 +255,7 @@ async def log_food(
         return {"success": True, "meal_id": meal.id}
     except Exception as e:
         logger.error(f"Failed to persist meal manually: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Could not save this meal. Please try again.")
 
 
 # ─── GET /images/{image_id} ──────────────────────────────────────
@@ -381,7 +392,8 @@ async def chat(
     chat_repo = ChatRepository(db)
     if req.session_id:
         session = chat_repo.get_session(req.session_id)
-        if not session:
+        # Never continue (or leak the history of) another user's conversation.
+        if not session or session.user_id != uid:
             title = req.message[:35] if req.message else "New Chat"
             session = chat_repo.create_session(uid, title=title)
     else:
@@ -621,6 +633,9 @@ async def generate_recipe(
 ):
     """Generate a recipe using the Recipe Agent."""
     uid = current_user["uid"]
+    rate = check_rate_limit(f"{uid}:recipe", limit=8, window_seconds=60)
+    if not rate.allowed:
+        raise HTTPException(status_code=429, detail=rate.message)
     keys = await resolve_api_keys(current_user)
 
     user_repo = UserRepository(db)
@@ -681,6 +696,11 @@ async def generate_meal_plan(
 ):
     """Generate a meal plan."""
     uid = current_user["uid"]
+    rate = check_rate_limit(f"{uid}:mealplan", limit=5, window_seconds=60)
+    if not rate.allowed:
+        raise HTTPException(status_code=429, detail=rate.message)
+    if req.plan_type not in ("daily", "weekly"):
+        raise HTTPException(status_code=400, detail="Invalid plan type")
     keys = await resolve_api_keys(current_user)
 
     user_repo = UserRepository(db)
@@ -756,6 +776,7 @@ async def get_nutrition_history(
 ):
     """Get nutrition history."""
     uid = current_user["uid"]
+    days = max(1, min(days, 90))
     meal_svc = MealService(db)
     return {"history": meal_svc.get_history(uid, days)}
 

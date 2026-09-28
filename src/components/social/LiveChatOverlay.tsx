@@ -11,6 +11,7 @@ import { showNotification } from '@/utils/notifications';
 import { createPortal } from 'react-dom';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
+import { LiveUserName } from '@/components/ui/LiveUser';
 
 export function LiveChatOverlay() {
   const { user, profile } = useAuthStore();
@@ -167,7 +168,7 @@ export function LiveChatOverlay() {
               </div>
 
               <div className="flex-1 min-w-0 pr-4">
-                <div className="text-xs font-bold text-amber-600 dark:text-amber-400 mb-0.5 truncate">{msg.senderName}</div>
+                <LiveUserName userId={msg.senderUid} fallbackName={msg.senderName} className="block text-xs font-bold text-amber-600 dark:text-amber-400 mb-0.5 truncate" />
                 <div className="text-sm font-medium text-[var(--text)] line-clamp-2 leading-snug">{msg.text}</div>
                 <div className="text-[10px] text-[var(--muted)] mt-1.5 flex items-center gap-1 opacity-80">
                   <MessageCircle size={10} className="text-sienna" /> Tap to reply • Swipe to dismiss

@@ -33,200 +33,199 @@ async function openInAppBrowser(url: string) {
 }
 
 function ExerciseMedia({ exercise }: { exercise: Exercise }) {
+  // The resolver validates every candidate before returning it, so any ID we
+  // get back is playable - no extra thumbnail probing that could discard it.
+  const [status, setStatus] = useState<'loading' | 'ready' | 'empty'>('loading');
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [videoTitle, setVideoTitle] = useState<string | null>(null);
+  const [thumbStep, setThumbStep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [resolvedYoutubeId, setResolvedYoutubeId] = useState<string | null>(null);
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const { showToast } = useUIStore();
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
+    const controller = new AbortController();
+    setStatus('loading');
+    setVideoId(null);
+    setVideoTitle(null);
+    setIsPlaying(false);
+    setThumbStep(0);
 
-    import('@/lib/video-resolver').then(({ resolveExerciseVideo }) => {
-      resolveExerciseVideo(exercise.name, exercise.yt).then(vidId => {
-        if (cancelled) return;
-        if (vidId) {
-          setResolvedYoutubeId(vidId);
-
-          // Test if thumbnail actually loads (YouTube returns 120px placeholder for deleted/unavailable videos)
-          const thumb = `https://i.ytimg.com/vi/${vidId}/hqdefault.jpg`;
-          const img = new Image();
-          img.onload = () => {
-            if (!cancelled) {
-              if (img.naturalWidth <= 120) {
-                setThumbnailUrl(null);
-                setResolvedYoutubeId(null);
-              } else {
-                setThumbnailUrl(thumb);
-              }
-              setLoading(false);
-            }
-          };
-          img.onerror = () => {
-            if (!cancelled) {
-              setThumbnailUrl(null);
-              setLoading(false);
-            }
-          };
-          img.src = thumb;
-        } else {
-          setThumbnailUrl(null);
-          setLoading(false);
-        }
+    import('@/lib/video-resolver')
+      .then(({ resolveExerciseVideo }) => resolveExerciseVideo(exercise.name, exercise.yt, controller.signal))
+      .then(id => {
+        if (controller.signal.aborted) return;
+        setVideoId(id);
+        setStatus(id ? 'ready' : 'empty');
+      })
+      .catch(err => {
+        if (controller.signal.aborted) return;
+        console.warn('Failed to resolve exercise video:', err);
+        setStatus('empty');
       });
-    });
 
-    return () => { cancelled = true; };
-  }, [exercise.name, exercise.yt]);
+    return () => controller.abort();
+  }, [exercise.name, exercise.yt, reloadKey]);
 
   const handleRefreshVideo = async (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    if (isRefreshing || loading) return;
+    e?.stopPropagation();
+    if (isRefreshing || status === 'loading') return;
 
     setIsRefreshing(true);
     setIsPlaying(false);
 
     try {
       const { refreshExerciseVideo } = await import('@/lib/video-resolver');
-      const result = await refreshExerciseVideo(exercise.name, resolvedYoutubeId, exercise.yt);
+      const result = await refreshExerciseVideo(exercise.name, videoId, exercise.yt);
 
-      if (result && result.youtubeId) {
-        const thumb = `https://i.ytimg.com/vi/${result.youtubeId}/hqdefault.jpg`;
-        const img = new Image();
-        img.onload = () => {
-          if (img.naturalWidth <= 120) {
-            setThumbnailUrl(null);
-            setResolvedYoutubeId(null);
-            showToast('No alternative video found for this exercise', 'error');
-          } else {
-            setResolvedYoutubeId(result.youtubeId);
-            setThumbnailUrl(thumb);
-            showToast(`Updated demonstration video for ${exercise.name}`);
-          }
-          setIsRefreshing(false);
-        };
-        img.onerror = () => {
-          setThumbnailUrl(null);
-          setIsRefreshing(false);
-          showToast('No alternative video found for this exercise', 'error');
-        };
-        img.src = thumb;
+      if (result?.youtubeId && result.youtubeId !== videoId) {
+        setVideoId(result.youtubeId);
+        setVideoTitle(result.title || null);
+        setThumbStep(0);
+        setStatus('ready');
+        showToast('Switched to another technique video');
+      } else if (videoId) {
+        showToast('No other verified video yet, keeping the current one', 'info');
       } else {
-        setIsRefreshing(false);
-        showToast('No alternative video found for this exercise', 'error');
+        showToast('No video found. Opening YouTube search instead.', 'info');
+        openInAppBrowser(searchUrl);
       }
     } catch (err) {
-      console.warn("Failed to refresh exercise video:", err);
+      console.warn('Failed to refresh exercise video:', err);
+      showToast('Could not load another video. Check your connection.', 'error');
+    } finally {
       setIsRefreshing(false);
-      showToast('Could not refresh video. Try again later.', 'error');
     }
   };
 
-  const formUrl = resolvedYoutubeId
-    ? `https://www.youtube.com/watch?v=${resolvedYoutubeId}`
-    : `https://www.youtube.com/results?search_query=${encodeURIComponent(`${exercise.name} proper form technique`)}`;
+  const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${exercise.name} proper form technique`)}`;
+  const formUrl = videoId ? `https://www.youtube.com/watch?v=${videoId}` : searchUrl;
+  const thumbSources = videoId
+    ? [`https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`, `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`]
+    : [];
+  const thumbnailUrl = thumbSources[thumbStep] ?? null;
+  const busy = status === 'loading' || isRefreshing;
 
   const handleDemoClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (resolvedYoutubeId) {
+    if (videoId) {
       setIsPlaying(true);
     } else {
-      openInAppBrowser(formUrl);
+      openInAppBrowser(searchUrl);
     }
   };
 
-  return (
-    <div className="relative overflow-hidden rounded-2xl border border-line/60 bg-ink group/media">
-      {/* Floating Refresh Button in Top Right Overlay - Mobile Responsive */}
-      <button
-        type="button"
-        onClick={handleRefreshVideo}
-        disabled={isRefreshing || loading}
-        aria-label="Change technique video"
-        title="Change video / Find alternative demonstration"
-        className="absolute top-2.5 right-2.5 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-line/80 bg-ink/80 text-bone-dim backdrop-blur-md shadow-md hover:border-sienna/60 hover:bg-ink hover:text-sienna active:scale-95 transition-all disabled:opacity-50 touch-manipulation"
-      >
-        <RotateCw size={14} className={isRefreshing ? 'animate-spin text-sienna' : 'transition-transform duration-200 group-hover/media:rotate-45'} />
-      </button>
+  const overlayBtn = 'flex h-9 items-center gap-1.5 rounded-full px-3 text-[11px] font-semibold text-white backdrop-blur-md transition active:scale-95 disabled:opacity-50 touch-manipulation';
 
-      {isPlaying && resolvedYoutubeId ? (
-        <div className="relative w-full bg-black flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
+  return (
+    <section className="overflow-hidden rounded-2xl" style={{ background: 'var(--dx-card-2)' }}>
+      <div className="relative w-full overflow-hidden" style={{ aspectRatio: '16/9', background: '#0c0a09' }}>
+        {isPlaying && videoId ? (
           <iframe
-            src={`https://www.youtube-nocookie.com/embed/${resolvedYoutubeId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&fs=1`}
-            title={`${exercise.name} form`}
-            className="absolute top-0 left-0 w-full h-full border-0"
+            src={`https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&playsinline=1&rel=0&modestbranding=1&fs=1&origin=${encodeURIComponent(window.location.origin)}`}
+            title={`${exercise.name} technique`}
+            className="absolute inset-0 h-full w-full border-0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            referrerPolicy="strict-origin-when-cross-origin"
             allowFullScreen
           />
-        </div>
-      ) : thumbnailUrl ? (
-        <div className="relative cursor-pointer group" onClick={handleDemoClick}>
-          <img
-            src={thumbnailUrl}
-            alt={`${exercise.name} correct form`}
-            className="w-full object-cover"
-            style={{ aspectRatio: '16/9' }}
-            loading="lazy"
-            referrerPolicy="no-referrer"
-          />
-          {/* Play overlay */}
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="w-14 h-14 rounded-full bg-sienna flex items-center justify-center shadow-lg">
-              <Play size={24} className="text-white ml-1" fill="white" />
-            </div>
+        ) : videoId ? (
+          <button type="button" onClick={handleDemoClick} className="group absolute inset-0 block h-full w-full" aria-label={`Play ${exercise.name} technique video`}>
+            {thumbnailUrl && (
+              <img
+                src={thumbnailUrl}
+                alt=""
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                onError={() => setThumbStep(s => s + 1)}
+              />
+            )}
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 35%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.7) 100%)' }} />
+            <span className="absolute left-1/2 top-1/2 flex h-14 w-14 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full shadow-xl transition-transform duration-200 group-hover:scale-110" style={{ background: 'rgba(255,255,255,0.95)' }}>
+              <Play size={22} className="ml-0.5" style={{ color: '#111' }} fill="#111" />
+            </span>
+            {videoTitle && (
+              <span className="absolute inset-x-3 bottom-2.5 truncate text-left text-xs font-medium text-white/90">{videoTitle}</span>
+            )}
+          </button>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+            {busy ? (
+              <>
+                <LoaderCircle size={26} className="animate-spin" style={{ color: 'rgba(255,255,255,0.8)' }} />
+                <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                  {isRefreshing ? 'Finding another demonstration…' : 'Loading technique video…'}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="flex h-12 w-12 items-center justify-center rounded-full" style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.14)' }}>
+                  <Dumbbell size={20} style={{ color: 'rgba(255,255,255,0.8)' }} />
+                </span>
+                <div>
+                  <div className="text-sm font-semibold text-white">No verified demo yet</div>
+                  <div className="mt-0.5 text-xs" style={{ color: 'rgba(255,255,255,0.6)' }}>Search YouTube or try loading again.</div>
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={handleDemoClick} className={overlayBtn} style={{ background: 'rgba(255,255,255,0.16)' }}>
+                    <ExternalLink size={13} /> Search YouTube
+                  </button>
+                  <button type="button" onClick={() => setReloadKey(k => k + 1)} className={overlayBtn} style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <RotateCcw size={13} /> Retry
+                  </button>
+                </div>
+              </>
+            )}
           </div>
-          {isRefreshing && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm z-10 transition-all">
-              <LoaderCircle size={28} className="animate-spin text-sienna mb-2" />
-              <span className="text-xs font-mono text-bone tracking-wider uppercase">Loading next video...</span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div
-          className="relative cursor-pointer group bg-gradient-to-br from-ink-2 to-ink flex flex-col items-center justify-center"
-          style={{ aspectRatio: '16/9' }}
-          onClick={handleDemoClick}
-        >
-          {loading || isRefreshing ? (
-            <div className="flex flex-col items-center gap-3">
-              <LoaderCircle size={24} className="animate-spin text-sienna" />
-              <span className="text-xs font-mono text-bone-dim uppercase tracking-wider">
-                {isRefreshing ? 'Finding next demo...' : 'Finding demo...'}
-              </span>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-3">
-              <div className="w-14 h-14 rounded-full bg-sienna/20 border border-sienna/50 flex items-center justify-center shadow-lg group-hover:bg-sienna/40 group-hover:scale-110 transition-all duration-300">
-                <Play size={24} className="text-sienna ml-1" fill="currentColor" />
-              </div>
-              <span className="text-xs font-mono text-bone-dim uppercase tracking-wider group-hover:text-bone transition-colors">Find demonstration</span>
-            </div>
-          )}
-        </div>
-      )}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-line/60 px-3.5 sm:px-4 py-2.5 sm:py-3 bg-ink-2">
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-mono uppercase tracking-widest text-sienna">Technique reference</div>
-          <div className="mt-0.5 text-xs text-bone-dim truncate">
-            {isRefreshing ? 'Loading alternative video...' : isPlaying ? 'Playing video' : thumbnailUrl ? 'Ready to watch' : 'Find technique demo'}
+        )}
+
+        {/* Busy veil while swapping away from a playing/visible video */}
+        {isRefreshing && videoId && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2" style={{ background: 'rgba(0,0,0,0.65)' }}>
+            <LoaderCircle size={26} className="animate-spin" style={{ color: 'rgba(255,255,255,0.85)' }} />
+            <span className="text-xs font-medium text-white/80">Finding another demonstration…</span>
           </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {isPlaying ? (
-            <button onClick={(e) => { e.preventDefault(); openInAppBrowser(formUrl); }} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 px-3 py-1.5 text-[10px] sm:text-[11px] font-bold text-sienna hover:bg-sienna/10 active:scale-95 transition-all">
-              <ExternalLink size={12} /> More Videos
-            </button>
-          ) : (
-            <button onClick={handleDemoClick} className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-sienna/40 bg-sienna/10 px-3.5 sm:px-4 py-1.5 text-[10px] sm:text-[11px] font-bold text-sienna hover:bg-sienna/20 active:scale-95 transition-all">
-              <Play size={12} fill="currentColor" /> {thumbnailUrl ? 'Watch' : 'Search YouTube'}
-            </button>
-          )}
-        </div>
+        )}
+
+        <span className="pointer-events-none absolute left-3 top-3 z-20 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white" style={{ background: 'rgba(0,0,0,0.55)' }}>
+          Technique
+        </span>
       </div>
-    </div>
+
+      <div className="flex items-center gap-2 px-3.5 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-semibold">
+            {status === 'loading' ? 'Finding the best demonstration' : videoId ? (isPlaying ? 'Now playing' : 'Form reference') : 'Not available'}
+          </div>
+          <div className="truncate text-[12px] dx-muted">
+            {videoId ? 'Watch the full movement before your first set' : 'Opens YouTube search in the browser'}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleRefreshVideo}
+          disabled={busy}
+          aria-label="Change technique video"
+          title="Show a different demonstration"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl px-3 text-[12px] font-semibold transition active:scale-95 disabled:opacity-50"
+          style={{ background: 'var(--dx-card)', border: '1px solid var(--dx-border)' }}
+        >
+          <RotateCw size={13} className={isRefreshing ? 'animate-spin' : ''} /> Change
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); openInAppBrowser(formUrl); }}
+          aria-label="Open on YouTube"
+          title="Open on YouTube"
+          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl dx-muted transition active:scale-95"
+          style={{ background: 'var(--dx-card)', border: '1px solid var(--dx-border)' }}
+        >
+          <ExternalLink size={14} />
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -357,75 +356,100 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const sectionLabel = { warmup: 'Warm-up', skillWork: 'Skill work', strength: 'Strength', cooldown: 'Cool-down' }[section];
+  const completedSets = log.sets.filter((s: any) => s.completed).length;
+  const specs = [
+    { label: 'Sets', value: exercise.sets },
+    { label: 'Tempo', value: exercise.tempo },
+    { label: 'Rest', value: exercise.rest },
+  ].filter(s => s.value);
+  const iconBtn = 'dx-icon-btn dx-icon-btn--sm';
+  const sectionTitle = 'dx-eyebrow';
+
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 pb-0 sm:pb-4">
-      <div className="absolute inset-0 bg-ink/80 backdrop-blur-sm" onClick={onClose} />
+    <div className="dx pro-scope dx-overlay z-50">
+      <div className="dx-backdrop" onClick={onClose} />
 
       <motion.div
         initial={{ y: '100%', opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="relative w-full max-w-lg bg-ink-2 rounded-t-3xl sm:rounded-3xl border border-line flex flex-col max-h-[90dvh] sm:max-h-[90vh]"
+        transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={exercise.name}
+        className="dx-sheet sm:max-w-lg"
       >
+        <div className="dx-sheet-handle" aria-hidden />
+
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-line">
-          <div className="flex-1 mr-4">
-            <h3 className="font-display text-xl uppercase tracking-wide">{exercise.name}</h3>
-            <p className="text-xs text-bone-dim mt-0.5">
-              {exercise.sets} {exercise.tempo ? `· tempo ${exercise.tempo}` : ''} {exercise.rest ? `· rest ${exercise.rest}` : ''}
-            </p>
+        <div className="dx-sheet-header">
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.1em] dx-accent">
+              {sectionLabel}{isReadOnly ? ' · History' : ''}
+            </div>
+            <h3 className="mt-1 text-[20px] font-semibold leading-tight tracking-tight">{exercise.name}</h3>
+            {specs.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {specs.map(s => (
+                  <span key={s.label} className="dx-tag">
+                    {s.label} <strong>{s.value}</strong>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             {!isReadOnly && (
               <>
-                <button onClick={() => setIsEditingEx(!isEditingEx)} className="text-xs font-mono text-sienna hover:underline px-2 py-1">
-                  Edit
+                <button onClick={() => setIsEditingEx(!isEditingEx)} className={iconBtn} style={isEditingEx ? { borderColor: 'var(--dx-accent)', color: 'var(--dx-accent)' } : undefined} aria-label="Edit exercise" title="Edit exercise">
+                  <Edit3 size={15} />
                 </button>
-                <button onClick={handleDelete} className="text-xs font-mono text-danger hover:underline px-2 py-1">
-                  Delete
+                <button onClick={handleDelete} className={`${iconBtn} hover:!text-red-500`} aria-label="Delete exercise" title="Delete exercise">
+                  <Trash2 size={15} />
                 </button>
               </>
             )}
-            <button onClick={onClose} className="p-1.5 text-bone-dim hover:text-bone rounded-lg border border-line ml-2">
-              <X size={18} />
+            <button onClick={onClose} className={iconBtn} aria-label="Close">
+              <X size={17} />
             </button>
           </div>
         </div>
 
         {/* Scrollable Container */}
-        <div className="p-5 overflow-y-auto space-y-6 max-h-[65vh]">
+        <div className="dx-sheet-body space-y-5">
           {isEditingEx ? (
-            <div className="space-y-4 bg-ink p-4 rounded-lg border border-line">
-              <h4 className="font-display text-base">Edit Exercise details</h4>
+            <div className="space-y-4">
+              <h4 className="dx-section-title">Edit exercise</h4>
               <div>
-                <label className="text-xs font-mono text-bone-dim block mb-1">Exercise Name</label>
-                <input type="text" className="input-field w-full" value={editName} onChange={e => setEditName(e.target.value)} />
+                <label className="dx-label">Exercise name</label>
+                <input type="text" className="dx-input" value={editName} onChange={e => setEditName(e.target.value)} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-mono text-bone-dim block mb-1">Sets String</label>
-                  <input type="text" className="input-field w-full" value={editSetsStr} onChange={e => setEditSetsStr(e.target.value)} />
+                  <label className="dx-label">Sets × reps</label>
+                  <input type="text" className="dx-input" value={editSetsStr} onChange={e => setEditSetsStr(e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-xs font-mono text-bone-dim block mb-1">Tempo</label>
-                  <input type="text" className="input-field w-full" value={editTempo} onChange={e => setEditTempo(e.target.value)} />
+                  <label className="dx-label">Tempo</label>
+                  <input type="text" className="dx-input" value={editTempo} onChange={e => setEditTempo(e.target.value)} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-mono text-bone-dim block mb-1">Rest</label>
-                  <input type="text" className="input-field w-full" value={editRest} onChange={e => setEditRest(e.target.value)} />
+                  <label className="dx-label">Rest</label>
+                  <input type="text" className="dx-input" value={editRest} onChange={e => setEditRest(e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-xs font-mono text-bone-dim block mb-1">YouTube Link / Search</label>
-                  <input type="text" className="input-field w-full" value={editYt} onChange={e => setEditYt(e.target.value)} />
+                  <label className="dx-label">YouTube link</label>
+                  <input type="text" className="dx-input" value={editYt} onChange={e => setEditYt(e.target.value)} />
                 </div>
               </div>
               <div>
-                <label className="text-xs font-mono text-bone-dim block mb-1">Cues (one per line)</label>
-                <textarea className="input-field w-full h-20 text-xs" value={editCues} onChange={e => setEditCues(e.target.value)} />
+                <label className="dx-label">Cues (one per line)</label>
+                <textarea className="dx-input text-[13px]" value={editCues} onChange={e => setEditCues(e.target.value)} />
               </div>
               <div>
-                <label className="text-xs font-mono text-bone-dim block mb-1">Target Muscle Group (Optional)</label>
+                <label className="dx-label">Target muscle group</label>
                 <CustomSelect
                   className="w-full"
                   value={editMuscleGroup}
@@ -436,9 +460,9 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                   ]}
                 />
               </div>
-              <div className="flex gap-2">
-                <button onClick={handleEditSave} className="btn-primary flex-1">Save changes</button>
-                <button onClick={() => setIsEditingEx(false)} className="btn-secondary">Cancel</button>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setIsEditingEx(false)} className="dx-btn-secondary">Cancel</button>
+                <button onClick={handleEditSave} className="dx-btn flex-1">Save changes</button>
               </div>
             </div>
           ) : (
@@ -447,55 +471,91 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
 
               {/* Form Cues */}
               {exercise.cues && exercise.cues.length > 0 && (
-                <div className="space-y-1 text-xs text-bone-dim leading-relaxed">
-                  {exercise.cues.map((cue, i) => (
-                    <div key={i} className="flex gap-1.5">
-                      <span className="text-sienna">—</span>
-                      <span>{cue}</span>
-                    </div>
-                  ))}
-                </div>
+                <section>
+                  <div className={`${sectionTitle} mb-2.5`}>Form cues</div>
+                  <ol className="space-y-2">
+                    {exercise.cues.map((cue, i) => (
+                      <li key={i} className="flex gap-3 text-[13px] leading-relaxed">
+                        <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold tabular" style={{ background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)' }}>{i + 1}</span>
+                        <span>{cue}</span>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
               )}
 
               {/* Last Session History */}
-              <div>
-                <div className="text-xs font-mono text-bone-dim tracking-wider mb-2 uppercase">Last Session</div>
-                <div className="bg-ink border border-line/50 p-4 rounded text-sm text-bone-dim">
+              <section className="dx-inset flex items-start gap-3 p-3.5">
+                <span className="dx-badge-icon" style={{ background: 'var(--dx-card)', color: 'var(--dx-muted)' }}>
+                  <History size={16} />
+                </span>
+                <div className="min-w-0 flex-1 text-[13px]">
+                  <div className="font-semibold">Last session</div>
                   {previousLog ? (
-                    <div className="space-y-1">
-                      <div className="text-bone">{previousLog.sets?.filter((set: any) => set.completed !== false).length || 0} completed sets</div>
-                      <div>{previousLog.sets?.map((set: any) => `${set.reps || set.seconds || 0}${set.seconds ? ' sec' : ' reps'}${set.weight ? ` @ ${set.weight} kg` : ''}`).join(' · ')}</div>
+                    <div className="mt-0.5 dx-muted">
+                      <span style={{ color: 'var(--dx-text)' }}>{previousLog.sets?.filter((set: any) => set.completed !== false).length || 0} sets</span>
+                      {' · '}
+                      <span className="tabular text-[12px]">{previousLog.sets?.map((set: any) => `${set.reps || set.seconds || 0}${set.seconds ? 's' : ''}${set.weight ? ` @ ${set.weight}kg` : ''}`).join('  ·  ')}</span>
                     </div>
-                  ) : 'No previous data yet — this will be your first logged session.'}
+                  ) : (
+                    <div className="mt-0.5 dx-muted">No previous data. This will be your first logged session.</div>
+                  )}
                 </div>
-              </div>
+              </section>
 
               {/* Logging Section */}
-              <div>
-                <div className="text-xs font-mono text-bone-dim tracking-wider mb-4 uppercase">
-                  Log this session — {log.mode === 'reps' ? 'Reps / Added weight per set' : 'Seconds held'}
+              <section>
+                <div className="mb-2.5 flex items-baseline justify-between gap-3">
+                  <div className={sectionTitle}>{log.mode === 'reps' ? 'Log sets' : 'Log holds'}</div>
+                  {log.sets.length > 0 && (
+                    <div className="text-[12px] dx-muted tabular">
+                      <span className="font-semibold" style={{ color: 'var(--dx-text)' }}>{completedSets}</span>/{log.sets.length} done
+                    </div>
+                  )}
                 </div>
 
-                <div className="space-y-3">
-                  {log.sets.map((set: any, idx: number) => (
-                    <div key={idx} className={`grid grid-cols-[auto_1fr_auto] items-center gap-4 p-2 rounded border ${set.completed ? 'bg-amber/10 border-amber/30' : 'bg-ink border-line'}`}>
-                      <div className="w-8 text-center font-mono text-sm text-bone-dim font-bold">#{idx + 1}</div>
+                {log.sets.length > 0 && (
+                  <div className="mb-1.5 grid grid-cols-[2.25rem_1fr_2.75rem] items-center gap-3 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] dx-muted">
+                    <span className="text-center">Set</span>
+                    {log.mode === 'reps' ? (
+                      <span className="grid grid-cols-2 gap-2 text-center"><span>Reps</span><span>Added kg</span></span>
+                    ) : (
+                      <span className="text-center">Seconds</span>
+                    )}
+                    <span className="text-center">Done</span>
+                  </div>
+                )}
 
-                      <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  {log.sets.map((set: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="grid grid-cols-[2.25rem_1fr_2.75rem] items-center gap-3 rounded-2xl p-1.5 transition-colors"
+                      style={{ background: set.completed ? 'var(--dx-success-soft)' : 'var(--dx-card-2)' }}
+                    >
+                      <div className="text-center text-[14px] font-semibold tabular dx-muted">{idx + 1}</div>
+
+                      <div className="grid grid-cols-2 gap-2">
                         {log.mode === 'reps' ? (
                           <>
                             <input
                               type="number"
-                              placeholder="reps"
-                              className="input-field text-center font-mono text-base bg-ink-2"
+                              inputMode="numeric"
+                              placeholder="0"
+                              aria-label={`Set ${idx + 1} reps`}
+                              className="dx-input !h-10 !min-h-0 !py-0 text-center text-[16px] font-semibold tabular"
+                              style={{ background: 'var(--dx-card)' }}
                               value={set.reps ?? ''}
                               onChange={(e) => store.updateSet(exercise.name, log.mode, idx, { reps: parseInt(e.target.value) || 0 })}
                               disabled={set.completed || isReadOnly}
                             />
                             <input
                               type="number"
-                              placeholder="+kg"
-                              className="input-field text-center font-mono text-base bg-ink-2"
+                              inputMode="decimal"
+                              placeholder="0"
+                              aria-label={`Set ${idx + 1} added weight`}
+                              className="dx-input !h-10 !min-h-0 !py-0 text-center text-[16px] font-semibold tabular"
+                              style={{ background: 'var(--dx-card)' }}
                               value={set.weight ?? ''}
                               onChange={(e) => store.updateSet(exercise.name, log.mode, idx, { weight: parseFloat(e.target.value) || 0 })}
                               disabled={set.completed || isReadOnly}
@@ -504,8 +564,11 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                         ) : (
                           <input
                             type="number"
-                            placeholder="seconds"
-                            className="input-field col-span-2 text-center font-mono text-base bg-ink-2"
+                            inputMode="numeric"
+                            placeholder="0"
+                            aria-label={`Set ${idx + 1} seconds`}
+                            className="dx-input col-span-2 !h-10 !min-h-0 !py-0 text-center text-[16px] font-semibold tabular"
+                            style={{ background: 'var(--dx-card)' }}
                             value={set.seconds ?? ''}
                             onChange={(e) => store.updateSet(exercise.name, log.mode, idx, { seconds: parseInt(e.target.value) || 0 })}
                             disabled={set.completed || isReadOnly}
@@ -523,48 +586,70 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                           }
                         }}
                         disabled={isReadOnly}
-                        className={`w-8 h-8 rounded flex items-center justify-center font-mono text-sm font-bold border transition-all ${set.completed ? 'bg-sienna text-bone border-sienna' : 'bg-line/50 border-line hover:border-sienna'}`}
+                        aria-label={set.completed ? `Mark set ${idx + 1} incomplete` : `Mark set ${idx + 1} complete`}
+                        aria-pressed={!!set.completed}
+                        className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl transition-all active:scale-95"
+                        style={set.completed
+                          ? { background: 'var(--dx-success)', color: '#fff' }
+                          : { background: 'var(--dx-card)', color: 'var(--dx-muted)', border: '1px solid var(--dx-border)' }}
                       >
-                        {set.completed ? '✓' : '✕'}
+                        <Check size={18} strokeWidth={set.completed ? 3 : 2} className={set.completed ? '' : 'opacity-50'} />
                       </button>
                     </div>
                   ))}
                 </div>
 
-                {!isReadOnly && (
-                  <div className="flex justify-between items-center mt-3">
-                    <button onClick={() => store.addSet(exercise.name, log.mode)} className="text-sienna text-sm font-mono flex items-center gap-1 hover:underline">
-                      <Plus size={14} /> Add set
-                    </button>
-                    {log.sets.length > 0 && (
-                      <button onClick={() => store.removeSet(exercise.name, log.sets.length - 1)} className="text-danger text-sm font-mono flex items-center gap-1 hover:underline">
-                        <Trash2 size={14} /> Remove last
-                      </button>
-                    )}
+                {log.sets.length === 0 && (
+                  <div className="rounded-2xl px-4 py-5 text-center text-[13px] dx-muted" style={{ border: '1px dashed var(--dx-border-strong)' }}>
+                    {isReadOnly ? 'No sets were logged.' : 'No sets yet. Add your first set to start logging.'}
                   </div>
                 )}
-              </div>
+
+                {!isReadOnly && (
+                  <div className="mt-2.5 grid grid-cols-2 gap-2">
+                    <button onClick={() => store.addSet(exercise.name, log.mode)} className="dx-btn-secondary !h-10 text-[13px]">
+                      <Plus size={15} /> Add set
+                    </button>
+                    <button
+                      onClick={() => store.removeSet(exercise.name, log.sets.length - 1)}
+                      disabled={log.sets.length === 0}
+                      className="dx-btn-secondary !h-10 text-[13px] dx-muted hover:!text-red-500"
+                    >
+                      <Trash2 size={14} /> Remove last
+                    </button>
+                  </div>
+                )}
+              </section>
 
               {/* Notes */}
-              <div>
-                <div className="text-xs font-mono text-bone-dim mb-2 uppercase">Notes</div>
+              <section>
+                <div className={`${sectionTitle} mb-2.5`}>Notes</div>
                 <textarea
-                  className="input-field w-full h-20 text-sm"
+                  className="dx-input text-[14px]"
                   placeholder={isReadOnly ? "No notes logged." : "e.g. left shoulder felt tight, form breaking down on last set..."}
                   value={log.notes}
                   onChange={e => store.updateNotes(exercise.name, e.target.value)}
                   disabled={isReadOnly}
                 />
-              </div>
+              </section>
 
               {/* Timers Section */}
-              <div className="border border-line rounded-lg p-4 bg-ink space-y-4">
-                <div className="flex border-b border-line pb-2">
-                  <div className="text-xs font-mono text-bone-dim tracking-wider uppercase flex-1">Timers</div>
-                  <div className="flex gap-2 text-xs font-mono overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    <button onClick={() => setTimerMode('rest')} className={`px-2 py-0.5 rounded whitespace-nowrap ${timerMode === 'rest' ? 'bg-sienna text-bone font-bold' : 'text-bone-dim'}`}>Rest</button>
-                    <button onClick={() => setTimerMode('stopwatch')} className={`px-2 py-0.5 rounded whitespace-nowrap ${timerMode === 'stopwatch' ? 'bg-sienna text-bone font-bold' : 'text-bone-dim'}`}>Stopwatch</button>
-                    <button onClick={() => setTimerMode('countdown')} className={`px-2 py-0.5 rounded whitespace-nowrap ${timerMode === 'countdown' ? 'bg-sienna text-bone font-bold' : 'text-bone-dim'}`}>Countdown</button>
+              <section className="dx-inset p-4 space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className={sectionTitle}>Timer</div>
+                  <div className="dx-segment !p-[3px]" role="tablist" style={{ background: 'var(--dx-card)' }}>
+                    {([['rest', 'Rest'], ['stopwatch', 'Stopwatch'], ['countdown', 'Countdown']] as const).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        role="tab"
+                        aria-selected={timerMode === mode}
+                        onClick={() => setTimerMode(mode)}
+                        className="!h-8 !px-2.5 !text-[12px]"
+                        style={timerMode === mode ? { background: 'var(--dx-card-2)' } : undefined}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
@@ -580,7 +665,8 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                             setRestTimeLeft(s);
                             setIsRestRunning(false);
                           }}
-                          className={`px-3 py-1 font-mono text-xs rounded-full border ${restDuration === s ? 'bg-sienna text-bone border-sienna font-bold' : 'border-line text-bone-dim hover:border-bone-dim'}`}
+                          className="min-w-[3rem] h-8 rounded-full px-3 text-[12px] font-semibold tabular transition"
+                          style={restDuration === s ? { background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' } : { background: 'var(--dx-card)', color: 'var(--dx-muted)' }}
                         >
                           {s}s
                         </button>
@@ -588,12 +674,13 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                     </div>
 
                     {/* Custom Rest Input */}
-                    <div className="flex justify-center items-center gap-2 text-xs font-mono text-bone-dim">
-                      <span>Custom:</span>
+                    <div className="flex justify-center items-center gap-2 text-[12px] dx-muted">
+                      <span>Custom</span>
                       <input
                         type="number"
                         min="1"
-                        className="input-field w-16 py-1 text-center bg-ink-2"
+                        className="dx-input !w-20 !h-9 !min-h-0 !py-0 text-center tabular"
+                        style={{ background: 'var(--dx-card)' }}
                         value={restDuration}
                         onChange={(e) => {
                           const val = parseInt(e.target.value) || 0;
@@ -605,14 +692,14 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                       <span>sec</span>
                     </div>
 
-                    <div className="text-4xl font-mono font-bold tracking-widest text-bone">
+                    <div className={`text-[48px] leading-none font-semibold tabular tracking-tight ${isRestRunning ? 'dx-accent' : ''}`}>
                       {formatMMSS(restTimeLeft)}
                     </div>
-                    <div className="flex gap-3 max-w-xs mx-auto">
-                      <button onClick={() => setIsRestRunning(!isRestRunning)} className="btn-primary py-2 flex-1">
+                    <div className="flex gap-2.5 max-w-xs mx-auto">
+                      <button onClick={() => setIsRestRunning(!isRestRunning)} className="dx-btn flex-1">
                         {isRestRunning ? 'Pause' : 'Start'}
                       </button>
-                      <button onClick={() => { setRestTimeLeft(restDuration); setIsRestRunning(false); }} className="btn-secondary py-2 px-4 flex items-center justify-center">
+                      <button onClick={() => { setRestTimeLeft(restDuration); setIsRestRunning(false); }} className="dx-icon-btn" aria-label="Reset timer" style={{ background: 'var(--dx-card)' }}>
                         <RotateCcw size={16} />
                       </button>
                     </div>
@@ -622,14 +709,14 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                 {/* Stopwatch Block */}
                 {timerMode === 'stopwatch' && (
                   <div className="space-y-4 text-center">
-                    <div className="text-4xl font-mono font-bold tracking-widest text-bone">
+                    <div className={`text-[48px] leading-none font-semibold tabular tracking-tight ${isStopwatchRunning ? 'dx-accent' : ''}`}>
                       {formatMMSS(stopwatchElapsed)}
                     </div>
-                    <div className="flex gap-3 max-w-xs mx-auto">
-                      <button onClick={() => setIsStopwatchRunning(!isStopwatchRunning)} className="btn-primary py-2 flex-1">
+                    <div className="flex gap-2.5 max-w-xs mx-auto">
+                      <button onClick={() => setIsStopwatchRunning(!isStopwatchRunning)} className="dx-btn flex-1">
                         {isStopwatchRunning ? 'Pause' : 'Start'}
                       </button>
-                      <button onClick={() => { setStopwatchElapsed(0); setIsStopwatchRunning(false); }} className="btn-secondary py-2 px-4 flex items-center justify-center">
+                      <button onClick={() => { setStopwatchElapsed(0); setIsStopwatchRunning(false); }} className="dx-icon-btn" aria-label="Reset stopwatch" style={{ background: 'var(--dx-card)' }}>
                         <RotateCcw size={16} />
                       </button>
                     </div>
@@ -648,7 +735,8 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                             setCountdownTimeLeft(s);
                             setIsCountdownRunning(false);
                           }}
-                          className={`px-3 py-1 font-mono text-xs rounded-full border ${countdownDuration === s ? 'bg-sienna text-bone border-sienna font-bold' : 'border-line text-bone-dim hover:border-bone-dim'}`}
+                          className="min-w-[3rem] h-8 rounded-full px-3 text-[12px] font-semibold tabular transition"
+                          style={countdownDuration === s ? { background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' } : { background: 'var(--dx-card)', color: 'var(--dx-muted)' }}
                         >
                           {s === 60 ? '1m' : s === 180 ? '3m' : s === 300 ? '5m' : '10m'}
                         </button>
@@ -656,12 +744,13 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                     </div>
 
                     {/* Custom Countdown Input */}
-                    <div className="flex justify-center items-center gap-2 text-xs font-mono text-bone-dim">
-                      <span>Custom:</span>
+                    <div className="flex justify-center items-center gap-2 text-[12px] dx-muted">
+                      <span>Custom</span>
                       <input
                         type="number"
                         min="1"
-                        className="input-field w-16 py-1 text-center bg-ink-2"
+                        className="dx-input !w-20 !h-9 !min-h-0 !py-0 text-center tabular"
+                        style={{ background: 'var(--dx-card)' }}
                         value={Math.floor(countdownDuration / 60)}
                         onChange={(e) => {
                           const val = (parseInt(e.target.value) || 0) * 60;
@@ -673,28 +762,28 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                       <span>min</span>
                     </div>
 
-                    <div className="text-4xl font-mono font-bold tracking-widest text-bone">
+                    <div className={`text-[48px] leading-none font-semibold tabular tracking-tight ${isCountdownRunning ? 'dx-accent' : ''}`}>
                       {formatMMSS(countdownTimeLeft)}
                     </div>
-                    <div className="flex gap-3 max-w-xs mx-auto">
-                      <button onClick={() => setIsCountdownRunning(!isCountdownRunning)} className="btn-primary py-2 flex-1">
+                    <div className="flex gap-2.5 max-w-xs mx-auto">
+                      <button onClick={() => setIsCountdownRunning(!isCountdownRunning)} className="dx-btn flex-1">
                         {isCountdownRunning ? 'Pause' : 'Start'}
                       </button>
-                      <button onClick={() => { setCountdownTimeLeft(countdownDuration); setIsCountdownRunning(false); }} className="btn-secondary py-2 px-4 flex items-center justify-center">
+                      <button onClick={() => { setCountdownTimeLeft(countdownDuration); setIsCountdownRunning(false); }} className="dx-icon-btn" aria-label="Reset countdown" style={{ background: 'var(--dx-card)' }}>
                         <RotateCcw size={16} />
                       </button>
                     </div>
                   </div>
                 )}
-              </div>
+              </section>
             </>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-line">
-          <button onClick={handleSaveSession} className="btn-primary w-full py-3 tracking-wider font-bold">
-            {isReadOnly ? 'CLOSE' : 'SAVE SESSION'}
+        <div className="dx-sheet-footer">
+          <button onClick={handleSaveSession} className="dx-btn w-full h-12 text-[15px]">
+            {isReadOnly ? 'Close' : `Save session${completedSets ? ` · ${completedSets}/${log.sets.length} sets` : ''}`}
           </button>
         </div>
       </motion.div>

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, Plus, X, Share2, TrendingUp, ChevronRight, Check, Flame, Dumbbell, Weight, ChevronDown, Activity, User } from 'lucide-react';
+import { ArrowLeft, Clock, Plus, X, Share2, ChevronRight, Check, Flame, Dumbbell, Weight, Activity, Play, Target, Wind, Trophy, Flag } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { useUserWeight } from '@/hooks/use-user-weight';
@@ -17,7 +17,7 @@ import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore
 import { db } from '@/lib/firebase';
 import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
 import type { Exercise } from '@/types';
-import { calculateWorkoutCalories, calculateWorkoutVolume } from '@/lib/calories';
+import { CALORIE_MODEL_VERSION, calculateWorkoutCalories, calculateWorkoutVolume } from '@/lib/calories';
 import { usePedometerStore } from '@/stores/pedometer-store';
 import { requestNotificationPermission, showPersistentNotification, clearNotification, showNotification, cancelRemainingTodayReminders, scheduleInactivityReminders } from '@/utils/notifications';
 import { requestForegroundPermissions, startWorkoutForegroundService, updateWorkoutForegroundService, stopWorkoutForegroundService, setupForegroundServiceListeners } from '@/utils/foreground-service';
@@ -26,9 +26,33 @@ import { calculateBodyweightReps } from '@/lib/muscle-map';
 import { compareExerciseProgress } from '@/lib/progressive-overload';
 import { updateUserChallengeProgress } from '@/services/community';
 import { ExerciseIllustration } from '@/components/ui/ExerciseIllustration';
+import { getBadge } from '@/lib/badges';
+import { effectiveStreak } from '@/lib/stats';
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function buildWorkoutLiveStats() {
+  const st = useWorkoutStore.getState();
+  const now = Date.now();
+  const pausedMs = st.totalPausedMs + (st.isPaused && st.pausedAt ? now - st.pausedAt : 0);
+  let setsCompleted = 0;
+  let exercisesDone = 0;
+  let volumeKg = 0;
+  for (const log of Object.values(st.logs || {})) {
+    const done = (log.sets || []).filter((s) => s.completed);
+    if (done.length > 0) exercisesDone += 1;
+    setsCompleted += done.length;
+    for (const s of done) volumeKg += (s.weight || 0) * (s.reps || 0);
+  }
+  return {
+    status: st.isPaused ? 'paused' as const : 'active' as const,
+    activeSec: st.startedAt ? Math.max(0, Math.floor((now - st.startedAt - pausedMs) / 1000)) : 0,
+    setsCompleted,
+    exercisesDone,
+    volumeKg: Math.round(volumeKg),
+  };
 }
 
 function historicalLogToExercise(log: any): Exercise {
@@ -279,8 +303,7 @@ export function WorkoutSession() {
     ? [...(store.warmup || []), ...(store.skillWork || []), ...(store.strength || []), ...(store.cooldown || [])]
     : displayExercises;
   const estimatedCalories = calculateWorkoutCalories(
-    activeExercises,
-    activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)),
+    activeLogs,
     userWeight,
     Math.max(1, Math.round(elapsedSec / 60)),
   );
@@ -354,8 +377,9 @@ export function WorkoutSession() {
     if (!user || !store.isActive || sessionFinished || !store.startedAt) return;
     updateActiveSession(user.uid, {
       currentExercise: lastExercise,
+      ...buildWorkoutLiveStats(),
     }, 'workout').catch(console.error);
-  }, [lastExercise, user, store.isActive, sessionFinished, store.startedAt]);
+  }, [lastExercise, user, store.isActive, store.isPaused, sessionFinished, store.startedAt]);
 
   // Periodically update the active session's stats (calories, etc.)
   useEffect(() => {
@@ -364,6 +388,7 @@ export function WorkoutSession() {
       updateActiveSession(user.uid, {
         currentExercise: lastExerciseRef.current,
         caloriesBurned: Math.round(displayCaloriesRef.current) || 0,
+        ...buildWorkoutLiveStats(),
       }, 'workout').catch(console.error);
     }, 10000); // Update every 10s
     return () => clearInterval(interval);
@@ -421,11 +446,7 @@ export function WorkoutSession() {
         }
       }
 
-      // Award XP celebration values
-      const streakBonus = 2; // static for now
-      const xpEarned = 100 + Math.round(totalVol / 1000) + Math.round(elapsedSec / 60);
-
-      const workoutId = await saveWorkout(user.uid, {
+      const saved = await saveWorkout(user.uid, {
         userId: user.uid,
         userName: user.displayName || 'Unknown',
         userPhoto: user.photoURL || '',
@@ -438,6 +459,7 @@ export function WorkoutSession() {
         finishedAt: null, // Set in backend
         durationMin: finalDurationMin,
         calories,
+        caloriesVersion: CALORIE_MODEL_VERSION,
         volume: totalVol,
         bodyweight: userWeight || undefined,
         visibility: privacy,
@@ -472,7 +494,7 @@ export function WorkoutSession() {
           username: profile!.username,
           userPhoto: user!.photoURL || '',
           type: 'workout',
-          workoutId: workoutId,
+          workoutId: saved.id,
           summary: `Completed ${store.dayTitle} from ${plan!.title}`,
           details: {
             planTitle: plan!.title,
@@ -481,6 +503,8 @@ export function WorkoutSession() {
             volume: totalVol,
             calories,
             bodyweight: userWeight || null,
+            gender: profile?.gender || null,
+            prCount: saved.prCount || 0,
             exercises: exLogs.map(e => e.name),
             // Preserve completion state so shared anatomy reflects this
             exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets, muscleGroup: e.muscleGroup, section: e.section }))
@@ -533,13 +557,17 @@ export function WorkoutSession() {
       scheduleInactivityReminders().catch(() => {});
 
       setCelebrationData({
-        heading: 'DAY COMPLETE',
-        sub: `${store.dayTitle} — ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`,
+        heading: 'Day complete',
+        sub: `${store.dayTitle} · ${new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`,
         xpBreakdown: [
-          { label: 'Day complete', val: 40 },
-          { label: 'Streak bonus (1d)', val: 2 }
-        ],
-        totalXp: 42
+          { label: 'Workout complete', val: 50 },
+          { label: `Training time (${finalDurationMin} min)`, val: Math.round(Math.min(finalDurationMin, 180)) },
+          { label: 'Load moved', val: Math.min(150, Math.round(totalVol / 500)) },
+          { label: `Personal records (${saved.prCount})`, val: Math.min(100, saved.prCount * 25) },
+          { label: 'Streak bonus', val: saved.streakBonus },
+        ].filter(row => row.val > 0),
+        totalXp: saved.xpEarned,
+        unlocked: saved.unlockedBadges,
       });
 
       // Prepare share data for the share card - filter out warmup and cooldown exercises
@@ -573,21 +601,21 @@ export function WorkoutSession() {
 
 
 
-  const [celebrationData, setCelebrationData] = useState<{ heading: string, sub: string, xpBreakdown: { label: string, val: number }[], totalXp: number } | null>(null);
+  const [celebrationData, setCelebrationData] = useState<{ heading: string, sub: string, xpBreakdown: { label: string, val: number }[], totalXp: number, unlocked: string[] } | null>(null);
   const [shareData, setShareData] = useState<ShareCardData | null>(null);
 
-  if (planLoading || daysLoading) {
+  if (planLoading || daysLoading || !plan || !currentDay || (!store.isActive && !hasCompletedToday && !sessionFinished)) {
     return (
-      <div className="flex justify-center py-20">
-        <div className="w-8 h-8 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!plan || !currentDay || (!store.isActive && !hasCompletedToday && !sessionFinished)) {
-    return (
-      <div className="text-center py-20 text-bone-dim">
-        Workout initializing...
+      <div className="dx max-w-3xl mx-auto space-y-3 pt-2 animate-pulse" aria-busy="true" aria-label="Preparing workout">
+        <div className="flex justify-between">
+          <div className="h-9 w-9 rounded-xl" style={{ background: 'var(--dx-card-2)' }} />
+          <div className="h-9 w-24 rounded-full" style={{ background: 'var(--dx-card-2)' }} />
+        </div>
+        <div className="h-44 rounded-3xl" style={{ background: 'var(--dx-card-2)' }} />
+        <div className="grid grid-cols-3 gap-2.5">
+          {[0, 1, 2].map(i => <div key={i} className="h-20 rounded-2xl" style={{ background: 'var(--dx-card-2)' }} />)}
+        </div>
+        <div className="h-56 rounded-3xl" style={{ background: 'var(--dx-card-2)' }} />
       </div>
     );
   }
@@ -633,44 +661,44 @@ export function WorkoutSession() {
     showToast('Exercise added to workout');
   };
 
-  const renderSection = (title: string, tagLabel: string, tagColor: string, exercises: Exercise[], sectionKey: 'warmup' | 'skillWork' | 'strength' | 'cooldown', IconComponent: any = Dumbbell) => {
-    return (
-      <div className="mb-10 relative px-1">
-        <div className="flex items-center justify-between mb-4 px-1">
-          <div className="flex items-center gap-2">
-            <IconComponent className={tagColor.split(' ')[1] || "text-bone"} size={18} />
-            <h4 className="font-display text-lg text-bone uppercase tracking-wide flex items-center gap-2">
-               {tagLabel} <span className="text-bone-dim font-mono text-sm normal-case">{title}</span>
-            </h4>
-          </div>
-          <button
-            onClick={() => setAddSection(sectionKey)}
-            className="text-[10px] text-bone border border-line/80 px-3 py-1.5 rounded-full flex items-center gap-1.5 hover:bg-ink-2 transition-all shadow-sm font-medium"
-          >
-            <Plus size={12} /> Add
-          </button>
-        </div>
+  const renderSection = (label: string, meta: string, exercises: Exercise[], sectionKey: 'warmup' | 'skillWork' | 'strength' | 'cooldown', IconComponent: any = Dumbbell) => {
+    const isViewingHistory = !store.isActive && hasCompletedToday;
+    const exerciseDone = (name: string) => isViewingHistory
+      ? !!completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === name)?.sets?.some((s: any) => s.completed)
+      : !!activeLogs.find(item => item.name === name)?.sets.some((s: any) => s.completed);
+    const doneCount = exercises.filter(e => exerciseDone(e.name)).length;
 
-        <div className="space-y-3">
+    return (
+      <section className="dx-card overflow-hidden">
+        <header className="flex items-center gap-3 px-4 pt-4 pb-3">
+          <span className="dx-badge-icon"><IconComponent size={17} /></span>
+          <div className="flex-1 min-w-0">
+            <h3 className="dx-section-title truncate">{label}</h3>
+            <p className="text-[12px] dx-muted truncate">
+              {meta}{exercises.length > 0 ? ` · ${doneCount}/${exercises.length} done` : ''}
+            </p>
+          </div>
+          <button onClick={() => setAddSection(sectionKey)} className="dx-chip font-semibold shrink-0" aria-label={`Add exercise to ${label}`}>
+            <Plus size={13} /> Add
+          </button>
+        </header>
+
+        <div className="dx-list border-t" style={{ borderColor: 'var(--dx-border)' }}>
           {exercises.length === 0 ? (
-            <div className="text-xs text-bone-dim py-6 px-4 border border-dashed border-line/60 rounded-2xl text-center bg-ink-2/30">
-              No exercises added.
-            </div>
+            <div className="px-5 py-6 text-center text-[13px] dx-muted">No exercises in this section.</div>
           ) : (
             exercises.map((e, idx) => {
               const log = activeLogs.find(item => item.name === e.name);
               const histLog = completedWorkoutForDay?.exercises?.find((ex: any) => ex.name === e.name);
               const previousLog = findPreviousExerciseLog(e.name);
-              
-              const isDone = (!store.isActive && hasCompletedToday)
-                ? !!(histLog && histLog.sets?.some((s: any) => s.completed))
-                : !!(log && log.sets.some((s: any) => s.completed));
-                
-              const numCompletedSets = (!store.isActive && hasCompletedToday)
+
+              const isDone = exerciseDone(e.name);
+
+              const numCompletedSets = isViewingHistory
                 ? histLog?.sets?.filter((s: any) => s.completed !== false).length || 0
                 : log?.sets?.filter((s: any) => s.completed).length || 0;
 
-              const previousCompletedSets = previousLog?.sets?.filter((s: any) => 
+              const previousCompletedSets = previousLog?.sets?.filter((s: any) =>
                 s.completed !== false && ((s.reps ?? 0) > 0 || (s.seconds ?? 0) > 0 || (s.weight ?? 0) > 0)
               ) || [];
               const previousSummary = previousCompletedSets
@@ -680,16 +708,16 @@ export function WorkoutSession() {
               return (
                 <motion.div
                   key={idx}
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
+                  transition={{ delay: idx * 0.03 }}
                   onClick={() => setActiveExercise({ name: e.name, mode: exMode(e.sets), index: idx, section: sectionKey })}
-                  className="bg-ink-2 border border-line/60 rounded-[24px] p-3.5 pr-5 flex items-center gap-4 shadow-sm cursor-pointer hover:bg-ink-2/80 transition-all"
+                  className="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-[var(--dx-card-2)] active:bg-[var(--dx-card-2)]"
                 >
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
-                      if (!store.isActive && hasCompletedToday) return;
+                      if (isViewingHistory) return;
                       const isCurrentlyDone = log && log.sets.some((s: any) => s.completed);
                       log?.sets.forEach((_: any, setIdx: number) => {
                         store.markSetComplete(e.name, setIdx, !isCurrentlyDone);
@@ -697,76 +725,104 @@ export function WorkoutSession() {
                       setLastExercise(e.name);
                       showToast(`All sets marked ${!isCurrentlyDone ? 'complete' : 'incomplete'}`);
                     }}
-                    className={`w-7 h-7 rounded-full border-2 flex items-center justify-center flex-none transition-all shadow-sm ${
-                      isDone 
-                        ? 'bg-sienna border-sienna text-bone shadow-[0_0_10px_rgba(200,90,70,0.3)]' 
-                        : 'bg-transparent border-line/80 text-transparent hover:border-sienna/50'
-                    }`}
+                    className="dx-check"
+                    aria-pressed={isDone}
+                    aria-label={isDone ? `Mark ${e.name} incomplete` : `Mark ${e.name} complete`}
                   >
-                    <Check size={14} strokeWidth={3} className={isDone ? "opacity-100" : "opacity-0"} />
+                    <Check size={14} strokeWidth={3} />
                   </button>
 
-                  <ExerciseIllustration 
-                    name={e.name} 
-                    muscleGroup={(e as any).muscleGroup} 
-                    size={56} 
-                    className="border border-line/40 shadow-sm"
+                  <ExerciseIllustration
+                    name={e.name}
+                    muscleGroup={(e as any).muscleGroup}
+                    size={48}
+                    className="!rounded-xl"
                   />
 
                   <div className="flex-1 min-w-0">
-                    <h5 className={`font-display text-base tracking-wide truncate transition-colors ${isDone ? 'text-bone' : 'text-bone'}`}>
-                      {e.name}
-                    </h5>
+                    <h5 className="text-[15px] font-semibold leading-snug truncate">{e.name}</h5>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                      <span className="bg-ink px-1.5 py-0.5 rounded border border-line/40 text-[10px] font-mono text-bone shadow-sm">{e.sets}</span>
-                      {e.tempo && <span className="bg-ink px-1.5 py-0.5 rounded border border-line/40 text-[10px] font-mono text-bone-dim shadow-sm">tempo {e.tempo}</span>}
-                      {e.rest && <span className="bg-ink px-1.5 py-0.5 rounded border border-line/40 text-[10px] font-mono text-bone-dim shadow-sm">rest {e.rest}</span>}
+                      {e.sets && <span className="dx-tag"><strong>{e.sets}</strong></span>}
+                      {e.tempo && <span className="dx-tag">Tempo <strong>{e.tempo}</strong></span>}
+                      {e.rest && <span className="dx-tag">Rest <strong>{e.rest}</strong></span>}
                     </div>
-                    <div className={`text-[10px] font-mono mt-2 truncate ${isDone ? 'text-green-500' : 'text-bone-dim/50'}`}>
+                    <div className="text-[12px] mt-1.5 truncate font-medium" style={{ color: isDone ? 'var(--dx-success)' : 'var(--dx-muted)' }}>
                       {isDone
-                        ? `Logged ${numCompletedSets} sets`
+                        ? `${numCompletedSets} ${numCompletedSets === 1 ? 'set' : 'sets'} logged`
                         : previousCompletedSets.length > 0
                           ? `Last: ${previousSummary}`
                           : 'No history yet'}
                     </div>
                   </div>
 
-                  <div className="w-7 h-7 rounded-full bg-ink border border-line/40 flex items-center justify-center text-bone-dim shrink-0 shadow-sm">
-                    <ChevronRight size={14} />
-                  </div>
+                  <ChevronRight size={17} className="dx-muted shrink-0" />
                 </motion.div>
               );
             })
           )}
         </div>
-      </div>
+      </section>
     );
   };
 
+  const completedExerciseCount = activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length;
+  const progressPct = activeExercises.length ? Math.round((completedExerciseCount / activeExercises.length) * 100) : 0;
+  const isViewingHistory = !store.isActive && hasCompletedToday;
+  const timerRunning = store.isActive && !!store.startedAt && !sessionFinished;
+  const kpis = [
+    { icon: Clock, label: 'Duration', value: Math.round(elapsedSec / 60), unit: 'min' },
+    { icon: Weight, label: 'Max lift', value: maxWeight > 0 ? maxWeight : 0, unit: displayWeightUnit },
+    { icon: Flame, label: 'Calories', value: `~${displayCalories}`, unit: 'kcal' },
+  ];
+  const primaryLabel = isSaving
+    ? 'Saving…'
+    : sessionFinished
+      ? 'Session saved'
+      : isViewingHistory
+        ? 'Log again'
+        : (store.isActive && !store.startedAt)
+          ? 'Start workout'
+          : 'Finish workout';
+  const PrimaryIcon = isViewingHistory ? Activity : (store.isActive && !store.startedAt) ? Play : Check;
+
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pb-32 bg-ink min-h-screen">
-      <div className="flex justify-between items-center mb-6 px-4 pt-4">
-        <button onClick={handleCancel} className="inline-flex items-center gap-2 text-sm font-medium text-bone-dim hover:text-bone transition-colors">
-          <ArrowLeft size={16} /> Quit
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="dx pro-scope max-w-3xl mx-auto pb-36 pt-1 sm:pt-3">
+      {/* Top bar */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <button onClick={handleCancel} className="dx-icon-btn dx-icon-btn--sm" aria-label="Quit workout" title="Quit">
+          <ArrowLeft size={18} />
         </button>
-        <div className="flex items-center gap-2 font-mono text-sienna font-bold">
+        <div className="flex items-center gap-2">
           {store.isActive && !store.startedAt && (
-            <button onClick={() => store.startTimer()} className="bg-sienna/10 text-sienna py-1 px-3 mr-2 text-[10px] tracking-wider uppercase rounded-full">Start</button>
+            <button onClick={() => store.startTimer()} className="dx-pill dx-pill--accent h-8 px-3 text-[12px]">
+              <Play size={12} fill="currentColor" /> Start timer
+            </button>
           )}
-          <Clock size={16} />
-          {formatStopwatch(elapsedSec)}
+          <div className="dx-card inline-flex items-center gap-2 h-9 px-3.5 !rounded-full" aria-label="Elapsed time">
+            {timerRunning ? (
+              <span className="relative flex h-2 w-2">
+                {!store.isPaused && <span className="absolute inline-flex h-full w-full rounded-full opacity-70 animate-ping" style={{ background: 'var(--dx-success)' }} />}
+                <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: store.isPaused ? 'var(--dx-warning)' : 'var(--dx-success)' }} />
+              </span>
+            ) : (
+              <Clock size={14} className="dx-muted" />
+            )}
+            <span className="tabular font-semibold text-[15px]">{formatStopwatch(elapsedSec)}</span>
+          </div>
         </div>
       </div>
 
-      <div className="mb-8 pb-8 border-b border-line/60 px-4">
-        <div className="flex justify-between items-center mb-3">
-          <div className="font-mono text-sienna text-[10px] tracking-widest uppercase font-bold">
-            DAY {currentDay.dayNumber.toString().padStart(2, '0')} / 07
-          </div>
-          {(!store.isActive && hasCompletedToday) && todayCompletedWorkouts.length > 0 && (
-            <div className="relative z-10 w-[110px]">
+      {/* Hero */}
+      <section className="dx-hero p-5 sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] opacity-75">
+            Day {currentDay.dayNumber.toString().padStart(2, '0')} of {String(days.length || 7).padStart(2, '0')}
+          </span>
+          {isViewingHistory && todayCompletedWorkouts.length > 0 && (
+            <div className="relative z-10 w-[118px]">
               <CustomSelect
-                className="w-full text-[10px] font-mono border-line/50 bg-ink-2 shadow-sm rounded-full py-1.5"
+                className="w-full text-[12px]"
+                ariaLabel="Choose session"
                 value={selectedWorkoutIndex.toString()}
                 onChange={(val) => setSelectedWorkoutIndex(Number(val))}
                 options={todayCompletedWorkouts.map((w: any, idx: number) => {
@@ -782,65 +838,60 @@ export function WorkoutSession() {
             </div>
           )}
         </div>
-        <h1 className="font-display text-4xl mb-4 text-bone font-bold">{currentDay.title}</h1>
-        <div className="text-[11px] text-bone-dim font-mono uppercase tracking-wider flex items-center flex-wrap gap-2">
-          <span>SKILL: <span className="text-bone font-bold">{currentDay.skill || 'None'}</span></span>
-          <span className="opacity-40">•</span>
-          <span>PROGRESS: <span className="text-bone font-bold">{activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length} / {activeExercises.length}</span></span>
+        <h1 className="mt-2 text-[24px] sm:text-[28px] font-semibold tracking-tight leading-tight">{currentDay.title}</h1>
+        <p className="mt-1 text-[14px] opacity-80">Skill focus · {currentDay.skill || 'None'}</p>
+
+        <div className="mt-5 flex items-center justify-between text-[12px] font-medium">
+          <span className="opacity-80">{isViewingHistory ? 'Completed' : 'Progress'}</span>
+          <span className="tabular">{completedExerciseCount} of {activeExercises.length} exercises</span>
         </div>
-        
-        <div className="w-full h-1.5 bg-line/40 rounded-full overflow-hidden mt-4 max-w-sm shadow-inner">
+        <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.16)' }}>
           <motion.div
-            className="h-full bg-sienna rounded-full shadow-[0_0_8px_rgba(200,90,70,0.8)]"
+            className="h-full rounded-full"
+            style={{ background: 'var(--dx-hero-btn)' }}
             initial={{ width: 0 }}
-            animate={{ width: `${activeExercises.length ? Math.round((activeLogs.filter(ex => ex.sets.some((s: any) => s.completed)).length / activeExercises.length) * 100) : 0}%` }}
+            animate={{ width: `${progressPct}%` }}
             transition={{ duration: 0.3, ease: 'easeOut' }}
           />
         </div>
+      </section>
 
-        {/* Dynamic metrics strip - Redesigned Cards */}
-        <div className="flex gap-3 mt-8 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden w-full max-w-md">
-          <div className="bg-ink-2 border border-line/60 p-4 rounded-3xl flex-1 min-w-[100px] text-center shadow-sm flex flex-col items-center justify-center">
-            <Clock className="text-sienna mb-2 opacity-80" size={18} />
-            <div className="text-[9px] font-mono text-bone-dim uppercase tracking-widest mb-1 font-bold">DURATION</div>
-            <div className="text-2xl font-display font-bold text-bone">{Math.round(elapsedSec / 60)}</div>
-            <div className="text-[10px] text-bone-dim mt-0.5">min</div>
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-2.5 mt-3">
+        {kpis.map(({ icon: KpiIcon, label, value, unit }) => (
+          <div key={label} className="dx-card p-3.5">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium dx-muted">
+              <KpiIcon size={13} /> {label}
+            </div>
+            <div className="mt-1.5 flex items-baseline gap-1">
+              <span className="text-[22px] font-semibold tabular leading-none">{value}</span>
+              <span className="text-[11px] dx-muted">{unit}</span>
+            </div>
           </div>
-          <div className="bg-ink-2 border border-line/60 p-4 rounded-3xl flex-1 min-w-[100px] text-center shadow-sm flex flex-col items-center justify-center">
-            <Weight className="text-sienna mb-2 opacity-80" size={18} />
-            <div className="text-[9px] font-mono text-bone-dim uppercase tracking-widest mb-1 font-bold">MAX LIFT</div>
-            <div className="text-2xl font-display font-bold text-bone">{maxWeight > 0 ? maxWeight : 0}</div>
-            <div className="text-[10px] text-bone-dim mt-0.5">{displayWeightUnit}</div>
-          </div>
-          <div className="bg-ink-2 border border-line/60 p-4 rounded-3xl flex-1 min-w-[100px] text-center shadow-sm flex flex-col items-center justify-center">
-            <Flame className="text-sienna mb-2 opacity-80" size={18} />
-            <div className="text-[9px] font-mono text-bone-dim uppercase tracking-widest mb-1 font-bold">CALORIES</div>
-            <div className="text-2xl font-display font-bold text-bone">~{displayCalories}</div>
-            <div className="text-[10px] text-bone-dim mt-0.5">kcal</div>
-          </div>
-        </div>
+        ))}
       </div>
 
-      <div className="px-3">
-        {renderSection(currentDay.time, 'WARM-UP', 'text-bone', store.isActive ? store.warmup : displayWarmup, 'warmup', Activity)}
-        {renderSection('~15 min', `SKILL — ${currentDay.skill || 'NONE'}`, 'text-amber', store.isActive ? store.skillWork : displaySkillWork, 'skillWork', Dumbbell)}
-        {renderSection('Main sets', 'STRENGTH', 'text-sienna', store.isActive ? store.strength : displayStrength, 'strength', Weight)}
-        {renderSection('5-10 min', 'COOLDOWN', 'text-bone', store.isActive ? store.cooldown : displayCooldown, 'cooldown', Activity)}
+      <div className="space-y-4 mt-5">
+        {renderSection('Warm-up', currentDay.time || 'Get moving', store.isActive ? store.warmup : displayWarmup, 'warmup', Activity)}
+        {renderSection(`Skill · ${currentDay.skill || 'None'}`, '~15 min', store.isActive ? store.skillWork : displaySkillWork, 'skillWork', Target)}
+        {renderSection('Strength', 'Main sets', store.isActive ? store.strength : displayStrength, 'strength', Dumbbell)}
+        {renderSection('Cool-down', '5–10 min', store.isActive ? store.cooldown : displayCooldown, 'cooldown', Wind)}
       </div>
 
-      <div className="fixed bottom-0 left-0 w-full p-4 bg-gradient-to-t from-ink via-ink/95 to-transparent pb-6 pt-12 z-40 flex items-center justify-center pointer-events-none">
-        <div className="flex items-center gap-2 w-full max-w-md pointer-events-auto">
-          <div className="flex items-center justify-center bg-ink-2 px-3 h-14 rounded-[20px] border border-line/60 shadow-lg shrink-0">
-            <User size={16} className="text-bone-dim mr-1" />
+      {/* Action bar */}
+      <div className="dx-actionbar">
+        <div className="flex items-center gap-2">
+          <div className="w-[128px] shrink-0">
             <CustomSelect
-              className="w-[100px] text-[11px] font-mono !bg-transparent border-0 font-bold tracking-wider text-bone"
+              className="w-full text-[13px]"
+              ariaLabel="Who can see this workout"
               value={privacy}
               onChange={(val) => setPrivacy(val as any)}
               placement="top"
               options={[
                 { value: 'followers', label: 'Followers' },
                 { value: 'public', label: 'Public' },
-                { value: 'private', label: 'Private' }
+                { value: 'private', label: 'Only me' }
               ]}
             />
           </div>
@@ -848,7 +899,7 @@ export function WorkoutSession() {
             onClick={() => {
               if (store.isActive && !store.startedAt) {
                 store.startTimer();
-              } else if (!store.isActive && hasCompletedToday) {
+              } else if (isViewingHistory) {
                 setSessionFinished(false);
                 store.startWorkout(plan, currentDay);
               } else {
@@ -856,10 +907,10 @@ export function WorkoutSession() {
               }
             }}
             disabled={sessionFinished || isSaving}
-            className={`h-14 flex-1 text-sm font-display tracking-widest uppercase rounded-[20px] shadow-xl transition-all duration-300 flex items-center justify-center gap-2 ${sessionFinished || isSaving ? 'bg-ink-2 border border-line text-bone-dim cursor-not-allowed opacity-50' : 'bg-sienna text-bone hover:bg-sienna/90 hover:scale-[1.02] shadow-[0_4px_20px_rgba(200,90,70,0.3)]'}`}
+            className="dx-btn flex-1 h-12 text-[15px]"
           >
-            {(!store.isActive && hasCompletedToday) && !sessionFinished && !isSaving && <Activity size={18} />}
-            {isSaving ? 'Saving...' : sessionFinished ? 'Session Saved' : (!store.isActive && hasCompletedToday) ? 'Log Again' : (store.isActive && !store.startedAt) ? 'Start Workout' : 'Finish Workout'}
+            {!isSaving && !sessionFinished && <PrimaryIcon size={17} />}
+            {primaryLabel}
           </button>
         </div>
       </div>
@@ -879,150 +930,153 @@ export function WorkoutSession() {
         />
       )}
 
-      {/* Add New Exercise Modal */}
+      {/* Add New Exercise Sheet */}
       {addSection && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-ink/80 backdrop-blur-sm" onClick={() => setAddSection(null)} />
+        <div className="dx-overlay z-50">
+          <div className="dx-backdrop" onClick={() => setAddSection(null)} />
           <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="relative w-full max-w-md bg-ink-2 border border-line rounded-xl p-6 z-10 max-h-[90vh] overflow-y-auto"
+            initial={{ y: 40, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add exercise"
+            className="dx-sheet sm:max-w-md"
           >
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="font-display text-xl">Add New Exercise</h3>
-                <p className="text-xs text-bone-dim mt-0.5">Create a new exercise for this section</p>
+            <div className="dx-sheet-handle sm:hidden" aria-hidden />
+            <div className="dx-sheet-header">
+              <div className="flex-1 min-w-0">
+                <div className="dx-eyebrow">{{ warmup: 'Warm-up', skillWork: 'Skill work', strength: 'Strength', cooldown: 'Cool-down' }[addSection]}</div>
+                <h3 className="mt-0.5 text-[18px] font-semibold tracking-tight">Add exercise</h3>
               </div>
-              <button onClick={() => setAddSection(null)} className="p-1 text-bone-dim hover:text-bone">
-                <X size={18} />
+              <button onClick={() => setAddSection(null)} className="dx-icon-btn dx-icon-btn--sm" aria-label="Close">
+                <X size={17} />
               </button>
             </div>
 
-            <form onSubmit={handleAddExercise} className="space-y-4">
-              <div>
-                <label className="text-xs font-mono text-bone-dim block mb-1">Exercise Name</label>
-                <ExerciseAutocomplete
-                  value={addName}
-                  onChange={setAddName}
-                  onSelect={handleSelectAutocomplete}
-                  placeholder="e.g. Lat Pulldown"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleAddExercise} className="flex flex-col min-h-0 flex-1">
+              <div className="dx-sheet-body space-y-4">
                 <div>
-                  <label className="text-xs font-mono text-bone-dim block mb-1">Sets (e.g., 4 x 10 or 3 x 20 sec)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., 3 x 10"
-                    className="input-field w-full"
-                    value={addSets}
-                    onChange={e => setAddSets(e.target.value)}
+                  <label className="dx-label">Exercise</label>
+                  <ExerciseAutocomplete
+                    value={addName}
+                    onChange={setAddName}
+                    onSelect={handleSelectAutocomplete}
+                    placeholder="Search e.g. Lat pulldown"
                   />
                 </div>
+
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div>
+                    <label className="dx-label">Sets × reps</label>
+                    <input type="text" placeholder="3 x 10" className="dx-input" value={addSets} onChange={e => setAddSets(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="dx-label">Tempo</label>
+                    <input type="text" placeholder="2-1-2" className="dx-input" value={addTempo} onChange={e => setAddTempo(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="dx-label">Rest</label>
+                    <input type="text" placeholder="90s" className="dx-input" value={addRest} onChange={e => setAddRest(e.target.value)} />
+                  </div>
+                </div>
+                <p className="-mt-2 text-[11px] dx-muted">Use “3 x 20 sec” for timed holds.</p>
+
                 <div>
-                  <label className="text-xs font-mono text-bone-dim block mb-1">Tempo (e.g., 2-1-2)</label>
-                  <input
-                    type="text"
-                    placeholder="e.g., 2-1-2"
-                    className="input-field w-full"
-                    value={addTempo}
-                    onChange={e => setAddTempo(e.target.value)}
-                  />
+                  <label className="dx-label">Form cues (one per line)</label>
+                  <textarea placeholder="Keep arms locked..." className="dx-input text-[13px]" value={addCues} onChange={e => setAddCues(e.target.value)} />
+                </div>
+
+                <div>
+                  <label className="dx-label">YouTube link or search</label>
+                  <input type="text" placeholder="Leave blank to search by name" className="dx-input" value={addYt} onChange={e => setAddYt(e.target.value)} />
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-mono text-bone-dim block mb-1">Rest (e.g., 90s or 2 min)</label>
-                <input
-                  type="text"
-                  placeholder="e.g., 90s"
-                  className="input-field w-full"
-                  value={addRest}
-                  onChange={e => setAddRest(e.target.value)}
-                />
+              <div className="dx-sheet-footer">
+                <button type="submit" disabled={!addName.trim()} className="dx-btn w-full h-12 text-[15px]">
+                  <Plus size={17} /> Add exercise
+                </button>
               </div>
-
-              <div>
-                <label className="text-xs font-mono text-bone-dim block mb-1">Form Cues (one per line)</label>
-                <textarea
-                  placeholder="Keep arms locked..."
-                  className="input-field w-full h-20 text-sm"
-                  value={addCues}
-                  onChange={e => setAddCues(e.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-mono text-bone-dim block mb-1">YouTube Search or Link</label>
-                <input
-                  type="text"
-                  placeholder="Leave blank to search by name"
-                  className="input-field w-full"
-                  value={addYt}
-                  onChange={e => setAddYt(e.target.value)}
-                />
-              </div>
-
-              <button type="submit" className="btn-primary w-full py-3 mt-2">
-                Add Exercise
-              </button>
             </form>
           </motion.div>
         </div>
       )}
 
-      {/* Celebration Modal */}
+      {/* Celebration */}
       {celebrationData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-ink/90 backdrop-blur" />
+        <div className="dx-overlay z-50">
+          <div className="dx-backdrop" />
           <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="relative w-full max-w-md bg-ink-2 border border-line rounded-xl p-8 z-10 text-center"
+            initial={{ y: 40, opacity: 0, scale: 0.98 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={celebrationData.heading}
+            className="dx-sheet sm:max-w-md"
           >
-            <div className="text-5xl mb-4">🎉</div>
-            <h2 className="font-display text-3xl mb-1 text-bone">{celebrationData.heading}</h2>
-            <p className="text-sm text-bone-dim mb-6">{celebrationData.sub}</p>
+            <div className="dx-sheet-handle sm:hidden" aria-hidden />
+            <div className="dx-sheet-body text-center pt-6">
+              <div className="mx-auto w-16 h-16 rounded-[22px] flex items-center justify-center" style={{ background: 'var(--dx-success-soft)', color: 'var(--dx-success)' }}>
+                <Trophy size={30} />
+              </div>
+              <h2 className="mt-4 text-[22px] font-semibold tracking-tight">{celebrationData.heading}</h2>
+              <p className="mt-1 text-[13px] dx-muted">{celebrationData.sub}</p>
 
-            <div className="bg-ink border border-line rounded-lg p-4 mb-6">
-              {celebrationData.xpBreakdown.map((row, idx) => (
-                <div key={idx} className="flex justify-between items-center text-sm py-1.5 border-b border-line/30 last:border-b-0">
-                  <span className="text-bone-dim">{row.label}</span>
-                  <span className="font-mono text-sienna">+{row.val} XP</span>
+              <div className="dx-inset mt-5 p-4 text-left">
+                {celebrationData.xpBreakdown.map((row, idx) => (
+                  <div key={idx} className="flex items-center justify-between py-1.5 text-[13px]">
+                    <span className="dx-muted">{row.label}</span>
+                    <span className="font-semibold tabular dx-accent">+{row.val} XP</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-2.5 mt-1.5 border-t text-[14px] font-semibold" style={{ borderColor: 'var(--dx-border)' }}>
+                  <span>Total</span>
+                  <span className="tabular">+{celebrationData.totalXp} XP</span>
                 </div>
-              ))}
-              <div className="flex justify-between items-center text-sm font-bold pt-2 mt-1 border-t border-line">
-                <span className="text-bone">Total</span>
-                <span className="font-mono text-amber">+{celebrationData.totalXp} XP</span>
               </div>
+
+              {celebrationData.unlocked.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  {celebrationData.unlocked.map(id => getBadge(id)).filter(Boolean).map(badge => (
+                    <div key={badge!.id} className="flex items-center gap-3 rounded-2xl p-3.5 text-left" style={{ background: 'var(--dx-accent-soft)' }}>
+                      <span className="dx-badge-icon text-[18px]" style={{ background: 'var(--dx-card)' }}>{badge!.icon}</span>
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.08em] dx-muted">Achievement unlocked</div>
+                        <h4 className="text-[14px] font-semibold dx-accent">{badge!.name}</h4>
+                        <p className="text-[12px] dx-muted">{badge!.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 flex items-center gap-3 rounded-2xl p-3.5 text-left" style={{ background: 'var(--dx-accent-soft)' }}>
+                  <span className="dx-badge-icon" style={{ background: 'var(--dx-card)' }}><Flame size={17} /></span>
+                  <div className="min-w-0">
+                    <h4 className="text-[14px] font-semibold dx-accent">{effectiveStreak(useAuthStore.getState().stats)}-day streak</h4>
+                    <p className="text-[12px] dx-muted">Train again tomorrow to keep it going.</p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="bg-sienna/5 border border-sienna/20 rounded-lg p-4 flex gap-4 text-left mb-6 items-center">
-              <div className="text-2xl">🏁</div>
-              <div>
-                <h4 className="font-semibold text-sm text-sienna">Day One</h4>
-                <p className="text-xs text-bone-dim mt-0.5">Complete your first full training day.</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+            <div className="dx-sheet-footer grid grid-cols-2 gap-2.5">
+              <button
+                onClick={() => setCelebrationData(null)}
+                className="dx-btn-secondary h-12"
+              >
+                <Share2 size={17} /> Share
+              </button>
               <button
                 onClick={() => {
                   setCelebrationData(null);
                   store.finishWorkout();
                   navigate('/');
                 }}
-                className="btn-primary py-3"
+                className="dx-btn h-12"
               >
-                Nice – back to it
-              </button>
-              <button
-                onClick={() => setCelebrationData(null)}
-                className="flex items-center justify-center gap-2 bg-ink-3 border border-sienna/40 text-sienna font-display font-bold uppercase tracking-wider py-3 rounded-md text-sm hover:bg-sienna/10 active:scale-[0.98] transition-all"
-              >
-                <Share2 size={18} />
-                Share
+                Done
               </button>
             </div>
           </motion.div>

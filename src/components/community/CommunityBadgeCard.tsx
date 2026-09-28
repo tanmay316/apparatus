@@ -74,7 +74,7 @@ export function CommunityBadgeCard({ badge, compact = false, onShare }: Communit
       
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-3 min-w-0">
-          {/* Medallion — real rank badge artwork, matching the detail/share view */}
+          {/* Medallion - real rank badge artwork, matching the detail/share view */}
           <MedalIcon rank={badge.rank} size={48} />
           <div className="min-w-0">
             <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[9px] font-mono font-black uppercase tracking-wider mb-1 ${styleConfig.pillBg}`}>

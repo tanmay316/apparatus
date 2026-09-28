@@ -40,7 +40,14 @@ final class WorkoutLocationManager: NSObject, CLLocationManagerDelegate {
     private var consecutiveMovingSamples = 0
     private var consecutiveStillSamples = 0
     private var altBuffer: [Double] = []
+    private var altEma: Double?
     private var lastElevationAnchor: Double?
+    private var distSinceElevAnchorM: Double = 0
+    /// GPS altitude jitters several metres; only rises beyond this count as climb.
+    private let elevationHysteresisM: Double = 4.0
+    /// Rises steeper than this over the horizontal run are GPS jumps, not terrain.
+    private let elevationMaxGrade: Double = 0.35
+    private let maxVerticalAccuracyM: Double = 12.0
     private var lastMovementTimeMs: Double = 0
 
     /// Set by the Capacitor plugin so engine events can be forwarded to JS.
@@ -329,6 +336,9 @@ final class WorkoutLocationManager: NSObject, CLLocationManagerDelegate {
             var candidateSpeedKmh: Double
             if nativeSpeedKmh >= 2.0 {
                 candidateSpeedKmh = nativeSpeedKmh
+            } else if rawDopplerKmh >= 0 && rawDopplerKmh < 1.5 {
+                // Doppler reports standing still: coordinate drift is jitter (keeps auto-pause working).
+                candidateSpeedKmh = 0
             } else if rawDopplerKmh >= 0 && rawDopplerKmh < 2.0 && derivedSpeedKmh > 4.0 {
                 // Doppler says nearly stopped but position says fast → coordinate jitter.
                 candidateSpeedKmh = 0
@@ -410,24 +420,31 @@ final class WorkoutLocationManager: NSObject, CLLocationManagerDelegate {
                     movingDurationSec += dtSec.rounded()
                 }
 
-                if location.verticalAccuracy >= 0 {
+                if location.verticalAccuracy >= 0 && location.verticalAccuracy <= maxVerticalAccuracyM {
                     let smoothedAlt = smoothAltitude(location.altitude)
+                    distSinceElevAnchorM += deltaDistanceM
                     if let anchor = lastElevationAnchor {
                         let altDiff = smoothedAlt - anchor
-                        if altDiff >= 1.5 && altDiff < 80.0 {
-                            elevationGainM += altDiff
+                        if altDiff >= elevationHysteresisM {
+                            if altDiff / max(1.0, distSinceElevAnchorM) <= elevationMaxGrade {
+                                elevationGainM += altDiff
+                            }
                             lastElevationAnchor = smoothedAlt
-                        } else if altDiff <= -1.5 && altDiff > -80.0 {
+                            distSinceElevAnchorM = 0
+                        } else if altDiff <= -elevationHysteresisM {
                             lastElevationAnchor = smoothedAlt
+                            distSinceElevAnchorM = 0
                         }
                     } else {
                         lastElevationAnchor = smoothedAlt
+                        distSinceElevAnchorM = 0
                     }
                 }
             } else if isSettling {
                 lastAcceptedLocation = smoothedLoc
-                if location.verticalAccuracy >= 0 {
+                if location.verticalAccuracy >= 0 && location.verticalAccuracy <= maxVerticalAccuracyM {
                     lastElevationAnchor = smoothAltitude(location.altitude)
+                    distSinceElevAnchorM = 0
                 }
             }
 
@@ -448,8 +465,9 @@ final class WorkoutLocationManager: NSObject, CLLocationManagerDelegate {
                 isCurrentlyMoving = false
             }
             isMoving = isCurrentlyMoving
-            if location.verticalAccuracy >= 0 {
+            if location.verticalAccuracy >= 0 && location.verticalAccuracy <= maxVerticalAccuracyM {
                 lastElevationAnchor = smoothAltitude(location.altitude)
+                distSinceElevAnchorM = 0
             }
         }
 
@@ -559,12 +577,15 @@ final class WorkoutLocationManager: NSObject, CLLocationManagerDelegate {
         return point
     }
 
-    /// Median-of-5 filter, matching the Android altitude smoothing window.
+    /// Median-of-7 spike rejection + EMA, matching the Android altitude smoothing.
     private func smoothAltitude(_ altitude: Double) -> Double {
         altBuffer.append(altitude)
-        if altBuffer.count > 5 { altBuffer.removeFirst() }
+        if altBuffer.count > 7 { altBuffer.removeFirst() }
         let sorted = altBuffer.sorted()
-        return sorted[sorted.count / 2]
+        let median = sorted[sorted.count / 2]
+        let next = altEma.map { 0.25 * median + 0.75 * $0 } ?? median
+        altEma = next
+        return next
     }
 
     private func resetEngineState() {
@@ -575,6 +596,8 @@ final class WorkoutLocationManager: NSObject, CLLocationManagerDelegate {
         consecutiveMovingSamples = 0
         consecutiveStillSamples = 0
         altBuffer.removeAll()
+        altEma = nil
+        distSinceElevAnchorM = 0
         lastElevationAnchor = nil
         lastMovementTimeMs = 0
         kalman.reset()

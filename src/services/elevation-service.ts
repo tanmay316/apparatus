@@ -1,4 +1,5 @@
 import type { RoutePoint } from '@/types';
+import { computeElevationGain, type AltSample } from '@/utils/elevation';
 
 interface ElevationCorrectionResult {
   correctedElevationGainM: number;
@@ -55,10 +56,8 @@ export async function calculateCorrectedElevation(route: RoutePoint[]): Promise<
       const results: { latitude: number; longitude: number; elevation: number }[] = data.results;
 
       if (results && results.length === sampledPoints.length) {
-        // Compute gain using Strava 10m threshold algorithm
-        let elevationGain = 0;
-        let anchorElev = results[0].elevation;
         const profile: { distanceKm: number; elevationM: number }[] = [];
+        const samples: AltSample[] = [];
 
         let cumulativeDist = 0;
         for (let i = 0; i < results.length; i++) {
@@ -67,21 +66,21 @@ export async function calculateCorrectedElevation(route: RoutePoint[]): Promise<
             const prevP = sampledPoints[i - 1];
             const currP = sampledPoints[i];
             cumulativeDist += haversineKm(prevP.lat, prevP.lng, currP.lat, currP.lng);
-
-            const diff = curr - anchorElev;
-            // Strava threshold for DEM lookup: >= 5m climb gain
-            if (diff >= 5.0) {
-              elevationGain += diff;
-              anchorElev = curr;
-            } else if (diff <= -5.0) {
-              anchorElev = curr;
-            }
           }
+          samples.push({ alt: curr, distM: cumulativeDist * 1000 });
           profile.push({
             distanceKm: Math.round(cumulativeDist * 100) / 100,
             elevationM: Math.round(curr)
           });
         }
+
+        // DEM cells are 30–90 m wide and include rooftops/trees, so smooth
+        // over ~120 m before counting climbs.
+        const elevationGain = computeElevationGain(samples, {
+          thresholdM: 3,
+          smoothWindowM: 120,
+          flatRangeM: 5,
+        });
 
         return {
           correctedElevationGainM: Math.round(elevationGain),
@@ -95,32 +94,31 @@ export async function calculateCorrectedElevation(route: RoutePoint[]): Promise<
   }
 
   // Fallback: Smoothed GPS altitude calculation
-  let gpsGain = 0;
-  let anchor = route[0].alt ?? 0;
   const profile: { distanceKm: number; elevationM: number }[] = [];
+  const samples: AltSample[] = [];
   let cumDist = 0;
 
   for (let i = 0; i < route.length; i++) {
     const pt = route[i];
     if (i > 0) {
       cumDist += haversineKm(route[i - 1].lat, route[i - 1].lng, pt.lat, pt.lng);
-      if (pt.alt !== undefined) {
-        const diff = pt.alt - anchor;
-        if (diff >= 2.0 && diff < 80.0) {
-          gpsGain += diff;
-          anchor = pt.alt;
-        } else if (diff <= -2.0 && diff > -80.0) {
-          anchor = pt.alt;
-        }
-      }
     }
-    if (pt.alt !== undefined && i % Math.max(1, Math.floor(route.length / 40)) === 0) {
+    if (pt.alt == null || !Number.isFinite(pt.alt)) continue;
+    samples.push({ alt: pt.alt, distM: cumDist * 1000 });
+    if (i % Math.max(1, Math.floor(route.length / 40)) === 0) {
       profile.push({
         distanceKm: Math.round(cumDist * 100) / 100,
         elevationM: Math.round(pt.alt)
       });
     }
   }
+
+  // Raw GPS altitude is far noisier than DEM: wider smoothing, higher thresholds.
+  const gpsGain = computeElevationGain(samples, {
+    thresholdM: 5,
+    smoothWindowM: 150,
+    flatRangeM: 10,
+  });
 
   return {
     correctedElevationGainM: Math.round(gpsGain),

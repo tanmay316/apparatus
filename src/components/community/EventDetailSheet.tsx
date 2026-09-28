@@ -17,6 +17,7 @@ import {
 } from '@/services/community';
 import { SimpleEvent, EventParticipant } from '@/types';
 import { useUIStore } from '@/stores/ui-store';
+import { LiveUserName } from '@/components/ui/LiveUser';
 import { EditEventSheet } from './EditEventSheet';
 import { LeaderboardBadgeChip } from './CommunityBadgeCard';
 import { useNavigate } from 'react-router-dom';
@@ -29,7 +30,7 @@ interface EventDetailSheetProps {
 export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
   const { user, profile } = useAuthStore();
   const isAdmin = !!profile?.isAdmin;
-  const { showToast } = useUIStore();
+  const { showToast, confirm } = useUIStore();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -172,12 +173,12 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      if (confirm('Are you sure you want to delete this event?')) {
-        await deleteSimpleEvent(eventId);
-        return true;
-      }
-      return false;
+      const ok = await confirm({ title: 'Delete event', message: 'This permanently removes the event and its results.', confirmText: 'Delete', type: 'danger' });
+      if (!ok) return false;
+      await deleteSimpleEvent(eventId);
+      return true;
     },
+    onError: (err: any) => showToast(err?.message || 'Failed to delete event', 'error'),
     onSuccess: (didDelete) => {
       if (didDelete) {
         queryClient.invalidateQueries({ queryKey: ['publicEvents'] });
@@ -270,7 +271,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
   const realParticipantCount = participants.length;
 
   return createPortal(
-    <div className="fixed inset-0 z-[600] flex flex-col justify-end">
+    <div className="cx pro-scope fixed inset-0 z-[600] flex flex-col justify-end">
       <motion.div 
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose}
@@ -542,7 +543,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                           onClick={() => handleNavigateProfile(p.userId)}
                           className="font-bold text-bone text-sm break-words cursor-pointer hover:underline leading-snug"
                         >
-                          {p.userName}
+                          <LiveUserName userId={p.userId} fallbackName={p.userName} />
                         </span>
                         {p.userId === user?.uid && (
                           <span className="text-[10px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded border border-blue-500/30 shrink-0">You</span>
@@ -601,7 +602,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                       <div key={p.userId} className="p-4 rounded-2xl bg-ink-2 border border-line/40 space-y-3">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2.5 min-w-0 flex-1 flex-wrap">
-                            <span className="font-bold text-sm sm:text-base text-bone break-words leading-tight">{p.userName}</span>
+                            <LiveUserName userId={p.userId} fallbackName={p.userName} className="font-bold text-sm sm:text-base text-bone break-words leading-tight" />
                             {curr.badgeAwarded && (
                               <div className="shrink-0 scale-95 origin-left">
                                 <LeaderboardBadgeChip rank={curr.badgeAwarded} />
@@ -770,7 +771,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                             onClick={() => handleNavigateProfile(p.userId)}
                             className="font-bold text-sm text-bone flex items-center gap-1.5 cursor-pointer hover:underline flex-wrap"
                           >
-                            <span className="break-words leading-tight">{p.userName}</span>
+                            <LiveUserName userId={p.userId} fallbackName={p.userName} className="break-words leading-tight" />
                             {p.userId === user?.uid && <span className="text-[9px] font-mono text-blue-400 bg-blue-500/10 px-1 py-0.5 rounded shrink-0">You</span>}
                           </div>
                           <div className="text-xs font-mono text-bone-dim truncate">

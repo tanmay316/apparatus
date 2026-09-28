@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Apple, Plus, ScanLine, MessageSquare, Flame, Beef, Wheat, Droplet, TrendingUp, ChefHat, CalendarDays, BarChart3, SlidersHorizontal, Loader2, User } from 'lucide-react';
+import { Apple, Plus, ScanLine, Flame, SlidersHorizontal, Loader2, Coffee, Sun, Moon, Cookie, ChevronRight, Target, UtensilsCrossed } from 'lucide-react';
 import CameraScanner from '@/components/nutrition/CameraScanner';
 import NutritionResultCard from '@/components/nutrition/NutritionResultCard';
 import NutritionChat from '@/components/nutrition/NutritionChat';
@@ -19,38 +19,54 @@ const item = {
   show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } },
 };
 
-function MacroRing({ value, max, label, color, size = 64, strokeWidth = 5, loading = false }: {
-  value: number; max: number; label: string; color: string; size?: number; strokeWidth?: number; loading?: boolean;
-}) {
-  const pct = Math.min((value / Math.max(max, 1)) * 100, 100);
-  const radius = (size - strokeWidth) / 2;
-  const circum = 2 * Math.PI * radius;
-  
+const MEAL_ICONS: Record<string, typeof Coffee> = { breakfast: Coffee, lunch: Sun, dinner: Moon, snack: Cookie };
+
+function gradeStyle(grade: string): React.CSSProperties {
+  if (['A+', 'A'].includes(grade)) return { background: 'var(--dx-success-soft)', color: 'var(--dx-success)' };
+  if (['B+', 'B'].includes(grade)) return { background: 'rgba(234, 179, 8, 0.14)', color: 'var(--dx-warning)' };
+  return { background: 'rgba(249, 115, 22, 0.14)', color: '#ea580c' };
+}
+
+function MacroBar({ label, value, goal, color, loading }: { label: string; value: number; goal: number; color: string; loading: boolean }) {
+  const pct = Math.min((value / Math.max(goal, 1)) * 100, 100);
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg className="-rotate-90 w-full h-full" viewBox={`0 0 ${size} ${size}`}>
-          <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="currentColor"
-            className="text-white/[0.06]" strokeWidth={strokeWidth} />
-          <motion.circle
-            cx={size/2} cy={size/2} r={radius} fill="none" stroke={color}
-            strokeWidth={strokeWidth} strokeLinecap="round"
-            strokeDasharray={circum}
-            initial={{ strokeDashoffset: circum }}
-            animate={{ strokeDashoffset: loading ? circum : circum - (pct / 100) * circum }}
-            transition={{ duration: 1.2, delay: 0.3, ease: 'easeOut' }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          {loading ? (
-            <Loader2 size={14} className="animate-spin text-bone-dim" />
-          ) : (
-            <span className="text-xs font-mono text-bone font-bold">{value.toFixed(0)}</span>
-          )}
-        </div>
+    <div>
+      <div className="flex items-baseline justify-between gap-2 text-[12px]">
+        <span className="font-medium inline-flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+          {label}
+        </span>
+        <span className="dx-muted tabular">
+          <span className="font-semibold" style={{ color: 'var(--dx-text)' }}>{loading ? '–' : value.toFixed(0)}</span> / {goal}g
+        </span>
       </div>
-      <span className="text-[10px] text-bone-dim uppercase tracking-wider font-medium">{label}</span>
+      <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--dx-card-2)' }}>
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: color }}
+          initial={{ width: 0 }}
+          animate={{ width: loading ? 0 : `${pct}%` }}
+          transition={{ duration: 0.9, delay: 0.2, ease: 'easeOut' }}
+        />
+      </div>
     </div>
+  );
+}
+
+function MealRow({ meal, subtitle, onClick }: { meal: any; subtitle: string; onClick: () => void }) {
+  const Icon = MEAL_ICONS[meal.meal_type] || Apple;
+  return (
+    <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--dx-card-2)] active:bg-[var(--dx-card-2)]">
+      <span className="dx-badge-icon"><Icon size={17} /></span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-[15px] font-semibold capitalize truncate">{meal.meal_type}</span>
+        <span className="block text-[12px] dx-muted truncate">{subtitle}</span>
+      </span>
+      {meal.health_grade && (
+        <span className="dx-pill shrink-0" style={gradeStyle(meal.health_grade)}>{meal.health_grade}</span>
+      )}
+      <ChevronRight size={17} className="dx-muted shrink-0" />
+    </button>
   );
 }
 
@@ -82,7 +98,7 @@ export default function NutritionDashboard() {
       const data = await getTodayNutrition();
       setTodayData(data);
     } catch {
-      // API might not be running yet — show placeholder
+      // API might not be running yet - show placeholder
       setTodayData(null);
     } finally {
       setLoadingToday(false);
@@ -165,31 +181,42 @@ export default function NutritionDashboard() {
   const fatConsumed = todayData?.total_fat || 0;
   const fiberConsumed = todayData?.total_fiber || 0;
   const caloriesLeft = Math.max(0, goals.calories - caloriesConsumed);
+  const calPct = Math.min(caloriesConsumed / Math.max(goals.calories, 1), 1);
+  const RING = 2 * Math.PI * 52;
+  const todayLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+
+  const pastByDay = (historyData || [])
+    .filter(m => new Date(m.logged_at).toDateString() !== new Date().toDateString())
+    .reduce<{ key: string; label: string; total: number; meals: any[] }[]>((groups, meal) => {
+      const d = new Date(meal.logged_at);
+      const key = d.toDateString();
+      let group = groups.find(g => g.key === key);
+      if (!group) {
+        group = { key, label: d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }), total: 0, meals: [] };
+        groups.push(group);
+      }
+      group.meals.push(meal);
+      group.total += meal.calories || 0;
+      return groups;
+    }, []);
 
   return (
     <>
-      <motion.div variants={container} initial="hidden" animate="show" className="space-y-5 max-w-4xl mx-auto pb-28">
+      <motion.div variants={container} initial="hidden" animate="show" className="dx pro-scope space-y-4 max-w-4xl mx-auto pt-1 sm:pt-4">
         {/* Header */}
-        <motion.div variants={item} className="flex items-center justify-between pb-4 border-b border-line">
-          <div>
-            <div className="font-mono text-sienna text-xs tracking-widest mb-1">YOUR DAILY FUEL</div>
-            <h1 className="font-display text-3xl mb-1">Nutrition</h1>
+        <motion.header variants={item} className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="dx-eyebrow">{todayLabel}</div>
+            <h1 className="mt-1 text-[22px] sm:text-[27px] font-semibold tracking-tight leading-tight">Nutrition</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowProfile(true)}
-              className="flex items-center gap-2 px-4 h-10 rounded-xl bg-sienna/10 border border-sienna/20 text-sienna hover:bg-sienna/20 transition-colors"
-              title="Body Metrics & Goals"
-            >
-              <User size={16} />
-              <span className="text-sm font-medium">Body Metrics</span>
-            </button>
-          </div>
-        </motion.div>
+          <button onClick={() => setShowProfile(true)} className="dx-btn-secondary h-10 px-3.5 text-[13px] shrink-0" title="Body metrics & goals">
+            <SlidersHorizontal size={15} /> Goals
+          </button>
+        </motion.header>
 
         {/* Error */}
         {error && (
-          <motion.div variants={item} className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-sm text-red-300">
+          <motion.div variants={item} className="dx-card p-4 text-[13px] font-medium" style={{ color: '#dc2626', background: 'rgba(220, 38, 38, 0.06)' }}>
             {error}
           </motion.div>
         )}
@@ -197,151 +224,148 @@ export default function NutritionDashboard() {
         {/* Scan Result */}
         {scanResult && (
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-display uppercase tracking-wider text-bone-dim">Scan Result</h2>
-              <button
-                onClick={() => setScanResult(null)}
-                className="text-xs text-bone-dim hover:text-bone transition-colors"
-              >
-                Dismiss
-              </button>
+            <div className="flex items-center justify-between mb-2.5">
+              <h2 className="dx-section-title">Scan result</h2>
+              <button onClick={() => setScanResult(null)} className="dx-link">Dismiss</button>
             </div>
             <NutritionResultCard result={scanResult} onClose={() => setScanResult(null)} />
           </div>
         )}
 
-        {/* Calorie Ring Hero */}
-        <motion.div variants={item} className="card p-6 bg-gradient-to-br from-ink-2 to-ink relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-sienna/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
-          <h2 className="text-xs font-display uppercase tracking-wider text-bone-dim mb-4">Daily Progress</h2>
-          <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8">
-            {/* Calorie Ring */}
-            <div className="relative w-32 h-32 shrink-0">
-              <svg className="w-32 h-32 -rotate-90" viewBox="0 0 128 128">
-                <circle cx="64" cy="64" r="56" fill="none" stroke="currentColor"
-                  className="text-white/[0.06]" strokeWidth="8" />
+        {/* Daily summary */}
+        <motion.section variants={item} className="dx-card p-4 sm:p-5" aria-label="Daily progress">
+          <div className="flex items-center gap-5">
+            <div className="relative w-[124px] h-[124px] shrink-0">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 124 124">
+                <circle cx="62" cy="62" r="52" fill="none" strokeWidth="10" style={{ stroke: 'var(--dx-card-2)' }} />
                 <motion.circle
-                  cx="64" cy="64" r="56" fill="none" stroke="#c87941"
-                  strokeWidth="8" strokeLinecap="round"
-                  strokeDasharray={2 * Math.PI * 56}
-                  initial={{ strokeDashoffset: 2 * Math.PI * 56 }}
-                  animate={{
-                    strokeDashoffset: 2 * Math.PI * 56 - (Math.min(caloriesConsumed / goals.calories, 1) * 2 * Math.PI * 56)
-                  }}
-                  transition={{ duration: 1.2, delay: 0.3, ease: 'easeOut' }}
+                  cx="62" cy="62" r="52" fill="none"
+                  strokeWidth="10" strokeLinecap="round"
+                  strokeDasharray={RING}
+                  style={{ stroke: 'var(--dx-accent)' }}
+                  initial={{ strokeDashoffset: RING }}
+                  animate={{ strokeDashoffset: loadingToday ? RING : RING * (1 - calPct) }}
+                  transition={{ duration: 1.1, delay: 0.2, ease: 'easeOut' }}
                 />
               </svg>
               <div className="absolute inset-0 flex flex-col items-center justify-center">
                 {loadingToday ? (
-                  <div className="flex flex-col items-center justify-center gap-1">
-                    <Loader2 size={24} className="animate-spin text-sienna" />
-                    <span className="text-[10px] text-bone-dim uppercase tracking-wider">Syncing...</span>
-                  </div>
+                  <Loader2 size={22} className="animate-spin dx-muted" />
                 ) : (
                   <>
-                    <motion.span
-                      className="text-2xl font-display font-bold text-bone"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.5 }}
-                    >
-                      {caloriesLeft.toFixed(0)}
-                    </motion.span>
-                    <span className="text-[10px] text-bone-dim uppercase tracking-wider">kcal left</span>
+                    <span className="text-[26px] font-semibold tabular leading-none">{caloriesLeft.toFixed(0)}</span>
+                    <span className="mt-1 text-[11px] dx-muted">kcal left</span>
                   </>
                 )}
               </div>
             </div>
 
-            {/* Macro Rings */}
-            <div className="flex-1 flex flex-wrap md:flex-nowrap items-center justify-center md:justify-between w-full md:pl-6 gap-6 md:gap-2 md:border-l border-line/30 md:ml-2 pt-6 md:pt-0 border-t md:border-t-0">
-              <MacroRing value={proteinConsumed} max={goals.protein} label="Protein" color="#c87941" loading={loadingToday} />
-              <MacroRing value={carbsConsumed} max={goals.carbs} label="Carbs" color="#eab308" loading={loadingToday} />
-              <MacroRing value={fatConsumed} max={goals.fat} label="Fat" color="#06b6d4" loading={loadingToday} />
-              <MacroRing value={fiberConsumed} max={goals.fiber} label="Fiber" color="#10b981" loading={loadingToday} />
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Today's Meals */}
-        <motion.div variants={item} className="space-y-3">
-          <h2 className="text-xs font-display uppercase tracking-wider text-bone-dim mb-2">Today's Meals</h2>
-
-          {todayData?.meals && todayData.meals.length > 0 ? (
-            todayData.meals.map((meal: any, i: number) => (
-              <div 
-                key={meal.id || i} 
-                onClick={() => setSelectedMeal(meal)}
-                className="card p-4 flex items-center justify-between cursor-pointer hover:bg-ink-2 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-ink border border-line flex items-center justify-center">
-                    <Apple size={16} className="text-sienna" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-bone text-sm capitalize">{meal.meal_type}</h3>
-                    <p className="text-xs text-bone-dim">{meal.calories?.toFixed(0)} kcal • {meal.protein?.toFixed(0)}g protein</p>
-                  </div>
-                </div>
-                {meal.health_grade && (
-                  <span className={`text-xs font-display font-bold px-2 py-1 rounded-lg ${
-                    ['A+', 'A'].includes(meal.health_grade) ? 'bg-emerald-500/20 text-emerald-400' :
-                    ['B+', 'B'].includes(meal.health_grade) ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-orange-500/20 text-orange-400'
-                  }`}>
-                    {meal.health_grade}
-                  </span>
-                )}
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-10 bg-white/[0.02] border border-line border-dashed rounded-2xl">
-              <Apple size={32} className="mx-auto text-bone-dim/50 mb-3" />
-              <p className="text-sm text-bone-dim">No meals logged today.</p>
-              <p className="text-xs text-bone-dim mt-1">Open the AI Chatbot to scan your food!</p>
-            </div>
-          )}
-        </motion.div>
-
-        {/* History (Past 7 Days) */}
-        {historyData && historyData.length > 0 && (
-          <motion.div variants={item} className="space-y-3 mt-8">
-            <h2 className="text-xs font-display uppercase tracking-wider text-bone-dim mb-2">Past 7 Days</h2>
-            {historyData
-              .filter(m => {
-                // Filter out today's meals since they are already shown above
-                const today = new Date().toDateString();
-                return new Date(m.logged_at).toDateString() !== today;
-              })
-              .map((meal: any, i: number) => (
-                <div 
-                  key={meal.id || i} 
-                  onClick={() => setSelectedMeal(meal)}
-                  className="card p-4 flex items-center justify-between cursor-pointer hover:bg-ink-2 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-ink border border-line flex items-center justify-center">
-                      <CalendarDays size={16} className="text-bone-dim" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-bone text-sm capitalize">{meal.meal_type}</h3>
-                      <p className="text-xs text-bone-dim">
-                        {new Date(meal.logged_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {meal.calories?.toFixed(0)} kcal
-                      </p>
-                    </div>
-                  </div>
-                  {meal.health_grade && (
-                    <span className={`text-xs font-display font-bold px-2 py-1 rounded-lg ${
-                      ['A+', 'A'].includes(meal.health_grade) ? 'bg-emerald-500/20 text-emerald-400' :
-                      ['B+', 'B'].includes(meal.health_grade) ? 'bg-yellow-500/20 text-yellow-400' :
-                      'bg-orange-500/20 text-orange-400'
-                    }`}>
-                      {meal.health_grade}
-                    </span>
-                  )}
+            <div className="flex-1 min-w-0 space-y-3">
+              {[
+                { icon: Target, label: 'Goal', value: goals.calories },
+                { icon: UtensilsCrossed, label: 'Eaten', value: caloriesConsumed },
+                { icon: Flame, label: 'Remaining', value: caloriesLeft },
+              ].map(({ icon: RowIcon, label, value }) => (
+                <div key={label} className="flex items-center gap-2.5">
+                  <RowIcon size={15} className="dx-muted shrink-0" />
+                  <span className="text-[13px] dx-muted flex-1">{label}</span>
+                  <span className="text-[15px] font-semibold tabular">{loadingToday ? '–' : Math.round(value).toLocaleString()}</span>
                 </div>
               ))}
-          </motion.div>
+            </div>
+          </div>
+
+          <div className="mt-5 pt-4 grid grid-cols-2 gap-x-5 gap-y-4 border-t" style={{ borderColor: 'var(--dx-border)' }}>
+            <MacroBar label="Protein" value={proteinConsumed} goal={goals.protein} color="#c87941" loading={loadingToday} />
+            <MacroBar label="Carbs" value={carbsConsumed} goal={goals.carbs} color="#eab308" loading={loadingToday} />
+            <MacroBar label="Fat" value={fatConsumed} goal={goals.fat} color="#06b6d4" loading={loadingToday} />
+            <MacroBar label="Fiber" value={fiberConsumed} goal={goals.fiber} color="#10b981" loading={loadingToday} />
+          </div>
+        </motion.section>
+
+        {/* Astra shortcut */}
+        <motion.button
+          variants={item}
+          onClick={() => window.dispatchEvent(new Event('open-ai-bot'))}
+          className="dx-card w-full flex items-center gap-3 p-4 text-left transition-transform active:scale-[0.99]"
+        >
+          <span className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0" style={{ background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' }}>
+            <ScanLine size={20} />
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[15px] font-semibold">Log a meal with Astra</span>
+            <span className="block text-[12px] dx-muted truncate">Snap a photo or describe what you ate</span>
+          </span>
+          <ChevronRight size={18} className="dx-muted shrink-0" />
+        </motion.button>
+
+        {/* Today's Meals */}
+        <motion.section variants={item}>
+          <div className="flex items-baseline justify-between mb-2.5 px-0.5">
+            <h2 className="dx-section-title">Today's meals</h2>
+            {todayData?.meals && todayData.meals.length > 0 && (
+              <span className="text-[12px] dx-muted">{todayData.meals.length} logged</span>
+            )}
+          </div>
+
+          {loadingToday ? (
+            <div className="dx-card dx-list overflow-hidden animate-pulse">
+              {[0, 1].map(i => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                  <div className="w-9 h-9 rounded-xl" style={{ background: 'var(--dx-card-2)' }} />
+                  <div className="flex-1 space-y-2">
+                    <div className="h-3 w-24 rounded" style={{ background: 'var(--dx-card-2)' }} />
+                    <div className="h-2.5 w-40 rounded" style={{ background: 'var(--dx-card-2)' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : todayData?.meals && todayData.meals.length > 0 ? (
+            <div className="dx-card dx-list overflow-hidden">
+              {todayData.meals.map((meal: any, i: number) => (
+                <MealRow
+                  key={meal.id || i}
+                  meal={meal}
+                  onClick={() => setSelectedMeal(meal)}
+                  subtitle={`${meal.calories?.toFixed(0)} kcal · ${meal.protein?.toFixed(0)}g protein`}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="dx-card text-center px-6 py-9">
+              <span className="dx-badge-icon mx-auto !w-12 !h-12 !rounded-2xl"><Apple size={22} /></span>
+              <p className="mt-3 text-[15px] font-semibold">No meals logged today</p>
+              <p className="mt-1 text-[13px] dx-muted">Scan your food with Astra to track calories and macros.</p>
+              <button onClick={() => window.dispatchEvent(new Event('open-ai-bot'))} className="dx-btn mt-4 h-10 text-[13px]">
+                <Plus size={15} /> Log first meal
+              </button>
+            </div>
+          )}
+        </motion.section>
+
+        {/* History (Past 7 Days) */}
+        {pastByDay.length > 0 && (
+          <motion.section variants={item} className="space-y-4">
+            <h2 className="dx-section-title px-0.5">Past 7 days</h2>
+            {pastByDay.map(group => (
+              <div key={group.key}>
+                <div className="flex items-baseline justify-between mb-2 px-0.5">
+                  <span className="text-[12px] font-semibold dx-muted">{group.label}</span>
+                  <span className="text-[12px] dx-muted tabular">{Math.round(group.total).toLocaleString()} kcal</span>
+                </div>
+                <div className="dx-card dx-list overflow-hidden">
+                  {group.meals.map((meal: any, i: number) => (
+                    <MealRow
+                      key={meal.id || i}
+                      meal={meal}
+                      onClick={() => setSelectedMeal(meal)}
+                      subtitle={`${new Date(meal.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${meal.calories?.toFixed(0)} kcal`}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </motion.section>
         )}
 
       </motion.div>

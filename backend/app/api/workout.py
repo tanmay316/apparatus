@@ -10,6 +10,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from app.schemas.workout import WorkoutPlanRequest, WorkoutPlanResponse
 from app.core.security import get_current_user
+from app.core.guardrails import check_rate_limit
 from app.middleware.api_keys import resolve_api_keys
 from app.providers.llm import get_llm_providers, chat_with_fallback
 from app.providers.llm.base import ChatMessage
@@ -106,6 +107,9 @@ async def generate_workout_plan(
     Generate a highly customized AI workout plan using a 3-step hybrid pipeline.
     Step 1: LLM coaching blueprint → Step 2: Engine assembly → Step 3: LLM delta review
     """
+    rate = check_rate_limit(f"{current_user['uid']}:workout", limit=5, window_seconds=600)
+    if not rate.allowed:
+        raise HTTPException(status_code=429, detail=rate.message)
     keys = await resolve_api_keys(current_user)
     providers = get_llm_providers(
         groq_key=keys.get("groq_key", ""),

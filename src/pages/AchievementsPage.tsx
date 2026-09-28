@@ -1,110 +1,93 @@
 import { motion } from 'framer-motion';
-import { Trophy, Lock } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, Lock, Check, Flame, Trophy, Dumbbell, Footprints } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { BADGES, evaluateBadges } from '@/lib/badges';
-import type { BadgeContext } from '@/types';
+import { badgeContextFromStats, effectiveStreak } from '@/lib/stats';
 
-const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.04 } } };
-const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
+const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } };
+const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
 export function AchievementsPage() {
   const { stats } = useAuthStore();
-  
+
   if (!stats) return null;
-  
-  // Build badge context from stats
-  const context: BadgeContext = {
-    totalSessions: stats.totalWorkouts,
-    totalVolume: stats.totalVolume,
-    bestHold: stats.bestHold || 0,
-    currentStreak: stats.currentStreak,
-    longestStreak: stats.longestStreak,
-    prCount: stats.prCount,
-    daysCompleted: stats.totalWorkouts,
-    uniqueDaysCompleted: stats.totalWorkouts,
-    yogaCount: 0,
-    measurementsCount: 0,
-    weekGoalHit: false,
-  };
-  
-  const earnedIds = new Set(evaluateBadges(context));
-  const earnedCount = earnedIds.size;
+
+  const context = badgeContextFromStats(stats);
+  // Persisted badges are never lost; live evaluation covers anything earned before persistence existed.
+  const earnedIds = new Set([...(stats.badges || []), ...evaluateBadges(context)]);
+  const earnedCount = BADGES.filter(b => earnedIds.has(b.id)).length;
   const totalCount = BADGES.length;
   const progressPct = (earnedCount / totalCount) * 100;
-  
+  const ordered = [...BADGES.filter(b => earnedIds.has(b.id)), ...BADGES.filter(b => !earnedIds.has(b.id))];
+
+  const summary = [
+    { icon: Dumbbell, label: 'Workouts', value: stats.totalWorkouts || 0 },
+    { icon: Footprints, label: 'Cardio', value: stats.totalCardioSessions || 0 },
+    { icon: Flame, label: 'Streak', value: `${effectiveStreak(stats)}d` },
+  ];
+
   return (
-    <motion.div variants={container} initial="hidden" animate="show">
-      <motion.div variants={item} className="pb-5 border-b border-line mb-6">
-        <div className="font-mono text-amber text-xs tracking-widest mb-1">GAMIFICATION</div>
-        <h1 className="font-display text-3xl mb-1">Trophy Room</h1>
-        <p className="text-bone-dim text-sm max-w-xl">Unlock achievements by training consistently and hitting milestones.</p>
-      </motion.div>
-      
-      {/* Progress summary */}
-      <motion.div variants={item} className="card p-5 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Trophy size={18} className="text-amber" />
-            <span className="font-mono text-sm font-bold">{earnedCount} / {totalCount} Unlocked</span>
+    <motion.div variants={container} initial="hidden" animate="show" className="dx pro-scope max-w-4xl mx-auto pt-1 sm:pt-4 space-y-4">
+      <motion.header variants={item} className="flex items-center gap-3">
+        <Link to="/" className="dx-icon-btn dx-icon-btn--sm" aria-label="Back"><ArrowLeft size={18} /></Link>
+        <div>
+          <div className="dx-eyebrow">Trophy room</div>
+          <h1 className="text-[22px] sm:text-[27px] font-semibold tracking-tight leading-tight">Achievements</h1>
+        </div>
+      </motion.header>
+
+      <motion.section variants={item} className="dx-card p-4 sm:p-5">
+        <div className="flex items-center gap-3">
+          <span className="dx-badge-icon !w-11 !h-11 !rounded-2xl"><Trophy size={20} /></span>
+          <div className="flex-1 min-w-0">
+            <div className="text-[15px] font-semibold">{earnedCount} of {totalCount} unlocked</div>
+            <div className="text-[12px] dx-muted">Workouts and cardio sessions both count toward your badges.</div>
           </div>
-          <span className="font-mono text-xs text-bone-dim">{Math.round(progressPct)}%</span>
+          <span className="text-[13px] font-semibold tabular">{Math.round(progressPct)}%</span>
         </div>
-        <div className="w-full h-2.5 bg-line rounded-full overflow-hidden">
-          <motion.div 
-            className="h-full bg-gradient-to-r from-amber to-sienna rounded-full"
-            initial={{ width: 0 }}
-            animate={{ width: `${progressPct}%` }}
-            transition={{ duration: 1, ease: 'easeOut' }}
-          />
+        <div className="dx-progress mt-3.5">
+          <motion.span initial={{ width: 0 }} animate={{ width: `${progressPct}%` }} transition={{ duration: 0.9, ease: 'easeOut' }} />
         </div>
-      </motion.div>
-      
-      {/* Badge Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-        {BADGES.map((badge, i) => {
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {summary.map(({ icon: Icon, label, value }) => (
+            <div key={label} className="dx-inset p-3">
+              <div className="flex items-center gap-1.5 text-[11px] font-medium dx-muted"><Icon size={13} /> {label}</div>
+              <div className="mt-1 text-[18px] font-semibold tabular leading-none">{value}</div>
+            </div>
+          ))}
+        </div>
+      </motion.section>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {ordered.map(badge => {
           const isEarned = earnedIds.has(badge.id);
-          
+          const progress = !isEarned ? badge.progress?.(context) : undefined;
+          const pct = progress ? Math.round((progress.value / progress.target) * 100) : 0;
+
           return (
             <motion.div
               key={badge.id}
               variants={item}
-              className={`relative card p-5 text-center transition-all duration-300 ${
-                isEarned 
-                  ? 'border-sienna/50 bg-gradient-to-b from-sienna/5 to-transparent shadow-[0_0_20px_rgba(93,42,26,0.1)]'
-                  : 'opacity-50 grayscale'
-              }`}
+              className="dx-card p-4 flex flex-col relative"
+              style={isEarned ? { borderColor: 'var(--dx-accent)', background: 'linear-gradient(180deg, var(--dx-accent-soft), var(--dx-card) 70%)' } : undefined}
             >
-              {/* Glow effect for earned badges */}
-              {isEarned && (
-                <div className="absolute inset-0 rounded-[inherit] animate-pulse opacity-20 bg-gradient-to-b from-sienna/20 to-transparent pointer-events-none" />
-              )}
-              
-              {/* Lock overlay for unearned */}
-              {!isEarned && (
-                <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-line flex items-center justify-center">
-                  <Lock size={10} className="text-bone-dim" />
-                </div>
-              )}
-              
-              {/* Icon */}
-              <div className={`text-4xl mb-3 ${isEarned ? '' : 'filter grayscale'}`}>
-                {badge.icon}
-              </div>
-              
-              {/* Name */}
-              <div className={`font-display text-sm mb-1 ${isEarned ? 'text-bone' : 'text-bone-dim'}`}>
-                {badge.name}
-              </div>
-              
-              {/* Description */}
-              <div className="font-mono text-[10px] text-bone-dim leading-snug">
-                {badge.desc}
-              </div>
-              
-              {/* Earned indicator */}
-              {isEarned && (
-                <div className="mt-3 font-mono text-[10px] text-sienna font-bold tracking-wider">
-                  ✓ UNLOCKED
+              <span
+                className="absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center"
+                style={isEarned ? { background: 'var(--dx-success)', color: '#fff' } : { background: 'var(--dx-card-2)', color: 'var(--dx-muted)' }}
+                aria-label={isEarned ? 'Unlocked' : 'Locked'}
+              >
+                {isEarned ? <Check size={13} strokeWidth={3} /> : <Lock size={11} />}
+              </span>
+              <div className={`text-[34px] leading-none ${isEarned ? '' : 'grayscale opacity-50'}`}>{badge.icon}</div>
+              <div className={`mt-3 text-[14px] font-semibold leading-tight ${isEarned ? '' : 'dx-muted'}`}>{badge.name}</div>
+              <div className="mt-1 text-[12px] dx-muted leading-snug flex-1">{badge.desc}</div>
+              {progress && (
+                <div className="mt-3">
+                  <div className="dx-progress !h-1.5"><span style={{ width: `${pct}%` }} /></div>
+                  <div className="mt-1 text-[11px] dx-muted tabular">
+                    {Number.isInteger(progress.value) ? progress.value : progress.value.toFixed(1)} / {progress.target.toLocaleString()}
+                  </div>
                 </div>
               )}
             </motion.div>

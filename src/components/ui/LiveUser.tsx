@@ -27,3 +27,20 @@ export function LiveUserAvatar({ userId, fallbackName, fallbackPhoto, className 
   }
   return <>{displayName?.charAt(0)?.toUpperCase() || '?'}</>;
 }
+
+interface LiveSenderMessageProps {
+  senderId?: string | null;
+  senderName?: string | null;
+  message: string;
+  className?: string;
+}
+
+/** Notification text was baked with the sender's old name; swap in their current one. */
+export function LiveSenderMessage({ senderId, senderName, message, className }: LiveSenderMessageProps) {
+  const isUser = !!senderId && senderId !== 'system';
+  const { displayName } = useLiveDisplayName(isUser ? senderId : null, senderName);
+  const text = isUser && senderName && displayName && displayName !== senderName
+    ? message.split(senderName).join(displayName)
+    : message;
+  return <span className={className}>{text}</span>;
+}

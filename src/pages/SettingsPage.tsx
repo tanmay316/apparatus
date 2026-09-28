@@ -12,6 +12,8 @@ import { usePedometerStore } from '@/stores/pedometer-store';
 import { googleProvider } from '@/lib/firebase';
 import { deleteAccountData, deleteAvatar, downloadJson, exportAccountData, resetUserData, uploadAvatar } from '@/services/account';
 import { getAvatarUrl } from '@/lib/avatar';
+import { acceptAllFollowRequests, restrictPublicContent } from '@/services/social';
+import { computeAthleteRank } from '@/lib/rank';
 import type { UserProfile } from '@/types';
 
 const container = {
@@ -39,7 +41,7 @@ export function SettingsPage() {
 }
 
 function SettingsForm({ profile }: { profile: any }) {
-  const { user, updateProfile, signOut } = useAuthStore();
+  const { user, stats, updateProfile, signOut } = useAuthStore();
   const { showToast, confirm, theme, setTheme, units, setUnits, language, setLanguage } = useUIStore();
   const navigate = useNavigate();
 
@@ -374,21 +376,14 @@ function SettingsForm({ profile }: { profile: any }) {
               />
             </div>
             <div>
-              <label className="label">Experience Level</label>
-              <CustomSelect
-                className="w-full capitalize"
-                value={experienceLevel}
-                onChange={(val) => {
-                  const level = val as 'beginner' | 'intermediate' | 'advanced';
-                  setExperienceLevel(level);
-                  handleSaveField({ experienceLevel: level });
-                }}
-                options={[
-                  { value: 'beginner', label: 'Beginner' },
-                  { value: 'intermediate', label: 'Intermediate' },
-                  { value: 'advanced', label: 'Advanced' }
-                ]}
-              />
+              <label className="label">Athlete Rank</label>
+              <div className="input-field w-full flex items-center justify-between">
+                <span>{computeAthleteRank(stats, profile.weight).label}</span>
+                <span className="text-[10px] text-bone-dim">Auto</span>
+              </div>
+              <p className="text-[10px] text-bone-dim mt-1.5 leading-relaxed">
+                Calculated from your logged workouts, lifts, cardio and streaks.
+              </p>
             </div>
             <div>
               <label className="label">Preferred Training</label>
@@ -417,18 +412,30 @@ function SettingsForm({ profile }: { profile: any }) {
               <CustomSelect
                 className="w-full"
                 value={profileVisibility}
-                onChange={(val) => {
+                onChange={async (val) => {
                   const newValue = val as 'public' | 'followers' | 'private';
+                  const previous = profileVisibility;
                   setProfileVisibility(newValue);
-                  handleSaveField({
+                  await handleSaveField({
                     isPublic: newValue === 'public',
                     privacySettings: {
+                      ...(profile.privacySettings || {}),
                       profileVisibility: newValue,
                       showEventsToFollowers: showEvents,
                       showClansToFollowers: showClans,
                       showStatsToFollowers: showStats
                     }
                   });
+                  if (!user) return;
+                  try {
+                    if (previous === 'private' && newValue !== 'private') {
+                      const approved = await acceptAllFollowRequests(user.uid);
+                      if (approved > 0) showToast(`${approved} pending follow request${approved === 1 ? '' : 's'} approved`);
+                    }
+                    if (newValue !== 'public') await restrictPublicContent(user.uid);
+                  } catch (err) {
+                    console.warn('Privacy follow-up failed', err);
+                  }
                 }}
                 options={[
                   { value: 'public', label: 'Public (Everyone can follow & view)' },
@@ -448,7 +455,7 @@ function SettingsForm({ profile }: { profile: any }) {
                   const checked = e.target.checked;
                   setShowEvents(checked);
                   handleSaveField({
-                    privacySettings: { profileVisibility, showEventsToFollowers: checked, showClansToFollowers: showClans, showStatsToFollowers: showStats }
+                    privacySettings: { ...(profile.privacySettings || {}), profileVisibility, showEventsToFollowers: checked, showClansToFollowers: showClans, showStatsToFollowers: showStats }
                   });
                 }} />
                 <div>
@@ -461,7 +468,7 @@ function SettingsForm({ profile }: { profile: any }) {
                   const checked = e.target.checked;
                   setShowClans(checked);
                   handleSaveField({
-                    privacySettings: { profileVisibility, showEventsToFollowers: showEvents, showClansToFollowers: checked, showStatsToFollowers: showStats }
+                    privacySettings: { ...(profile.privacySettings || {}), profileVisibility, showEventsToFollowers: showEvents, showClansToFollowers: checked, showStatsToFollowers: showStats }
                   });
                 }} />
                 <div>
@@ -474,7 +481,7 @@ function SettingsForm({ profile }: { profile: any }) {
                   const checked = e.target.checked;
                   setShowStats(checked);
                   handleSaveField({
-                    privacySettings: { profileVisibility, showEventsToFollowers: showEvents, showClansToFollowers: showClans, showStatsToFollowers: checked }
+                    privacySettings: { ...(profile.privacySettings || {}), profileVisibility, showEventsToFollowers: showEvents, showClansToFollowers: showClans, showStatsToFollowers: checked }
                   });
                 }} />
                 <div>
@@ -588,7 +595,7 @@ function SettingsForm({ profile }: { profile: any }) {
                   style={{ width: `${deleteProgressPct}%` }}
                 />
               </div>
-              <p className="text-[10px] text-bone-dim mt-2">Do not close the app. You can navigate away — the operation will continue in the background.</p>
+              <p className="text-[10px] text-bone-dim mt-2">Do not close the app. You can navigate away; the operation will continue in the background.</p>
             </div>
           ) : (
             <button type="button" onClick={() => handleDeleteAccount()} disabled={resetting} className="btn-danger inline-flex items-center gap-2">
@@ -612,7 +619,7 @@ function SettingsForm({ profile }: { profile: any }) {
                     style={{ width: `${resetProgressPct}%` }}
                   />
                 </div>
-                <p className="text-[10px] text-bone-dim mt-2">Do not close the app. You can navigate away — the operation will continue in the background.</p>
+                <p className="text-[10px] text-bone-dim mt-2">Do not close the app. You can navigate away; the operation will continue in the background.</p>
               </div>
             ) : (
               <button type="button" onClick={() => handleResetData()} disabled={deleting} className="btn-secondary text-danger border-danger/30 hover:bg-danger/10 inline-flex items-center gap-2">

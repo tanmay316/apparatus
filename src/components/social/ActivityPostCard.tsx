@@ -5,15 +5,14 @@ import { Link } from 'react-router-dom';
 import {
   Clock3, Flame, Heart, MessageSquare, Share2, TrendingUp, Dumbbell,
   MoreHorizontal, Check, Bookmark, Send, ChevronDown, ChevronUp, Sparkles, Calendar as CalendarIcon,
-  Zap, Bike, Footprints, Trophy
+  Zap, Bike, Footprints, Trophy, Mountain, Gauge, Timer
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { addComment, getComments, hasLiked, toggleLike, deleteActivity } from '@/services/social';
 import type { Activity, Comment } from '@/types';
-import { calculateBodyweightReps, calculateShareVolume, getActiveMuscleScores } from '@/lib/muscle-map';
+import { calculateBodyweightReps, calculateShareVolume, getActiveMuscleScores, getActiveMusclesFromLogs, isWarmupOrCooldown, muscleFocus, type MuscleScore } from '@/lib/muscle-map';
 import { calculateWorkoutCalories } from '@/lib/calories';
-import { COMPACT_LIBRARY } from '@/services/library';
 import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { getAvatarUrl } from '@/lib/avatar';
@@ -31,6 +30,337 @@ function timeAgo(seconds?: number): string {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
+function formatClock(totalSec?: number): string {
+  const s = Math.max(0, Math.round(Number(totalSec) || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+    : `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+const num = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+interface CardioPostHeroProps {
+  details: Record<string, any>;
+  activityType: string;
+  createdAtSec?: number;
+  theme: 'light' | 'dark';
+}
+
+/** Feed layout for a completed cardio session: title, map + primary stats, then every other KPI. */
+function CardioPostHero({ details, activityType, createdAtSec, theme }: CardioPostHeroProps) {
+  const kind = (['walk', 'run', 'cycle'].includes(details.activityType) ? details.activityType : activityType) as 'walk' | 'run' | 'cycle' | string;
+  const isCycle = kind === 'cycle';
+  const kindLabel = kind === 'run' ? 'Run' : isCycle ? 'Ride' : 'Walk';
+  const KindIcon = kind === 'run' ? Zap : isCycle ? Bike : Footprints;
+
+  const when = createdAtSec ? new Date(createdAtSec * 1000) : null;
+  const hour = when ? when.getHours() : 12;
+  const partOfDay = hour >= 5 && hour < 12 ? 'Morning' : hour >= 12 && hour < 17 ? 'Afternoon' : hour >= 17 && hour < 21 ? 'Evening' : 'Night';
+  const title = (typeof details.title === 'string' && details.title.trim()) || `${partOfDay} ${kindLabel}`;
+  const dateLabel = when
+    ? when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    : null;
+
+  const distanceKm = num(details.distanceKm);
+  const durationSec = num(details.movingDurationSec) ?? num(details.durationSec);
+  const elapsedSec = num(details.elapsedDurationSec);
+  const pausedSec = num(details.pausedDurationSec);
+  const pace = typeof details.avgPace === 'string' ? details.avgPace.replace(/\s*\/\s*km\s*$/i, '').trim() : null;
+  const avgSpeed = num(details.avgSpeedKmh) ?? (distanceKm && durationSec ? distanceKm / (durationSec / 3600) : null);
+  const maxSpeed = num(details.maxSpeedKmh);
+  const elevation = num(details.elevationGainM);
+  const calories = num(details.calories);
+  const steps = num(details.steps);
+  const hasRoute = Array.isArray(details.route) && details.route.length > 1;
+
+  const primary: { label: string; value: string; unit?: string }[] = [
+    { label: 'Distance', value: distanceKm !== null ? distanceKm.toFixed(2) : '0.00', unit: 'km' },
+    { label: 'Duration', value: formatClock(durationSec ?? 0) },
+    isCycle
+      ? { label: 'Avg Speed', value: avgSpeed !== null ? avgSpeed.toFixed(1) : '--', unit: 'km/h' }
+      : { label: 'Pace', value: pace && pace !== '0:00' ? pace : '--', unit: '/km' },
+  ];
+
+  const secondary: { label: string; value: string; unit?: string; icon: typeof Flame }[] = [];
+  if (calories !== null) secondary.push({ label: 'Calories', value: String(Math.round(calories)), unit: 'kcal', icon: Flame });
+  if (isCycle && pace && pace !== '0:00') secondary.push({ label: 'Pace', value: pace, unit: '/km', icon: Timer });
+  if (!isCycle && avgSpeed !== null) secondary.push({ label: 'Avg Speed', value: avgSpeed.toFixed(1), unit: 'km/h', icon: Gauge });
+  if (maxSpeed !== null && maxSpeed > 0) secondary.push({ label: 'Max Speed', value: maxSpeed.toFixed(1), unit: 'km/h', icon: TrendingUp });
+  if (steps !== null && steps > 0) secondary.push({ label: 'Steps', value: Math.round(steps).toLocaleString(), icon: Footprints });
+  if (elapsedSec !== null && pausedSec !== null && pausedSec > 0) {
+    secondary.push({ label: 'Elapsed', value: formatClock(elapsedSec), icon: Clock3 });
+    secondary.push({ label: 'Paused', value: formatClock(pausedSec), icon: Clock3 });
+  }
+
+  return (
+    <div className="mb-4">
+      <div className="mb-3 min-w-0">
+        <h3 className="font-serif font-normal text-[22px] leading-tight text-[#17191c] truncate">{title}</h3>
+        {dateLabel && <p className="text-[11px] font-mono text-[#777b86] mt-1 truncate">{dateLabel}</p>}
+      </div>
+
+      {/* Map stretches to the height of the stat column so both sides line up. */}
+      <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-3 items-stretch">
+        <div className="cardio-post-map relative w-full min-h-[184px] overflow-hidden rounded-[18px]">
+          {hasRoute ? (
+            <div className="absolute inset-0 pointer-events-none">
+              <RouteMap
+                route={details.route}
+                theme={theme === 'dark' ? 'dark' : 'light'}
+                height="100%"
+                fitToContainer
+                interactive={false}
+                variant="card"
+                hideMarkers
+                noGlow
+                highlightColor={theme === 'dark' ? '#efad80' : '#d9532f'}
+                cardioType={kind as any}
+                mapPaddingTopLeft={[20, 34]}
+                mapPaddingBottomRight={[20, 20]}
+              />
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="cardio-post-badge w-14 h-14 rounded-full flex items-center justify-center">
+                <KindIcon size={24} />
+              </div>
+            </div>
+          )}
+          <span className="cardio-post-chip absolute left-2.5 top-2.5 z-[500] inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-mono font-semibold uppercase tracking-wider">
+            <KindIcon size={11} /> {kindLabel}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-2.5 min-w-0">
+          {primary.map((s) => (
+            <div key={s.label} className="cardio-post-stat flex-1 flex flex-col justify-center px-3 py-2 min-w-0 min-h-[56px]">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-[#777b86] leading-none truncate">{s.label}</div>
+              <div className="mt-1.5 flex items-baseline gap-1 min-w-0">
+                <span className="font-mono font-bold text-[#17191c] text-[17px] leading-none tabular-nums truncate">{s.value}</span>
+                {s.unit && <span className="text-[10px] font-mono text-[#777b86] leading-none shrink-0">{s.unit}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-3">
+        {[{ label: 'Elevation', value: elevation !== null ? `+${Math.round(elevation)}` : '+0', unit: 'm', icon: Mountain }, ...secondary].map((s) => (
+          <div key={s.label} className="cardio-post-stat flex items-center gap-2.5 px-2.5 py-2.5 min-w-0 min-h-[52px]">
+            <span className="cardio-post-badge w-7 h-7 rounded-full inline-flex items-center justify-center shrink-0">
+              <s.icon size={13} />
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-0.5 min-w-0">
+                <span className="font-mono font-bold text-[#17191c] text-[13px] leading-none tabular-nums truncate">{s.value}</span>
+                {s.unit && <span className="text-[9px] font-mono text-[#777b86] leading-none shrink-0">{s.unit}</span>}
+              </div>
+              <div className="text-[10px] font-mono uppercase tracking-normal text-[#777b86] leading-tight mt-1 whitespace-nowrap">{s.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+type LoggedSet = { completed?: boolean; reps?: number; weight?: number; seconds?: number };
+
+const isCountedSet = (s: LoggedSet) =>
+  s.completed !== false && (s.completed === true || Number(s.reps) > 0 || Number(s.weight) > 0 || Number(s.seconds) > 0);
+
+interface StrengthPostHeroProps {
+  details: Record<string, any>;
+  title: string;
+  createdAtSec?: number;
+  activeMuscles: MuscleScore[];
+  calories: number;
+  volumeKg: number;
+  bodyweightReps: number;
+  gender: 'male' | 'female';
+  theme: 'light' | 'dark';
+  imperial: boolean;
+}
+
+/** Feed layout for a strength session: title, body map + primary stats, muscle focus, then the exercise log. */
+function StrengthPostHero({ details, title, createdAtSec, activeMuscles, calories, volumeKg, bodyweightReps, gender, theme, imperial }: StrengthPostHeroProps) {
+  const [showAll, setShowAll] = useState(false);
+  const dark = theme === 'dark';
+  const accent = dark ? '#efad80' : '#c24e2c';
+  const weightUnit = imperial ? 'lb' : 'kg';
+  const toUnit = (kg: number) => (imperial ? kg * 2.20462 : kg);
+
+  const logs = (Array.isArray(details.exerciseLogs) ? details.exerciseLogs : [])
+    .filter((l: any) => l?.name && !isWarmupOrCooldown(l.name, l.section))
+    .map((l: any) => ({ name: String(l.name), sets: ((l.sets || []) as LoggedSet[]).filter(isCountedSet) }))
+    .filter((l: { sets: LoggedSet[] }) => l.sets.length > 0) as { name: string; sets: LoggedSet[] }[];
+  const names = ((details.exercises || []) as string[]).filter(n => !isWarmupOrCooldown(n));
+  const exercises = logs.length > 0 ? logs : names.map(name => ({ name, sets: [] as LoggedSet[] }));
+
+  const totalSets = logs.reduce((n, l) => n + l.sets.length, 0);
+  const totalReps = logs.reduce((n, l) => n + l.sets.reduce((r, s) => r + (Number(s.reps) || 0), 0), 0);
+  const topLift = Math.max(0, ...logs.flatMap(l => l.sets.map(s => Number(s.weight) || 0)));
+  const prCount = Number(details.prCount) || 0;
+  const focus = muscleFocus(activeMuscles, 3);
+
+  const when = createdAtSec ? new Date(createdAtSec * 1000) : null;
+  const dateLabel = when
+    ? `${when.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`
+    : null;
+
+  const volumeValue = volumeKg > 0 ? Math.round(toUnit(volumeKg)).toLocaleString() : bodyweightReps > 0 ? bodyweightReps.toLocaleString() : String(totalReps || 0);
+  const primary: { label: string; value: string; unit?: string }[] = [
+    { label: 'Duration', value: String(details.durationMin || 0), unit: 'min' },
+    { label: volumeKg > 0 ? 'Volume' : 'Reps', value: volumeValue, unit: volumeKg > 0 ? weightUnit : bodyweightReps > 0 ? '@ BW' : undefined },
+    { label: 'Sets', value: String(totalSets || details.sets || 0) },
+  ];
+  const secondary: { label: string; value: string; unit?: string; icon: typeof Flame }[] = [
+    { label: 'Calories', value: String(Math.round(calories || 0)), unit: 'kcal', icon: Flame },
+    { label: 'Exercises', value: String(exercises.length), icon: Dumbbell },
+    topLift > 0
+      ? { label: 'Top lift', value: String(Math.round(toUnit(topLift) * 10) / 10), unit: weightUnit, icon: TrendingUp }
+      : { label: 'Reps', value: totalReps.toLocaleString(), icon: TrendingUp },
+  ];
+
+  const bestSet = (sets: LoggedSet[]) => {
+    if (sets.length === 0) return '';
+    const heaviest = sets.reduce((best, s) => ((Number(s.weight) || 0) > (Number(best.weight) || 0) ? s : best), sets[0]);
+    const maxReps = Math.max(0, ...sets.map(s => Number(s.reps) || 0));
+    const maxSec = Math.max(0, ...sets.map(s => Number(s.seconds) || 0));
+    const w = Number(heaviest.weight) || 0;
+    if (w > 0) return `${sets.length} × ${heaviest.reps || maxReps} · ${Math.round(toUnit(w) * 10) / 10} ${weightUnit}`;
+    if (maxReps > 0) return `${sets.length} × ${maxReps}`;
+    if (maxSec > 0) return `${sets.length} × ${maxSec}s`;
+    return `${sets.length} sets`;
+  };
+
+  const visible = showAll ? exercises : exercises.slice(0, 3);
+  const inactive = dark ? { fill: '#241613', stroke: '#3a2620' } : { fill: '#e2dbd3', stroke: '#b9aea3' };
+
+  return (
+    <div className="mb-4">
+      <div className="mb-3 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="strength-post-eyebrow text-[10px] font-mono font-bold uppercase tracking-[0.14em] truncate">
+            {details.planTitle || 'Strength session'}{details.skill ? ` · ${details.skill}` : ''}
+          </span>
+          {prCount > 0 && (
+            <span className="strength-post-pr shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-mono font-bold uppercase tracking-wider">
+              <Trophy size={10} /> {prCount} PR{prCount > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+        <h3 className="font-serif font-normal text-[22px] leading-tight text-[#17191c] truncate mt-1">{title}</h3>
+        {dateLabel && <p className="text-[11px] font-mono text-[#777b86] mt-1 truncate">{dateLabel}</p>}
+      </div>
+
+      <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-3 items-stretch">
+        <div className="cardio-post-map relative w-full min-h-[184px] overflow-hidden rounded-[18px] flex items-end justify-center gap-2 px-3 pt-8 pb-3">
+          {activeMuscles.length > 0 ? (
+            (['front', 'back'] as const).map(view => (
+              <AnatomyFigureSVG
+                key={view}
+                view={view}
+                activeMuscles={activeMuscles}
+                gender={gender}
+                color={accent}
+                inactiveFill={inactive.fill}
+                inactiveStroke={inactive.stroke}
+                glow={dark}
+                className="h-[150px] w-auto max-w-[48%]"
+              />
+            ))
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="cardio-post-badge w-14 h-14 rounded-full flex items-center justify-center">
+                <Dumbbell size={24} />
+              </div>
+            </div>
+          )}
+          <span className="cardio-post-chip absolute left-2.5 top-2.5 z-[5] inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-mono font-semibold uppercase tracking-wider">
+            <Dumbbell size={11} /> Strength
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-2.5 min-w-0">
+          {primary.map(s => (
+            <div key={s.label} className="cardio-post-stat flex-1 flex flex-col justify-center px-3 py-2 min-w-0 min-h-[56px]">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-[#777b86] leading-none truncate">{s.label}</div>
+              <div className="mt-1.5 flex items-baseline gap-1 min-w-0">
+                <span className="font-mono font-bold text-[#17191c] text-[17px] leading-none tabular-nums truncate">{s.value}</span>
+                {s.unit && <span className="text-[10px] font-mono text-[#777b86] leading-none shrink-0">{s.unit}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2.5 mt-3">
+        {secondary.map(s => (
+          <div key={s.label} className="cardio-post-stat flex items-center gap-2.5 px-2.5 py-2.5 min-w-0 min-h-[52px]">
+            <span className="cardio-post-badge w-7 h-7 rounded-full inline-flex items-center justify-center shrink-0">
+              <s.icon size={13} />
+            </span>
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-0.5 min-w-0">
+                <span className="font-mono font-bold text-[#17191c] text-[13px] leading-none tabular-nums truncate">{s.value}</span>
+                {s.unit && <span className="text-[9px] font-mono text-[#777b86] leading-none shrink-0">{s.unit}</span>}
+              </div>
+              <div className="text-[10px] font-mono uppercase tracking-normal text-[#777b86] leading-tight mt-1 whitespace-nowrap">{s.label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {focus.length > 0 && (
+        <div className="cardio-post-stat mt-3 px-3.5 py-3">
+          <div className="text-[10px] font-mono uppercase tracking-wider text-[#777b86] mb-2.5">Muscle focus</div>
+          <div className="space-y-2">
+            {focus.map(f => (
+              <div key={f.muscle} className="flex items-center gap-3">
+                <span className="w-[84px] shrink-0 text-[12px] font-semibold text-[#17191c] truncate">{f.label}</span>
+                <span className="strength-post-track flex-1 h-2 rounded-full overflow-hidden">
+                  <span className="strength-post-fill block h-full rounded-full" style={{ width: `${Math.max(8, f.pct)}%` }} />
+                </span>
+                <span className="w-9 text-right text-[11px] font-mono text-[#777b86] tabular-nums">{f.pct}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {exercises.length > 0 && (
+        <div className="cardio-post-stat mt-3 px-1.5 py-1.5">
+          {visible.map((ex, i) => (
+            <div key={`${ex.name}-${i}`} className="strength-post-row flex items-center gap-3 px-2 py-2.5 min-w-0">
+              <span className="cardio-post-badge w-7 h-7 rounded-full inline-flex items-center justify-center shrink-0 text-[10px] font-mono font-bold">
+                {i + 1}
+              </span>
+              <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-[#17191c]">{ex.name}</span>
+              <span className="shrink-0 text-[11px] font-mono text-[#777b86] tabular-nums">{bestSet(ex.sets)}</span>
+            </div>
+          ))}
+          {exercises.length > 3 && (
+            <button
+              type="button"
+              onClick={() => setShowAll(v => !v)}
+              className="w-full py-2 text-center text-[12px] font-semibold text-[#17191c] flex items-center justify-center gap-1"
+            >
+              {showAll ? <>Show less <ChevronUp size={14} /></> : <>Show all {exercises.length} exercises <ChevronDown size={14} /></>}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ActivityPostCardProps {
   activity: Activity;
   onShare?: (activity: Activity) => void;
@@ -46,7 +376,6 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
   const queryClient = useQueryClient();
 
   const [isDeleted, setIsDeleted] = useState(false);
-  const [showAllExercises, setShowAllExercises] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
 
   const bookmarks = profile?.bookmarks || [];
@@ -76,12 +405,16 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
   const repsLabel = activityWeight ? `reps @ BW` : 'BW reps';
 
   const displayCalories = Array.isArray(details.exerciseLogs) && details.exerciseLogs.length > 0
-    ? calculateWorkoutCalories(null, details.exerciseLogs as any, activityWeight || 70, details.durationMin)
+    ? calculateWorkoutCalories(details.exerciseLogs as any, activityWeight, details.durationMin)
     : Number(details.calories || 0);
 
   // Active muscle heatmap regions
-  const activeMuscles = getActiveMuscleScores(exerciseNames);
-  const activeMuscleList = activeMuscles.map(s => s.muscle).slice(0, 5);
+  const activeMuscles = Array.isArray(details.exerciseLogs) && details.exerciseLogs.length > 0
+    ? getActiveMusclesFromLogs(details.exerciseLogs as any)
+    : getActiveMuscleScores(exerciseNames);
+  // The author's body type: stored on newer posts, otherwise known only for your own posts.
+  const authorGender = String(details.gender || (isOwnActivity ? profile?.gender : '') || '').toLowerCase();
+  const postGender: 'male' | 'female' = authorGender === 'female' ? 'female' : 'male';
   
   const isCardio = activity.type === 'walk' || activity.type === 'run' || activity.type === 'cycle' || ['walk', 'run', 'cycle'].includes(details.activityType) || (details.distanceKm !== undefined && !details.exercises && !details.exerciseLogs);
 
@@ -129,12 +462,6 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
     return null;
   }
 
-  // Map exercise name to muscle group
-  const getExerciseMuscleGroup = (name: string) => {
-    const found = COMPACT_LIBRARY.find(ex => ex.name.toLowerCase() === name.toLowerCase());
-    return found?.muscleGroup || 'Full Body';
-  };
-
   if (activity.id && hiddenPosts?.includes(activity.id)) {
     return (
       <motion.div 
@@ -181,9 +508,9 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
                 <span className="text-[9px] md:text-[10px] font-mono font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-800 border border-amber-500/30 shrink-0">
                   Arena Official
                 </span>
-              ) : profile?.experienceLevel && isOwnActivity ? (
+              ) : (profile?.athleteRank?.tier || profile?.experienceLevel) && isOwnActivity ? (
                 <span className="text-[9px] md:text-[10px] font-mono font-medium uppercase px-2 py-0.5 rounded-full bg-[#fdfbfb] text-[#777b86] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] shrink-0">
-                  {profile.experienceLevel}
+                  {profile?.athleteRank?.tier || profile?.experienceLevel}
                 </span>
               ) : null}
             </div>
@@ -302,262 +629,30 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
             sourceType={details.eventId ? 'event' : 'challenge'}
           />
         </div>
-      ) : (
-        <div
-          className="relative overflow-hidden rounded-[20px] p-4 sm:p-6 mb-4 sm:mb-5 bg-[#fdfbfb] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.05),inset_-3px_-3px_8px_rgba(255,255,255,1)] flex flex-col justify-between min-h-[130px]"
-        >
-          {activity.type === 'event_join' ? (
-            <div>
-              <h2 className="font-serif text-2xl text-[#17191c] mb-1">{activity.summary}</h2>
-              <p className="text-sm text-[#777b86] font-sans flex items-center gap-1 mt-2">
-                <CalendarIcon size={14} className="text-[#5d2a1a]" />
-                Going to {details.eventTitle || 'an event'}
-              </p>
-            </div>
-          ) : isCardio ? (
-            <div className="relative w-full h-[150px] rounded-xl overflow-hidden mt-1 shadow-md">
-              {details.route && details.route.length > 0 ? (
-                <div className="w-full h-full pointer-events-none">
-                  <RouteMap 
-                    route={details.route} 
-                    theme={theme === 'dark' ? 'dark' : 'light'} 
-                    height="150px" 
-                    cardioType={activity.type as any}
-                  />
-                </div>
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-indigo-500/10 to-purple-500/10 flex items-center justify-center">
-                  <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white shadow-lg">
-                     {activity.type === 'run' ? <Zap size={32} /> : activity.type === 'cycle' ? <Bike size={32} /> : <Footprints size={32} />}
-                  </div>
-                </div>
-              )}
-              
-              {/* Overlay Info */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
-              <div className="absolute bottom-3 left-4 z-10">
-                <div className="text-[10px] font-sans font-bold text-white/90 uppercase tracking-widest mb-0.5">
-                  {activity.type}
-                </div>
-                <h3 className="font-serif font-bold text-2xl text-white leading-tight">
-                  {details.distanceKm ? `${details.distanceKm.toFixed(2)} km` : 'Cardio'}
-                </h3>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <span className="text-xs font-sans font-medium text-[#5d2a1a]">
-                      {details.planTitle || 'Custom Program'}
-                    </span>
-                    {details.skill && (
-                      <span className="text-xs font-mono text-[#777b86]">
-                        · Skill: {details.skill}
-                      </span>
-                    )}
-                  </div>
-
-                  <h3 className="font-serif font-normal text-2xl text-[#17191c] leading-tight">
-                    {details.dayTitle || activity.summary}
-                  </h3>
-                </div>
-
-                {/* Small size Anatomy figure beside workout day title */}
-                {activeMuscles.length > 0 && (
-                  <div className="flex items-center gap-1.5 shrink-0 bg-[#fdfbfb] p-2 rounded-2xl shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)]" title="Muscles Targeted">
-                    <AnatomyFigureSVG view="front" activeMuscles={activeMuscles} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
-                    <AnatomyFigureSVG view="back" activeMuscles={activeMuscles} gender={profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male'} className="w-7 h-11" />
-                  </div>
-                )}
-              </div>
-
-              {/* Muscle Heatmap Text Strip */}
-              {activeMuscleList.length > 0 && (
-                <div className="mt-4 pt-3 flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-mono font-semibold text-[#777b86] flex items-center gap-1">
-                    <Sparkles size={12} className="text-[#979799]" /> Trained:
-                  </span>
-                  {activeMuscleList.map((m, idx) => (
-                    <span
-                      key={idx}
-                      className="text-xs font-sans text-[#17191c] bg-[#fdfbfb] px-2.5 py-0.5 rounded-md shadow-[2px_2px_5px_rgba(0,0,0,0.05),-2px_-2px_5px_rgba(255,255,255,1)]"
-                    >
-                      {m.replace('_', ' ')}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
+      ) : isCardio && activity.type !== 'event_join' ? (
+        <CardioPostHero details={details} activityType={activity.type} createdAtSec={activity.createdAt?.seconds} theme={theme} />
+      ) : activity.type === 'event_join' ? (
+        <div className="relative overflow-hidden rounded-[20px] p-4 sm:p-6 mb-4 sm:mb-5 bg-[#fdfbfb] shadow-[inset_3px_3px_8px_rgba(0,0,0,0.05),inset_-3px_-3px_8px_rgba(255,255,255,1)]">
+          <h2 className="font-serif text-2xl text-[#17191c] mb-1">{activity.summary}</h2>
+          <p className="text-sm text-[#777b86] font-sans flex items-center gap-1 mt-2">
+            <CalendarIcon size={14} className="text-[#5d2a1a]" />
+            Going to {details.eventTitle || 'an event'}
+          </p>
         </div>
+      ) : (
+        <StrengthPostHero
+          details={details}
+          title={details.dayTitle || activity.summary || 'Workout'}
+          createdAtSec={activity.createdAt?.seconds}
+          activeMuscles={activeMuscles}
+          calories={displayCalories}
+          volumeKg={displayVolume}
+          bodyweightReps={displayBodyweightReps}
+          gender={postGender}
+          theme={theme}
+          imperial={units === 'imperial'}
+        />
       )}
-
-      {activity.type !== 'event_join' && !isCelebration && (
-        <>
-          {/* ─── SECTION 3: METRICS ROW ────────────────────────────────────── */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-            {/* Duration */}
-            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
-              <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                <Clock3 size={13} className="sm:w-[15px] sm:h-[15px]" />
-              </div>
-              <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
-                <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
-                  {isCardio ? Math.floor((details.durationSec || 0) / 60) : (details.durationMin || 0)} min
-                </div>
-                <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>Duration</div>
-              </div>
-            </div>
-
-            {/* Calories */}
-            <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
-              <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                <Flame size={13} className="sm:w-[15px] sm:h-[15px]" />
-              </div>
-              <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
-                <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
-                  {isCardio ? details.calories : displayCalories} kcal
-                </div>
-                <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>Burned</div>
-              </div>
-            </div>
-
-            {isCardio ? (
-              <>
-                {/* Distance */}
-                <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
-                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                    <TrendingUp size={13} className="sm:w-[15px] sm:h-[15px]" />
-                  </div>
-                  <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
-                    <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
-                      {details.distanceKm?.toFixed(2)}
-                    </div>
-                    <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>km</div>
-                  </div>
-                </div>
-                {/* Pace */}
-                <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
-                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                    <Zap size={13} className="sm:w-[15px] sm:h-[15px]" />
-                  </div>
-                  <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
-                    <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
-                      {details.avgPace?.replace(' /km', '')}
-                    </div>
-                    <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>/km</div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Volume */}
-                <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
-                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                    <TrendingUp size={13} className="sm:w-[15px] sm:h-[15px]" />
-                  </div>
-                  <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
-                    <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
-                      {displayVolume > 0 ? displayVolume.toLocaleString() : displayBodyweightReps > 0 ? displayBodyweightReps : '0'}
-                    </div>
-                    <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>
-                      {displayVolume > 0 ? 'kg·reps' : repsLabel}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Exercise count */}
-                <div className="rounded-[16px] bg-[#fdfbfb] shadow-[3px_3px_8px_rgba(0,0,0,0.05),-3px_-3px_8px_rgba(255,255,255,1)] p-1.5 sm:p-3 flex items-center gap-1.5 sm:gap-3">
-                  <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-[#fdfbfb] shadow-[inset_2px_2px_4px_rgba(0,0,0,0.05),inset_-2px_-2px_4px_rgba(255,255,255,1)] flex items-center justify-center text-[#777b86] shrink-0">
-                    <Dumbbell size={13} className="sm:w-[15px] sm:h-[15px]" />
-                  </div>
-                  <div className="flex-1 min-w-0" style={{ containerType: 'inline-size' }}>
-                    <div className="font-mono font-bold text-[#17191c] leading-tight truncate" style={{ fontSize: 'clamp(10px, 14cqw, 14px)' }}>
-                      {exerciseNames.length}
-                    </div>
-                    <div className="font-mono text-[#777b86] uppercase tracking-wider leading-tight mt-0.5 truncate" style={{ fontSize: 'clamp(8px, 9cqw, 10px)' }}>Exercises</div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* ─── SECTION 4: EXERCISE PREVIEW ───────────────────────────────── */}
-          {!isCardio && exerciseNames.length > 0 && (
-            <div className="mb-4">
-              {/* Default collapsed preview (shows first 2) */}
-              {!showAllExercises && (
-                <div className="space-y-2">
-                  {exerciseNames.slice(0, 2).map((name, index) => (
-                    <div
-                      key={`${name}-${index}`}
-                      className="flex items-center justify-between py-1.5 px-3 text-xs font-mono"
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="w-4 h-4 rounded-full bg-[#e8f5e9] text-[#2e7d32] flex items-center justify-center shrink-0">
-                          <Check size={10} />
-                        </span>
-                        <span className="truncate text-[#17191c] font-medium">{name}</span>
-                      </div>
-                      <span className="text-[11px] text-[#777b86] shrink-0 ml-2">
-                        {getExerciseMuscleGroup(name)}
-                      </span>
-                    </div>
-                  ))}
-
-                  {exerciseNames.length > 2 && (
-                    <button
-                      onClick={() => setShowAllExercises(true)}
-                      className="w-full py-2 text-center text-xs font-sans text-[#17191c] hover:underline flex items-center justify-center gap-1"
-                    >
-                      Show all {exerciseNames.length} exercises <ChevronDown size={14} />
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Expanded 2-column exercise grid */}
-              <AnimatePresence>
-                {showAllExercises && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {exerciseNames.map((name, index) => (
-                        <div
-                          key={`${name}-${index}`}
-                          className="flex items-center justify-between p-2 rounded-xl border border-white/[0.04] bg-white/[0.02] text-xs font-mono"
-                        >
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="w-4 h-4 rounded-full bg-[#e8f5e9] text-[#2e7d32] flex items-center justify-center shrink-0">
-                              <Check size={10} />
-                            </span>
-                            <span className="truncate text-[#17191c]">{name}</span>
-                          </div>
-                          <span className="text-[10px] text-[#777b86] shrink-0 ml-2">
-                            {getExerciseMuscleGroup(name)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => setShowAllExercises(false)}
-                      className="w-full mt-2 py-1.5 text-center text-[11px] font-sans text-[#17191c] hover:underline flex items-center justify-center gap-1"
-                    >
-                      Show less <ChevronUp size={14} />
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-        </>)}
 
       {/* ─── SECTION 5: SOCIAL ACTIONS ─────────────────────────────────── */}
       <div className="flex items-center justify-between mt-4 pt-4 text-xs font-sans">

@@ -32,18 +32,40 @@ let emaSpeed = 0;
 let lastAcceptedWebPoint: RoutePoint | null = null;
 let lastMovementTs = 0;
 
-const ALTITUDE_BUFFER_SIZE = 5;
+const ALTITUDE_BUFFER_SIZE = 7;
+const ALTITUDE_EMA_ALPHA = 0.25;
+/** GPS altitude jitters several metres; only count rises beyond this. */
+const ELEVATION_HYSTERESIS_M = 4;
+/** Climbs steeper than this over the horizontal run are GPS jumps, not terrain. */
+const ELEVATION_MAX_GRADE = 0.35;
 let altitudeBuffer: number[] = [];
+let altitudeEma: number | null = null;
 let lastElevationAnchorAlt: number | null = null;
+let distSinceElevAnchorM = 0;
 
 const GPS_SETTLING_DURATION_MS = 6000;
 let gpsSettledAt = 0;
+
+const AUTO_PAUSE_AFTER_MS = 8000;
+const STALE_SPEED_AFTER_MS = 5000;
+/** Device-clock time the last fix reached JS (GPS timestamps can be skewed). */
+let lastFixReceivedAt = 0;
+let lastWatchdogTick = 0;
 
 function getSmoothedAltitude(alt: number): number {
   altitudeBuffer.push(alt);
   if (altitudeBuffer.length > ALTITUDE_BUFFER_SIZE) altitudeBuffer.shift();
   const sorted = [...altitudeBuffer].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
+  const median = sorted[Math.floor(sorted.length / 2)];
+  altitudeEma = altitudeEma == null ? median : ALTITUDE_EMA_ALPHA * median + (1 - ALTITUDE_EMA_ALPHA) * altitudeEma;
+  return altitudeEma;
+}
+
+function resetAltitudeAnchor(alt: number) {
+  altitudeBuffer = [alt];
+  altitudeEma = alt;
+  lastElevationAnchorAlt = alt;
+  distSinceElevAnchorM = 0;
 }
 
 function pushSpeed(raw: number): number {
@@ -80,13 +102,15 @@ function resetWebGpsEngine() {
   emaSpeed = 0;
   lastAcceptedWebPoint = null;
   altitudeBuffer = [];
+  altitudeEma = null;
   lastElevationAnchorAlt = null;
+  distSinceElevAnchorM = 0;
   gpsSettledAt = 0;
   lastMovementTs = 0;
 }
 
 // ────────────────────────────────────────────────────────────
-// Background Resilience — Page Visibility + Native Sync
+// Background Resilience - Page Visibility + Native Sync
 // ────────────────────────────────────────────────────────────
 
 let visibilityListenerAttached = false;
@@ -146,7 +170,7 @@ function attachVisibilityListener() {
           if (isActive) void resyncIfTracking();
         });
       })
-      .catch(() => { /* @capacitor/app unavailable — visibilitychange still covers it */ });
+      .catch(() => { /* @capacitor/app unavailable - visibilitychange still covers it */ });
   }
 }
 
@@ -243,9 +267,71 @@ export const finishTracking = async () => {
 // Native Android Ingestion Handler (Single Source of Truth Adapter)
 // ────────────────────────────────────────────────────────────
 
+/**
+ * Live "Time": wall clock since start minus manual and auto pauses.
+ * Moving Time (`movingDurationSec`) is narrower: only GPS-confirmed movement.
+ */
+export function getCardioActiveSec(st: Pick<CardioState, 'startedAt' | 'totalPausedMs' | 'isPaused' | 'pausedAt' | 'autoPauseStatus' | 'autoPausedAt'>, now = Date.now()) {
+  if (!st.startedAt) return 0;
+  let pausedMs = st.totalPausedMs;
+  if (st.isPaused && st.pausedAt) pausedMs += now - st.pausedAt;
+  else if (st.autoPauseStatus === 'PAUSED' && st.autoPausedAt) pausedMs += now - st.autoPausedAt;
+  return Math.max(0, Math.floor((now - st.startedAt - pausedMs) / 1000));
+}
+
+/**
+ * Android stops delivering fixes when the phone is still (or accuracy drops below
+ * the native gate), so no "still" sample ever arrives. Call this on a UI tick to
+ * zero stale speed and auto-pause after the same 8 s the native engine uses.
+ */
+export function checkGpsStaleness() {
+  const st = useCardioStore.getState();
+  if (!st.isTracking || st.isPaused || st.isRecovering || st.gpsStatus !== 'active' || !lastFixReceivedAt) return;
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return;
+  const now = Date.now();
+  // Coming back from background (timers throttled): give native a moment to resume the stream.
+  const resumedFromIdle = now - lastWatchdogTick > 3000;
+  lastWatchdogTick = now;
+  if (resumedFromIdle) {
+    lastFixReceivedAt = Math.max(lastFixReceivedAt, now);
+    return;
+  }
+  const silentMs = now - lastFixReceivedAt;
+  if (silentMs < STALE_SPEED_AFTER_MS) return;
+
+  const patch: Partial<CardioState> = {};
+  if (st.currentSpeedKmh !== 0) patch.currentSpeedKmh = 0;
+  if (st.currentPaceMs !== 0) patch.currentPaceMs = 0;
+  if (silentMs >= AUTO_PAUSE_AFTER_MS && st.autoPauseStatus !== 'PAUSED') {
+    patch.autoPauseStatus = 'PAUSED';
+    patch.autoPausedAt = now;
+  }
+  if (Object.keys(patch).length > 0) useCardioStore.setState(patch);
+}
+
+const LIVE_PACE_WINDOW_MS = 45_000;
+const MIN_ROLLING_PACE_KM = 0.02;
+const MIN_AVG_PACE_KM = 0.03;
+
+/**
+ * Live pace from cumulative distance/moving-time snapshots over the last 45 s.
+ * Falls back to the session average until the window holds 20 m of movement.
+ */
+function rollingPace(window: CardioState['paceWindow'], now: number, distKm: number, movingSec: number) {
+  const next = [...window, { dist: distKm, dt: movingSec, ts: now }].filter(p => now - p.ts <= LIVE_PACE_WINDOW_MS);
+  const first = next[0];
+  const dDist = distKm - first.dist;
+  const dSec = movingSec - first.dt;
+  let paceMs = 0;
+  if (dDist >= MIN_ROLLING_PACE_KM && dSec > 0) paceMs = (dSec * 1000) / dDist;
+  else if (distKm >= MIN_AVG_PACE_KM && movingSec > 0) paceMs = (movingSec * 1000) / distKm;
+  return { window: next, paceMs };
+}
+
 function handleNativeLocation(point: NativeWorkoutPoint) {
   const store = useCardioStore.getState();
   if (!store.isTracking || store.isPaused) return;
+  lastFixReceivedAt = Date.now();
 
   const now = point.timestamp || Date.now();
   const newLat = point.lat;
@@ -279,27 +365,10 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
     }
   }
 
-  // 4. Rolling Moving-Pace Window from Native Distance Deltas
-  let newPaceWindow = [...store.paceWindow];
-  const deltaDistKm = nativeDistKm - store.distanceKm;
-  const deltaSec = movingDurationSec - store.movingDurationSec;
-  if (deltaDistKm > 0 && deltaSec > 0) {
-    newPaceWindow.push({ dist: deltaDistKm, dt: deltaSec, ts: now });
-  }
-
-  const LIVE_PACE_WINDOW_MS = 45_000;
-  newPaceWindow = newPaceWindow.filter(p => now - p.ts < LIVE_PACE_WINDOW_MS);
-
-  let currentPaceMs = store.currentPaceMs;
-  if (newPaceWindow.length > 0) {
-    const sumDist = newPaceWindow.reduce((a, b) => a + b.dist, 0);
-    const sumDt = newPaceWindow.reduce((a, b) => a + b.dt, 0);
-    if (sumDist >= 0.005) {
-      currentPaceMs = (sumDt * 1000) / sumDist;
-    }
-  } else if (currentSpeedKmh < 1.0) {
-    currentPaceMs = 0;
-  }
+  // 4. Rolling moving pace over the last 45 s of native distance/time
+  const pace = rollingPace(store.paceWindow, now, nativeDistKm, movingDurationSec);
+  const newPaceWindow = pace.window;
+  let currentPaceMs = pace.paceMs;
 
   // 5. Auto-Pause State Machine
   let autoPauseStatus = store.autoPauseStatus;
@@ -315,7 +384,7 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
     autoPausedAt = null;
     lastMovementTs = now;
   } else {
-    // Stationary candidate — trust native isAutoPaused as primary signal,
+    // Stationary candidate - trust native isAutoPaused as primary signal,
     // fallback to 8s frontend timeout matching native AUTO_PAUSE_TIMEOUT_MS
     const stationaryTimeMs = lastMovementTs > 0 ? (now - lastMovementTs) : 8000;
     if (point.isAutoPaused || stationaryTimeMs >= 8000) {
@@ -327,10 +396,11 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
   }
 
   // Smooth displayed speed: below 3 km/h, snap to nearest 0.5 to prevent visual jitter
-  let displaySpeed = Math.round(currentSpeedKmh * 10) / 10;
+  let displaySpeed = autoPauseStatus === 'PAUSED' ? 0 : Math.round(currentSpeedKmh * 10) / 10;
   if (displaySpeed < 3.0 && displaySpeed > 0) {
     displaySpeed = Math.round(currentSpeedKmh * 2) / 2; // round to nearest 0.5
   }
+  if (autoPauseStatus === 'PAUSED') currentPaceMs = 0;
 
   useCardioStore.setState({
     currentLocation,
@@ -563,6 +633,7 @@ export const useCardioStore = create<CardioState>()(
       startTracking: (type) => {
         resetWebGpsEngine();
         lastMovementTs = Date.now();
+        lastFixReceivedAt = Date.now();
         const prevLocation = get().currentLocation;
 
         set({
@@ -598,9 +669,18 @@ export const useCardioStore = create<CardioState>()(
         } else {
           stopGpsWatch();
         }
+        const now = Date.now();
+        const { autoPauseStatus, autoPausedAt, totalPausedMs } = get();
+        // Fold an ongoing auto-pause in now; resume only credits `pausedAt`, so it would be lost.
+        const foldedPausedMs = autoPauseStatus === 'PAUSED' && autoPausedAt
+          ? totalPausedMs + (now - autoPausedAt)
+          : totalPausedMs;
         set({
           isPaused: true,
-          pausedAt: Date.now(),
+          pausedAt: now,
+          totalPausedMs: foldedPausedMs,
+          autoPauseStatus: 'MOVING',
+          autoPausedAt: null,
           currentSpeedKmh: 0,
         });
       },
@@ -613,6 +693,7 @@ export const useCardioStore = create<CardioState>()(
         }
         resetWebGpsEngine();
         lastMovementTs = Date.now();
+        lastFixReceivedAt = Date.now();
 
         const { pausedAt, totalPausedMs, autoPauseStatus, autoPausedAt } = get();
         
@@ -641,6 +722,7 @@ export const useCardioStore = create<CardioState>()(
       addPoint: (point) => {
         const state = get();
         if (!state.isTracking || state.isPaused) return;
+        lastFixReceivedAt = Date.now();
 
         const accuracy = (point as any).accuracy as number | undefined;
         const now = point.ts;
@@ -661,10 +743,7 @@ export const useCardioStore = create<CardioState>()(
             gpsStatus = 'active';
             gpsSettledAt = now + GPS_SETTLING_DURATION_MS;
             lastAcceptedWebPoint = rawPt;
-            if (rawPt.alt !== undefined) {
-              lastElevationAnchorAlt = rawPt.alt;
-              altitudeBuffer = [rawPt.alt];
-            }
+            if (rawPt.alt !== undefined) resetAltitudeAnchor(rawPt.alt);
           }
           set({ gpsStatus, gpsAccuracy: accuracy || 0, lastGpsTimestamp: now, currentLocation: rawPt });
           return;
@@ -706,16 +785,22 @@ export const useCardioStore = create<CardioState>()(
 
             if (rawPt.alt !== undefined && (!accuracy || accuracy <= 25)) {
               const smoothedAlt = getSmoothedAltitude(rawPt.alt);
+              distSinceElevAnchorM += deltaDistanceM;
               if (lastElevationAnchorAlt !== null) {
                 const diff = smoothedAlt - lastElevationAnchorAlt;
-                if (diff >= 1.5 && diff < 80) {
-                  addedElevationM = diff;
+                if (diff >= ELEVATION_HYSTERESIS_M) {
+                  if (diff / Math.max(1, distSinceElevAnchorM) <= ELEVATION_MAX_GRADE) {
+                    addedElevationM = diff;
+                  }
                   lastElevationAnchorAlt = smoothedAlt;
-                } else if (diff <= -1.5 && diff > -80) {
+                  distSinceElevAnchorM = 0;
+                } else if (diff <= -ELEVATION_HYSTERESIS_M) {
                   lastElevationAnchorAlt = smoothedAlt;
+                  distSinceElevAnchorM = 0;
                 }
               } else {
                 lastElevationAnchorAlt = smoothedAlt;
+                distSinceElevAnchorM = 0;
               }
             }
 
@@ -724,32 +809,46 @@ export const useCardioStore = create<CardioState>()(
             }
           } else if (isSettling) {
             lastAcceptedWebPoint = rawPt;
-            if (rawPt.alt !== undefined) lastElevationAnchorAlt = rawPt.alt;
+            if (rawPt.alt !== undefined) resetAltitudeAnchor(rawPt.alt);
           }
         } else {
           lastAcceptedWebPoint = rawPt;
           lastMovementTs = now;
-          if (rawPt.alt !== undefined) {
-            lastElevationAnchorAlt = rawPt.alt;
-            altitudeBuffer = [rawPt.alt];
-          }
+          if (rawPt.alt !== undefined) resetAltitudeAnchor(rawPt.alt);
         }
 
         const nextRoutePoints = addedDistanceKm > 0 || state.routePoints.length === 0
           ? [...state.routePoints, rawPt]
           : state.routePoints;
 
+        let { autoPauseStatus, autoPausedAt, totalPausedMs } = state;
+        if (addedDistanceKm > 0) {
+          if (autoPauseStatus === 'PAUSED' && autoPausedAt) totalPausedMs += Date.now() - autoPausedAt;
+          autoPauseStatus = 'MOVING';
+          autoPausedAt = null;
+        } else if (autoPauseStatus !== 'PAUSED' && lastMovementTs > 0 && now - lastMovementTs >= AUTO_PAUSE_AFTER_MS) {
+          autoPauseStatus = 'PAUSED';
+          autoPausedAt = Date.now();
+        }
+
+        const paceNow = rollingPace(state.paceWindow, now, distanceKm + addedDistanceKm, movingDurationSec);
+
         set({
           routePoints: nextRoutePoints,
           currentLocation: rawPt,
           distanceKm: distanceKm + addedDistanceKm,
           movingDurationSec,
-          currentSpeedKmh: Math.round(currentSpeed * 10) / 10,
+          currentSpeedKmh: autoPauseStatus === 'PAUSED' ? 0 : Math.round(currentSpeed * 10) / 10,
+          paceWindow: paceNow.window,
+          currentPaceMs: autoPauseStatus === 'PAUSED' ? 0 : paceNow.paceMs,
           maxSpeedKmh: Math.round(maxSpeedKmh * 10) / 10,
           elevationGainM: Math.round((elevationGainM + addedElevationM) * 10) / 10,
           gpsAccuracy: accuracy || 0,
           gpsStatus: 'active',
           lastGpsTimestamp: now,
+          autoPauseStatus,
+          autoPausedAt,
+          totalPausedMs,
         });
       },
 

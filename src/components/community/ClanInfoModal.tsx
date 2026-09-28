@@ -6,6 +6,7 @@ import {
   Search, Lock, Globe, Tag
 } from 'lucide-react';
 import type { ClanV2, ClanMembership } from '@/types';
+import { LiveUserAvatar, LiveUserName } from '@/components/ui/LiveUser';
 
 interface ClanInfoModalProps {
   clan: ClanV2;
@@ -48,7 +49,7 @@ export function ClanInfoModal({
 
   return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-hidden">
+      <div className="cx pro-scope fixed inset-0 z-[650] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm overflow-hidden">
         {/* Backdrop */}
         <motion.div
           initial={{ opacity: 0 }}
@@ -222,20 +223,10 @@ export function ClanInfoModal({
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="w-8 h-8 rounded-full bg-ink border border-line/30 overflow-hidden shrink-0 flex items-center justify-center font-bold text-xs text-sienna">
-                              {m.userPhoto ? (
-                                <img
-                                  src={m.userPhoto}
-                                  alt={m.userName}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                m.userName?.charAt(0)?.toUpperCase() || 'M'
-                              )}
+                              <LiveUserAvatar userId={m.userId} fallbackName={m.userName} fallbackPhoto={m.userPhoto} className="w-full h-full object-cover" />
                             </div>
                             <div className="min-w-0">
-                              <div className="text-xs font-bold text-bone truncate">
-                                {m.userName}
-                              </div>
+                              <LiveUserName userId={m.userId} fallbackName={m.userName} className="block text-xs font-bold text-bone truncate" />
                             </div>
                           </div>
 

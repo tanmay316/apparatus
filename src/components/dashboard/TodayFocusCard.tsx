@@ -1,9 +1,6 @@
-import { motion, AnimatePresence } from 'framer-motion';
-import { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Play, Clock, Target, Layers, Compass, Plus, Footprints } from 'lucide-react';
-import { usePedometerStore } from '@/stores/pedometer-store';
-import { useAuthStore } from '@/stores/auth-store';
+import { Play, Clock, Target, Layers, Compass, Plus, Check, RotateCcw } from 'lucide-react';
 import type { Plan, PlanDay } from '@/types';
 
 interface TodayFocusCardProps {
@@ -16,120 +13,99 @@ interface TodayFocusCardProps {
 }
 
 export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentDayIndex, isActive, sessionProgress }: TodayFocusCardProps) {
-  const { profile } = useAuthStore();
-  const [showStepInfo, setShowStepInfo] = useState(false);
-  
-  const stepGoal = profile?.stepGoal || 10000;
   // No active plan
   if (!activePlan || activeDays.length === 0) {
     return (
-      <motion.div
-        initial={{ opacity: 0, y: 12 }}
+      <motion.section
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="relative overflow-hidden rounded-2xl border border-dashed border-line p-6 sm:p-8 mb-6 text-center bg-ink-2"
+        transition={{ delay: 0.05 }}
+        className="dx-card p-5 sm:p-6"
       >
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 rounded-full bg-sienna/5 blur-3xl" />
+        <div className="w-11 h-11 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)' }}>
+          <Compass size={22} />
         </div>
-        <div className="relative">
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-sienna/10 border border-sienna/20 flex items-center justify-center mx-auto mb-3 sm:mb-4">
-            <Compass size={24} className="text-sienna" />
-          </div>
-          <h3 className="font-display text-lg sm:text-xl text-bone mb-2">Choose a Plan to Start Training</h3>
-          <p className="text-xs sm:text-sm text-bone-dim max-w-sm mx-auto mb-4 sm:mb-5">
-            Select a workout plan to get personalized daily sessions and track your progress.
-          </p>
-          <div className="flex items-center justify-center gap-3">
-            <Link
-              to="/plans"
-              className="inline-flex items-center gap-2 h-10 px-5 rounded-xl bg-sienna text-bone font-display font-bold text-sm hover:bg-sienna/80 transition-all duration-200"
-            >
-              Browse Plans
-            </Link>
-            <Link
-              to="/explore"
-              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-line text-bone-dim font-mono text-xs hover:text-bone hover:bg-ink-3 transition-all"
-            >
-              <Compass size={15} /> Explore
-            </Link>
-          </div>
+        <h2 className="text-[18px] font-semibold tracking-tight">Choose a plan to start training</h2>
+        <p className="text-[13px] dx-muted mt-1 mb-5 max-w-sm leading-relaxed">
+          Select a workout plan to get personalized daily sessions and track your progress.
+        </p>
+        <div className="flex gap-2.5">
+          <Link to="/plans" className="dx-btn flex-1 sm:flex-none">Browse plans</Link>
+          <Link to="/explore" className="dx-btn-secondary flex-1 sm:flex-none">
+            <Compass size={16} /> Explore
+          </Link>
         </div>
-      </motion.div>
+      </motion.section>
     );
   }
 
-  // Find today's target day
   const todayDay = activeDays[currentDayIndex] || activeDays[0];
   if (!todayDay) return null;
-  
+
   const wasCompletedToday = todayWorkouts.some((w: any) => w.dayId === todayDay.id || String(todayDay.dayNumber) === String(w.dayId));
   const allExercises = [...(todayDay.warmup || []), ...(todayDay.skillWork || []), ...(todayDay.strength || []), ...(todayDay.cooldown || [])];
+  const ctaLabel = wasCompletedToday ? 'Redo workout' : isActive ? 'Resume workout' : 'Start workout';
+  const CtaIcon = wasCompletedToday ? RotateCcw : Play;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
+    <motion.section
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      whileHover={{ y: -2 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="today-focus-card relative p-4 mb-3 rounded-[16px] bg-[#fbe1d1]/40 backdrop-blur-xl border border-white/40 shadow-lg text-[#5d2a1a]"
+      className="dx-hero p-5 sm:p-6"
+      aria-label="Today's focus"
     >
-      <div className="relative flex items-center justify-between gap-3">
-        {/* Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-sans text-[10px] font-semibold uppercase tracking-wider text-[#5d2a1a] opacity-80">Today's Focus</span>
-            {wasCompletedToday && (
-              <span className="font-sans text-[10px] font-medium uppercase px-2 py-0.5 rounded-full bg-[#5d2a1a] text-[#fbe1d1]">
-                ✓ Done
-              </span>
-            )}
-          </div>
-          <h2 className="font-sans font-semibold text-lg text-[#5d2a1a] mb-2 tracking-tight leading-snug line-clamp-1">{todayDay.title}</h2>
-
-          <div className="flex flex-wrap gap-1.5">
-            <span className="flex items-center gap-1 text-[11px] font-sans text-[#5d2a1a] bg-white/40 px-2.5 py-1 rounded-full">
-              <Clock size={12} />
-              ~{todayDay.time}
-            </span>
-            <span className="flex items-center gap-1 text-[11px] font-sans text-[#5d2a1a] bg-white/40 px-2.5 py-1 rounded-full">
-              <Target size={12} />
-              {todayDay.skill || 'General'}
-            </span>
-            <span className="flex items-center gap-1 text-[11px] font-sans text-[#5d2a1a] bg-white/40 px-2.5 py-1 rounded-full">
-              <Layers size={12} />
-              {allExercises.length} ex
-            </span>
-          </div>
-        </div>
-
-        {/* CTA Buttons - grid */}
-        <div className="shrink-0 grid grid-cols-2 gap-2">
-          <Link
-            to={`/workout/${activePlan.id}/day/${todayDay.id}`}
-            className="w-10 h-10 rounded-full bg-[#5d2a1a] text-[#fbe1d1] inline-flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.2),-4px_-4px_10px_rgba(255,255,255,0.5)]"
-            title={wasCompletedToday ? 'Redo Workout' : isActive ? 'Resume Workout' : 'Start Workout'}
-          >
-            <Play size={18} fill="currentColor" className="ml-0.5" />
-          </Link>
-          
-          <Link
-            to="/explore"
-            className="inline-flex w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.1),-4px_-4px_10px_rgba(255,255,255,0.8)]"
-            title="Explore Programs & Community Workouts"
-          >
-            <Compass size={18} />
-          </Link>
-          
-          <Link
-            to="/plans"
-            className="inline-flex w-10 h-10 rounded-full bg-white/60 text-[#5d2a1a] items-center justify-center hover:bg-white/90 hover:scale-105 active:scale-95 transition-all shadow-[4px_4px_10px_rgba(0,0,0,0.1),-4px_-4px_10px_rgba(255,255,255,0.8)]"
-            title="My Custom Plan"
-          >
-            <Plus size={18} />
-          </Link>
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.1em] opacity-75">Today's focus</span>
+        {wasCompletedToday ? (
+          <span className="dx-pill" style={{ background: 'rgba(52, 211, 153, 0.18)', color: '#a7f3d0' }}>
+            <Check size={12} strokeWidth={3} /> Done
+          </span>
+        ) : isActive ? (
+          <span className="dx-pill" style={{ background: 'rgba(255, 255, 255, 0.14)', color: 'inherit' }}>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> In progress
+          </span>
+        ) : null}
       </div>
-    </motion.div>
+
+      <h2 className="mt-2 text-[20px] sm:text-[23px] font-semibold leading-tight tracking-tight line-clamp-2">
+        {todayDay.title}
+      </h2>
+      <p className="mt-1 text-[13px] opacity-75 truncate">{activePlan.title}</p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] opacity-90">
+        <span className="inline-flex items-center gap-1.5"><Clock size={14} className="opacity-75" /> ~{todayDay.time}</span>
+        <span className="inline-flex items-center gap-1.5"><Target size={14} className="opacity-75" /> {todayDay.skill || 'General'}</span>
+        <span className="inline-flex items-center gap-1.5"><Layers size={14} className="opacity-75" /> {allExercises.length} exercises</span>
+      </div>
+
+      {isActive && !wasCompletedToday && (
+        <div className="mt-4">
+          <div className="flex justify-between text-[11px] opacity-75 mb-1.5">
+            <span>Session progress</span>
+            <span className="tabular">{sessionProgress}%</span>
+          </div>
+          <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.16)' }}>
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${sessionProgress}%`, background: 'var(--dx-hero-btn)' }} />
+          </div>
+        </div>
+      )}
+
+      <div className="mt-5 flex items-center gap-2.5">
+        <Link
+          to={`/workout/${activePlan.id}/day/${todayDay.id}`}
+          className="dx-hero-btn flex-1"
+          title={ctaLabel}
+        >
+          <CtaIcon size={17} fill={wasCompletedToday ? 'none' : 'currentColor'} /> {ctaLabel}
+        </Link>
+        <Link to="/explore" className="dx-hero-icon" title="Explore Programs & Community Workouts" aria-label="Explore programs">
+          <Compass size={19} />
+        </Link>
+        <Link to="/plans" className="dx-hero-icon" title="My Custom Plan" aria-label="My plans">
+          <Plus size={20} />
+        </Link>
+      </div>
+    </motion.section>
   );
 }

@@ -40,6 +40,14 @@
   --color-line-solid: 58 61 68;
   --color-danger:    239 68 68;
 
+  /* ─── Data-viz accents (dark default, light overrides below) ─── */
+  --viz-cardio:   34 211 238;
+  --viz-strength: 239 173 128;
+  --viz-speed:    251 191 36;
+  --viz-energy:   251 113 133;
+  --viz-elev:     52 211 153;
+  --viz-event:    167 139 250;
+
   /* ─── Steep Typography Tokens ────────────────────────────── */
   --font-signifier:  'Source Serif 4', 'Georgia', serif;
   --font-sohne:      'Inter', system-ui, -apple-system, sans-serif;
@@ -120,6 +128,13 @@
   --color-line-solid: 230 230 232;
 
   --surface-canvas:   #ffffff;
+
+  --viz-cardio:   8 145 178;
+  --viz-strength: 180 83 42;
+  --viz-speed:    217 119 6;
+  --viz-energy:   225 29 72;
+  --viz-elev:     5 150 105;
+  --viz-event:    124 58 237;
 }
 
 /* Steep Dark Theme */

@@ -1,4 +1,5 @@
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,16 +8,20 @@ from app.api.endpoints import api_router
 
 logger = logging.getLogger(__name__)
 
+_docs = os.getenv("ENABLE_API_DOCS", "").lower() in ("1", "true", "yes")
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json" if _docs else None,
+    docs_url="/docs" if _docs else None,
+    redoc_url="/redoc" if _docs else None,
 )
 
-# Set all CORS enabled origins
+# Auth is a Bearer token, never a cookie, so credentialed CORS is not needed.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins or ["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -24,7 +29,7 @@ app.add_middleware(
 
 @app.get("/")
 def root():
-    return {"message": "Apparatus AI Nutrition Backend", "docs": "/docs"}
+    return {"message": "Apparatus AI Nutrition Backend"}
 
 
 @app.get("/ping")
@@ -44,7 +49,8 @@ def health():
             conn.execute(text("SELECT 1"))
         return {"status": "ok", "database": "connected"}
     except Exception as exc:
-        return {"status": "degraded", "database": "unavailable", "detail": str(exc)}
+        logger.error("Health check database error: %s", exc)
+        return {"status": "degraded", "database": "unavailable"}
 
 
 @app.on_event("startup")

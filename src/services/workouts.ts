@@ -1,12 +1,10 @@
 import { collection, doc, setDoc, getDoc, runTransaction, Timestamp, query, where, getDocs, orderBy, limit, deleteDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import type { Workout, UserStats } from '@/types';
-import { summarizeProgressiveOverload } from '@/lib/progressive-overload';
-import { isFollowing } from '@/services/social';
-
-function localDateKey(date: Date) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
+import { findPersonalRecords, summarizeProgressiveOverload } from '@/lib/progressive-overload';
+import { applySession, bestHoldSeconds, completesPlanWeek, heaviestLiftKg, localDateKey } from '@/lib/stats';
+import { isFollowing, visibilityForUser } from '@/services/social';
+import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@/services/stats';
 
 function removeUndefined(obj: any): any {
   if (Array.isArray(obj)) {
@@ -22,104 +20,77 @@ function removeUndefined(obj: any): any {
   return obj;
 }
 
-export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) => {
+export interface SaveWorkoutResult {
+  id: string;
+  xpEarned: number;
+  streakBonus: number;
+  prCount: number;
+  unlockedBadges: string[];
+}
+
+export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>): Promise<SaveWorkoutResult> => {
   const workoutRef = doc(collection(db, 'workouts'));
   const newWorkoutId = workoutRef.id;
 
   const statsRef = doc(db, 'users', userId, 'stats', 'current');
   let progressiveOverload;
+  let earlierWorkouts: Workout[] = [];
   try {
     const previousSnapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)));
     const isFirstWorkoutEver = previousSnapshot.empty;
+    earlierWorkouts = previousSnapshot.docs.map(item => ({ id: item.id, ...item.data() } as Workout));
     // Pass full workout history (not just the last session on the same plan day) so each
     // exercise is compared against its own true personal best, which is what "progressive
     // overload" actually means.
-    const previousWorkouts = previousSnapshot.docs
-      .map(item => ({ id: item.id, ...item.data() } as Workout))
+    const previousWorkouts = earlierWorkouts
       .filter(item => item.date !== workout.date && (item.exercises || []).length > 0)
       .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0));
     progressiveOverload = summarizeProgressiveOverload(workout, previousWorkouts, isFirstWorkoutEver);
   } catch {
-    // Progressive overload is a nice-to-have — don't let it block saving.
+    // Progressive overload is a nice-to-have - don't let it block saving.
     progressiveOverload = undefined;
   }
 
-  await runTransaction(db, async (transaction) => {
-    // 1. Read existing stats
+  const personalRecords = new Set(findPersonalRecords(workout, earlierWorkouts));
+  const exercises = (workout.exercises || []).map(exercise => ({ ...exercise, isPR: personalRecords.has(exercise.name) }));
+  const dateKey = workout.date || localDateKey(new Date());
+
+  let daysPerWeek = 0;
+  if (workout.planId) {
+    try {
+      const plan = await getDoc(doc(db, 'plans', workout.planId));
+      daysPerWeek = Number(plan.data()?.daysPerWeek) || 0;
+    } catch { /* sample or deleted plan */ }
+  }
+  const fullWeek = completesPlanWeek({ ...workout, date: dateKey }, earlierWorkouts, daysPerWeek);
+  const visibility = await visibilityForUser(userId, workout.visibility);
+
+  const result = await runTransaction(db, async (transaction) => {
     const statsDoc = await transaction.get(statsRef);
-    let stats = statsDoc.data() as UserStats | undefined;
-    
-    if (!stats) {
-      stats = {
-        totalWorkouts: 0,
-        totalCalories: 0,
-        totalDurationMin: 0,
-        totalVolume: 0,
-        currentStreak: 0,
-        longestStreak: 0,
-        lastWorkoutDate: null,
-        xp: 0,
-        prCount: 0,
-        bestHold: 0,
-        badges: []
-      };
-    }
+    const outcome = applySession(statsDoc.data() as UserStats | undefined, {
+      kind: 'workout',
+      dateKey,
+      calories: workout.calories || 0,
+      durationMin: workout.durationMin || 0,
+      volume: workout.volume || 0,
+      prCount: personalRecords.size,
+      bestHold: bestHoldSeconds(workout),
+      maxLiftKg: heaviestLiftKg(workout),
+      fullWeek,
+    });
 
-    // 2. Calculate increments
-    const calories = workout.calories || 0;
-    const duration = workout.durationMin || 0;
-    const volume = workout.volume || 0;
-    
-    // Calculate Streak
-    const today = localDateKey(new Date());
-    let newStreak = stats.currentStreak;
-    if (stats.lastWorkoutDate !== today) {
-       // If it's the very next day, increment
-       const last = stats.lastWorkoutDate ? new Date(stats.lastWorkoutDate) : null;
-       const yesterday = new Date();
-       yesterday.setDate(yesterday.getDate() - 1);
-       const yesterdayStr = localDateKey(yesterday);
-       
-       if (stats.lastWorkoutDate === yesterdayStr) {
-         newStreak += 1;
-       } else if (stats.lastWorkoutDate !== today) {
-         newStreak = 1; // reset streak if gap > 1 day
-       }
-    }
-
-    // Calculate XP (Example rule: 100 XP per workout + volume/1000 + duration)
-    const xpEarned = 100 + Math.round(volume / 1000) + duration;
-    const bestHold = Math.max(
-      stats.bestHold || 0,
-      ...(workout.exercises || []).flatMap(exercise => (exercise.sets || []).map(set => Number(set.seconds) || 0)),
-    );
-
-    // 3. Update stats object
-    const newStats: UserStats = {
-      ...stats,
-      totalWorkouts: (stats.totalWorkouts || 0) + 1,
-      totalCalories: (stats.totalCalories || 0) + calories,
-      totalDurationMin: (stats.totalDurationMin || 0) + duration,
-      totalVolume: (stats.totalVolume || 0) + volume,
-      currentStreak: newStreak,
-      longestStreak: Math.max(stats.longestStreak || 0, newStreak),
-      lastWorkoutDate: today,
-      xp: (stats.xp || 0) + xpEarned,
-      prCount: (stats.prCount || 0) + (workout.exercises?.filter(e => e.isPR).length || 0),
-      bestHold,
-    };
-
-    const workoutData: any = { ...workout, id: newWorkoutId, finishedAt: Timestamp.now() };
+    const workoutData: any = { ...workout, exercises, visibility, date: dateKey, id: newWorkoutId, finishedAt: Timestamp.now() };
     if (progressiveOverload !== undefined) {
       workoutData.progressiveOverload = progressiveOverload;
     }
-    
-    // Deep clone/clean undefined to prevent Firestore errors
-    const cleanedWorkoutData = removeUndefined(workoutData);
 
-    transaction.set(workoutRef, cleanedWorkoutData);
-    transaction.set(statsRef, newStats);
+    transaction.set(workoutRef, removeUndefined(workoutData));
+    transaction.set(statsRef, outcome.stats);
+    return outcome;
   });
+
+  notifyUnlockedBadges(userId, result.unlocked).catch(() => {});
+  syncAthleteRank(userId, result.stats).catch(() => {});
 
   // Auto-track challenge progress (fire-and-forget)
   try {
@@ -148,7 +119,7 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>) 
     }
   } catch { /* auto-track is non-critical */ }
 
-  return newWorkoutId;
+  return { id: newWorkoutId, xpEarned: result.xpEarned, streakBonus: result.streakBonus, prCount: personalRecords.size, unlockedBadges: result.unlocked };
 };
 
 export const getUserWorkouts = async (userId: string, limitCount = 10): Promise<Workout[]> => {
@@ -252,4 +223,5 @@ export const getPublicWorkoutsForUser = async (userId: string, viewerId?: string
 
 export const deleteWorkout = async (workoutId: string): Promise<void> => {
   await deleteDoc(doc(db, 'workouts', workoutId));
+  scheduleStatsReconcile(auth.currentUser?.uid);
 };

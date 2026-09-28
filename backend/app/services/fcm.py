@@ -1,9 +1,35 @@
+import re
 import time
 import threading
 from app.core.firebase import get_firestore_client, get_messaging_client
 
 # Keep track of when the server started to avoid sending notifications for old messages
 server_start_time = time.time()
+
+# Notification docs are written by other users, so only in-app paths may be forwarded.
+_SAFE_LINK = re.compile(r"^/(?![/\\])[^\s\\]{0,299}$")
+
+
+def _safe_link(link) -> str:
+    return link if isinstance(link, str) and _SAFE_LINK.match(link) else ""
+
+
+def _clip(value, limit: int) -> str:
+    return str(value or "")[:limit]
+
+
+def _sender_display_name(sender_id) -> str:
+    """Look the sender up instead of trusting the senderName field on the doc."""
+    if not isinstance(sender_id, str) or not sender_id:
+        return ""
+    db = get_firestore_client()
+    if not db:
+        return ""
+    try:
+        snap = db.collection("users").document(sender_id).get()
+        return _clip((snap.to_dict() or {}).get("displayName", ""), 60) if snap.exists else ""
+    except Exception:
+        return ""
 
 def process_notification(doc_data, doc_id, is_app_notification=False):
     # Check if the notification was created before the server started
@@ -23,19 +49,23 @@ def process_notification(doc_data, doc_id, is_app_notification=False):
         return
 
     if is_app_notification:
-        title = doc_data.get("title", "Apparatus Alert")
-        body = doc_data.get("body", "You have a new alert")
-        link = doc_data.get("link", "")
-        extra_type = doc_data.get("type", "alert")
+        title = _clip(doc_data.get("title") or "Apparatus Alert", 150)
+        body = _clip(doc_data.get("body") or "You have a new alert", 500)
+        link = _safe_link(doc_data.get("link", ""))
+        extra_type = _clip(doc_data.get("type", "alert"), 40)
         clan_id = ""
     else:
-        sender_name = doc_data.get("senderName", "")
+        sender_id = doc_data.get("senderId", "")
+        # Self-addressed docs are the app's own reminders/achievements.
+        sender_name = "" if sender_id == receiver_id else _sender_display_name(sender_id)
         title = f"New message from {sender_name}" if sender_name else "Apparatus Notification"
-        body = doc_data.get("message", "You have a new notification")
-        extra = doc_data.get("extra", {})
-        link = extra.get("link", "")
-        clan_id = extra.get("clanId", "")
-        extra_type = doc_data.get("type", "general")
+        body = _clip(doc_data.get("message") or "You have a new notification", 500)
+        extra = doc_data.get("extra") or {}
+        if not isinstance(extra, dict):
+            extra = {}
+        link = _safe_link(extra.get("link", ""))
+        clan_id = _clip(extra.get("clanId", ""), 128)
+        extra_type = _clip(doc_data.get("type", "general"), 40)
 
     send_push_notification(receiver_id, title, body, {
         "link": link,
@@ -58,10 +88,18 @@ def send_push_notification(user_id: str, title: str, body: str, data_payload: di
 
         user_data = user_snap.to_dict()
         tokens = []
-        
+
+        # Tokens now live in the owner-only users/{uid}/private/push doc;
+        # the profile fields are legacy and get cleared by the app on sign-in.
+        push_ref = user_ref.collection("private").document("push")
+        push_snap = push_ref.get()
+        private_tokens = (push_snap.to_dict() or {}).get("fcmTokens") if push_snap.exists else None
+        if isinstance(private_tokens, list):
+            tokens.extend(t for t in private_tokens if isinstance(t, str))
+
         fcm_tokens = user_data.get("fcmTokens")
         if fcm_tokens and isinstance(fcm_tokens, list):
-            tokens.extend(fcm_tokens)
+            tokens.extend(t for t in fcm_tokens if isinstance(t, str))
         
         fcm_token = user_data.get("fcmToken")
         if fcm_token and isinstance(fcm_token, str):
@@ -107,9 +145,14 @@ def send_push_notification(user_id: str, title: str, body: str, data_payload: di
             
             if failed_tokens:
                 from firebase_admin import firestore
-                user_ref.update({
-                    "fcmTokens": firestore.firestore.ArrayRemove(failed_tokens)
-                })
+                if push_snap.exists:
+                    push_ref.update({
+                        "fcmTokens": firestore.firestore.ArrayRemove(failed_tokens)
+                    })
+                if user_data.get("fcmTokens"):
+                    user_ref.update({
+                        "fcmTokens": firestore.firestore.ArrayRemove(failed_tokens)
+                    })
 
     except Exception as e:
         print(f"Error sending FCM notification: {e}")

@@ -19,4 +19,4 @@ def health_check():
 
 @api_router.get("/me")
 def read_users_me(current_user: dict = Depends(get_current_user)):
-    return current_user
+    return {"uid": current_user.get("uid"), "email": current_user.get("email")}

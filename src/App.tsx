@@ -8,6 +8,7 @@ import { Toast } from '@/components/ui/Toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { safeInternalPath } from '@/lib/validation';
 import { subscribeToNotifications } from '@/services/social';
 import { 
   requestNotificationPermission, 
@@ -20,6 +21,7 @@ import { UpdatePopup } from '@/components/ui/UpdatePopup';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { useCardioStore } from '@/stores/cardio-store';
+import { CardioLivePublisher } from '@/components/social/CardioLivePublisher';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { OtaKit } from '@otakit/capacitor-updater';
@@ -39,7 +41,7 @@ const NutritionDashboard = lazy(() => import('./pages/NutritionDashboard'));
 const AdminPage = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m.AdminPage })));
 const WorkoutSession = lazy(() => import('@/pages/WorkoutSession').then(m => ({ default: m.WorkoutSession })));
 const ProgressPage = lazy(() => import('@/pages/ProgressPage').then(m => ({ default: m.ProgressPage })));
-const CalendarPage = lazy(() => import('@/pages/CalendarPage').then(m => ({ default: m.CalendarPage })));
+
 const FeedPage = lazy(() => import('@/pages/FeedPage').then(m => ({ default: m.FeedPage })));
 const CommunityPage = lazy(() => import('@/pages/CommunityPage').then(m => ({ default: m.CommunityPage })));
 const ClanPage = lazy(() => import('@/pages/ClanPage').then(m => ({ default: m.ClanPage })));
@@ -107,7 +109,7 @@ function PreferencesSync() {
   useEffect(() => {
     // One-time migration (already applied to existing installs). For genuinely new installs
     // (no stored preference at all) respect the device's system light/dark setting instead of
-    // always forcing light — that mismatch was making the app's colors look "wrong" on
+    // always forcing light - that mismatch was making the app's colors look "wrong" on
     // dark-mode phones.
     const migrationKey = 'forced-light-theme-reset-v2';
     const hasStoredPreference = !!localStorage.getItem('apparatus-preferences');
@@ -173,10 +175,11 @@ function PreferencesSync() {
         LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
           const data = action.notification?.extra;
           const id = action.notification?.id;
-          if (data?.link) {
-            window.location.href = data.link;
-          } else if (data?.clanId) {
-            window.location.href = `/clan/${data.clanId}/chat`;
+          const link = safeInternalPath(data?.link);
+          if (link) {
+            window.location.href = link;
+          } else if (typeof data?.clanId === 'string' && data.clanId) {
+            window.location.href = `/clan/${encodeURIComponent(data.clanId)}/chat`;
           } else if (data?.type === 'cardio' || id === 101 || data?.session === 'cardio') {
             window.location.href = '/cardio';
           } else if (data?.type === 'gym' || id === 1001 || id === 102 || data?.session === 'gym') {
@@ -321,6 +324,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <PreferencesSync />
+      <CardioLivePublisher />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ActiveSessionRestorer />
         <Suspense fallback={<PageLoader />}>
@@ -332,7 +336,7 @@ export function App() {
               <Route path="plans/:planId" element={<PlanDetail />} />
               <Route path="plans/:planId/day/:dayId" element={<DayView />} />
               <Route path="workout/:planId/day/:dayId" element={<WorkoutSession />} />
-              <Route path="calendar" element={<CalendarPage />} />
+              <Route path="calendar" element={<ProgressPage />} />
               <Route path="progress" element={<ProgressPage />} />
               <Route path="skills" element={<SkillsPage />} />
               <Route path="measurements" element={<MeasurementsPage />} />

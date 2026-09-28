@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Save, Plus, GripVertical, Play, X, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Play, Trash2, Pencil, History, Activity, Target, Dumbbell, Wind, Clock, Layers, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getPlan, getPlanDays, savePlanDay } from '@/services/plans';
 import { useAuthStore } from '@/stores/auth-store';
@@ -13,12 +13,14 @@ import type { PlanDay, Exercise } from '@/types';
 
 function ExerciseSection({ 
   title, 
+  icon: Icon,
   exercises, 
   isOwner, 
   onUpdate,
   workoutHistory = []
 }: { 
   title: string, 
+  icon: typeof Activity,
   exercises: Exercise[], 
   isOwner: boolean,
   onUpdate: (exs: Exercise[]) => void,
@@ -60,106 +62,124 @@ function ExerciseSection({
   if (exercises.length === 0 && !isOwner) return null;
 
   return (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-display text-base text-bone-dim tracking-wider uppercase border-b border-line/50 pb-1 flex-1">{title}</h3>
-      </div>
-      
-      <div className="space-y-3">
+    <section className="dx-card overflow-hidden">
+      <header className="flex items-center gap-3 px-4 sm:px-5 pt-4 pb-3">
+        <span className="dx-badge-icon"><Icon size={17} /></span>
+        <div className="flex-1 min-w-0">
+          <h3 className="dx-section-title">{title}</h3>
+          <p className="text-[12px] dx-muted">{exercises.length} {exercises.length === 1 ? 'exercise' : 'exercises'}</p>
+        </div>
+      </header>
+
+      <div className="dx-list border-t" style={{ borderColor: 'var(--dx-border)' }}>
         {exercises.map((ex, i) => (
-          <div key={i} className="card p-4">
+          <div key={i} className="px-4 sm:px-5 py-3.5">
             {editingIdx === i ? (
               <div className="space-y-3">
-                <ExerciseAutocomplete
-                  value={ex.name}
-                  onChange={(val) => updateExercise(i, 'name', val)}
-                  onSelect={(libEx) => handleSelectAutocomplete(i, libEx)}
-                  placeholder="Exercise Name (e.g. Pull-up)"
-                />
-                <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="dx-label">Exercise</label>
+                  <ExerciseAutocomplete
+                    value={ex.name}
+                    onChange={(val) => updateExercise(i, 'name', val)}
+                    onSelect={(libEx) => handleSelectAutocomplete(i, libEx)}
+                    placeholder="Exercise name (e.g. Pull-up)"
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2.5">
                   <div>
-                    <label className="label">Sets x Reps/Time</label>
-                    <input className="input-field" value={ex.sets} onChange={e => updateExercise(i, 'sets', e.target.value)} placeholder="3 x 10" />
+                    <label className="dx-label">Sets × reps</label>
+                    <input className="dx-input" value={ex.sets} onChange={e => updateExercise(i, 'sets', e.target.value)} placeholder="3 x 10" />
                   </div>
                   <div>
-                    <label className="label">Tempo</label>
-                    <input className="input-field" value={ex.tempo} onChange={e => updateExercise(i, 'tempo', e.target.value)} placeholder="2-1-2" />
+                    <label className="dx-label">Tempo</label>
+                    <input className="dx-input" value={ex.tempo} onChange={e => updateExercise(i, 'tempo', e.target.value)} placeholder="2-1-2" />
                   </div>
                   <div>
-                    <label className="label">Rest</label>
-                    <input className="input-field" value={ex.rest} onChange={e => updateExercise(i, 'rest', e.target.value)} placeholder="90s" />
+                    <label className="dx-label">Rest</label>
+                    <input className="dx-input" value={ex.rest} onChange={e => updateExercise(i, 'rest', e.target.value)} placeholder="90s" />
                   </div>
                 </div>
                 <div>
-                  <label className="label">YouTube Link or Search Query</label>
-                  <input className="input-field" value={ex.yt || ''} onChange={e => updateExercise(i, 'yt', e.target.value)} placeholder="Leave blank to search by name" />
+                  <label className="dx-label">YouTube link or search</label>
+                  <input className="dx-input" value={ex.yt || ''} onChange={e => updateExercise(i, 'yt', e.target.value)} placeholder="Leave blank to search by name" />
                 </div>
                 <div>
-                  <label className="label">Cues (one per line)</label>
-                  <textarea 
-                    className="input-field text-xs min-h-[60px]" 
-                    value={ex.cues.join('\n')} 
+                  <label className="dx-label">Form cues (one per line)</label>
+                  <textarea
+                    className="dx-input text-[13px]"
+                    value={ex.cues.join('\n')}
                     onChange={e => updateExercise(i, 'cues', e.target.value.split('\n').filter(s=>s.trim()))}
                     placeholder="Keep core tight..."
                   />
                 </div>
-                <div className="flex justify-between pt-2">
-                  <button onClick={() => removeExercise(i)} className="text-danger text-sm flex items-center gap-1 hover:underline"><Trash2 size={14}/> Remove</button>
-                  <button onClick={() => setEditingIdx(null)} className="btn-primary py-1.5 px-4 text-xs">Done</button>
+                <div className="flex items-center justify-between pt-1">
+                  <button onClick={() => removeExercise(i)} className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-red-600 dark:text-red-400"><Trash2 size={14}/> Remove</button>
+                  <button onClick={() => setEditingIdx(null)} className="dx-btn h-10 px-5 text-[13px]">Done</button>
                 </div>
               </div>
             ) : (
-              <div 
-                className={isOwner ? "cursor-pointer group relative pl-6" : "pl-2"}
+              <div
+                className={`flex gap-3 ${isOwner ? 'cursor-pointer group' : ''}`}
                 onClick={() => isOwner && setEditingIdx(i)}
               >
-                {isOwner && <GripVertical size={16} className="absolute left-0 top-1 text-bone-dim opacity-0 group-hover:opacity-100 transition-opacity" />}
-                <div className="flex justify-between items-start">
-                  <div>
-                    <div className="font-bold text-sm mb-1">{ex.name}</div>
-                    <div className="flex items-center gap-3 font-mono text-[10px] text-sienna">
-                      <span className="bg-sienna/10 px-1.5 py-0.5 rounded">{ex.sets}</span>
-                      {ex.tempo && <span className="text-bone-dim">T: {ex.tempo}</span>}
-                      {ex.rest && <span className="text-bone-dim">R: {ex.rest}</span>}
-                    </div>
-                    {(() => {
-                      const targetName = ex.name?.trim().toLowerCase();
-                      const prevWorkout = workoutHistory.find((w: any) =>
-                        w.exercises?.some((e: any) => e.name?.trim().toLowerCase() === targetName && e.sets?.some((s: any) => s.completed !== false && ((s.reps ?? 0) > 0 || (s.seconds ?? 0) > 0 || (s.weight ?? 0) > 0)))
-                      );
-                      const prevEx = prevWorkout?.exercises?.find((e: any) => e.name?.trim().toLowerCase() === targetName);
-                      const prevCompletedSets = prevEx?.sets?.filter((s: any) => s.completed !== false && ((s.reps ?? 0) > 0 || (s.seconds ?? 0) > 0 || (s.weight ?? 0) > 0)) || [];
-                      if (prevCompletedSets.length === 0) return null;
-                      const prevSummary = prevCompletedSets
-                        .map((s: any) => `${s.reps || s.seconds || 0}${s.seconds ? 's' : ''}${s.weight ? `@${s.weight}kg` : ''}`)
-                        .join(', ');
-                      return (
-                        <div className="text-[10px] font-mono text-bone-dim/70 mt-1.5 truncate">
-                          Last: <span className="text-sienna">{prevSummary}</span>
-                        </div>
-                      );
-                    })()}
+                <span className="w-7 h-7 mt-0.5 rounded-full flex items-center justify-center text-[12px] font-semibold tabular shrink-0" style={{ background: 'var(--dx-card-2)', color: 'var(--dx-muted)' }}>
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-[15px] font-semibold leading-snug">{ex.name}</div>
+                    {isOwner && <Pencil size={14} className="mt-1 shrink-0 dx-muted opacity-60 group-hover:opacity-100 transition-opacity" />}
                   </div>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                    {ex.sets && <span className="dx-tag"><strong>{ex.sets}</strong></span>}
+                    {ex.tempo && <span className="dx-tag">Tempo <strong>{ex.tempo}</strong></span>}
+                    {ex.rest && <span className="dx-tag">Rest <strong>{ex.rest}</strong></span>}
+                  </div>
+                  {(() => {
+                    const targetName = ex.name?.trim().toLowerCase();
+                    const prevWorkout = workoutHistory.find((w: any) =>
+                      w.exercises?.some((e: any) => e.name?.trim().toLowerCase() === targetName && e.sets?.some((s: any) => s.completed !== false && ((s.reps ?? 0) > 0 || (s.seconds ?? 0) > 0 || (s.weight ?? 0) > 0)))
+                    );
+                    const prevEx = prevWorkout?.exercises?.find((e: any) => e.name?.trim().toLowerCase() === targetName);
+                    const prevCompletedSets = prevEx?.sets?.filter((s: any) => s.completed !== false && ((s.reps ?? 0) > 0 || (s.seconds ?? 0) > 0 || (s.weight ?? 0) > 0)) || [];
+                    if (prevCompletedSets.length === 0) return null;
+                    const prevSummary = prevCompletedSets
+                      .map((s: any) => `${s.reps || s.seconds || 0}${s.seconds ? 's' : ''}${s.weight ? `@${s.weight}kg` : ''}`)
+                      .join(', ');
+                    return (
+                      <div className="flex items-center gap-1.5 text-[12px] dx-muted mt-2 min-w-0">
+                        <History size={12} className="shrink-0" />
+                        <span className="truncate">Last: <span className="font-medium tabular" style={{ color: 'var(--dx-text)' }}>{prevSummary}</span></span>
+                      </div>
+                    );
+                  })()}
+                  {ex.cues && ex.cues.length > 0 && (
+                    <ul className="mt-2.5 space-y-1">
+                      {ex.cues.map((cue, ci) => (
+                        <li key={ci} className="flex gap-2 text-[12.5px] leading-snug dx-muted">
+                          <span className="mt-[7px] w-1 h-1 rounded-full shrink-0" style={{ background: 'var(--dx-accent)' }} />
+                          <span>{cue}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                {ex.cues && ex.cues.length > 0 && (
-                  <ul className="mt-3 space-y-1">
-                    {ex.cues.map((cue, ci) => (
-                      <li key={ci} className="text-[12px] text-bone-dim leading-snug pl-3 relative before:content-['—'] before:absolute before:left-0 before:text-sienna/50">{cue}</li>
-                    ))}
-                  </ul>
-                )}
               </div>
             )}
           </div>
         ))}
-        
+
+        {exercises.length === 0 && (
+          <div className="px-5 py-6 text-center text-[13px] dx-muted">No exercises yet.</div>
+        )}
+
         {isOwner && (
-          <button onClick={addExercise} className="w-full py-3 border border-dashed border-line rounded hover:border-sienna hover:text-sienna transition-colors text-sm font-mono text-bone-dim flex items-center justify-center gap-2">
-            <Plus size={14}/> Add {title} Exercise
+          <button onClick={addExercise} className="w-full flex items-center justify-center gap-2 px-5 py-3.5 text-[13px] font-semibold dx-accent transition-colors hover:bg-[var(--dx-card-2)]">
+            <Plus size={15}/> Add exercise
           </button>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -227,67 +247,95 @@ export function DayView() {
 
   if (!day || !plan) {
     return (
-      <div className="flex justify-center py-20">
-        <div className="w-8 h-8 border-2 border-sienna border-t-transparent rounded-full animate-spin" />
+      <div className="dx max-w-3xl mx-auto space-y-4 pt-2 animate-pulse">
+        <div className="h-9 w-9 rounded-xl" style={{ background: 'var(--dx-card-2)' }} />
+        <div className="h-48 rounded-3xl" style={{ background: 'var(--dx-card-2)' }} />
+        <div className="h-40 rounded-3xl" style={{ background: 'var(--dx-card-2)' }} />
       </div>
     );
   }
 
+  const sections = [day.warmup, day.skillWork, day.strength, day.cooldown];
+  const totalExercises = sections.reduce((n, s) => n + (s?.length || 0), 0);
+  const todayKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })();
+  const doneToday = workoutHistory.some((w: any) => w.dayId === dayId && w.date === todayKey);
+
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pb-24">
-      <div className="flex items-center justify-between mb-6">
-        <button onClick={() => navigate(-1)} className="inline-flex items-center gap-2 text-sm text-bone-dim hover:text-bone transition-colors">
-          <ArrowLeft size={16} /> Back
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="dx pro-scope max-w-3xl mx-auto pb-28 pt-1 sm:pt-3">
+      <div className="flex items-center gap-3 mb-4">
+        <button onClick={() => navigate(-1)} className="dx-icon-btn dx-icon-btn--sm" aria-label="Back">
+          <ArrowLeft size={18} />
         </button>
-      </div>
-
-      <div className="border-b border-line pb-6 mb-8">
-        <div className="font-mono text-amber text-xs tracking-widest mb-1 flex justify-between">
-          <span>DAY {day.dayNumber} • {(day.type || 'STRENGTH').toUpperCase()}</span>
-          {isOwner && <span>{day.time}</span>}
-        </div>
-        
-        {isOwner ? (
-          <div className="flex gap-4 items-end mt-2">
-            <div className="flex-1">
-              <label className="label">Title</label>
-              <input className="input-field font-display text-2xl py-1 px-3" value={day.title} onChange={e => handleUpdate({ title: e.target.value })}/>
-            </div>
-            <div className="w-48">
-              <label className="label">Skill Focus</label>
-              <input className="input-field font-mono text-sm py-1.5 px-3" value={day.skill} onChange={e => handleUpdate({ skill: e.target.value })} placeholder="e.g. Handstand"/>
-            </div>
-          </div>
-        ) : (
-          <div>
-            <h1 className="font-display text-3xl mb-1">{day.title}</h1>
-            {day.skill && <div className="font-mono text-sienna text-sm mt-1">{day.skill}</div>}
-          </div>
-        )}
-
-        <div className="mt-8">
-          <Link to={`/workout/${planId}/day/${dayId}`} className="flex items-center justify-center gap-3 w-full py-4 bg-sienna text-bone font-bold text-lg rounded-xl hover:bg-sienna/90 transition-all shadow-lg shadow-sienna/20">
-            <Play size={20} fill="currentColor"/> Start Workout
-          </Link>
+        <div className="min-w-0">
+          <div className="dx-eyebrow">Workout plan</div>
+          <div className="text-[14px] font-semibold truncate">{plan.title}</div>
         </div>
       </div>
 
-      <ExerciseSection title="Warm-up" exercises={day.warmup || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ warmup: exs })} workoutHistory={workoutHistory} />
-      <ExerciseSection title="Skill Work" exercises={day.skillWork || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ skillWork: exs })} workoutHistory={workoutHistory} />
-      <ExerciseSection title="Strength" exercises={day.strength || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ strength: exs })} workoutHistory={workoutHistory} />
-      <ExerciseSection title="Cool-down" exercises={day.cooldown || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ cooldown: exs })} workoutHistory={workoutHistory} />
+      <section className="dx-hero p-5 sm:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.1em] opacity-75">
+            Day {day.dayNumber} · {day.type || 'Strength'}
+          </span>
+          {doneToday && (
+            <span className="inline-flex items-center gap-1 rounded-full px-2.5 h-6 text-[11px] font-semibold" style={{ background: 'rgba(52, 211, 153, 0.18)', color: '#a7f3d0' }}>
+              Done today
+            </span>
+          )}
+        </div>
+        <h1 className="mt-2 text-[24px] sm:text-[28px] font-semibold tracking-tight leading-tight">{day.title || 'Untitled day'}</h1>
+        {day.skill && <p className="mt-1 text-[14px] opacity-80">Skill focus · {day.skill}</p>}
 
-      {/* Save FAB */}
+        <div className="mt-4 flex flex-wrap gap-2 text-[12px] font-medium">
+          <span className="inline-flex items-center gap-1.5 rounded-full px-3 h-7" style={{ background: 'rgba(255,255,255,0.12)' }}>
+            <Layers size={13} /> {totalExercises} exercises
+          </span>
+          {day.time && (
+            <span className="inline-flex items-center gap-1.5 rounded-full px-3 h-7" style={{ background: 'rgba(255,255,255,0.12)' }}>
+              <Clock size={13} /> {day.time}
+            </span>
+          )}
+        </div>
+
+        <Link to={`/workout/${planId}/day/${dayId}`} className="dx-hero-btn w-full mt-5">
+          {doneToday ? <RotateCcw size={18} /> : <Play size={18} fill="currentColor" />}
+          {doneToday ? 'View or redo workout' : 'Start workout'}
+        </Link>
+      </section>
+
+      {isOwner && (
+        <section className="dx-card p-4 sm:p-5 mt-4">
+          <h2 className="dx-section-title mb-3">Day details</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_200px] gap-3">
+            <div>
+              <label className="dx-label">Title</label>
+              <input className="dx-input" value={day.title} onChange={e => handleUpdate({ title: e.target.value })}/>
+            </div>
+            <div>
+              <label className="dx-label">Skill focus</label>
+              <input className="dx-input" value={day.skill} onChange={e => handleUpdate({ skill: e.target.value })} placeholder="e.g. Handstand"/>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <div className="space-y-4 mt-4">
+        <ExerciseSection title="Warm-up" icon={Activity} exercises={day.warmup || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ warmup: exs })} workoutHistory={workoutHistory} />
+        <ExerciseSection title="Skill work" icon={Target} exercises={day.skillWork || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ skillWork: exs })} workoutHistory={workoutHistory} />
+        <ExerciseSection title="Strength" icon={Dumbbell} exercises={day.strength || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ strength: exs })} workoutHistory={workoutHistory} />
+        <ExerciseSection title="Cool-down" icon={Wind} exercises={day.cooldown || []} isOwner={!!isOwner} onUpdate={exs => handleUpdate({ cooldown: exs })} workoutHistory={workoutHistory} />
+      </div>
+
       <AnimatePresence>
         {isDirty && (
-          <motion.div 
-            initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none"
+          <motion.div
+            initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
+            className="dx-actionbar z-50"
           >
-            <div className="bg-ink-2 border border-line p-3 rounded-xl shadow-2xl flex items-center gap-4 pointer-events-auto max-w-[90vw]">
-              <span className="text-sm font-bold text-amber px-2">Unsaved changes</span>
-              <button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="btn-primary py-2 px-6">
-                {saveMutation.isPending ? 'Saving...' : 'Save Day'}
+            <div className="flex items-center gap-3">
+              <span className="flex-1 pl-2 text-[13px] font-semibold">Unsaved changes</span>
+              <button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending} className="dx-btn">
+                {saveMutation.isPending ? 'Saving…' : 'Save day'}
               </button>
             </div>
           </motion.div>

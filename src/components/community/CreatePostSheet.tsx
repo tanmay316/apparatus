@@ -172,7 +172,7 @@ export function CreatePostSheet({ clanId, isOpen, onClose }: CreatePostSheetProp
       {createPortal(
         <AnimatePresence>
           {isOpen && (
-            <div className="fixed inset-0 z-[600] flex flex-col justify-end sm:justify-center sm:items-center sm:p-4">
+            <div className="cx pro-scope fixed inset-0 z-[600] flex flex-col justify-end sm:justify-center sm:items-center sm:p-4">
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}

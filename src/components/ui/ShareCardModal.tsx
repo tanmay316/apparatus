@@ -1,17 +1,26 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Download, Share2, Check, Image as ImageIcon, List } from 'lucide-react';
+import {
+  X, Download, Check, Share2, ChevronLeft, ChevronRight, Loader2, Smartphone, Square as SquareIcon,
+  LayoutTemplate, PersonStanding, Palette, ImagePlus, Trash2,
+} from 'lucide-react';
+import { toCanvas } from 'html-to-image';
+import html2canvas from 'html2canvas';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import { useUIStore } from '@/stores/ui-store';
-import { getActiveMuscles, getActiveMuscleScores, getActiveMusclesFromLogs, calculateShareVolume, calculateBodyweightReps, calculateTotalSets, isWarmupOrCooldown } from '@/lib/muscle-map';
+import { useAuthStore } from '@/stores/auth-store';
+import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
+import {
+  calculateShareVolume, getActiveMuscleScores, getActiveMusclesFromLogs, isWarmupOrCooldown, muscleFocus,
+  type MuscleScore,
+} from '@/lib/muscle-map';
 import { calculateWorkoutCalories } from '@/lib/calories';
-import { drawAnatomyOnCanvas, ACTIVE_ORANGE } from '@/components/ui/AnatomySvg';
-import { format } from 'date-fns';
-import type { MuscleRegion, MuscleScore } from '@/lib/muscle-map';
-import { getAppShareUrl } from '@/lib/share';
+import { compressImageFile } from '@/utils/image-compression';
+
+type SetEntry = { completed?: boolean; reps?: number; weight?: number; seconds?: number };
 
 export interface ShareCardData {
   dayTitle: string;
@@ -22,7 +31,7 @@ export interface ShareCardData {
   volume?: number;
   sets?: number;
   exerciseNames: string[];
-  exerciseLogs?: Array<{ name: string; sets: Array<{ completed?: boolean; reps?: number; weight?: number; seconds?: number }> }>;
+  exerciseLogs?: Array<{ name: string; section?: string; isPR?: boolean; sets: SetEntry[] }>;
   bodyweight?: number;
 }
 
@@ -31,1001 +40,1024 @@ interface Props {
   onClose: () => void;
 }
 
-type CardVariant = 'anatomy' | 'exercises' | 'combined';
+type ShareLayout = 'hero' | 'split' | 'logbook' | 'poster' | 'clean' | 'photo' | 'sticker';
+type Views = 'both' | 'front' | 'back';
+type Gender = 'male' | 'female';
 
-// ─── Format Helpers ──────────────────────────────────────────
-function formatDuration(min: number): string {
-  if (min < 60) return `${min}m`;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
-function formatVolume(vol: number): string {
-  if (vol >= 10000) return `${(vol / 1000).toFixed(1)}k`;
-  if (vol >= 1000) return vol.toLocaleString();
-  return `${vol}`;
-}
-
-function formatVolumeStat(vol: number, bodyweightReps: number, bodyweight?: number, units?: 'metric' | 'imperial'): string {
-  if (vol > 0) return `${formatVolume(vol)} kg`;
-  if (bodyweightReps > 0) {
-    return `${bodyweightReps} reps @ BW`;
-  }
-  return 'Bodyweight';
-}
-
-function calculateMaxWeight(exerciseLogs?: ShareCardData['exerciseLogs']): number {
-  if (!exerciseLogs) return 0;
-  let maxWeight = 0;
-  for (const log of exerciseLogs) {
-    for (const s of log.sets) {
-      if (s.completed && s.weight && s.weight > maxWeight) {
-        maxWeight = s.weight;
-      }
-    }
-  }
-  return maxWeight;
-}
-
-// ─── Canvas Drawing — Anatomy Card ──────────────────────────
-function drawAnatomyCard(
-  canvas: HTMLCanvasElement,
-  data: ShareCardData,
-  activeMuscles: MuscleScore[],
-  transparent: boolean,
-  volume: number,
-  totalSets: number,
-  highlightColor: HighlightColor,
-  units?: 'metric' | 'imperial',
-  gender: 'male' | 'female' = 'male'
-) {
-  const W = 1080;
-  const H = 1920;
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
-
-  // Background
-  if (transparent) {
-    ctx.clearRect(0, 0, W, H);
-  } else {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  let cursorY = 90;
-
-  // ─── Brand Header ───
-  drawCardHeader(ctx, W, cursorY, highlightColor);
-  cursorY += 100;
-
-  // ─── Metrics Row ─── (Time | Max Lift | Sets)
-  const maxWeight = calculateMaxWeight(data.exerciseLogs);
-  const maxWeightStr = maxWeight > 0 ? `${maxWeight} kg` : 'BW';
-  const stats = [
-    { label: 'Time', value: formatDuration(data.durationMin) },
-    { label: 'Max Lift', value: maxWeightStr },
-    { label: 'Sets', value: `${totalSets}` },
-  ];
-
-  const colW = (W - 160) / 3;
-
-  stats.forEach((stat, i) => {
-    const sx = 80 + i * colW + colW / 2;
-    ctx.textAlign = 'center';
-
-    // Label
-    ctx.font = '500 30px Inter, sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.fillText(stat.label, sx, cursorY);
-
-    // Value
-    const maxValWidth = colW - 20;
-    let fontSize = 68;
-    ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
-    let textWidth = ctx.measureText(stat.value).width;
-    while (textWidth > maxValWidth && fontSize > 24) {
-      fontSize -= 2;
-      ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
-      textWidth = ctx.measureText(stat.value).width;
-    }
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(stat.value, sx, cursorY + 66);
-  });
-
-  cursorY += 140;
-
-  // ─── Dual Muscle Visualizer (Front Left, Back Right) ───
-  const figureScale = 0.65;
-  const figureW = 727 * figureScale;
-  const figureH = 1280 * figureScale;
-  const gap = 30;
-  const totalW = figureW * 2 + gap;
-  const startX = (W - totalW) / 2;
-  const figureY = cursorY + 20;
-
-  // Front View on Left, Back View on Right (Standard Anatomy Presentation)
-  drawAnatomyOnCanvas(ctx, 'front', activeMuscles, startX, figureY, figureScale, highlightColor.fill, highlightColor.glow, gender);
-  drawAnatomyOnCanvas(ctx, 'back', activeMuscles, startX + figureW + gap, figureY, figureScale, highlightColor.fill, highlightColor.glow, gender);
-
-  cursorY = figureY + figureH + 50;
-
-  // ─── Workout Title ───
-  ctx.font = '700 52px Oswald, sans-serif';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'center';
-  const titleDisplay = data.dayTitle.length > 40 ? data.dayTitle.substring(0, 37) + '...' : data.dayTitle;
-  ctx.fillText(titleDisplay.toUpperCase(), W / 2, cursorY);
-
-  cursorY += 56;
-
-  // ─── Calories Burned Accent ───
-  ctx.font = '400 30px "JetBrains Mono", monospace';
-  ctx.fillStyle = highlightColor.fill;
-  ctx.fillText(`${data.calories} kcal burned`, W / 2, cursorY);
-
-  // ─── Bottom Watermark ───
-  ctx.font = '400 24px "JetBrains Mono", monospace';
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-}
-
-
-function drawCardHeader(ctx: CanvasRenderingContext2D, W: number, cursorY: number, highlightColor: HighlightColor) {
-  ctx.save();
-  ctx.textAlign = 'left';
-  // Futuristic geometric monospace look with custom letter-spacing
-  ctx.letterSpacing = '14px';
-  ctx.font = '300 48px Inter, sans-serif';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.shadowColor = 'rgba(93,42,26,0.3)';
-  ctx.shadowBlur = 10;
-  ctx.fillText('ΛPPΛRΛTUS', 80, cursorY);
-  ctx.restore();
-}
-
-function drawExercisePill(
-  ctx: CanvasRenderingContext2D,
-  cardX: number,
-  cardY: number,
-  cardW: number,
-  cardH: number,
-  exName: string,
-  highlightColor: HighlightColor,
-  exLog: any,
-  scale: number = 1
-) {
-  // Draw card background
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-  roundRect(ctx, cardX, cardY, cardW, cardH, 8 * scale);
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // Draw left accent bar in highlight color
-  ctx.fillStyle = highlightColor.fill;
-  roundRect(ctx, cardX, cardY, 6 * scale, cardH, 2 * scale);
-  ctx.fill();
-
-  // Display name
-  const nameFontSize = Math.floor(32 * scale);
-  ctx.font = `700 ${nameFontSize}px Oswald, sans-serif`;
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'left';
-  
-  let displayName = exName.toUpperCase();
-  const maxTextWidth = cardW - (40 * scale);
-  let textWidth = ctx.measureText(displayName).width;
-  if (textWidth > maxTextWidth) {
-    while (displayName.length > 3 && ctx.measureText(displayName + '...').width > maxTextWidth) {
-      displayName = displayName.substring(0, displayName.length - 1);
-    }
-    displayName += '...';
-  }
-
-  const textStartY = cardY + (cardH / 2) - (nameFontSize / 4);
-  ctx.fillText(displayName, cardX + 24 * scale, textStartY);
-
-  // Display sets info
-  const setsFontSize = Math.floor(20 * scale);
-  ctx.font = `400 ${setsFontSize}px "JetBrains Mono", monospace`;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  const setsCount = exLog ? exLog.sets.length : 3;
-  ctx.fillText(`${setsCount} SETS COMPLETED`, cardX + 24 * scale, cardY + cardH - (16 * scale));
-}
-
-function drawMoreExercisesPill(
-  ctx: CanvasRenderingContext2D,
-  cardX: number,
-  cardY: number,
-  cardW: number,
-  cardH: number,
-  moreCount: number,
-  highlightColor: HighlightColor,
-  scale: number = 1
-) {
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-  roundRect(ctx, cardX, cardY, cardW, cardH, 8 * scale);
-  ctx.fill();
-
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  ctx.fillStyle = highlightColor.fill;
-  roundRect(ctx, cardX, cardY, 6 * scale, cardH, 2 * scale);
-  ctx.fill();
-
-  const fontSize = Math.floor(34 * scale);
-  ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'center';
-  ctx.fillText(`+${moreCount} MORE`, cardX + cardW / 2, cardY + cardH / 2 + (fontSize / 3));
-}
-
-// ─── Canvas Drawing — Exercises List Card ─────────────────────
-function drawExercisesCard(
-  canvas: HTMLCanvasElement,
-  data: ShareCardData,
-  transparent: boolean,
-  volume: number,
-  totalSets: number,
-  highlightColor: HighlightColor,
-  units?: 'metric' | 'imperial',
-  calories?: number
-) {
-  const W = 1080;
-  const H = 1920;
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
-
-  if (transparent) {
-    ctx.clearRect(0, 0, W, H);
-  } else {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  let cursorY = 90;
-
-  // Header
-  drawCardHeader(ctx, W, cursorY, highlightColor);
-  cursorY += 90;
-
-  // Workout Title (Futuristic & larger since no anatomy visualizer)
-  ctx.font = '700 76px Oswald, sans-serif';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'left';
-  const titleLines = wrapText(ctx, data.dayTitle.toUpperCase(), 80, W - 160, 88, 3);
-  titleLines.forEach((line, i) => {
-    ctx.fillText(line, 80, cursorY + i * 88);
-  });
-  cursorY += titleLines.length * 88 + 20;
-
-  // Subtitle
-  ctx.font = '400 28px "JetBrains Mono", monospace';
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.fillText(`${data.planTitle} • ${data.date}`, 80, cursorY);
-  cursorY += 50;
-
-  // Divider
-  ctx.fillStyle = 'rgba(255,255,255,0.1)';
-  ctx.fillRect(80, cursorY, W - 160, 2);
-  cursorY += 40;
-
-  // Metrics (4 Columns)
-  const maxWeight = calculateMaxWeight(data.exerciseLogs);
-  const maxWeightStr = maxWeight > 0 ? `${maxWeight} kg` : 'BW';
-  const stats = [
-    { label: 'TIME', value: formatDuration(data.durationMin) },
-    { label: 'MAX LIFT', value: maxWeightStr },
-    { label: 'SETS', value: `${totalSets}` },
-    { label: 'KCAL', value: `${calories !== undefined ? calories : data.calories}` },
-  ];
-
-  const colPositions = [80, 250, 620, 820];
-  stats.forEach((stat, i) => {
-    const sx = colPositions[i];
-    ctx.font = '400 22px "JetBrains Mono", monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.textAlign = 'left';
-    ctx.fillText(stat.label, sx, cursorY);
-
-    const maxValWidth = (colPositions[i + 1] !== undefined ? colPositions[i + 1] : W - 80) - sx - 20;
-    let fontSize = 52;
-    ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
-    let textWidth = ctx.measureText(stat.value).width;
-    while (textWidth > maxValWidth && fontSize > 20) {
-      fontSize -= 2;
-      ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
-      textWidth = ctx.measureText(stat.value).width;
-    }
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(stat.value, sx, cursorY + 52);
-  });
-  cursorY += 120;
-
-  // Divider
-  ctx.fillStyle = 'rgba(255,255,255,0.1)';
-  ctx.fillRect(80, cursorY, W - 160, 2);
-  cursorY += 40;
-
-  // Exercises Section Header
-  ctx.font = '700 24px "JetBrains Mono", monospace';
-  ctx.fillStyle = highlightColor.fill;
-  ctx.textAlign = 'left';
-  ctx.fillText('CRUSHED MOVES', 80, cursorY);
-  cursorY += 40;
-
-  // Grid of Exercises (Dynamic Columns)
-  const total = data.exerciseNames.length;
-  let cols = 2;
-  let maxExercises = 14;
-  if (total > 21) {
-    cols = 4;
-    maxExercises = 36;
-  } else if (total > 14) {
-    cols = 3;
-    maxExercises = 24;
-  }
-  
-  const items = data.exerciseNames.slice(0, maxExercises);
-  const colGap = cols === 2 ? 40 : 20;
-  const rowGap = cols === 2 ? 20 : 15;
-  const cardW = (W - 160 - (cols - 1) * colGap) / cols;
-  
-  let scale = cardW / 440;
-  if (scale < 0.65) scale = 0.65;
-  
-  const cardH = 114 * scale;
-
-  items.forEach((exName, index) => {
-    const row = Math.floor(index / cols);
-    const col = index % cols;
-    const cardX = 80 + col * (cardW + colGap);
-    const cardY = cursorY + row * (cardH + rowGap);
-
-    const isLastSlot = index === maxExercises - 1;
-    const hasMore = data.exerciseNames.length > maxExercises;
-
-    if (isLastSlot && hasMore) {
-      drawMoreExercisesPill(ctx, cardX, cardY, cardW, cardH, data.exerciseNames.length - maxExercises + 1, highlightColor, scale);
-    } else {
-      const exLog = data.exerciseLogs?.find(l => l.name === exName);
-      drawExercisePill(ctx, cardX, cardY, cardW, cardH, exName, highlightColor, exLog, scale);
-    }
-  });
-
-  // Watermark
-  ctx.font = '400 22px "JetBrains Mono", monospace';
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-}
-
-// ─── Highlight Color Types & Presets ─────────────────────────
-export interface HighlightColor {
-  name: string;
-  fill: string;
-  glow: string;
-  stroke: string;
-}
-
-export const HIGHLIGHT_COLORS: HighlightColor[] = [
-  // Neon Colors
-  { name: 'Orange', fill: '#FF5500', glow: '#FF7700', stroke: '#FFAA66' },
-  { name: 'Volt', fill: '#CCFF00', glow: '#AAFF00', stroke: '#E5FF80' },
-  { name: 'Pink', fill: '#FF007F', glow: '#FF3399', stroke: '#FF80BF' },
-  { name: 'Cyan', fill: '#00E5FF', glow: '#00B0FF', stroke: '#80F2FF' },
-  { name: 'Gold', fill: '#FFD700', glow: '#FFAA00', stroke: '#FFEAA3' },
-  // Soft Pastel & Light Colors
-  { name: 'Mint', fill: '#98FF98', glow: '#76D876', stroke: '#C2FFC2' },
-  { name: 'Ice', fill: '#A0E6FF', glow: '#82D1F5', stroke: '#D4F5FF' },
-  { name: 'Lavender', fill: '#E0B0FF', glow: '#D6A2E8', stroke: '#F3E5FF' },
-  { name: 'Coral', fill: '#FF7F50', glow: '#FF6347', stroke: '#FFB399' },
-  { name: 'Cream', fill: '#FFFDD0', glow: '#E6D8A8', stroke: '#FFFFE0' },
-  { name: 'Violet', fill: '#A066FF', glow: '#8E4DFF', stroke: '#D1B8FF' },
-  { name: 'Teal', fill: '#20B2AA', glow: '#008B8B', stroke: '#7FFFD4' },
+const LAYOUT_OPTIONS: { id: ShareLayout; label: string; short: string }[] = [
+  { id: 'hero', label: 'Pro', short: 'Pro' },
+  { id: 'split', label: 'Muscle Map', short: 'Muscles' },
+  { id: 'logbook', label: 'Logbook', short: 'Logbook' },
+  { id: 'poster', label: 'Poster', short: 'Poster' },
+  { id: 'clean', label: 'Clean', short: 'Clean' },
+  { id: 'photo', label: 'Photo', short: 'Photo' },
+  { id: 'sticker', label: 'Sticker', short: 'Sticker' },
 ];
 
-// ─── Canvas Drawing — Combined Muscles + Exercises Card ───────
-function drawCombinedCard(
-  canvas: HTMLCanvasElement,
-  data: ShareCardData,
-  activeMuscles: MuscleScore[],
-  transparent: boolean,
-  volume: number,
-  totalSets: number,
-  highlightColor: HighlightColor,
-  units?: 'metric' | 'imperial',
-  calories?: number,
-  gender: 'male' | 'female' = 'male'
-) {
-  const W = 1080;
-  const H = 1920;
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d')!;
+const ACCENTS = [
+  { id: 'ember', label: 'Ember', hex: '#FF5A1F' },
+  { id: 'volt', label: 'Volt', hex: '#C6FF00' },
+  { id: 'ice', label: 'Ice', hex: '#38BDF8' },
+  { id: 'crimson', label: 'Crimson', hex: '#F43F5E' },
+  { id: 'violet', label: 'Violet', hex: '#A78BFA' },
+  { id: 'gold', label: 'Gold', hex: '#F5B301' },
+  { id: 'mint', label: 'Mint', hex: '#34D399' },
+  { id: 'white', label: 'White', hex: '#FFFFFF' },
+];
 
-  if (transparent) {
-    ctx.clearRect(0, 0, W, H);
-  } else {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, W, H);
-  }
+/** Fixed design size of the exported card (logical px). Exported at 3x → 1080 px wide. */
+const DESIGN_W = 360;
+const PIXEL_RATIO = 3;
+const FONT = "Inter, 'SF Pro Display', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 
-  let cursorY = 90;
+const CARD_BG: Record<ShareLayout, string> = {
+  hero: '#07070A',
+  split: '#0B0B0E',
+  logbook: '#0D0D10',
+  poster: '#0A0A0A',
+  clean: '#F4F1EC',
+  photo: '#111111',
+  sticker: 'transparent',
+};
 
-  // ─── Brand Header ───
-  drawCardHeader(ctx, W, cursorY, highlightColor);
-  cursorY += 100;
+const DARK_INACTIVE = { fill: '#1E2029', stroke: '#2B2E3A' };
+const LIGHT_INACTIVE = { fill: '#DEDAD2', stroke: '#CFC9BF' };
 
-  // ─── Workout Title ───
-  ctx.font = '700 68px Oswald, sans-serif';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.textAlign = 'center';
-  const titleLines = wrapText(ctx, data.dayTitle.toUpperCase(), W / 2, W - 160, 78, 2);
-  titleLines.forEach((line, i) => {
-    ctx.fillText(line, W / 2, cursorY + i * 78);
-  });
-  cursorY += titleLines.length * 78 + 10;
+// ─── Data helpers ────────────────────────────────────────────
 
-  // ─── Subtitle / Date ───
-  ctx.font = '400 24px "JetBrains Mono", monospace';
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.textAlign = 'center';
-  ctx.fillText(`${data.planTitle} • ${data.date}`, W / 2, cursorY);
-  cursorY += 50;
+const isCounted = (s: SetEntry) =>
+  s.completed !== false && (s.completed === true || Number(s.reps) > 0 || Number(s.weight) > 0 || Number(s.seconds) > 0);
 
-  // ─── Divider ───
-  ctx.fillStyle = 'rgba(255,255,255,0.1)';
-  ctx.fillRect(80, cursorY, W - 160, 2);
-  cursorY += 40;
-
-  // ─── Metrics Grid (4 columns) ───
-  const maxWeight = calculateMaxWeight(data.exerciseLogs);
-  const maxWeightStr = maxWeight > 0 ? `${maxWeight} kg` : 'BW';
-  const stats = [
-    { label: 'TIME', value: formatDuration(data.durationMin) },
-    { label: 'MAX LIFT', value: maxWeightStr },
-    { label: 'SETS', value: `${totalSets}` },
-    { label: 'KCAL', value: `${calories !== undefined ? calories : data.calories}` },
-  ];
-
-  const colPositions = [80, 250, 620, 820];
-  stats.forEach((stat, i) => {
-    const sx = colPositions[i];
-    ctx.textAlign = 'left';
-
-    ctx.font = '400 20px "JetBrains Mono", monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.fillText(stat.label, sx, cursorY);
-
-    const maxValWidth = (colPositions[i + 1] !== undefined ? colPositions[i + 1] : W - 80) - sx - 20;
-    let fontSize = 48;
-    ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
-    let textWidth = ctx.measureText(stat.value).width;
-    while (textWidth > maxValWidth && fontSize > 20) {
-      fontSize -= 2;
-      ctx.font = `700 ${fontSize}px Oswald, sans-serif`;
-      textWidth = ctx.measureText(stat.value).width;
-    }
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(stat.value, sx, cursorY + 48);
-  });
-  cursorY += 110;
-
-  // ─── Divider ───
-  ctx.fillStyle = 'rgba(255,255,255,0.1)';
-  ctx.fillRect(80, cursorY, W - 160, 2);
-  cursorY += 30;
-
-  // ─── Dual Muscle Visualizer ───
-  const figureScale = 0.65;
-  const figureW = 727 * figureScale;
-  const figureH = 1280 * figureScale;
-  const gap = 40;
-  const totalW = figureW * 2 + gap;
-  const startX = (W - totalW) / 2;
-  const figureY = cursorY + 20;
-
-  drawAnatomyOnCanvas(ctx, 'front', activeMuscles, startX, figureY, figureScale, highlightColor.fill, highlightColor.glow, gender);
-  drawAnatomyOnCanvas(ctx, 'back', activeMuscles, startX + figureW + gap, figureY, figureScale, highlightColor.fill, highlightColor.glow, gender);
-
-  cursorY = figureY + figureH + 60;
-
-  // ─── Exercises Section Header ───
-  ctx.font = '700 22px "JetBrains Mono", monospace';
-  ctx.fillStyle = highlightColor.fill;
-  ctx.textAlign = 'left';
-  ctx.fillText('CRUSHED MOVES', 80, cursorY);
-
-  ctx.fillStyle = 'rgba(255,255,255,0.1)';
-  ctx.fillRect(80, cursorY + 12, W - 160, 2);
-  cursorY += 50;
-
-  // ─── Grid of Exercises (Dynamic Columns) ───
-  const total = data.exerciseNames.length;
-  let cols = 2;
-  let maxExercises = 6;
-  if (total > 12) {
-    cols = 4;
-    maxExercises = 16;
-  } else if (total > 6) {
-    cols = 3;
-    maxExercises = 12;
-  }
-  
-  const items = data.exerciseNames.slice(0, maxExercises);
-  const colGap = cols === 2 ? 40 : 20;
-  const rowGap = cols === 2 ? 20 : 15;
-  const cardW = (W - 160 - (cols - 1) * colGap) / cols;
-  
-  let scale = cardW / 440;
-  if (scale < 0.65) scale = 0.65;
-  
-  const cardH = 114 * scale;
-
-  items.forEach((exName, index) => {
-    const row = Math.floor(index / cols);
-    const col = index % cols;
-    const cardX = 80 + col * (cardW + colGap);
-    const cardY = cursorY + row * (cardH + rowGap);
-
-    const isLastSlot = index === maxExercises - 1;
-    const hasMore = data.exerciseNames.length > maxExercises;
-
-    if (isLastSlot && hasMore) {
-      drawMoreExercisesPill(ctx, cardX, cardY, cardW, cardH, data.exerciseNames.length - maxExercises + 1, highlightColor, scale);
-    } else {
-      const exLog = data.exerciseLogs?.find(l => l.name === exName);
-      drawExercisePill(ctx, cardX, cardY, cardW, cardH, exName, highlightColor, exLog, scale);
-    }
-  });
-
-  // ─── Bottom Watermark ───
-  ctx.font = '400 22px "JetBrains Mono", monospace';
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+function formatDuration(min: number): { value: string; unit: string } {
+  const m = Math.max(0, Math.round(min));
+  if (m < 60) return { value: String(m), unit: 'min' };
+  return { value: `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`, unit: 'h' };
 }
 
-// ─── Helpers ─────────────────────────────────────────────────
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.arcTo(x + w, y, x + w, y + r, r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-  ctx.lineTo(x + r, y + h);
-  ctx.arcTo(x, y + h, x, y + h - r, r);
-  ctx.lineTo(x, y + r);
-  ctx.arcTo(x, y, x + r, y, r);
-  ctx.closePath();
+const durationText = (min: number) => {
+  const d = formatDuration(min);
+  return `${d.value} ${d.unit}`;
+};
+
+function formatNumber(value: number): string {
+  if (value >= 100000) return `${Math.round(value / 1000)}k`;
+  return Math.round(value).toLocaleString();
 }
 
-function wrapText(ctx: CanvasRenderingContext2D, text: string, x: number, maxWidth: number, lineHeight: number, maxLines: number): string[] {
-  const words = text.split(' ');
-  const lines: string[] = [];
-  let currentLine = '';
-
-  for (const word of words) {
-    const test = currentLine ? `${currentLine} ${word}` : word;
-    if (ctx.measureText(test).width > maxWidth && currentLine) {
-      lines.push(currentLine);
-      currentLine = word;
-      if (lines.length >= maxLines) break;
-    } else {
-      currentLine = test;
-    }
-  }
-  if (currentLine && lines.length < maxLines) {
-    lines.push(currentLine);
-  }
-  return lines;
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// ─── Component ───────────────────────────────────────────────
-export function ShareCardModal({ data: originalData, onClose }: Props) {
-  // Filter out warm-up and cool-down exercises
-  const filteredExerciseLogs = originalData.exerciseLogs
-    ? originalData.exerciseLogs.filter((log: any) => !isWarmupOrCooldown(log.name, log.section))
-    : undefined;
+// ─── Card primitives ─────────────────────────────────────────
 
-  const filteredExerciseNames = originalData.exerciseNames
-    ? originalData.exerciseNames.filter(name => {
-        if (isWarmupOrCooldown(name)) return false;
-        if (filteredExerciseLogs) {
-          return filteredExerciseLogs.some(log => log.name === name);
-        }
-        return true;
-      })
-    : [];
+function Wordmark({ color = '#FFFFFF', size = 13 }: { color?: string; size?: number }) {
+  return (
+    <span style={{ color, fontSize: size, fontWeight: 800, letterSpacing: '0.32em', lineHeight: 1 }}>APPARATUS</span>
+  );
+}
 
-  const data = {
-    ...originalData,
-    exerciseNames: filteredExerciseNames,
-    exerciseLogs: filteredExerciseLogs,
+function Figures({ muscles, gender, views, color, light, height, glow = true, gap = 10 }: {
+  muscles: MuscleScore[]; gender: Gender; views: Views; color: string; light?: boolean; height: number; glow?: boolean; gap?: number;
+}) {
+  const ratio = gender === 'female' ? 650 / 1450 : 727 / 1280;
+  const inactive = light ? LIGHT_INACTIVE : DARK_INACTIVE;
+  const list: ('front' | 'back')[] = views === 'both' ? ['front', 'back'] : [views];
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap }}>
+      {list.map(v => (
+        <div key={v} style={{ height, width: height * ratio }}>
+          <AnatomyFigureSVG
+            view={v}
+            activeMuscles={muscles}
+            gender={gender}
+            color={color}
+            inactiveFill={inactive.fill}
+            inactiveStroke={inactive.stroke}
+            glow={glow}
+            className="block w-full h-full"
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Stat({ label, value, unit, accent, align = 'left', dark = true, size = 22 }: {
+  label: string; value: string; unit?: string; accent?: string; align?: 'left' | 'center'; dark?: boolean; size?: number;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: align === 'center' ? 'center' : 'flex-start', minWidth: 0 }}>
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.16em', textTransform: 'uppercase', color: dark ? 'rgba(255,255,255,0.55)' : 'rgba(17,17,17,0.5)' }}>{label}</span>
+      <span style={{ marginTop: 3, fontSize: size, fontWeight: 800, letterSpacing: '-0.02em', lineHeight: 1, color: accent || (dark ? '#FFFFFF' : '#111111'), whiteSpace: 'nowrap' }}>
+        {value}
+        {unit && <span style={{ fontSize: Math.round(size * 0.48), fontWeight: 700, marginLeft: 2, opacity: 0.7 }}>{unit}</span>}
+      </span>
+    </div>
+  );
+}
+
+// ─── Template thumbnails ─────────────────────────────────────
+
+function ThumbFigure({ x, y, s, lit, base }: { x: number; y: number; s: number; lit: string; base: string }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <circle cx={6} cy={3} r={2.6} fill={base} />
+      <rect x={2.5} y={6.5} width={7} height={10} rx={2.5} fill={lit} />
+      <rect x={0} y={7} width={2} height={9} rx={1} fill={base} />
+      <rect x={10} y={7} width={2} height={9} rx={1} fill={base} />
+      <rect x={3} y={17} width={2.6} height={11} rx={1.2} fill={lit} />
+      <rect x={6.4} y={17} width={2.6} height={11} rx={1.2} fill={lit} />
+    </g>
+  );
+}
+
+function LayoutThumb({ id, accent }: { id: ShareLayout; accent: string }) {
+  const W = 60, H = 88;
+  const line = (x: number, y: number, w: number, fill = 'rgba(255,255,255,0.85)', h = 3) => <rect key={`${x}-${y}-${w}-${fill}`} x={x} y={y} width={w} height={h} rx={h / 2} fill={fill} />;
+  const dim = '#2b2e3a';
+  let body: ReactNode;
+  switch (id) {
+    case 'hero':
+      body = (
+        <>
+          <rect width={W} height={H} fill="#07070A" />
+          <circle cx={30} cy={34} r={26} fill={hexToRgba(accent, 0.18)} />
+          {line(6, 7, 18, '#fff', 2)}
+          {line(6, 13, 30, '#fff', 4)}
+          <ThumbFigure x={16} y={22} s={1.05} lit={accent} base={dim} />
+          <ThumbFigure x={31} y={22} s={1.05} lit={accent} base={dim} />
+          <rect x={5} y={66} width={50} height={16} rx={4} fill="rgba(255,255,255,0.1)" />
+          {[0, 1, 2, 3].map(i => line(8 + i * 12, 72, 8, i === 3 ? accent : '#fff', 3))}
+        </>
+      );
+      break;
+    case 'split':
+      body = (
+        <>
+          <rect width={W} height={H} fill="#0B0B0E" />
+          {line(6, 7, 26, '#fff', 3)}
+          <ThumbFigure x={16} y={14} s={0.9} lit={accent} base={dim} />
+          <ThumbFigure x={31} y={14} s={0.9} lit={accent} base={dim} />
+          {[0, 1, 2, 3].map(i => (
+            <g key={i}>
+              {line(6, 46 + i * 8, 48, 'rgba(255,255,255,0.12)', 3)}
+              {line(6, 46 + i * 8, 48 - i * 10, accent, 3)}
+            </g>
+          ))}
+          {line(6, 80, 48, 'rgba(255,255,255,0.4)', 2)}
+        </>
+      );
+      break;
+    case 'logbook':
+      body = (
+        <>
+          <rect width={W} height={H} fill="#0D0D10" />
+          {line(6, 7, 30, '#fff', 4)}
+          {[0, 1, 2].map(i => line(6 + i * 17, 16, 13, i === 0 ? accent : 'rgba(255,255,255,0.7)', 3))}
+          {[0, 1, 2, 3, 4, 5].map(i => (
+            <g key={i}>
+              <rect x={6} y={26 + i * 8} width={3} height={3} rx={1} fill={accent} />
+              {line(12, 26 + i * 8, 26, 'rgba(255,255,255,0.8)', 3)}
+              {line(42, 26 + i * 8, 12, 'rgba(255,255,255,0.35)', 3)}
+            </g>
+          ))}
+          <ThumbFigure x={22} y={74} s={0.4} lit={accent} base={dim} />
+          <ThumbFigure x={30} y={74} s={0.4} lit={accent} base={dim} />
+        </>
+      );
+      break;
+    case 'poster':
+      body = (
+        <>
+          <rect width={W} height={H} fill="#0A0A0A" />
+          <ThumbFigure x={28} y={10} s={2} lit={hexToRgba(accent, 0.7)} base="#1d1d22" />
+          {line(6, 14, 34, '#fff', 8)}
+          {line(6, 25, 28, accent, 8)}
+          {line(6, 36, 20, '#fff', 8)}
+          <rect x={6} y={72} width={48} height={0.8} fill="rgba(255,255,255,0.3)" />
+          {[0, 1, 2].map(i => line(6 + i * 17, 76, 12, '#fff', 4))}
+        </>
+      );
+      break;
+    case 'clean':
+      body = (
+        <>
+          <rect width={W} height={H} fill="#F4F1EC" />
+          {line(6, 8, 16, 'rgba(17,17,17,0.5)', 2)}
+          {line(6, 13, 30, '#111', 4)}
+          <ThumbFigure x={16} y={24} s={1.05} lit={accent === '#FFFFFF' ? '#111111' : accent} base="#DEDAD2" />
+          <ThumbFigure x={31} y={24} s={1.05} lit={accent === '#FFFFFF' ? '#111111' : accent} base="#DEDAD2" />
+          {[0, 1, 2].map(i => line(8 + i * 16, 72, 11, '#111', 4))}
+          {line(20, 81, 20, 'rgba(17,17,17,0.35)', 2)}
+        </>
+      );
+      break;
+    case 'photo':
+      body = (
+        <>
+          <defs>
+            <linearGradient id="thumb-photo" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#5b6472" />
+              <stop offset="100%" stopColor="#1f242c" />
+            </linearGradient>
+          </defs>
+          <rect width={W} height={H} fill="url(#thumb-photo)" />
+          <path d="M8 58 L22 40 L32 50 L42 36 L54 58 Z" fill="rgba(255,255,255,0.18)" />
+          <circle cx={44} cy={20} r={5} fill="rgba(255,255,255,0.25)" />
+          <rect y={56} width={W} height={32} fill="rgba(0,0,0,0.5)" />
+          {line(6, 64, 26, '#fff', 4)}
+          {[0, 1, 2].map(i => line(6 + i * 13, 74, 9, i === 2 ? accent : '#fff', 3))}
+          <ThumbFigure x={44} y={62} s={0.45} lit={accent} base="#444" />
+        </>
+      );
+      break;
+    case 'sticker':
+    default:
+      body = (
+        <>
+          <defs>
+            <pattern id="thumb-chk" width={8} height={8} patternUnits="userSpaceOnUse">
+              <rect width={8} height={8} fill="#2b2b2b" />
+              <rect width={4} height={4} fill="#3b3b3b" />
+              <rect x={4} y={4} width={4} height={4} fill="#3b3b3b" />
+            </pattern>
+          </defs>
+          <rect width={W} height={H} fill="url(#thumb-chk)" />
+          <ThumbFigure x={16} y={14} s={1.05} lit={accent} base="#555a66" />
+          <ThumbFigure x={31} y={14} s={1.05} lit={accent} base="#555a66" />
+          {line(10, 62, 40, '#fff', 5)}
+          {[0, 1, 2].map(i => line(10 + i * 14, 72, 10, '#fff', 3))}
+        </>
+      );
+  }
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="block w-full h-full" preserveAspectRatio="xMidYMid slice" aria-hidden>
+      {body}
+    </svg>
+  );
+}
+
+// ─── Chrome primitives ───────────────────────────────────────
+
+function RoundButton({ onClick, label, children }: { onClick: () => void; label: string; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+      className="w-10 h-10 rounded-full pro-track flex items-center justify-center text-bone hover:bg-bone/10 transition-colors shrink-0"
+    >
+      {children}
+    </button>
+  );
+}
+
+function ControlHeading({ children, hint }: { children: ReactNode; hint?: string }) {
+  return (
+    <div className="mb-3">
+      <h3 className="hidden md:block text-[13px] font-semibold text-bone">{children}</h3>
+      {hint && <p className="text-xs text-bone-dim md:mt-0.5">{hint}</p>}
+    </div>
+  );
+}
+
+function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { id: T; label: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div className="pro-track flex p-1 rounded-full">
+      {options.map(o => (
+        <button
+          key={o.id}
+          type="button"
+          aria-pressed={value === o.id}
+          onClick={() => onChange(o.id)}
+          className={`flex-1 h-8 rounded-full text-[12px] font-semibold transition-colors ${value === o.id ? 'pro-thumb text-bone' : 'text-bone-dim'}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════
+   Modal
+   ════════════════════════════════════════════════════════════════ */
+
+export function ShareCardModal({ data, onClose }: Props) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { units } = useUIStore();
+  const { profile } = useAuthStore();
+
+  const [layout, setLayout] = useState<ShareLayout>('hero');
+  const [aspectRatio, setAspectRatio] = useState<'9/16' | '1/1'>('9/16');
+  const [activeTab, setActiveTab] = useState<'layout' | 'body' | 'colors'>('layout');
+  const [gender, setGender] = useState<Gender>(profile?.gender?.toLowerCase() === 'female' ? 'female' : 'male');
+  const [views, setViews] = useState<Views>('both');
+  const [accentId, setAccentId] = useState(ACCENTS[0].id);
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [didSave, setDidSave] = useState(false);
+  const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
+
+  const accent = ACCENTS.find(a => a.id === accentId)?.hex || ACCENTS[0].hex;
+  const isSquare = aspectRatio === '1/1';
+  const designH = isSquare ? DESIGN_W : Math.round((DESIGN_W * 16) / 9);
+  const imperial = units === 'imperial';
+  const weightUnit = imperial ? 'lb' : 'kg';
+  const toUnit = (kg: number) => (imperial ? kg * 2.20462 : kg);
+
+  // ─── Session summary ───
+  const summary = useMemo(() => {
+    const logs = (data.exerciseLogs || [])
+      .filter(l => !isWarmupOrCooldown(l.name, l.section))
+      .map(l => ({ ...l, sets: (l.sets || []).filter(isCounted) }))
+      .filter(l => l.sets.length > 0);
+    const names = (data.exerciseNames || []).filter(n => !isWarmupOrCooldown(n));
+    const muscles = logs.length > 0 ? getActiveMusclesFromLogs(logs) : getActiveMuscleScores(names);
+    const totalSets = logs.length > 0 ? logs.reduce((n, l) => n + l.sets.length, 0) : data.sets || 0;
+    const totalReps = logs.reduce((n, l) => n + l.sets.reduce((r, s) => r + (Number(s.reps) || 0), 0), 0);
+    const volume = logs.length > 0 ? calculateShareVolume(logs) : data.volume || 0;
+    const calories = data.calories > 0 ? data.calories : logs.length > 0 ? calculateWorkoutCalories(logs as any, data.bodyweight, data.durationMin) : 0;
+    const topLift = Math.max(0, ...logs.flatMap(l => l.sets.map(s => Number(s.weight) || 0)));
+    const exercises = logs.length > 0
+      ? logs.map(l => ({ name: l.name, isPR: !!l.isPR, sets: l.sets }))
+      : names.map(n => ({ name: n, isPR: false, sets: [] as SetEntry[] }));
+    return { muscles, totalSets, totalReps, volume, calories, topLift, exercises, prCount: exercises.filter(e => e.isPR).length };
+  }, [data]);
+
+  const focus = useMemo(() => muscleFocus(summary.muscles, 5), [summary.muscles]);
+  const focusLine = focus.slice(0, 3).map(f => f.label).join(' · ') || 'Full body';
+
+  const setDetail = (sets: SetEntry[]) => {
+    if (sets.length === 0) return '';
+    const heaviest = sets.reduce((best, s) => ((Number(s.weight) || 0) > (Number(best.weight) || 0) ? s : best), sets[0]);
+    const maxReps = Math.max(0, ...sets.map(s => Number(s.reps) || 0));
+    const maxSec = Math.max(0, ...sets.map(s => Number(s.seconds) || 0));
+    const w = Number(heaviest.weight) || 0;
+    if (w > 0) return `${sets.length} × ${heaviest.reps || maxReps} · ${Math.round(toUnit(w) * 10) / 10} ${weightUnit}`;
+    if (maxReps > 0) return `${sets.length} × ${maxReps}`;
+    if (maxSec > 0) return `${sets.length} × ${maxSec}s`;
+    return `${sets.length} sets`;
   };
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { units } = useUIStore();
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [variant, setVariant] = useState<CardVariant>('combined'); // Default to combined!
-  const [transparent, setTransparent] = useState(false);
-  const [anatomyGender, setAnatomyGender] = useState<'male' | 'female'>('male');
-  const [selectedColor, setSelectedColor] = useState<HighlightColor>(HIGHLIGHT_COLORS[0]);
-  const [colorDropdownOpen, setColorDropdownOpen] = useState(false);
+  const volumeStat = summary.volume > 0
+    ? { value: formatNumber(toUnit(summary.volume)), unit: weightUnit, label: 'Volume' }
+    : { value: summary.totalReps > 0 ? formatNumber(summary.totalReps) : String(summary.totalSets), unit: '', label: summary.totalReps > 0 ? 'Reps' : 'Sets' };
 
-  // Completed set logs are authoritative. Older activity records may only
-  // contain exercise names, so retain the name-based fallback for those.
-  const activeMuscles = data.exerciseLogs 
-    ? getActiveMusclesFromLogs(data.exerciseLogs)
-    : getActiveMuscleScores(data.exerciseNames);
+  const duration = formatDuration(data.durationMin);
+  const stats = [
+    { label: 'Time', value: duration.value, unit: duration.unit },
+    { label: volumeStat.label, value: volumeStat.value, unit: volumeStat.unit },
+    { label: 'Sets', value: String(summary.totalSets) },
+    { label: 'Kcal', value: String(summary.calories), accent: true },
+  ];
+  const statsNoDup = volumeStat.label === 'Sets' ? stats.filter((s, i) => !(s.label === 'Sets' && i === 2)) : stats;
 
-  // Robust Volume calculation with fallback
-  let volume = 0;
-  if (data.exerciseLogs !== undefined) {
-    volume = calculateShareVolume(data.exerciseLogs, data.bodyweight || 70);
-  }
-  if (data.exerciseLogs === undefined && data.volume && data.volume > 0) {
-    volume = data.volume;
-  }
+  // ─── Responsive preview scaling ───
+  const scale = stageSize.w > 0 && stageSize.h > 0 ? Math.min(stageSize.w / DESIGN_W, stageSize.h / designH, 1.25) : 0;
 
-  // Recalculate calories dynamically using MET formula
-  const calculatedCalories = data.exerciseLogs !== undefined && data.exerciseLogs.length > 0
-    ? calculateWorkoutCalories(null, data.exerciseLogs as any, data.bodyweight || 70, data.durationMin)
-    : data.calories || 0;
-
-  // Robust Sets calculation with fallback
-  let totalSets = 0;
-  if (data.exerciseLogs !== undefined) {
-    totalSets = calculateTotalSets(data.exerciseLogs);
-  }
-  if (totalSets === 0 && data.sets && data.sets > 0) {
-    totalSets = data.sets;
-  }
-  if (totalSets === 0 && data.exerciseNames && data.exerciseNames.length > 0) {
-    totalSets = data.exerciseNames.length * 3;
-  }
-  if (totalSets === 0) {
-    totalSets = 3;
-  }
+  useLayoutEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const measure = () => {
+      const cs = getComputedStyle(el);
+      const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const h = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      setStageSize({ w: Math.max(0, w), h: Math.max(0, h) });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
-    if (!canvasRef.current) return;
+    const cycle = (dir: 1 | -1) =>
+      setLayout(cur => {
+        const idx = LAYOUT_OPTIONS.findIndex(l => l.id === cur);
+        return LAYOUT_OPTIONS[(idx + dir + LAYOUT_OPTIONS.length) % LAYOUT_OPTIONS.length].id;
+      });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft') cycle(-1);
+      else if (e.key === 'ArrowRight') cycle(1);
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
 
-    if (variant === 'anatomy') {
-      drawAnatomyCard(canvasRef.current, data, activeMuscles, transparent, volume, totalSets, selectedColor, units, anatomyGender);
-    } else if (variant === 'exercises') {
-      drawExercisesCard(canvasRef.current, data, transparent, volume, totalSets, selectedColor, units, calculatedCalories);
-    } else {
-      drawCombinedCard(canvasRef.current, data, activeMuscles, transparent, volume, totalSets, selectedColor, units, calculatedCalories, anatomyGender);
-    }
-    setPreviewUrl(canvasRef.current.toDataURL('image/png'));
-  }, [data, variant, transparent, volume, totalSets, selectedColor, units, calculatedCalories, anatomyGender]);
-  const getBlob = (): Promise<Blob> => {
-    return new Promise((resolve, reject) => {
-      if (!canvasRef.current) {
-        reject(new Error('Share card is still generating'));
-        return;
-      }
-      canvasRef.current.toBlob(blob => {
-        if (blob) resolve(blob);
-        else reject(new Error('Canvas toBlob failed'));
-      }, 'image/png');
-    });
-  };
+  const layoutIndex = LAYOUT_OPTIONS.findIndex(l => l.id === layout);
+  const goPrevious = () => setLayout(LAYOUT_OPTIONS[(layoutIndex - 1 + LAYOUT_OPTIONS.length) % LAYOUT_OPTIONS.length].id);
+  const goNext = () => setLayout(LAYOUT_OPTIONS[(layoutIndex + 1) % LAYOUT_OPTIONS.length].id);
 
-  const getBlobSynchronously = (): Blob => {
-    if (!canvasRef.current) throw new Error('Share card is still generating');
-    const dataUrl = canvasRef.current.toDataURL('image/png');
-    const encoded = dataUrl.split(',')[1];
-    const binary = atob(encoded);
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-    return new Blob([bytes], { type: 'image/png' });
-  };
-
-  const downloadBlob = (blob: Blob) => {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `apparatus-${data.dayTitle.toLowerCase().replace(/[^a-z0-9]/g, '-')}.png`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
-
-  const fileName = `apparatus-${data.dayTitle.toLowerCase().replace(/[^a-z0-9]/g, '-')}.png`;
-
-  const handleShare = async () => {
-    setSharing(true);
+  const pickPhoto = async (file?: File | null) => {
+    if (!file) return;
     try {
-      if (!canvasRef.current) throw new Error('Share card is still generating');
-
-      // Native Android/iOS app: write to cache then hand off to the OS share sheet.
-      if (Capacitor.isNativePlatform()) {
-        const base64Data = canvasRef.current.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
-        const fileResult = await Filesystem.writeFile({
-          path: fileName,
-          data: base64Data,
-          directory: Directory.Cache,
-        });
-        await Share.share({
-          title: `${data.dayTitle} — Apparatus`,
-          text: `Crushed it 💪`,
-          files: [fileResult.uri],
-          dialogTitle: 'Share Workout Card',
-        });
-        return;
-      }
-
-      // Web: convert synchronously so navigator.share is called during the
-      // original click gesture on mobile browsers.
-      const blob = getBlobSynchronously();
-      const file = new File([blob], fileName, { type: 'image/png' });
-
-      const canShareFiles = typeof navigator.share === 'function'
-        && (!navigator.canShare || navigator.canShare({ files: [file] }));
-      if (canShareFiles) {
-        await navigator.share({
-          title: `${data.dayTitle} — Apparatus`,
-          text: `Crushed it 💪`,
-          files: [file],
-        });
-      } else {
-        downloadBlob(blob);
-      }
-    } catch (err: any) {
-      if (err?.name !== 'AbortError' && !String(err?.message).toLowerCase().includes('cancel')) {
-        console.error('Share failed:', err);
-        try {
-          downloadBlob(getBlobSynchronously());
-        } catch (fallbackError) {
-          console.error('Share fallback failed:', fallbackError);
-        }
-      }
-    } finally {
-      setSharing(false);
+      setPhoto(await compressImageFile(file, 1440, 1920, 0.85));
+      setLayout('photo');
+    } catch {
+      useUIStore.getState().showToast('Could not load that photo', 'error');
     }
   };
 
-  const handleDownload = async () => {
-    try {
-      if (!canvasRef.current) throw new Error('Share card is still generating');
+  // ─── Export ───
+  const isTransparent = layout === 'sticker';
+  const fileName = `apparatus-${(data.dayTitle || 'workout').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.png`;
 
-      // Native Android/iOS app: save directly to device storage — no share sheet.
+  const getCanvas = async (): Promise<HTMLCanvasElement | null> => {
+    if (!cardRef.current) return null;
+    const solidBg = isTransparent ? undefined : CARD_BG[layout];
+    try {
+      return await toCanvas(cardRef.current, {
+        pixelRatio: PIXEL_RATIO,
+        cacheBust: false,
+        skipFonts: true,
+        backgroundColor: solidBg,
+        style: { borderRadius: '0' },
+      });
+    } catch (err) {
+      console.warn('html-to-image failed, falling back to html2canvas:', err);
+    }
+    try {
+      return await html2canvas(cardRef.current, {
+        scale: PIXEL_RATIO,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: solidBg ?? null,
+        logging: false,
+        onclone: (_doc, el) => { el.style.borderRadius = '0'; },
+      });
+    } catch (err) {
+      console.error('html2canvas also failed:', err);
+      return null;
+    }
+  };
+
+  const downloadCanvas = (canvas: HTMLCanvasElement) => {
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  const flashSaved = () => {
+    setDidSave(true);
+    setTimeout(() => setDidSave(false), 2200);
+  };
+
+  const handleSave = async () => {
+    setBusy(true);
+    try {
+      await new Promise(r => setTimeout(r, 60));
+      const canvas = await getCanvas();
+      if (!canvas) {
+        useUIStore.getState().showToast('Could not generate share image', 'error');
+        return;
+      }
       if (Capacitor.isNativePlatform()) {
-        const base64Data = canvasRef.current.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
         await Filesystem.writeFile({
           path: `Apparatus/${fileName}`,
-          data: base64Data,
+          data: canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, ''),
           directory: Directory.Documents,
           recursive: true,
         });
         useUIStore.getState().showToast('Saved to Documents/Apparatus', 'success');
-        return;
+      } else {
+        downloadCanvas(canvas);
+        useUIStore.getState().showToast('Workout card saved', 'success');
       }
-
-      downloadBlob(await getBlob());
+      flashSaved();
     } catch (err) {
-      console.error('Download failed:', err);
+      console.error('Save failed:', err);
       useUIStore.getState().showToast('Failed to save image. Please try again.', 'error');
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleCopyLink = async () => {
+  const shareText = `${data.dayTitle}: ${summary.totalSets} sets in ${durationText(data.durationMin)}. Logged with Apparatus.`;
+
+  const handleShare = async () => {
+    setBusy(true);
     try {
-      await navigator.clipboard.writeText(getAppShareUrl());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch { /* noop */ }
+      await new Promise(r => setTimeout(r, 60));
+      const canvas = await getCanvas();
+      if (!canvas) {
+        useUIStore.getState().showToast('Could not generate share image', 'error');
+        return;
+      }
+      if (Capacitor.isNativePlatform()) {
+        const file = await Filesystem.writeFile({
+          path: fileName,
+          data: canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, ''),
+          directory: Directory.Cache,
+        });
+        await Share.share({ title: data.dayTitle, text: shareText, files: [file.uri], dialogTitle: 'Share workout' });
+        return;
+      }
+      const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+      const file = blob ? new File([blob], fileName, { type: 'image/png' }) : null;
+      if (file && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ title: data.dayTitle, text: shareText, files: [file] });
+      } else {
+        downloadCanvas(canvas);
+        flashSaved();
+      }
+    } catch (err: any) {
+      const msg = String(err?.message || '').toLowerCase();
+      if (err?.name !== 'AbortError' && !msg.includes('cancel')) {
+        console.error('Share failed:', err);
+        useUIStore.getState().showToast('Failed to share card. Try saving the image instead.', 'error');
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
-  return createPortal(
-    (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-[9999] flex items-end md:items-center justify-center p-0 md:p-4 pb-safe">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-black/95 backdrop-blur-sm"
-          onClick={onClose}
-        />
+  // ─── Card templates (fixed 360px design) ───
+  // White accent is invisible on the light template, so fall back to ink there.
+  const darkAccent = accent === '#FFFFFF' ? '#111111' : accent;
+  const title = (data.dayTitle || 'Workout').trim();
+  const titleWords = title.split(/\s+/);
+  const figureArgs = { muscles: summary.muscles, gender, views, color: accent };
+  const pad = isSquare ? 20 : 24;
+  const visibleExercises = summary.exercises.slice(0, isSquare ? 4 : 8);
+  const hiddenExercises = summary.exercises.length - visibleExercises.length;
 
-        <motion.div
-          initial={{ scale: 0.95, opacity: 0, y: 50 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.95, opacity: 0, y: 50 }}
-          transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-          className="relative z-10 w-full max-w-lg flex flex-col h-[92dvh] md:h-auto md:max-h-[95vh] bg-ink rounded-t-2xl md:rounded-2xl border-t border-line/20 md:border border-line/30 p-4 pb-8 md:pb-4 shadow-2xl"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between mb-3 flex-shrink-0">
-            <h2 className="font-display text-xl text-bone">Share Workout</h2>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 rounded-full bg-ink-2 border border-line flex items-center justify-center text-bone-dim hover:text-bone transition-colors"
-            >
-              <X size={16} />
-            </button>
+  const headerRow = (dark = true) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Wordmark color={dark ? '#FFFFFF' : '#111111'} />
+      <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', color: dark ? 'rgba(255,255,255,0.6)' : 'rgba(17,17,17,0.55)' }}>{data.date}</span>
+    </div>
+  );
+
+  const statRow = (dark = true, size = 22, items = statsNoDup) => (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`, gap: 8 }}>
+      {items.map(s => (
+        <Stat key={s.label} label={s.label} value={s.value} unit={s.unit} dark={dark} size={size} accent={s.accent ? (dark ? accent : darkAccent) : undefined} />
+      ))}
+    </div>
+  );
+
+  const eyebrow = (color: string) => (
+    <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.24em', textTransform: 'uppercase', color }}>
+      {summary.prCount > 0 ? `${summary.prCount} personal record${summary.prCount > 1 ? 's' : ''}` : data.planTitle || 'Strength session'}
+    </div>
+  );
+
+  let content: ReactNode;
+  switch (layout) {
+    case 'hero':
+      content = (
+        <div style={{ position: 'absolute', inset: 0, padding: pad, display: 'flex', flexDirection: 'column', background: `radial-gradient(90% 55% at 50% 42%, ${hexToRgba(accent, 0.22)} 0%, transparent 70%), #07070A` }}>
+          {headerRow()}
+          <div style={{ marginTop: isSquare ? 12 : 22 }}>
+            {eyebrow(accent)}
+            <div style={{ marginTop: 6, fontSize: isSquare ? 22 : 28, fontWeight: 900, lineHeight: 1.02, letterSpacing: '-0.02em', color: '#fff', textTransform: 'uppercase', maxHeight: isSquare ? 46 : 60, overflow: 'hidden' }}>{title}</div>
           </div>
-
-          {/* Controls Bar (Swipeable on Mobile) */}
-          <div className="flex gap-1.5 mb-2 overflow-x-auto scrollbar-none flex-nowrap pb-1 -mx-2 px-2 flex-shrink-0">
-            <button
-              onClick={() => setVariant('combined')}
-              className={`flex items-center gap-1.5 text-xs font-mono py-1.5 px-3 rounded-lg transition-all flex-shrink-0 border ${
-                variant === 'combined'
-                  ? 'bg-bone text-ink border-bone shadow-sm'
-                  : 'bg-ink-2 text-bone-dim border-line/50 hover:bg-ink-3 hover:text-bone'
-              }`}
-            >
-              <ImageIcon size={13} />
-              <span>Combined Layout</span>
-            </button>
-            <button
-              onClick={() => setVariant('anatomy')}
-              className={`flex items-center gap-1.5 text-xs font-mono py-1.5 px-3 rounded-lg transition-all flex-shrink-0 border ${
-                variant === 'anatomy'
-                  ? 'bg-bone text-ink border-bone shadow-sm'
-                  : 'bg-ink-2 text-bone-dim border-line/50 hover:bg-ink-3 hover:text-bone'
-              }`}
-            >
-              <ImageIcon size={13} />
-              <span>Muscles Only</span>
-            </button>
-            <button
-              onClick={() => setVariant('exercises')}
-              className={`flex items-center gap-1.5 text-xs font-mono py-1.5 px-3 rounded-lg transition-all flex-shrink-0 border ${
-                variant === 'exercises'
-                  ? 'bg-bone text-ink border-bone shadow-sm'
-                  : 'bg-ink-2 text-bone-dim border-line/50 hover:bg-ink-3 hover:text-bone'
-              }`}
-            >
-              <List size={13} />
-              <span>Exercises Only</span>
-            </button>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
+            <Figures {...figureArgs} height={isSquare ? 150 : 300} gap={isSquare ? 10 : 18} />
           </div>
-
-          {/* Secondary Controls: BG Toggler + Gender Selector + Custom Color Dropdown */}
-          <div className="flex gap-2 mb-3 items-center flex-shrink-0 flex-wrap sm:flex-nowrap">
-            <button
-              onClick={() => setTransparent(!transparent)}
-              className={`text-xs font-mono py-2 px-3 rounded-lg transition-all flex-shrink-0 border ${
-                transparent
-                  ? 'bg-amber/10 text-amber border-amber/30'
-                  : 'bg-ink-2 text-bone-dim border-line/50 hover:bg-ink-3 hover:text-bone'
-              }`}
-            >
-              {transparent ? 'Transparent BG' : 'Dark BG'}
-            </button>
-
-            {/* Model Gender Selector */}
-            <div className="flex items-center rounded-lg border border-line/20 bg-ink-3/45 p-0.5 text-xs font-mono shrink-0">
-              <button
-                type="button"
-                onClick={() => setAnatomyGender('male')}
-                className={`px-2.5 py-1.5 rounded-md transition-all ${
-                  anatomyGender === 'male'
-                    ? 'bg-sienna/20 text-sienna font-bold border border-sienna/30'
-                    : 'text-bone-dim hover:text-bone'
-                }`}
-              >
-                Male ♂
-              </button>
-              <button
-                type="button"
-                onClick={() => setAnatomyGender('female')}
-                className={`px-2.5 py-1.5 rounded-md transition-all ${
-                  anatomyGender === 'female'
-                    ? 'bg-danger/20 text-danger font-bold border border-danger/30'
-                    : 'text-bone-dim hover:text-bone'
-                }`}
-              >
-                Female ♀
-              </button>
+          {!isSquare && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginBottom: 14 }}>
+              {focus.slice(0, 3).map(f => (
+                <span key={f.muscle} style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#fff', padding: '5px 10px', borderRadius: 999, background: hexToRgba(accent, 0.16), border: `1px solid ${hexToRgba(accent, 0.45)}` }}>{f.label}</span>
+              ))}
             </div>
-
-            {/* Accent Color Custom Dropdown */}
-            <div className="relative flex-1">
-              <button
-                onClick={() => setColorDropdownOpen(!colorDropdownOpen)}
-                className="w-full flex items-center justify-between bg-ink-3/45 border border-line/20 rounded-lg px-3 py-2 text-xs font-mono text-bone-dim hover:text-bone transition-all"
-              >
-                <span className="flex items-center gap-2">
-                  <span className="text-[10px] tracking-wider uppercase text-bone-dim">Color:</span>
-                  <span className="w-3.5 h-3.5 rounded-full inline-block border border-white/10" style={{ backgroundColor: selectedColor.fill }} />
-                  <span className="text-bone font-medium">{selectedColor.name}</span>
-                </span>
-                <span className="text-bone-dim text-[10px] transition-transform duration-200" style={colorDropdownOpen ? { transform: 'rotate(180deg)' } : undefined}>▼</span>
-              </button>
-
-              {colorDropdownOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setColorDropdownOpen(false)} />
-                  <div className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-ink-2 border border-line/30 rounded-xl shadow-2xl max-h-56 overflow-y-auto py-1 backdrop-blur-md">
-                    {HIGHLIGHT_COLORS.map((color) => (
-                      <button
-                        key={color.name}
-                        onClick={() => {
-                          setSelectedColor(color);
-                          setColorDropdownOpen(false);
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-mono text-bone hover:bg-white/5 transition-colors text-left border-b border-line/10 last:border-b-0"
-                      >
-                        <span className="w-3.5 h-3.5 rounded-full border border-white/10" style={{ backgroundColor: color.fill }} />
-                        <span className="font-medium">{color.name}</span>
-                        {selectedColor.name === color.name && (
-                          <span className="ml-auto text-sienna text-sm">✓</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+          )}
+          <div style={{ padding: '14px 14px 12px', borderRadius: 18, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            {statRow(true, isSquare ? 17 : 20)}
           </div>
+        </div>
+      );
+      break;
 
-          {/* Preview Window */}
-          <div className={`flex-1 min-h-0 overflow-y-auto rounded-xl border border-line/30 mb-3 ${transparent ? 'bg-[repeating-conic-gradient(#222_0%_25%,#1a1a1a_0%_50%)_0_0/20px_20px]' : 'bg-black'}`}>
-            {previewUrl ? (
-              <img
-                src={previewUrl}
-                alt="Share card preview"
-                className="w-full rounded-xl"
-              />
-            ) : (
-              <div className="flex items-center justify-center h-48 text-bone-dim text-sm font-mono">
-                Generating card...
+    case 'split': {
+      const bars = focus.slice(0, 4);
+      const barList = (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: isSquare ? 9 : 12, flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.5)' }}>MUSCLE SPLIT</div>
+          {bars.map(b => (
+            <div key={b.muscle}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: '#fff' }}>
+                <span>{b.label}</span>
+                <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{b.pct}%</span>
               </div>
+              <div style={{ marginTop: 5, height: 6, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+                <div style={{ width: `${b.pct}%`, height: '100%', borderRadius: 999, background: hexToRgba(accent, 0.35 + 0.65 * (b.pct / 100)) }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+      content = (
+        <div style={{ position: 'absolute', inset: 0, padding: pad, display: 'flex', flexDirection: 'column', background: '#0B0B0E' }}>
+          {headerRow()}
+          <div style={{ marginTop: 14, flexShrink: 0, fontSize: isSquare ? 18 : 22, fontWeight: 900, lineHeight: 1.1, color: '#fff', textTransform: 'uppercase', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          {isSquare ? (
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 16, minHeight: 0 }}>
+              <Figures {...figureArgs} height={170} gap={6} />
+              {barList}
+            </div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0 18px', flexShrink: 0 }}>
+                <Figures {...figureArgs} height={230} gap={16} />
+              </div>
+              {barList}
+            </>
+          )}
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+            {statRow(true, isSquare ? 16 : 18, statsNoDup.slice(0, 3))}
+          </div>
+        </div>
+      );
+      break;
+    }
+
+    case 'logbook':
+      content = (
+        <div style={{ position: 'absolute', inset: 0, padding: pad, display: 'flex', flexDirection: 'column', background: '#0D0D10' }}>
+          {headerRow()}
+          <div style={{ marginTop: 14, flexShrink: 0, fontSize: isSquare ? 19 : 24, fontWeight: 900, color: '#fff', textTransform: 'uppercase', letterSpacing: '-0.01em', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          <div style={{ marginTop: 12 }}>{statRow(true, isSquare ? 16 : 19)}</div>
+          <div style={{ marginTop: 14, borderTop: '1px solid rgba(255,255,255,0.1)', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            {visibleExercises.map((ex, i) => (
+              <div key={`${ex.name}-${i}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: isSquare ? '8px 0' : '10px 0', borderBottom: '1px solid rgba(255,255,255,0.07)' }}>
+                <span style={{ width: 18, fontSize: 11, fontWeight: 800, color: accent }}>{String(i + 1).padStart(2, '0')}</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ex.name}</span>
+                {ex.isPR && <span style={{ fontSize: 8, fontWeight: 900, letterSpacing: '0.1em', padding: '3px 5px', borderRadius: 4, background: accent, color: '#0D0D10' }}>PR</span>}
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>{setDetail(ex.sets)}</span>
+              </div>
+            ))}
+            {hiddenExercises > 0 && (
+              <div style={{ paddingTop: 8, fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.45)' }}>+{hiddenExercises} more exercise{hiddenExercises > 1 ? 's' : ''}</div>
             )}
           </div>
+          <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Figures {...figureArgs} height={isSquare ? 44 : 64} gap={4} glow={false} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.45)' }}>FOCUS</div>
+              <div style={{ marginTop: 3, fontSize: 12, fontWeight: 700, color: '#fff' }}>{focusLine}</div>
+            </div>
+          </div>
+        </div>
+      );
+      break;
 
-          {/* Hidden Canvas */}
-          <canvas ref={canvasRef} className="hidden" />
+    case 'poster': {
+      const size = isSquare ? 40 : titleWords.length > 3 ? 44 : 56;
+      content = (
+        <div style={{ position: 'absolute', inset: 0, background: '#0A0A0A', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', right: isSquare ? -30 : -40, bottom: isSquare ? 50 : 90, opacity: 0.95 }}>
+            <Figures {...figureArgs} views={views === 'both' ? 'front' : views} height={isSquare ? 290 : 470} />
+          </div>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(10,10,10,0.95) 0%, rgba(10,10,10,0.55) 55%, rgba(10,10,10,0) 100%)' }} />
+          <div style={{ position: 'absolute', inset: 0, padding: pad, display: 'flex', flexDirection: 'column' }}>
+            <Wordmark />
+            <div style={{ marginTop: isSquare ? 16 : 36, maxWidth: 240 }}>
+              {titleWords.slice(0, 4).map((w, i) => (
+                <div key={i} style={{ fontSize: size, fontWeight: 900, lineHeight: 0.92, letterSpacing: '-0.03em', textTransform: 'uppercase', color: i % 2 === 1 ? accent : '#fff', wordBreak: 'break-word' }}>{w}</div>
+              ))}
+            </div>
+            <div style={{ marginTop: 10, fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' }}>{data.date}</div>
+            <div style={{ flex: 1 }} />
+            <div style={{ paddingTop: 12, borderTop: `2px solid ${accent}` }}>{statRow(true, isSquare ? 18 : 22)}</div>
+          </div>
+        </div>
+      );
+      break;
+    }
 
-          {/* Action Buttons */}
-          <div className="grid grid-cols-3 gap-2 flex-shrink-0">
-            <button
-              onClick={handleShare}
-              disabled={sharing || !previewUrl}
-              className="flex flex-col items-center gap-1.5 bg-bone text-ink font-display font-bold uppercase tracking-wider px-3 py-3 rounded-lg text-xs hover:bg-bone/90 active:scale-[0.97] transition-all disabled:opacity-50"
-            >
-              <Share2 size={18} />
-              <span className="text-[10px]">{sharing ? '...' : 'Share'}</span>
-            </button>
+    case 'clean':
+      content = (
+        <div style={{ position: 'absolute', inset: 0, padding: pad, display: 'flex', flexDirection: 'column', background: '#F4F1EC' }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.04em', color: 'rgba(17,17,17,0.55)' }}>{data.date}</div>
+          <div style={{ marginTop: 6, fontSize: isSquare ? 22 : 28, fontWeight: 800, color: '#111', letterSpacing: '-0.03em', lineHeight: 1.05, maxHeight: isSquare ? 48 : 62, overflow: 'hidden' }}>{title}</div>
+          <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: 'rgba(17,17,17,0.6)' }}>{focusLine}</div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
+            <Figures {...figureArgs} color={darkAccent} light glow={false} height={isSquare ? 160 : 320} gap={isSquare ? 10 : 20} />
+          </div>
+          <div style={{ padding: '14px 0', borderTop: '1px solid rgba(17,17,17,0.12)', borderBottom: '1px solid rgba(17,17,17,0.12)' }}>
+            {statRow(false, isSquare ? 18 : 22)}
+          </div>
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'center' }}>
+            <Wordmark color="#111111" size={11} />
+          </div>
+        </div>
+      );
+      break;
 
-            <button
-              onClick={handleDownload}
-              disabled={!previewUrl}
-              className="flex flex-col items-center gap-1.5 bg-ink-3 border border-line text-bone font-display font-bold uppercase tracking-wider px-3 py-3 rounded-lg text-xs hover:border-white/30 active:scale-[0.97] transition-all disabled:opacity-50"
-            >
-              <Download size={18} />
-              <span className="text-[10px]">Save</span>
-            </button>
+    case 'photo':
+      content = (
+        <div style={{ position: 'absolute', inset: 0, background: '#111' }}>
+          {photo ? (
+            <img src={photo} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg, #3a4150 0%, #14171d 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'rgba(255,255,255,0.55)' }}>
+              <div style={{ width: 54, height: 54, borderRadius: 18, border: '1.5px dashed rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ImagePlus size={24} />
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>Add a photo to use this template</div>
+            </div>
+          )}
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.85) 100%)' }} />
+          <div style={{ position: 'absolute', inset: 0, padding: pad, display: 'flex', flexDirection: 'column' }}>
+            {headerRow()}
+            <div style={{ flex: 1 }} />
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ minWidth: 0 }}>
+                {eyebrow(accent)}
+                <div style={{ marginTop: 6, fontSize: isSquare ? 20 : 26, fontWeight: 900, color: '#fff', textTransform: 'uppercase', lineHeight: 1.02, letterSpacing: '-0.02em', textShadow: '0 2px 10px rgba(0,0,0,0.4)' }}>{title}</div>
+              </div>
+              <Figures {...figureArgs} height={isSquare ? 70 : 96} gap={4} />
+            </div>
+            <div style={{ marginTop: 14 }}>{statRow(true, isSquare ? 17 : 21)}</div>
+          </div>
+        </div>
+      );
+      break;
 
-            <button
-              onClick={handleCopyLink}
-              disabled={!previewUrl}
-              className="flex flex-col items-center gap-1.5 bg-ink-3 border border-line text-bone font-display font-bold uppercase tracking-wider px-3 py-3 rounded-lg text-xs hover:border-white/30 active:scale-[0.97] transition-all disabled:opacity-50"
-            >
-              {copied ? <Check size={18} className="text-sienna" /> : <Share2 size={18} />}
-              <span className="text-[10px]">{copied ? 'Copied' : 'Link'}</span>
-            </button>
+    case 'sticker':
+    default:
+      content = (
+        <div style={{ position: 'absolute', inset: 0, padding: pad, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: isSquare ? 10 : 18, textShadow: '0 2px 10px rgba(0,0,0,0.55)' }}>
+          <div style={{ filter: 'drop-shadow(0 8px 18px rgba(0,0,0,0.5))' }}>
+            <Figures {...figureArgs} height={isSquare ? 170 : 300} gap={isSquare ? 10 : 18} />
+          </div>
+          <div style={{ fontSize: isSquare ? 18 : 24, fontWeight: 900, color: '#fff', textTransform: 'uppercase', letterSpacing: '-0.01em', textAlign: 'center' }}>{title}</div>
+          <div style={{ width: '100%', maxWidth: 300 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${statsNoDup.length}, minmax(0, 1fr))`, gap: 8 }}>
+              {statsNoDup.map(s => <Stat key={s.label} label={s.label} value={s.value} unit={s.unit} align="center" size={isSquare ? 17 : 21} accent={s.accent ? accent : undefined} />)}
+            </div>
+          </div>
+          <Wordmark size={10} />
+        </div>
+      );
+  }
+
+  const cardTemplate = (
+    <div
+      ref={cardRef}
+      className="relative overflow-hidden rounded-[2.2rem]"
+      style={{ width: DESIGN_W, height: designH, background: CARD_BG[layout], fontFamily: FONT } as CSSProperties}
+    >
+      {content}
+    </div>
+  );
+
+  const TABS = [
+    { id: 'layout' as const, label: 'Template', icon: LayoutTemplate },
+    { id: 'body' as const, label: 'Body', icon: PersonStanding },
+    { id: 'colors' as const, label: 'Colour', icon: Palette },
+  ];
+
+  const tabVisibility = (id: typeof activeTab) => `${activeTab === id ? '' : 'hidden'} md:block`;
+  const hScroll = 'flex md:grid gap-3 overflow-x-auto md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
+  const subtitle = `${summary.exercises.length} exercise${summary.exercises.length === 1 ? '' : 's'} · ${data.date}`;
+
+  return createPortal(
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="pro-scope fixed inset-0 z-[9999] flex md:items-center md:justify-center md:p-6 font-sans select-none"
+      >
+        <div className="absolute inset-0 hidden md:block bg-black/60 backdrop-blur-sm" onClick={onClose} />
+
+        <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Share workout"
+          initial={{ opacity: 0, y: 16, scale: 0.99 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="relative flex flex-col md:flex-row w-full h-full md:max-w-[1000px] md:h-[min(800px,calc(100dvh-48px))] md:rounded-[28px] overflow-hidden bg-[rgb(var(--color-ink))] md:border md:border-line"
+          style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.35)' }}
+        >
+          {/* ═════ Preview column ═════ */}
+          <div className="flex-1 min-h-0 min-w-0 flex flex-col bg-[rgb(var(--color-ink-2))]">
+            <div className="md:hidden flex items-center gap-2 px-3 pb-2" style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}>
+              <RoundButton onClick={onClose} label="Close"><X size={18} /></RoundButton>
+              <div className="flex-1 min-w-0 text-center">
+                <div className="text-[15px] font-semibold text-bone leading-tight">Share workout</div>
+                <div className="text-[11px] text-bone-dim truncate">{subtitle}</div>
+              </div>
+              <RoundButton
+                onClick={() => setAspectRatio(prev => (prev === '9/16' ? '1/1' : '9/16'))}
+                label={aspectRatio === '9/16' ? 'Switch to square' : 'Switch to story'}
+              >
+                {aspectRatio === '9/16' ? <Smartphone size={17} /> : <SquareIcon size={16} />}
+              </RoundButton>
+            </div>
+
+            <div ref={stageRef} className="flex-1 min-h-0 flex items-center justify-center px-6 py-2 md:p-8">
+              <div className="relative shrink-0" style={{ width: DESIGN_W * scale, height: designH * scale, visibility: scale ? 'visible' : 'hidden' }}>
+                <div
+                  className={`absolute left-0 top-0 rounded-[2.2rem] overflow-hidden ${isTransparent ? 'pro-checker' : ''}`}
+                  style={{
+                    width: DESIGN_W,
+                    height: designH,
+                    transform: `scale(${scale || 1})`,
+                    transformOrigin: 'top left',
+                    boxShadow: '0 24px 60px rgba(0,0,0,0.28), 0 0 0 1px rgba(0,0,0,0.04)',
+                  }}
+                >
+                  {cardTemplate}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center gap-4 pb-3 md:pb-6 pt-1">
+              <RoundButton onClick={goPrevious} label="Previous template"><ChevronLeft size={18} /></RoundButton>
+              <div className="w-32 text-center">
+                <div className="text-[13px] font-semibold text-bone truncate">{LAYOUT_OPTIONS[layoutIndex].label}</div>
+                <div className="flex justify-center gap-1 mt-1.5">
+                  {LAYOUT_OPTIONS.map(o => (
+                    <span key={o.id} className={`h-1 rounded-full transition-all duration-300 ${o.id === layout ? 'w-4 bg-bone' : 'w-1 bg-bone/25'}`} />
+                  ))}
+                </div>
+              </div>
+              <RoundButton onClick={goNext} label="Next template"><ChevronRight size={18} /></RoundButton>
+            </div>
+          </div>
+
+          {/* ═════ Controls column / bottom sheet ═════ */}
+          <div
+            className="relative shrink-0 md:w-[380px] flex flex-col bg-[rgb(var(--color-ink))] rounded-t-[28px] md:rounded-none border-t md:border-t-0 md:border-l border-line"
+            style={{ boxShadow: '0 -10px 30px rgba(0,0,0,0.06)' }}
+          >
+            <div className="hidden md:flex items-start justify-between gap-3 px-6 pt-6 pb-5 border-b border-line">
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold text-bone leading-tight">Share workout</h2>
+                <p className="text-xs text-bone-dim mt-1 truncate">{title} · {subtitle}</p>
+              </div>
+              <RoundButton onClick={onClose} label="Close"><X size={18} /></RoundButton>
+            </div>
+
+            <div className="md:hidden px-4 pt-4">
+              <div role="tablist" className="pro-track flex p-1 rounded-full">
+                {TABS.map(t => {
+                  const active = activeTab === t.id;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setActiveTab(t.id)}
+                      className={`relative flex-1 h-9 rounded-full text-[13px] font-medium transition-colors ${active ? 'text-bone' : 'text-bone-dim'}`}
+                    >
+                      {active && (
+                        <motion.span layoutId="workout-share-tab" className="absolute inset-0 rounded-full pro-thumb" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />
+                      )}
+                      <span className="relative flex items-center justify-center gap-1.5">
+                        <t.icon size={14} />
+                        {t.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="md:flex-1 md:min-h-0 overflow-y-auto overscroll-contain px-4 md:px-6 pt-4 pb-3 md:py-6 md:space-y-8 min-h-[132px]">
+              {/* Template */}
+              <section className={tabVisibility('layout')}>
+                <ControlHeading>Template</ControlHeading>
+                <div className={`${hScroll} md:grid-cols-4`}>
+                  {LAYOUT_OPTIONS.map(opt => {
+                    const selected = layout === opt.id;
+                    return (
+                      <button key={opt.id} type="button" onClick={() => setLayout(opt.id)} aria-pressed={selected} className="shrink-0 w-[62px] md:w-auto flex flex-col items-center gap-1.5 group">
+                        <span className={`block w-full aspect-[60/88] rounded-xl overflow-hidden transition-all ${selected ? 'ring-2 ring-bone ring-offset-2 ring-offset-[rgb(var(--color-ink))]' : 'ring-1 ring-line group-hover:ring-bone-dim/50'}`}>
+                          <LayoutThumb id={opt.id} accent={accent} />
+                        </span>
+                        <span className={`text-[11px] font-medium ${selected ? 'text-bone' : 'text-bone-dim'}`}>{opt.short}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {layout === 'photo' && (
+                  <div className="mt-3 flex gap-2">
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 h-10 rounded-full pro-track text-bone text-[13px] font-semibold flex items-center justify-center gap-2">
+                      <ImagePlus size={16} /> {photo ? 'Change photo' : 'Add photo'}
+                    </button>
+                    {photo && (
+                      <button type="button" onClick={() => setPhoto(null)} className="w-10 h-10 rounded-full pro-track text-bone flex items-center justify-center" aria-label="Remove photo" title="Remove photo">
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
+                )}
+                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={e => { pickPhoto(e.target.files?.[0]); e.target.value = ''; }} />
+              </section>
+
+              {/* Format (desktop; mobile uses the top-bar toggle) */}
+              <section className="hidden md:block">
+                <ControlHeading>Format</ControlHeading>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { id: '9/16' as const, label: 'Story', sub: '1080 × 1920', icon: Smartphone },
+                    { id: '1/1' as const, label: 'Square', sub: '1080 × 1080', icon: SquareIcon },
+                  ]).map(f => {
+                    const selected = aspectRatio === f.id;
+                    return (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => setAspectRatio(f.id)}
+                        aria-pressed={selected}
+                        className={`flex items-center gap-2.5 p-3 rounded-2xl text-left transition-colors border ${selected ? 'border-bone bg-bone/[0.04]' : 'border-line hover:border-bone-dim/50'}`}
+                      >
+                        <f.icon size={18} className={selected ? 'text-bone' : 'text-bone-dim'} />
+                        <span>
+                          <span className="block text-[13px] font-semibold text-bone">{f.label}</span>
+                          <span className="block text-[11px] text-bone-dim tabular-nums">{f.sub}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* Body */}
+              <section className={`${tabVisibility('body')} space-y-3`}>
+                <ControlHeading hint="Muscles are shaded by how much work they did this session.">Body</ControlHeading>
+                <Segmented value={gender} onChange={setGender} options={[{ id: 'male', label: 'Male' }, { id: 'female', label: 'Female' }]} />
+                <Segmented value={views} onChange={setViews} options={[{ id: 'both', label: 'Front + back' }, { id: 'front', label: 'Front' }, { id: 'back', label: 'Back' }]} />
+                {focus.length > 0 && (
+                  <div className="hidden md:block pt-1 space-y-2">
+                    {focus.map(f => (
+                      <div key={f.muscle} className="flex items-center gap-3">
+                        <span className="w-24 text-xs text-bone-dim truncate">{f.label}</span>
+                        <span className="flex-1 h-1.5 rounded-full bg-bone/10 overflow-hidden">
+                          <span className="block h-full rounded-full" style={{ width: `${f.pct}%`, background: accent === '#FFFFFF' ? 'rgb(var(--color-bone))' : accent }} />
+                        </span>
+                        <span className="w-9 text-right text-xs text-bone-dim tabular-nums">{f.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* Colours */}
+              <section className={tabVisibility('colors')}>
+                <ControlHeading>Accent colour</ControlHeading>
+                <div className="flex items-center gap-2.5 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-wrap">
+                  {ACCENTS.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setAccentId(c.id)}
+                      aria-label={c.label}
+                      aria-pressed={accentId === c.id}
+                      title={c.label}
+                      className={`shrink-0 w-8 h-8 rounded-full transition-transform ${accentId === c.id ? 'ring-2 ring-bone ring-offset-2 ring-offset-[rgb(var(--color-ink))] scale-105' : 'hover:scale-105'}`}
+                      style={{ background: c.hex, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.12)' }}
+                    />
+                  ))}
+                </div>
+              </section>
+            </div>
+
+            <div className="flex items-center gap-2.5 px-4 md:px-6 pt-3 md:pt-4 md:pb-6 border-t border-line" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={busy || (layout === 'photo' && !photo)}
+                className="h-12 px-5 rounded-full pro-track text-bone text-sm font-semibold flex items-center justify-center gap-2 hover:bg-bone/10 transition-colors disabled:opacity-50"
+              >
+                {didSave ? <Check size={18} className="text-viz-elev" /> : <Download size={18} />}
+                {didSave ? 'Saved' : 'Save'}
+              </button>
+              <button
+                type="button"
+                onClick={handleShare}
+                disabled={busy || (layout === 'photo' && !photo)}
+                className="flex-1 h-12 rounded-full bg-bone text-ink text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60"
+              >
+                {busy ? <><Loader2 size={18} className="animate-spin" /> Preparing…</> : <><Share2 size={18} /> Share</>}
+              </button>
+            </div>
           </div>
         </motion.div>
-      </div>
-    </AnimatePresence>
-    ),
+      </motion.div>
+    </AnimatePresence>,
     document.body,
   );
 }

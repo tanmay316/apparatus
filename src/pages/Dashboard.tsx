@@ -7,6 +7,7 @@ import { getPlan, getPlanDays } from '@/services/plans';
 import { getWorkoutsByDateRange } from '@/services/workouts';
 import { getFollowing, getFeed } from '@/services/social';
 import { calculateWorkoutCalories } from '@/lib/calories';
+import { effectiveStreak } from '@/lib/stats';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 
@@ -23,7 +24,7 @@ import type { PlanDay, Activity } from '@/types';
 // ─── Constants ───────────────────────────────────────────────
 
 const QUOTES = [
-  "Nobody sees the reps you did alone — your body will.",
+  "Nobody sees the reps you did alone, but your body will.",
   "Consistency beats intensity. Show up again tomorrow.",
   "The bar doesn't care how you feel. Grab it anyway.",
   "Every skill hold you've ever nailed started as a failed attempt.",
@@ -63,7 +64,7 @@ export function Dashboard() {
 
   // ─── Data ────────────────────────────────────────────────
   const xp = stats?.xp || 0;
-  const streak = stats?.currentStreak || 0;
+  const streak = effectiveStreak(stats);
   const totalWorkouts = stats?.totalWorkouts || 0;
   const totalHours = Math.round((stats?.totalDurationMin || 0) / 60);
   const badges = stats?.badges || [];
@@ -104,7 +105,7 @@ export function Dashboard() {
   recentWorkouts.forEach((workout: any) => {
     const rawExLogs = (workout.exercises || workout.details?.exerciseLogs || []) as any[];
     if (rawExLogs.length > 0) {
-      const dynamicCals = calculateWorkoutCalories(null, rawExLogs, workout.bodyweight || userWeight || 70, workout.durationMin);
+      const dynamicCals = calculateWorkoutCalories(rawExLogs, workout.bodyweight || userWeight, workout.durationMin);
       const savedCals = workout.calories || 0;
       totalCalories = totalCalories - savedCals + dynamicCals;
     }
@@ -188,7 +189,7 @@ export function Dashboard() {
 
     const workoutWeight = todayWorkout?.bodyweight || userWeight;
     const calculatedCalories = rawExLogs.length > 0
-      ? calculateWorkoutCalories(null, rawExLogs, workoutWeight || 70, todayWorkout?.durationMin)
+      ? calculateWorkoutCalories(rawExLogs, workoutWeight, todayWorkout?.durationMin)
       : todayWorkout?.calories || 0;
 
     setDashboardShareData({
@@ -241,11 +242,10 @@ export function Dashboard() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+    <div className="dx pro-scope max-w-6xl mx-auto sm:px-2 lg:px-0 pt-1 sm:pt-4">
       {/* Live Training Hub (Stories-style) */}
       <LiveTrainingHub />
 
-      {/* 1. Hero */}
       <HeroDashboard
         displayName={profile.displayName || 'Athlete'}
         streak={streak}
@@ -254,42 +254,49 @@ export function Dashboard() {
         targetDays={targetDays}
       />
 
-      {/* 2. Today's Focus */}
-      <TodayFocusCard
-        activePlan={activePlan}
-        activeDays={activeDays}
-        todayWorkouts={todayWorkouts}
-        currentDayIndex={currentDayIndex}
-        isActive={store.isActive}
-        sessionProgress={sessionProgress}
-      />
+      {/* Mobile: one column in reading order. Desktop: main column + sticky side rail. */}
+      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6 lg:[grid-template-areas:'focus_side''weekly_side''feed_side'] lg:[grid-template-rows:auto_auto_1fr]">
+        <div className="order-1 lg:[grid-area:focus]">
+          <TodayFocusCard
+            activePlan={activePlan}
+            activeDays={activeDays}
+            todayWorkouts={todayWorkouts}
+            currentDayIndex={currentDayIndex}
+            isActive={store.isActive}
+            sessionProgress={sessionProgress}
+          />
+        </div>
 
-      {/* 2.5 Daily Steps removed (moved to TodayFocusCard) */}
+        <aside className="contents lg:flex lg:flex-col lg:gap-5 lg:[grid-area:side] lg:sticky lg:top-4 lg:self-start">
+          <div className="order-2">
+            <StatsPills
+              totalWorkouts={totalWorkouts}
+              totalCalories={totalCalories}
+              totalHours={totalHours}
+            />
+          </div>
+          <div className="order-4">
+            <XPPanel xp={xp} streak={streak} badges={badges} />
+          </div>
+        </aside>
 
-      {/* 3. Compact Stats */}
-      <StatsPills
-        totalWorkouts={totalWorkouts}
-        totalCalories={totalCalories}
-        totalHours={totalHours}
-      />
+        <div className="order-3 lg:[grid-area:weekly] empty:hidden">
+          <WeeklyTimeline
+            activePlan={activePlan}
+            activeDays={activeDays}
+            todayWorkouts={todayWorkouts}
+            recentWorkouts={currentWeekWorkouts}
+            onShareDay={handleShareDay}
+            isActive={store.isActive}
+            sessionProgress={sessionProgress}
+            activeSessionDayId={store.dayId}
+          />
+        </div>
 
-      {/* 4. Weekly Timeline with Share Option */}
-      <WeeklyTimeline
-        activePlan={activePlan}
-        activeDays={activeDays}
-        todayWorkouts={todayWorkouts}
-        recentWorkouts={currentWeekWorkouts}
-        onShareDay={handleShareDay}
-        isActive={store.isActive}
-        sessionProgress={sessionProgress}
-        activeSessionDayId={store.dayId}
-      />
-
-      {/* 5. XP & Achievements */}
-      <XPPanel xp={xp} streak={streak} badges={badges} />
-
-      {/* 6. Activity Feed */}
-      <ActivityFeed activities={displayFeed} onShare={handleShareActivity} />
+        <div className="order-5 lg:[grid-area:feed]">
+          <ActivityFeed activities={displayFeed} onShare={handleShareActivity} />
+        </div>
+      </div>
 
       {/* Share modal */}
       {dashboardShareData && (

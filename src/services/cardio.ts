@@ -1,6 +1,9 @@
-import { collection, doc, setDoc, getDocs, deleteDoc, query, where, Timestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import type { CardioActivity, RoutePoint } from '@/types';
+import { collection, doc, getDocs, deleteDoc, query, where, Timestamp, runTransaction } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
+import type { CardioActivity, RoutePoint, UserStats } from '@/types';
+import { applySession, cardioDurationMin, localDateKey } from '@/lib/stats';
+import { isFollowing, visibilityForUser } from '@/services/social';
+import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@/services/stats';
 
 /**
  * Perpendicular distance from a point (x0, y0) to line segment (x1, y1)-(x2, y2) in lat/lng degrees.
@@ -78,7 +81,7 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
   const ref = doc(collection(db, 'cardioActivities'));
   const id = ref.id;
 
-  // Geometry-aware compression — keeps full fidelity for up to 1000 points
+  // Geometry-aware compression - keeps full fidelity for up to 1000 points
   const route = simplifyRoute(activity.route, 1000).map(pt => {
     const cleanPt: any = { ...pt };
     Object.keys(cleanPt).forEach(k => {
@@ -91,6 +94,7 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
     ...activity,
     id,
     route,
+    visibility: await visibilityForUser(userId, activity.visibility),
     startedAt: activity.startedAt || Timestamp.now(),
     finishedAt: activity.finishedAt || Timestamp.now(),
     createdAt: Timestamp.now(),
@@ -103,7 +107,23 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
     }
   });
 
-  await setDoc(ref, dataToSave);
+  const statsRef = doc(db, 'users', userId, 'stats', 'current');
+  const outcome = await runTransaction(db, async (transaction) => {
+    const statsDoc = await transaction.get(statsRef);
+    const result = applySession(statsDoc.data() as UserStats | undefined, {
+      kind: 'cardio',
+      dateKey: activity.date || localDateKey(),
+      calories: activity.calories || 0,
+      durationMin: cardioDurationMin(activity),
+      distanceKm: activity.distanceKm || 0,
+      cardioType: activity.type,
+    });
+    transaction.set(ref, dataToSave);
+    transaction.set(statsRef, result.stats);
+    return result;
+  });
+  notifyUnlockedBadges(userId, outcome.unlocked).catch(() => {});
+  syncAthleteRank(userId, outcome.stats).catch(() => {});
 
   // Auto-track challenge progress (fire-and-forget)
   try {
@@ -156,6 +176,20 @@ export const getUserCardioActivities = async (userId: string, count = 20): Promi
     .slice(0, count);
 };
 
+/** Cardio sessions of another user that the viewer is allowed to see. */
+export const getVisibleCardioActivitiesForUser = async (userId: string, viewerId?: string, count = 20): Promise<CardioActivity[]> => {
+  const coll = collection(db, 'cardioActivities');
+  const snaps = [await getDocs(query(coll, where('userId', '==', userId), where('visibility', '==', 'public')))];
+  if (viewerId && viewerId !== userId && await isFollowing(viewerId, userId)) {
+    snaps.push(await getDocs(query(coll, where('userId', '==', userId), where('visibility', '==', 'followers'))));
+  }
+  return snaps
+    .flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as CardioActivity)))
+    .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0))
+    .slice(0, count);
+};
+
 export const deleteCardioActivity = async (activityId: string): Promise<void> => {
   await deleteDoc(doc(db, 'cardioActivities', activityId));
+  scheduleStatsReconcile(auth.currentUser?.uid);
 };

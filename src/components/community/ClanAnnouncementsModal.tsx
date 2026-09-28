@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
+import { LiveUserAvatar, LiveUserName } from '@/components/ui/LiveUser';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getClanAnnouncements,
@@ -186,7 +187,7 @@ export function ClanAnnouncementsModal({
   return createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[650] flex flex-col justify-end sm:justify-center sm:items-center sm:p-4">
+        <div className="cx pro-scope fixed inset-0 z-[650] flex flex-col justify-end sm:justify-center sm:items-center sm:p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -387,15 +388,11 @@ export function ClanAnnouncementsModal({
                       <div className="flex items-start justify-between gap-3 mb-2.5">
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="w-8 h-8 rounded-full bg-ink-3 border border-line/30 flex items-center justify-center text-bone font-bold text-xs shrink-0 overflow-hidden">
-                            {ann.authorPhoto ? (
-                              <img src={ann.authorPhoto} alt={ann.authorName} className="w-full h-full object-cover" />
-                            ) : (
-                              ann.authorName?.charAt(0)?.toUpperCase() || 'L'
-                            )}
+                            <LiveUserAvatar userId={ann.authorId} fallbackName={ann.authorName} fallbackPhoto={ann.authorPhoto} className="w-full h-full object-cover" />
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-xs text-bone truncate">{ann.authorName}</span>
+                              <LiveUserName userId={ann.authorId} fallbackName={ann.authorName} className="font-bold text-xs text-bone truncate" />
                               <span className={`text-[9px] font-mono font-bold uppercase px-1.5 py-0.2 rounded border ${
                                 isAdminAuthor
                                   ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'

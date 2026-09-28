@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Capacitor } from '@capacitor/core';
 import { ChevronLeft, Shield, Megaphone, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -52,11 +53,13 @@ export function ClanChatPage() {
   const isMember = !!myMembership || isAdmin;
   const canManage = isLeader || isCoLeader || isAdmin;
 
-  // Mark discussion as read when entering the chat page
+  // Mark discussion as read when entering AND leaving the chat page, so messages
+  // that arrived while the chat was open don't show up as unread afterwards.
   useEffect(() => {
-    if (clanId) {
-      localStorage.setItem(`lastReadChat_${clanId}`, Date.now().toString());
-    }
+    if (!clanId) return;
+    const markRead = () => localStorage.setItem(`lastReadChat_${clanId}`, Date.now().toString());
+    markRead();
+    return markRead;
   }, [clanId]);
 
   const joinMutation = useMutation({
@@ -78,98 +81,98 @@ export function ClanChatPage() {
     navigate(`/clan/${clanId}`);
   };
 
+  // Private / closed clans must go through the request flow on the clan page.
+  const handleJoin = () => {
+    const isPublic = !clan?.visibility || clan.visibility === 'public';
+    if (isPublic || isAdmin) joinMutation.mutate();
+    else navigate(`/clan/${clanId}`);
+  };
+
+  const headerTopPadding = Capacitor.getPlatform() === 'android' ? '0px' : 'env(safe-area-inset-top, 0px)';
+
   if (loadingClan) {
     return (
-      <div className="fixed inset-0 bg-ink flex flex-col items-center justify-center text-bone font-mono gap-3 z-50">
-        <Loader2 size={28} className="animate-spin text-sienna" />
-        <span>Loading clan discussion...</span>
+      <div className="cx pro-scope fixed inset-0 bg-ink flex items-center justify-center text-bone-dim z-50">
+        <Loader2 size={24} className="animate-spin" />
       </div>
     );
   }
 
   if (!clan) {
     return (
-      <div className="fixed inset-0 bg-ink flex flex-col items-center justify-center text-bone font-mono p-6 text-center z-50">
-        <Shield size={40} className="text-sienna mb-3 opacity-60" />
-        <h2 className="font-display text-xl mb-1">Clan Not Found</h2>
-        <p className="text-xs text-bone-dim mb-4">This clan may have been deleted or does not exist.</p>
-        <button onClick={() => navigate('/community')} className="btn-secondary py-2 px-4">
-          Return to Community
+      <div className="cx pro-scope fixed inset-0 bg-ink flex flex-col items-center justify-center p-6 text-center z-50">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-line bg-ink-2 text-bone-dim">
+          <Shield size={22} />
+        </div>
+        <h2 className="text-base font-semibold text-bone">Clan not found</h2>
+        <p className="mt-1.5 text-sm text-bone-dim mb-5">This clan may have been deleted or does not exist.</p>
+        <button type="button" onClick={() => navigate('/community')} className="cx-btn cx-btn-ghost">
+          Back to Community
         </button>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 w-full h-full bg-ink flex flex-col overflow-hidden select-none z-30">
-      {/* ─── WHATSAPP-STYLE GROUP CHAT HEADER ─── */}
-      <header className="h-14 shrink-0 bg-ink-2/95 backdrop-blur-md border-b border-line/30 px-2 sm:px-4 flex items-center justify-between z-30 shadow-sm">
-        {/* Left: Back button + Clan Avatar + Name & Subtitle */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
+    <div className="cx pro-scope fixed inset-0 w-full h-full bg-ink flex flex-col overflow-hidden select-none z-30">
+      <header
+        className="shrink-0 bg-ink/95 backdrop-blur-xl border-b border-line z-30"
+        style={{ paddingTop: headerTopPadding }}
+      >
+        <div className="h-14 px-2 sm:px-4 flex items-center gap-2">
           <button
+            type="button"
             onClick={handleBack}
-            className="p-1.5 -ml-1 rounded-full hover:bg-ink-3 text-bone transition-colors shrink-0"
-            title="Back to Clan"
-            aria-label="Back to Clan"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-bone hover:bg-ink-2 transition-colors shrink-0 !shadow-none"
+            aria-label="Back to clan"
           >
-            <ChevronLeft size={24} />
+            <ChevronLeft size={22} />
           </button>
 
-          {/* Clan Photo (Opens Clan Info Popup) */}
-          <div
-            onClick={() => setClanInfoOpen(true)}
-            className="w-9 h-9 rounded-full bg-ink-3 border border-line/30 overflow-hidden shrink-0 cursor-pointer hover:opacity-85 active:scale-95 transition-all flex items-center justify-center text-sienna font-bold text-sm shadow-inner"
-            title="View Clan Info & Members"
-          >
-            {clan.coverUrl ? (
-              <img src={clan.coverUrl} alt={clan.name} className="w-full h-full object-cover" />
-            ) : (
-              <Shield size={18} />
-            )}
-          </div>
-
-          {/* Clan Name & Member Count (Opens Clan Info Popup) */}
-          <div
-            onClick={() => setClanInfoOpen(true)}
-            className="min-w-0 flex-1 cursor-pointer group py-1"
-            title="View Clan Info & Members"
-          >
-            <h1 className="font-bold text-sm text-bone truncate leading-tight group-hover:text-sienna transition-colors">
-              {clan.name}
-            </h1>
-            <p className="text-[11px] font-mono text-bone-dim truncate leading-tight flex items-center gap-1.5 mt-0.5">
-              <span>{clan.memberCount || members.length} members</span>
-              <span className="opacity-40">•</span>
-              <span className="text-sienna/80 group-hover:text-sienna font-medium transition-colors">tap for info</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Right Actions */}
-        <div className="flex items-center gap-1 shrink-0">
-          {/* Announcements Icon */}
           <button
+            type="button"
+            onClick={() => setClanInfoOpen(true)}
+            className="min-w-0 flex-1 flex items-center gap-3 rounded-xl px-1 py-1 text-left hover:bg-ink-2 transition-colors !shadow-none"
+            aria-label="View clan info and members"
+          >
+            <span className="w-9 h-9 rounded-full bg-ink-3 border border-line overflow-hidden shrink-0 flex items-center justify-center text-bone-dim">
+              {clan.coverUrl ? (
+                <img src={clan.coverUrl} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <Shield size={16} />
+              )}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] font-semibold text-bone truncate leading-tight">{clan.name}</span>
+              <span className="block text-xs text-bone-dim truncate leading-tight mt-0.5">
+                {clan.memberCount || members.length} members · Tap for info
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setAnnouncementsOpen(true)}
-            className="relative p-2 rounded-full hover:bg-ink-3 text-bone-dim hover:text-amber-400 transition-colors"
-            title="Clan Announcements"
-            aria-label="Clan Announcements"
+            className="relative inline-flex h-10 w-10 items-center justify-center rounded-xl text-bone-dim hover:text-bone hover:bg-ink-2 transition-colors shrink-0 !shadow-none"
+            aria-label="Announcements"
           >
             <Megaphone size={18} />
             {announcements.length > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-ink animate-pulse" />
+              <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-ink" />
             )}
           </button>
         </div>
       </header>
 
-      {/* ─── FULL-SCREEN CHAT CONTAINER ─── */}
-      <main className="flex-1 min-h-0 flex flex-col relative overflow-hidden bg-ink">
+      <main className="flex-1 min-h-0 flex flex-col relative overflow-hidden">
         <ClanDiscussionTab
           clanId={clanId!}
           clanName={clan.name}
           isMember={isMember}
           userRole={myMembership?.role}
-          onJoinClan={() => joinMutation.mutate()}
+          onJoinClan={handleJoin}
+          joinLabel={!clan.visibility || clan.visibility === 'public' || isAdmin ? 'Join clan' : 'View clan'}
+          isJoining={joinMutation.isPending}
           className="h-full"
         />
       </main>
@@ -191,6 +194,7 @@ export function ClanChatPage() {
           clanId={clanId!}
           clanName={clan.name}
           canManage={canManage}
+          userRole={myMembership?.role}
           isOpen={announcementsOpen}
           onClose={() => setAnnouncementsOpen(false)}
         />

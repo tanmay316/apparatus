@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAllCommunityChallenges, deleteChallenge } from '@/services/community';
-import { Target, Users, Flame, Edit3, Trash2, Trophy, Sparkles, Shield, TrendingUp, Plus } from 'lucide-react';
+import { Target, Users, Edit3, Trash2, Trophy, Shield, TrendingUp, CalendarDays, ArrowRight } from 'lucide-react';
 import { useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { ChallengeDetailSheet } from './ChallengeDetailSheet';
@@ -12,36 +12,10 @@ import { useUIStore } from '@/stores/ui-store';
 import { ChallengeV2 } from '@/types';
 import { CreateChallengeSheet } from './CreateChallengeSheet';
 import { CreatePersonalChallengeSheet } from './CreatePersonalChallengeSheet';
-
-function getCountdownLabel(startMs: number, endMs: number) {
-  const now = Date.now();
-  if (now < startMs) {
-    const diff = startMs - now;
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-    const mins = Math.floor((diff / (1000 * 60)) % 60);
-    return {
-      type: 'upcoming' as const,
-      text: days > 0 ? `Starts in ${days}d ${hours}h` : `Starts in ${hours}h ${mins}m`,
-      color: 'badge-countdown-upcoming'
-    };
-  } else if (endMs && now <= endMs) {
-    const diff = endMs - now;
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-    const mins = Math.floor((diff / (1000 * 60)) % 60);
-    return {
-      type: 'ongoing' as const,
-      text: days > 0 ? `Ends in ${days}d ${hours}h` : `Ends in ${hours}h ${mins}m`,
-      color: 'text-emerald-500 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
-    };
-  }
-  return {
-    type: 'ended' as const,
-    text: 'Concluded',
-    color: 'bg-red-500/10 text-red-500 border border-red-500/30 px-2 py-0.5 rounded font-black uppercase tracking-widest shadow-sm'
-  };
-}
+import {
+  CardAction, CardSkeleton, ChampionRow, EmptyState, Eyebrow, FilterChips, MetaItem, StatusPill,
+  formatDateRange, getScheduleStatus, isScheduleActive, isScheduleEnded, isScheduleUpcoming, toMillis,
+} from './ui';
 
 export function ChallengesTab() {
   const [filter, setFilter] = useState<'all' | 'active' | 'upcoming' | 'concluded' | 'personal'>('all');
@@ -77,6 +51,9 @@ export function ChallengesTab() {
         queryClient.invalidateQueries({ queryKey: ['clanChallenges'] });
         showToast('Challenge deleted');
       }
+    },
+    onError: (err: any) => {
+      showToast(err?.message || 'Could not delete challenge', 'error');
     }
   });
 
@@ -86,251 +63,181 @@ export function ChallengesTab() {
   });
 
   const filteredChallenges = challenges.filter(c => {
-    const now = Date.now();
-    const startMs = c.startDate?.toMillis ? c.startDate.toMillis() : 0;
-    const endMs = c.endDate?.toMillis ? c.endDate.toMillis() : 0;
-    if (filter === 'upcoming') return now < startMs;
-    if (filter === 'active') return now >= startMs && (endMs ? now <= endMs : true);
-    if (filter === 'concluded') return endMs ? now > endMs : false;
+    const startMs = toMillis(c.startDate);
+    const endMs = toMillis(c.endDate);
+    if (filter === 'upcoming') return isScheduleUpcoming(startMs);
+    if (filter === 'active') return isScheduleActive(startMs, endMs, true);
+    if (filter === 'concluded') return isScheduleEnded(startMs, endMs, true);
     if (filter === 'personal') return c.challengeType === 'personal';
     return true;
   });
 
   // Featured challenge must never be a concluded challenge, and hidden in concluded tab
-  const featured = filter === 'concluded' ? null : filteredChallenges.find(c => {
-    const endMs = c.endDate?.toMillis ? c.endDate.toMillis() : 0;
-    return !endMs || Date.now() <= endMs;
-  });
+  const featured = filter === 'concluded' ? null : filteredChallenges.find(c =>
+    !isScheduleEnded(toMillis(c.startDate), toMillis(c.endDate), true)
+  );
+
+  const canManage = (c: ChallengeV2) => isAdmin || user?.uid === c.createdBy;
+  const renderManage = (c: ChallengeV2, onMedia = false) => canManage(c) ? (
+    <div className="flex items-center gap-1 shrink-0" onClick={ev => ev.stopPropagation()}>
+      <CardAction icon={Edit3} label="Edit challenge" onMedia={onMedia} onClick={() => setEditingChallenge(c)} />
+      <CardAction icon={Trash2} label="Delete challenge" onMedia={onMedia} danger onClick={() => deleteChallengeMutation.mutate(c.id!)} />
+    </div>
+  ) : null;
+
+  const open = (id?: string) => id && setSelectedChallengeId(id);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Filter Tabs */}
-      <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {(['all', 'active', 'upcoming', 'concluded', 'personal'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-full text-xs font-mono uppercase tracking-wider transition-colors whitespace-nowrap ${
-              filter === f ? 'bg-ink text-bone font-bold shadow-sm border border-line/40' : 'bg-ink-2 text-bone-dim hover:bg-ink-3'
-            }`}
-          >
-            {f === 'all' ? 'All' : f === 'personal' ? 'Personal' : f}
-          </button>
-        ))}
-      </div>
+      <FilterChips
+        value={filter}
+        onChange={setFilter}
+        options={[
+          { value: 'all', label: 'All' },
+          { value: 'active', label: 'Active' },
+          { value: 'upcoming', label: 'Upcoming' },
+          { value: 'concluded', label: 'Concluded' },
+          { value: 'personal', label: 'Personal' },
+        ]}
+      />
 
-      {/* Featured Challenge Banner (if available) */}
-      {featured && (
-        <div 
-          onClick={() => setSelectedChallengeId(featured.id!)}
-          className="relative overflow-hidden rounded-[32px] bg-ink-2 border border-line p-6 sm:p-8 cursor-pointer hover:border-emerald-500/50 transition-all shadow-xl group"
-        >
-          <div className="absolute inset-0 opacity-50 dark:opacity-40 group-hover:opacity-60 dark:group-hover:opacity-50 transition-opacity">
-            <img src={featured.coverUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1000&auto=format&fit=crop'} alt={featured.title} className="w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/60 to-transparent" />
-          </div>
-
-          <div className="relative z-10">
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-500 dark:text-emerald-400 px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider border border-emerald-500/30">
-                  <Flame size={14} /> Featured Challenge
-                </span>
-                {featured.visibility === 'clan_only' && (
-                  <span className="inline-flex items-center gap-1 bg-ink text-sienna px-2.5 py-1 rounded-full text-[10px] font-mono font-bold uppercase border border-sienna/30">
-                    <Shield size={11} /> Clan Only
-                  </span>
-                )}
+      {/* Featured */}
+      {featured && (() => {
+        const s = toMillis(featured.startDate);
+        const e = toMillis(featured.endDate);
+        const goal = formatChallengeGoal(featured.target, featured.unit, featured.metric);
+        return (
+          <section aria-label="Featured challenge">
+            <Eyebrow className="mb-2">Featured</Eyebrow>
+            <div
+              role="link"
+              tabIndex={0}
+              onClick={() => open(featured.id)}
+              onKeyDown={ev => { if (ev.key === 'Enter') open(featured.id); }}
+              className="cx-card cx-card-interactive overflow-hidden cursor-pointer group"
+            >
+              <div className="relative h-44 sm:h-56 bg-ink-3">
+                <img
+                  src={featured.coverUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1000&auto=format&fit=crop'}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-700"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
+                <div className="absolute top-3 left-3 flex flex-wrap gap-2">
+                  <StatusPill status={getScheduleStatus(s, e, true)} onMedia />
+                  {featured.visibility === 'clan_only' && (
+                    <span className="cx-status cx-status-on-media"><Shield size={11} /> Clan only</span>
+                  )}
+                </div>
+                <div className="absolute top-3 right-3">{renderManage(featured, true)}</div>
+                <h2 className="absolute bottom-3 left-4 right-4 text-white text-xl sm:text-2xl font-semibold leading-tight line-clamp-2">
+                  {featured.title}
+                </h2>
               </div>
 
-              {(isAdmin || user?.uid === featured.createdBy) && (
-                <div className="flex items-center gap-2 z-20" onClick={e => e.stopPropagation()}>
-                  <button 
-                    onClick={() => setEditingChallenge(featured)}
-                    className="p-1.5 rounded-lg bg-ink/60 hover:bg-ink text-bone-dim hover:text-bone transition-colors"
-                    title="Edit Challenge"
-                  >
-                    <Edit3 size={15} />
-                  </button>
-                  <button 
-                    onClick={() => deleteChallengeMutation.mutate(featured.id!)}
-                    className="p-1.5 rounded-lg bg-ink/60 hover:bg-red-500/20 text-bone-dim hover:text-red-400 transition-colors"
-                    title="Delete Challenge"
-                  >
-                    <Trash2 size={15} />
-                  </button>
+              <div className="p-4 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div className="min-w-0 space-y-2.5">
+                  <p className="text-sm text-bone-dim line-clamp-2 leading-relaxed">
+                    {featured.description || 'Push your limits and climb the leaderboard in this community challenge.'}
+                  </p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {goal && <MetaItem icon={TrendingUp}>Goal: {goal}</MetaItem>}
+                    <MetaItem icon={Users}>{featured.participantCount || 0} participants</MetaItem>
+                    <MetaItem icon={CalendarDays}>{formatDateRange(s, e)}</MetaItem>
+                    {featured.prize && <MetaItem icon={Trophy}>{featured.prize}</MetaItem>}
+                  </div>
                 </div>
-              )}
-            </div>
-
-            <h2 className="font-display text-3xl sm:text-4xl text-bone mb-2">{featured.title}</h2>
-            <p className="text-bone-dim max-w-2xl mb-4 line-clamp-2 text-sm leading-relaxed">
-              {featured.description || 'Push your limits and climb the leaderboard in this community challenge.'}
-            </p>
-
-            <div className="flex flex-wrap items-center gap-3 text-xs font-mono mb-6">
-              {(() => {
-                const s = featured.startDate?.toMillis ? featured.startDate.toMillis() : 0;
-                const e = featured.endDate?.toMillis ? featured.endDate.toMillis() : 0;
-                const cd = getCountdownLabel(s, e);
-                return (
-                  <span className={`px-3 py-1 rounded-full font-bold border flex items-center gap-1.5 ${cd.color}`}>
-                    <Sparkles size={12} /> {cd.text}
-                  </span>
-                );
-              })()}
-
-              <span className="text-bone-dim flex items-center gap-1.5">
-                <Users size={13} className="text-emerald-400" /> {featured.participantCount || 0} Participants
-              </span>
-
-              {formatChallengeGoal(featured.target, featured.unit, featured.metric) && (
-                <span className="text-bone-dim flex items-center gap-1.5">
-                  <TrendingUp size={13} className="text-emerald-400" /> Goal: {formatChallengeGoal(featured.target, featured.unit, featured.metric)}
+                <span className="cx-btn bg-sienna shrink-0 self-start sm:self-auto">
+                  View leaderboard <ArrowRight size={16} />
                 </span>
-              )}
-
-              {featured.prize && (
-                <span className="badge-prize font-bold flex items-center gap-1.5 px-3 py-1 rounded-full">
-                  <Trophy size={13} className="shrink-0" /> {featured.prize}
-                </span>
-              )}
+              </div>
             </div>
-            
-            <button className="btn-primary px-7 py-2.5 font-bold shadow-[0_0_20px_rgba(205,111,72,0.3)]">
-              Join & View Leaderboard
-            </button>
-          </div>
-        </div>
-      )}
+          </section>
+        );
+      })()}
 
       {/* Grid of Challenges */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-display text-xl text-bone flex items-center gap-2">
-            <Target size={20} className="text-emerald-500" />
-            Fitness Challenges ({filteredChallenges.length})
+      <section>
+        <div className="flex items-baseline justify-between mb-3">
+          <h3 className="text-base font-semibold text-bone">
+            {filter === 'all' ? 'All challenges' : filter === 'personal' ? 'Personal challenges' : `${filter[0].toUpperCase()}${filter.slice(1)} challenges`}
           </h3>
-
+          <span className="text-xs text-bone-dim tabular-nums">{filteredChallenges.length} {filteredChallenges.length === 1 ? 'challenge' : 'challenges'}</span>
         </div>
 
         {loadingChallenges ? (
-          <div className="text-bone-dim text-sm font-mono py-12 text-center">Loading challenges...</div>
+          <CardSkeleton />
         ) : filteredChallenges.length === 0 ? (
-          <div className="text-bone-dim text-sm font-mono py-12 text-center bg-ink-2 rounded-[28px] border border-dashed border-line">
-            No challenges found in this category.
-          </div>
+          <EmptyState
+            compact
+            icon={Target}
+            title="No challenges here yet"
+            description={filter === 'all' ? 'Community challenges will show up here once they are created.' : 'Nothing matches this filter right now.'}
+          />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredChallenges.map(c => {
-              const s = c.startDate?.toMillis ? c.startDate.toMillis() : 0;
-              const e = c.endDate?.toMillis ? c.endDate.toMillis() : 0;
-              const cd = getCountdownLabel(s, e);
+              const s = toMillis(c.startDate);
+              const e = toMillis(c.endDate);
               const goalText = formatChallengeGoal(c.target, c.unit, c.metric);
 
               return (
-                <div 
-                  key={c.id} 
-                  onClick={() => setSelectedChallengeId(c.id!)}
-                  className="card p-5 flex flex-col justify-between group cursor-pointer hover:border-emerald-500/50 transition-all space-y-4"
+                <div
+                  key={c.id}
+                  role="link"
+                  tabIndex={0}
+                  onClick={() => open(c.id)}
+                  onKeyDown={ev => { if (ev.key === 'Enter') open(c.id); }}
+                  className="cx-card cx-card-interactive p-4 flex flex-col gap-3 cursor-pointer"
                 >
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shrink-0 border border-emerald-500/20">
-                          <Target size={24} />
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="font-display text-lg text-bone group-hover:text-emerald-400 transition-colors truncate">{c.title}</h4>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] font-mono text-bone-dim uppercase">{c.metric}</span>
-                            {c.visibility === 'clan_only' && (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono uppercase bg-sienna/20 text-sienna px-1.5 py-0.5 rounded border border-sienna/30 shrink-0">
-                                <Shield size={9} /> Clan
-                              </span>
-                            )}
-                            {c.challengeType === 'personal' && (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono uppercase bg-violet-500/15 text-violet-400 px-1.5 py-0.5 rounded border border-violet-500/30 shrink-0">
-                                Personal
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end gap-2 shrink-0">
-                        <span className={`text-[9px] sm:text-[10px] whitespace-nowrap ${cd.color}`}>
-                          {cd.text}
-                        </span>
-                        {(isAdmin || user?.uid === c.createdBy) && (
-                          <div className="flex items-center gap-1" onClick={ev => ev.stopPropagation()}>
-                            <button 
-                              onClick={() => setEditingChallenge(c)}
-                              className="p-1.5 rounded-lg hover:bg-ink-3 text-bone-dim hover:text-bone transition-colors"
-                              title="Edit Challenge"
-                            >
-                              <Edit3 size={14} />
-                            </button>
-                            <button 
-                              onClick={() => deleteChallengeMutation.mutate(c.id!)}
-                              className="p-1.5 rounded-lg hover:bg-red-500/20 text-bone-dim hover:text-red-400 transition-colors"
-                              title="Delete Challenge"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                  <div className="flex items-start gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-ink-2 border border-line text-sienna flex items-center justify-center shrink-0">
+                      <Target size={22} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="text-[15px] font-semibold text-bone leading-snug line-clamp-2">{c.title}</h4>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-bone-dim">
+                        <span className="capitalize">{c.metric}</span>
+                        {c.visibility === 'clan_only' && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span className="inline-flex items-center gap-1 text-sienna"><Shield size={11} /> Clan only</span>
+                          </>
+                        )}
+                        {c.challengeType === 'personal' && (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span>Personal</span>
+                          </>
                         )}
                       </div>
                     </div>
-
-                    <p className="text-xs text-bone-dim line-clamp-2 leading-relaxed">{c.description}</p>
+                    {renderManage(c)}
                   </div>
 
-                  <div className="space-y-2 pt-2 border-t border-line/20">
-                    {c.topWinner && (
-                      <div className="mt-1 p-2.5 rounded-xl bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700/50 flex items-center justify-between gap-2 shadow-sm">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-300 text-black font-black text-[10px] flex items-center justify-center shrink-0 shadow-sm">
-                            🥇
-                          </div>
-                          <div className="min-w-0 truncate">
-                            <span className="text-[10px] font-mono uppercase text-amber-900 dark:text-amber-400 font-black mr-1">Champion:</span>
-                            <span className="text-xs font-bold text-foreground truncate">{c.topWinner.userName}</span>
-                          </div>
-                        </div>
-                        {c.topWinner.customResult && (
-                          <span className="text-[10px] font-mono text-foreground font-bold shrink-0">{c.topWinner.customResult}</span>
-                        )}
-                      </div>
-                    )}
+                  {c.description && (
+                    <p className="text-sm text-bone-dim line-clamp-2 leading-relaxed">{c.description}</p>
+                  )}
 
-                    {c.prize && (
-                      <div className="badge-prize inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono font-bold truncate">
-                        <Trophy size={11} className="shrink-0" />
-                        <span className="truncate">{c.prize}</span>
-                      </div>
-                    )}
-                    
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono text-bone-dim">
-                      <span className="flex items-center gap-1">
-                        <Users size={11} className="text-emerald-400" /> {c.participantCount || 0} Athletes
-                      </span>
+                  {c.topWinner && <ChampionRow name={c.topWinner.userName} result={c.topWinner.customResult} />}
+
+                  {(goalText || c.prize) && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                      {goalText && <MetaItem icon={TrendingUp}>Goal: <span className="font-semibold text-bone">{goalText}</span></MetaItem>}
+                      {c.prize && <MetaItem icon={Trophy}>{c.prize}</MetaItem>}
                     </div>
+                  )}
 
-                    {goalText && (
-                      <div className="text-[11px] font-mono text-bone-dim">
-                        Goal: <span className="font-bold text-bone">{goalText}</span>
-                      </div>
-                    )}
-
-
+                  <div className="mt-auto pt-3 border-t border-line flex items-center justify-between gap-2">
+                    <StatusPill status={getScheduleStatus(s, e, true)} />
+                    <MetaItem icon={Users}>{c.participantCount || 0} {c.participantCount === 1 ? 'athlete' : 'athletes'}</MetaItem>
                   </div>
                 </div>
               );
             })}
           </div>
         )}
-      </div>
+      </section>
 
       <AnimatePresence>
         {selectedChallengeId && (

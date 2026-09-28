@@ -22,11 +22,11 @@ class RecipeGenerateRequest(BaseModel):
     cuisine: Optional[str] = Field(None, max_length=60)
 
 class MealPlanRequest(BaseModel):
-    plan_type: str = "daily"  # daily, weekly
+    plan_type: str = Field("daily", max_length=10)  # daily, weekly
 
 class ManualLogRequest(BaseModel):
-    meal_type: str = "snack"
-    items: List[dict] = []  # [{"name": "chicken", "weight_grams": 150}]
+    meal_type: str = Field("snack", max_length=20)
+    items: List[dict] = Field(default_factory=list, max_length=50)  # [{"name": "chicken", "weight_grams": 150}]
 
 
 # ─── Responses ────────────────────────────────────────────
