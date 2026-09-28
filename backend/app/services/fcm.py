@@ -1,6 +1,7 @@
 import re
 import time
 import threading
+from datetime import datetime
 from app.core.firebase import get_firestore_client, get_messaging_client
 
 # Keep track of when the server started to avoid sending notifications for old messages
@@ -18,6 +19,47 @@ def _clip(value, limit: int) -> str:
     return str(value or "")[:limit]
 
 
+def _parse_timestamp(val) -> float | None:
+    if val is None:
+        return None
+    # 1. Datetime object or Google DatetimeWithNanoseconds
+    if hasattr(val, "timestamp") and callable(val.timestamp):
+        try:
+            return float(val.timestamp())
+        except Exception:
+            pass
+    # 2. Firestore map/dict representation (e.g. {'_seconds': 123, '_nanoseconds': 0})
+    if isinstance(val, dict):
+        sec = val.get("seconds")
+        if sec is None:
+            sec = val.get("_seconds")
+        if sec is not None:
+            try:
+                nanos = val.get("nanoseconds") or val.get("_nanoseconds") or 0
+                return float(sec) + (float(nanos) / 1e9)
+            except Exception:
+                pass
+        millis = val.get("toMillis") or val.get("_millis")
+        if millis is not None:
+            try:
+                return float(millis) / 1000.0
+            except Exception:
+                pass
+    # 3. Numeric timestamp (seconds or milliseconds)
+    if isinstance(val, (int, float)):
+        return float(val) / 1000.0 if val > 1e11 else float(val)
+    # 4. ISO formatted string
+    if isinstance(val, str):
+        try:
+            s = val.strip()
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            return datetime.fromisoformat(s).timestamp()
+        except Exception:
+            pass
+    return None
+
+
 def _sender_display_name(sender_id) -> str:
     """Look the sender up instead of trusting the senderName field on the doc."""
     if not isinstance(sender_id, str) or not sender_id:
@@ -31,18 +73,18 @@ def _sender_display_name(sender_id) -> str:
     except Exception:
         return ""
 
-def process_notification(doc_data, doc_id, is_app_notification=False):
+def process_notification(doc_data, doc_id, is_app_notification=False, is_initial_load=False):
     # Check if the notification was created before the server started
     created_at = doc_data.get("createdAt")
-    if created_at:
-        try:
-            # Firestore timestamps
-            created_time = created_at.timestamp()
-            # If the notification was created before the server booted (minus a 30s buffer), ignore it
-            if created_time < (server_start_time - 30):
-                return
-        except Exception as e:
-            print(f"Error parsing timestamp for {doc_id}: {e}")
+    created_time = _parse_timestamp(created_at)
+
+    if created_time is not None:
+        # If the notification was created before the server booted (minus a 30s buffer), ignore it
+        if created_time < (server_start_time - 30):
+            return
+    elif is_initial_load:
+        # On initial snapshot replay, if we cannot verify it is recent, do not send push
+        return
 
     receiver_id = doc_data.get("userId") if is_app_notification else doc_data.get("receiverId")
     if not receiver_id:
@@ -167,12 +209,12 @@ def on_snapshot_factory(is_app_notification):
             is_initial = False
             # Still process the initial snapshot but `process_notification` will filter out old ones
             for doc in col_snapshot:
-                process_notification(doc.to_dict(), doc.id, is_app_notification)
+                process_notification(doc.to_dict(), doc.id, is_app_notification, is_initial_load=True)
             return
 
         for change in changes:
             if change.type.name == 'ADDED':
-                process_notification(change.document.to_dict(), change.document.id, is_app_notification)
+                process_notification(change.document.to_dict(), change.document.id, is_app_notification, is_initial_load=False)
 
     return on_snapshot
 
