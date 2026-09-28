@@ -1,4 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
+import { readFileSync } from 'fs';
+
+// OTA bundles are tied to this native version, so a new APK never boots an older downloaded web bundle.
+const nativeVersion: string = JSON.parse(readFileSync('package.json', 'utf8')).nativeVersion;
 
 const config: CapacitorConfig = {
   appId: 'com.tms.apparatus',
@@ -6,7 +10,8 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   plugins: {
     OtaKit: {
-      appId: "a7c5429c-6e01-44bf-804c-24d3e8cb2441"
+      appId: "a7c5429c-6e01-44bf-804c-24d3e8cb2441",
+      runtimeVersion: nativeVersion
     },
     SplashScreen: {
       launchAutoHide: false,

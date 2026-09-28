@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, writeBatch, increment } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, writeBatch, increment, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Plan, PlanDay, Exercise } from '@/types';
 
@@ -143,6 +143,12 @@ export async function deletePlanDay(planId: string, dayId: string): Promise<void
 }
 
 // ─── Sample Plans ───────────────────────────────────────────────
+
+/** Community plans that owners have published. */
+export async function getPublicPlans(max = 100): Promise<Plan[]> {
+  const snap = await getDocs(query(collection(db, 'plans'), where('isPublic', '==', true), limit(max)));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Plan)).filter(p => !p.isArchived);
+}
 
 /** Get all sample plans (for exploration) */
 export async function getSamplePlans(): Promise<Plan[]> {

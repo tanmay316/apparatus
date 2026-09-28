@@ -1,7 +1,10 @@
-import { collection, doc, getDocs, deleteDoc, query, where, Timestamp, runTransaction } from 'firebase/firestore';
+import { collection, doc, getDocs, deleteDoc, query, where, Timestamp, runTransaction, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { CardioActivity, RoutePoint, UserStats } from '@/types';
 import { applySession, cardioDurationMin, localDateKey } from '@/lib/stats';
+import { cardioMetrics } from '@/lib/performance';
+import { getLiveSteps } from '@/lib/cardio-steps';
+import { scheduleInactivityReminders } from '@/utils/notifications';
 import { isFollowing, visibilityForUser } from '@/services/social';
 import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@/services/stats';
 
@@ -117,6 +120,7 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
       durationMin: cardioDurationMin(activity),
       distanceKm: activity.distanceKm || 0,
       cardioType: activity.type,
+      metrics: cardioMetrics(activity),
     });
     transaction.set(ref, dataToSave);
     transaction.set(statsRef, result.stats);
@@ -124,6 +128,8 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
   });
   notifyUnlockedBadges(userId, outcome.unlocked).catch(() => {});
   syncAthleteRank(userId, outcome.stats).catch(() => {});
+  scheduleInactivityReminders().catch(() => {});
+  notifyStepGoal(userId, activity).catch(() => {});
 
   // Auto-track challenge progress (fire-and-forget)
   try {
@@ -158,6 +164,41 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
   return id;
 };
 
+export const DEFAULT_STEP_GOAL = 10000;
+
+/** Steps from a walk or run: pedometer count when recorded, otherwise a stride estimate. */
+export function activitySteps(activity: Pick<CardioActivity, 'type' | 'distanceKm' | 'steps'>): number {
+  if (activity.steps && activity.steps > 0) return activity.steps;
+  return getLiveSteps(activity.type, activity.distanceKm || 0, { isSessionActive: false, sessionSteps: 0, stepSource: 'none' }) || 0;
+}
+
+export const getStepsForDate = async (userId: string, dateKey: string): Promise<number> => {
+  const snap = await getDocs(query(
+    collection(db, 'cardioActivities'),
+    where('userId', '==', userId),
+    where('date', '==', dateKey),
+  ));
+  return snap.docs.reduce((sum, d) => sum + activitySteps(d.data() as CardioActivity), 0);
+};
+
+/** Posts one notification the first time today's tracked steps pass the daily goal. */
+async function notifyStepGoal(userId: string, activity: Omit<CardioActivity, 'id'>) {
+  const added = activitySteps(activity);
+  if (!added) return;
+  const { useAuthStore } = await import('@/stores/auth-store');
+  const goal = useAuthStore.getState().profile?.stepGoal || DEFAULT_STEP_GOAL;
+  const dateKey = activity.date || localDateKey();
+  const total = await getStepsForDate(userId, dateKey);
+  if (total < goal || total - added >= goal) return;
+  const { createSelfNotification } = await import('@/services/social');
+  await createSelfNotification(
+    userId,
+    `Daily step goal reached: ${total.toLocaleString()} of ${goal.toLocaleString()} steps (${Math.round((total / goal) * 100)}%).`,
+    '',
+    { kind: 'steps', link: '/cardio' },
+  );
+}
+
 export const getUserCardioActivities = async (userId: string, count = 20): Promise<CardioActivity[]> => {
   const q = query(
     collection(db, 'cardioActivities'),
@@ -187,6 +228,10 @@ export const getVisibleCardioActivitiesForUser = async (userId: string, viewerId
     .flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as CardioActivity)))
     .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0))
     .slice(0, count);
+};
+
+export const updateCardioActivityNotes = async (activityId: string, notes: string): Promise<void> => {
+  await updateDoc(doc(db, 'cardioActivities', activityId), { notes: notes.slice(0, 500) });
 };
 
 export const deleteCardioActivity = async (activityId: string): Promise<void> => {

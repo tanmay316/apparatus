@@ -1,15 +1,19 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Lock, Check, Flame, Trophy, Dumbbell, Footprints } from 'lucide-react';
+import { ArrowLeft, Lock, Check, Flame, Trophy, Dumbbell, Footprints, Share2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { BADGES, evaluateBadges } from '@/lib/badges';
 import { badgeContextFromStats, effectiveStreak } from '@/lib/stats';
+import { AchievementShareModal } from '@/components/achievements/AchievementShareModal';
+import type { Badge } from '@/types';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } };
 const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
 export function AchievementsPage() {
   const { stats } = useAuthStore();
+  const [sharing, setSharing] = useState<Badge | null>(null);
 
   if (!stats) return null;
 
@@ -69,7 +73,12 @@ export function AchievementsPage() {
             <motion.div
               key={badge.id}
               variants={item}
-              className="dx-card p-4 flex flex-col relative"
+              role="button"
+              tabIndex={0}
+              onClick={() => setSharing(badge)}
+              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSharing(badge); } }}
+              aria-label={`Share ${badge.name}`}
+              className="dx-card p-4 flex flex-col relative cursor-pointer transition-transform active:scale-[0.98] hover:-translate-y-0.5"
               style={isEarned ? { borderColor: 'var(--dx-accent)', background: 'linear-gradient(180deg, var(--dx-accent-soft), var(--dx-card) 70%)' } : undefined}
             >
               <span
@@ -90,10 +99,24 @@ export function AchievementsPage() {
                   </div>
                 </div>
               )}
+              <div className="mt-3 flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: isEarned ? 'var(--dx-accent)' : 'var(--dx-muted)' }}>
+                <Share2 size={12} /> Share
+              </div>
             </motion.div>
           );
         })}
       </div>
+
+      {sharing && (
+        <AchievementShareModal
+          badge={sharing}
+          earned={earnedIds.has(sharing.id)}
+          progress={earnedIds.has(sharing.id) ? undefined : sharing.progress?.(context)}
+          earnedCount={earnedCount}
+          totalCount={totalCount}
+          onClose={() => setSharing(null)}
+        />
+      )}
     </motion.div>
   );
 }

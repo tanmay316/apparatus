@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { getUserChallenges, getUserEvents } from '@/services/community';
 import { ChallengeV2, SimpleEvent } from '@/types';
-import { showNotification } from '@/utils/notifications';
+import { notifyDevice } from '@/utils/notifications';
 import { ChallengeDetailSheet } from './ChallengeDetailSheet';
 import { EventDetailSheet } from './EventDetailSheet';
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
@@ -130,9 +130,8 @@ export function UpcomingReminderWidget() {
         const hoursLeft = Math.max(1, Math.round(diff / 3600000));
 
         // 1. Mobile Local Notification
-        const notifId = Math.floor(Math.random() * 900000) + 100000;
-        showNotification(
-          notifId,
+        notifyDevice(
+          'events',
           `⏰ Starting in ${hoursLeft}h: ${item.title}`,
           `Your joined ${item.type} starts soon. Get ready to participate!`
         );

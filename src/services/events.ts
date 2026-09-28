@@ -1,6 +1,7 @@
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, query, where, serverTimestamp, increment, orderBy, addDoc, Timestamp, writeBatch, documentId, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { notifyClanMembers } from './community';
+import { raiseAdminAlert } from './admin-alerts';
 import type { Community, AppEvent, EventRegistration, EventReview, CommunityAnnouncement, CommunityPoll, CommunityChallenge, CommunityPost } from '@/types';
 
 // ─── Communities ──────────────────────────────────────────────────
@@ -18,6 +19,7 @@ export async function createCommunity(community: Omit<Community, 'id' | 'created
     communityId: docRef.id,
     joinedAt: serverTimestamp()
   });
+  void raiseAdminAlert('community', docRef.id, 'Community awaiting approval', `“${community.name}” was submitted for review.`);
   return docRef.id;
 }
 
@@ -169,6 +171,7 @@ export async function createEvent(event: Omit<AppEvent, 'id' | 'createdAt' | 'st
     stats: { registeredCount: 0, checkInCount: 0, views: 0 },
     createdAt: serverTimestamp(),
   });
+  void raiseAdminAlert('event', docRef.id, 'Event awaiting approval', `“${event.title}” by ${event.organizerName || 'an organizer'} was submitted for review.`);
   return docRef.id;
 }
 

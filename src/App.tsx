@@ -12,11 +12,15 @@ import { safeInternalPath } from '@/lib/validation';
 import { subscribeToNotifications } from '@/services/social';
 import { 
   requestNotificationPermission, 
-  scheduleDailyReminders, 
-  showNotification,
+  scheduleWorkoutReminders,
+  cancelInactivityReminders,
+  notifyDevice,
   setupNotificationChannels,
   initPushNotifications
 } from '@/utils/notifications';
+import { categoryOf } from '@/lib/notification-center';
+import { localDateKey } from '@/lib/stats';
+import { useNotificationPrefs } from '@/stores/notification-prefs-store';
 import { UpdatePopup } from '@/components/ui/UpdatePopup';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
@@ -54,6 +58,7 @@ const GuidePage = lazy(() => import('@/pages/GuidePage').then(m => ({ default: m
 const CardioTracker = lazy(() => import('@/pages/CardioTracker').then(m => ({ default: m.CardioTracker })));
 const SinglePostPage = lazy(() => import('@/pages/SinglePostPage').then(m => ({ default: m.SinglePostPage })));
 const SearchPage = lazy(() => import('@/pages/SearchPage').then(m => ({ default: m.SearchPage })));
+const AthleteRanksPage = lazy(() => import('@/pages/AthleteRanksPage').then(m => ({ default: m.AthleteRanksPage })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -107,20 +112,11 @@ function PreferencesSync() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // One-time migration (already applied to existing installs). For genuinely new installs
-    // (no stored preference at all) respect the device's system light/dark setting instead of
-    // always forcing light - that mismatch was making the app's colors look "wrong" on
-    // dark-mode phones.
-    const migrationKey = 'forced-light-theme-reset-v2';
-    const hasStoredPreference = !!localStorage.getItem('apparatus-preferences');
+    // One-time migration to ensure light theme is the default for new build/installs.
+    const migrationKey = 'default-light-theme-v3';
     if (!localStorage.getItem(migrationKey)) {
       localStorage.setItem(migrationKey, 'true');
-      if (!hasStoredPreference) {
-        const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-        setTheme(prefersDark ? 'dark' : 'light');
-      } else {
-        setTheme('light');
-      }
+      setTheme('light');
     }
   }, [setTheme]);
 
@@ -157,11 +153,7 @@ function PreferencesSync() {
     // Hide Splash Screen immediately once React mounts to prevent double-loading screens
     SplashScreen.hide().catch(() => {});
 
-    requestNotificationPermission().then(granted => {
-      if (granted && user) {
-        scheduleDailyReminders();
-      }
-    });
+    requestNotificationPermission();
 
     // Setup Android notification channels
     setupNotificationChannels();
@@ -218,9 +210,24 @@ function PreferencesSync() {
     };
   }, []);
 
+  // Keep scheduled reminders in line with the user's notification preferences.
+  const lastWorkoutDate = useAuthStore(state => state.stats?.lastWorkoutDate);
+  const reminderPrefs = useNotificationPrefs();
+  useEffect(() => {
+    if (!user?.uid || !Capacitor.isNativePlatform()) return;
+    scheduleWorkoutReminders({ trainedToday: lastWorkoutDate === localDateKey(), prefs: reminderPrefs }).catch(() => {});
+    if (!reminderPrefs.inactivityReminders || !reminderPrefs.bannersEnabled || !reminderPrefs.categories.reminders) {
+      cancelInactivityReminders().catch(() => {});
+    }
+  }, [
+    user?.uid, lastWorkoutDate, reminderPrefs.workoutReminders, reminderPrefs.reminderTime, reminderPrefs.reminderDays,
+    reminderPrefs.inactivityReminders, reminderPrefs.bannersEnabled, reminderPrefs.categories.reminders,
+  ]);
+
   // Global real-time notification listener (Always active for mobile local & in-app delivery)
   useEffect(() => {
     if (!user?.uid) return;
+    const mountedAt = Date.now();
 
     // Register push notification token on mobile
     initPushNotifications(user.uid);
@@ -239,15 +246,18 @@ function PreferencesSync() {
               return;
             }
           }
+          // Workout reminders are already scheduled as native local notifications.
+          if (newNote.type === 'reminder' && newNote.extra?.kind === 'workout_reminder' && Capacitor.isNativePlatform()) return;
+          // The workout-complete banner already carries the volume change.
+          if (newNote.extra?.kind === 'progress') return;
           const createdAtMillis = newNote.createdAt && typeof (newNote.createdAt as any).toMillis === 'function'
             ? (newNote.createdAt as any).toMillis()
             : ((newNote.createdAt as any)?.seconds ? (newNote.createdAt as any).seconds * 1000 : 0);
 
           if (createdAtMillis >= mountedAt - 30000 || !createdAtMillis) {
-            const notifId = Math.floor(Math.random() * 2147483647);
             const sender = newNote.senderName || 'Apparatus';
-            showNotification(
-              notifId,
+            notifyDevice(
+              categoryOf(newNote.type),
               sender,
               newNote.message,
               {
@@ -265,7 +275,6 @@ function PreferencesSync() {
     );
 
     // 2. Also listen to 'app_notifications' collection (Join requests, direct notifications)
-    const mountedAt = Date.now();
     const qAppNotifs = query(
       collection(db, 'app_notifications'),
       where('userId', '==', user.uid),
@@ -281,8 +290,7 @@ function PreferencesSync() {
             : ((notif.createdAt as any)?.seconds ? (notif.createdAt as any).seconds * 1000 : 0);
 
           if (createdAtMillis >= mountedAt - 30000 || !createdAtMillis) {
-            const notifId = Math.floor(Math.random() * 2147483647);
-            showNotification(notifId, notif.title || 'Apparatus', notif.body || 'New notification', {
+            notifyDevice(categoryOf(notif.type), notif.title || 'Apparatus', notif.body || 'New notification', {
               ...notif,
               id: change.doc.id,
               link: notif.link,
@@ -341,6 +349,8 @@ export function App() {
               <Route path="skills" element={<SkillsPage />} />
               <Route path="measurements" element={<MeasurementsPage />} />
               <Route path="achievements" element={<AchievementsPage />} />
+              <Route path="ranks" element={<AthleteRanksPage />} />
+              <Route path="athlete-ranks" element={<AthleteRanksPage />} />
               <Route path="explore" element={<ExplorePage />} />
               <Route path="search" element={<SearchPage />} />
               <Route path="cardio" element={<CardioTracker />} />

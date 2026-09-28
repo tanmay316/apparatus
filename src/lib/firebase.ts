@@ -41,5 +41,14 @@ export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-// Admin email - loaded from environment variable for flexibility
-export const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL || '';
+// Must stay in sync with isAdmin() in firestore.rules.
+export const ADMIN_EMAILS: string[] = ['tanmay.sharma4334@gmail.com', 'sharmamoni913@gmail.com'];
+
+export function isAdminEmail(email: string | null | undefined): boolean {
+  return !!email && ADMIN_EMAILS.includes(email.trim().toLowerCase());
+}
+
+/** Client-side mirror of the rules check: admin email and a verified address. */
+export function isAdminUser(user: { email: string | null; emailVerified: boolean } | null | undefined): boolean {
+  return !!user && user.emailVerified && isAdminEmail(user.email);
+}

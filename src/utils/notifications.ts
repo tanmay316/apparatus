@@ -4,6 +4,23 @@ import { Capacitor } from '@capacitor/core';
 import { doc, setDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { safeInternalPath } from '@/lib/validation';
+import { allowsBanner } from '@/lib/notification-center';
+import { getNotificationPrefs, type NotificationCategory, type NotificationPrefs } from '@/stores/notification-prefs-store';
+
+export type NotificationPermissionState = 'granted' | 'denied' | 'prompt' | 'unsupported';
+
+export async function getNotificationPermissionState(): Promise<NotificationPermissionState> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { display } = await LocalNotifications.checkPermissions();
+      return display === 'granted' ? 'granted' : display === 'denied' ? 'denied' : 'prompt';
+    } catch {
+      return 'unsupported';
+    }
+  }
+  if (!('Notification' in window)) return 'unsupported';
+  return Notification.permission === 'default' ? 'prompt' : Notification.permission;
+}
 
 export async function setupNotificationChannels() {
   if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android') {
@@ -147,7 +164,7 @@ export async function clearNotification(id: number) {
   }
 }
 
-export async function showNotification(id: number, title: string, body: string, extraData?: any) {
+export async function showNotification(id: number, title: string, body: string, extraData?: any, channelId = 'clan_chat_messages') {
   const safeId = id || Math.floor(Math.random() * 2147483647);
   if (Capacitor.isNativePlatform()) {
     try {
@@ -170,7 +187,7 @@ export async function showNotification(id: number, title: string, body: string, 
             id: safeId,
             extra: extraData,
             autoCancel: true,
-            channelId: 'clan_chat_messages',
+            channelId,
             smallIcon: 'ic_notification',
             iconColor: '#e07a5f',
           }
@@ -219,106 +236,107 @@ export async function showNotification(id: number, title: string, body: string, 
   }
 }
 
-export async function scheduleDailyReminders() {
+/** Shows a device banner only if the user's notification preferences allow this category right now. */
+export async function notifyDevice(category: NotificationCategory, title: string, body: string, extraData?: any) {
+  if (!allowsBanner(getNotificationPrefs(), category)) return;
+  const channel = category === 'chat' ? 'clan_chat_messages' : 'general_notifications';
+  await showNotification(Math.floor(Math.random() * 2147483647), title, body, extraData, channel);
+}
+
+// Local notification id ranges: 100–799 workout reminders (incl. legacy 3-a-day ids), 2000–2010 inactivity nudges.
+const isWorkoutReminderId = (id: number) => id >= 100 && id <= 799;
+const isInactivityId = (id: number) => id >= 2000 && id <= 2010;
+
+async function cancelPending(match: (id: number) => boolean) {
+  const pending = await LocalNotifications.getPending();
+  const ids = pending.notifications.map(n => n.id).filter(match);
+  if (ids.length) await LocalNotifications.cancel({ notifications: ids.map(id => ({ id })) });
+}
+
+const REMINDER_COPY = [
+  { title: 'Time to train 💪', body: "Your session is waiting. Even a short workout keeps the streak alive." },
+  { title: 'Ready when you are 🏋️', body: 'Open Apparatus to start today\'s workout or log a run.' },
+  { title: 'Keep the momentum 🔥', body: 'Consistency builds your rank. Get a quality session in today.' },
+  { title: "Today's training 📋", body: 'Check your plan and knock out your session.' },
+];
+
+function atTime(base: Date, hhmm: string): Date {
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date(base);
+  d.setHours(h || 0, m || 0, 0, 0);
+  return d;
+}
+
+/** Schedules one reminder per selected weekday at the chosen time for the next 7 days. */
+export async function scheduleWorkoutReminders(options: { trainedToday?: boolean; prefs?: NotificationPrefs } = {}) {
   if (!Capacitor.isNativePlatform()) return;
   const permission = await LocalNotifications.checkPermissions();
   if (permission.display !== 'granted') return;
+  await cancelPending(isWorkoutReminderId);
 
-  // We will schedule notifications for the next 7 days.
-  // IDs will be based on the day (1-7) to allow easy cancellation.
-  // ID format: Day (1-7) * 100 + Hour.
-  // Example: Day 1 at 5am = 105. Day 1 at 8am = 108. Day 1 at 5pm = 117.
+  const prefs = options.prefs || getNotificationPrefs();
+  if (!prefs.workoutReminders || !prefs.bannersEnabled || !prefs.categories.reminders || !prefs.reminderDays.length) return;
 
-  const notifications: any[] = [];
   const now = new Date();
-  
-  for (let i = 1; i <= 7; i++) {
-    const targetDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i);
-    
-    // 5:00 AM
-    targetDate.setHours(5, 0, 0, 0);
+  const notifications = [];
+  for (let offset = 0; offset < 7; offset++) {
+    const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+    if (!prefs.reminderDays.includes(day.getDay())) continue;
+    const at = atTime(day, prefs.reminderTime);
+    if (offset === 0 && (options.trainedToday || at.getTime() <= now.getTime() + 60_000)) continue;
+    const copy = REMINDER_COPY[(day.getDate() + offset) % REMINDER_COPY.length];
     notifications.push({
-      id: i * 100 + 5,
-      title: 'Rise and grind! 🌅',
-      body: 'Time to crush your goals today. Check your workout plan!',
-      schedule: { at: new Date(targetDate) },
-    });
-
-    // 8:00 AM
-    targetDate.setHours(8, 0, 0, 0);
-    notifications.push({
-      id: i * 100 + 8,
-      title: "Don't forget your workout! 💪",
-      body: 'Your training awaits. Open the app to see today\'s session.',
-      schedule: { at: new Date(targetDate) },
-    });
-
-    // 5:00 PM
-    targetDate.setHours(17, 0, 0, 0);
-    notifications.push({
-      id: i * 100 + 17,
-      title: 'Evening session? 🌙',
-      body: 'Still haven\'t trained today? Now is the perfect time!',
-      schedule: { at: new Date(targetDate) },
+      id: 100 + offset,
+      title: copy.title,
+      body: copy.body,
+      schedule: { at, allowWhileIdle: true },
+      channelId: 'general_notifications',
+      smallIcon: 'ic_notification',
+      iconColor: '#e07a5f',
+      extra: { link: '/plans', kind: 'workout_reminder' },
     });
   }
-
-  await LocalNotifications.schedule({ notifications });
+  if (notifications.length) await LocalNotifications.schedule({ notifications });
 }
 
+/** After a session, drop today's reminder and keep the rest of the week. */
 export async function cancelRemainingTodayReminders() {
+  await scheduleWorkoutReminders({ trainedToday: true });
+}
+
+export async function cancelInactivityReminders() {
   if (!Capacitor.isNativePlatform()) return;
-  // If a user works out TODAY, we want to cancel the 8am and 5pm reminders for TODAY.
-  // We can just clear ALL pending daily reminders and re-schedule them for the next 7 days starting tomorrow!
-  
-  const pending = await LocalNotifications.getPending();
-  const dailyIds = pending.notifications
-    .map(n => n.id)
-    .filter(id => id >= 100 && id <= 717); // IDs for the daily reminders
-
-  if (dailyIds.length > 0) {
-    await LocalNotifications.cancel({ notifications: dailyIds.map(id => ({ id })) });
-  }
-
-  // Re-schedule for the NEXT 7 days (starting tomorrow)
-  await scheduleDailyReminders();
+  await cancelPending(isInactivityId);
 }
 
 export async function scheduleInactivityReminders() {
   if (!Capacitor.isNativePlatform()) return;
   const permission = await LocalNotifications.checkPermissions();
   if (permission.display !== 'granted') return;
+  await cancelPending(isInactivityId);
 
-  // Clear existing inactivity reminders (IDs 2000-2010)
-  const pending = await LocalNotifications.getPending();
-  const inactivityIds = pending.notifications
-    .map(n => n.id)
-    .filter(id => id >= 2000 && id <= 2010);
+  const prefs = getNotificationPrefs();
+  if (!prefs.inactivityReminders || !prefs.bannersEnabled || !prefs.categories.reminders) return;
 
-  if (inactivityIds.length > 0) {
-    await LocalNotifications.cancel({ notifications: inactivityIds.map(id => ({ id })) });
-  }
-
-  const notifications: any[] = [];
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
-
-  // Schedule for 3, 6, 7, 10, 14 days
   const intervals = [
-    { days: 3, title: 'We miss you! 🏃', body: 'It\'s been 3 days since your last workout. Let\'s get back to it!' },
-    { days: 6, title: 'Don\'t lose your progress! 📉', body: '6 days without training. Your body needs movement!' },
-    { days: 7, title: 'It\'s been a week! 🗓️', body: 'A full week! Open the app and log a quick 10-minute session.' },
-    { days: 10, title: 'Come back! 🥺', body: '10 days away. We saved your progress, just pick up where you left off.' },
-    { days: 14, title: 'Two weeks away! 🕰️', body: 'It\'s never too late to restart your fitness journey. Start today.' },
+    { days: 3, title: 'We miss you 🏃', body: "3 days since your last session. A short one counts." },
+    { days: 7, title: "It's been a week 🗓️", body: 'Log a 15-minute session to get back on track.' },
+    { days: 14, title: 'Two weeks away 🕰️', body: 'Your progress is saved. Pick up where you left off.' },
   ];
-
-  intervals.forEach((interval, index) => {
-    notifications.push({
+  const today = new Date();
+  const notifications = intervals.map((interval, index) => {
+    const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() + interval.days);
+    return {
       id: 2000 + index,
       title: interval.title,
       body: interval.body,
-      schedule: { at: new Date(now + (interval.days * dayMs)) },
-    });
+      // Same time of day as workout reminders instead of whenever the last session ended.
+      schedule: { at: atTime(day, prefs.reminderTime), allowWhileIdle: true },
+      channelId: 'general_notifications',
+      smallIcon: 'ic_notification',
+      iconColor: '#e07a5f',
+      extra: { link: '/plans', kind: 'inactivity_reminder' },
+    };
   });
 
   await LocalNotifications.schedule({ notifications });

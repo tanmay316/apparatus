@@ -42,19 +42,8 @@
             android:exported="false"
             android:stopWithTask="false"
         />
-        <!-- Grants access to other apps' media sessions (now-playing card). -->
-        <service
-            android:name=".MediaNotificationListener"
-            android:label="@string/app_name"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
     </application>
 
-    <!-- Lets "open app" resolve the launcher of the music app that is playing. -->
     <queries>
         <!-- Android 11+ package visibility for the Capacitor Camera intents. -->
         <intent>

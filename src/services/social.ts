@@ -17,7 +17,7 @@ export async function notify(receiverId: string, notification: Omit<AppNotificat
   });
 }
 
-export async function createSelfNotification(userId: string, message: string, targetId = ''): Promise<void> {
+export async function createSelfNotification(userId: string, message: string, targetId = '', extra?: Record<string, unknown>): Promise<void> {
   await addDoc(collection(db, 'notifications'), {
     receiverId: userId,
     senderId: userId,
@@ -27,6 +27,7 @@ export async function createSelfNotification(userId: string, message: string, ta
     message,
     targetId,
     read: false,
+    ...(extra ? { extra } : {}),
     createdAt: serverTimestamp(),
   });
 }
@@ -262,9 +263,9 @@ export async function getUsersByUids(uids: string[]): Promise<any[]> {
 // ─── User Discovery ─────────────────────────────────────────────
 
 export async function searchUsers(queryStr: string): Promise<any[]> {
-  const normalizedQuery = queryStr.toLowerCase().trim();
+  const normalizedQuery = queryStr.toLowerCase().trim().replace(/^@+/, '');
   
-  if (!normalizedQuery) return [];
+  if (normalizedQuery.length < 2) return [];
 
   // Prefix queries keep discovery bounded as the user base grows. Profiles created
   // before the indexed fields were introduced can be backfilled by the admin tool.
@@ -280,20 +281,33 @@ export async function searchUsers(queryStr: string): Promise<any[]> {
     console.warn('Indexed user search failed; using fallback.', error);
   }
 
-  // Older profiles may not have usernameLower/displayNameLower yet. Keep search
-  // usable while those records are gradually backfilled.
-  if (byUid.size < 20) {
-    const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(100)));
+  // Older profiles may lack usernameLower/displayNameLower; only pay for the broad scan
+  // when the indexed lookup came back thin.
+  if (byUid.size < 5) {
+    const fallbackSnap = await getDocs(query(collection(db, 'users'), limit(150)));
     fallbackSnap.docs.forEach(d => {
       const data = d.data();
       const username = String(data.username || '').toLowerCase();
       const displayName = String(data.displayName || '').toLowerCase();
-      if (username.startsWith(normalizedQuery) || displayName.startsWith(normalizedQuery) || username.includes(normalizedQuery) || displayName.includes(normalizedQuery)) {
+      if (username.includes(normalizedQuery) || displayName.includes(normalizedQuery)) {
         byUid.set(d.id, { uid: d.id, ...data });
       }
     });
   }
-  return [...byUid.values()].slice(0, 20);
+
+  // Exact handle, then handle prefix, then name prefix, then word-start, then anywhere.
+  const rank = (u: any) => {
+    const username = String(u.username || '').toLowerCase();
+    const name = String(u.displayName || '').toLowerCase();
+    if (username === normalizedQuery) return 0;
+    if (username.startsWith(normalizedQuery)) return 1;
+    if (name.startsWith(normalizedQuery)) return 2;
+    if (name.split(/\s+/).some(w => w.startsWith(normalizedQuery))) return 3;
+    return 4;
+  };
+  return [...byUid.values()]
+    .sort((a, b) => rank(a) - rank(b) || String(a.displayName || '').localeCompare(String(b.displayName || '')))
+    .slice(0, 20);
 }
 
 function removeUndefined(obj: any): any {
@@ -717,6 +731,10 @@ export async function markAllNotificationsRead(userId: string): Promise<void> {
     batch.update(doc.ref, { read: true });
   });
   await batch.commit();
+}
+
+export async function deleteNotification(notificationId: string): Promise<void> {
+  await deleteDoc(doc(db, 'notifications', notificationId));
 }
 
 export async function getBookmarkedActivities(bookmarkIds: string[]): Promise<Activity[]> {

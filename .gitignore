@@ -71,3 +71,7 @@ node_modules/
 # Scratch scripts
 scratch/
 
+
+# Build outputs
+Apparatus.apk
+Apparatus.aab

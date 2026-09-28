@@ -110,6 +110,7 @@ export function summarizeProgressiveOverload(
   }
 
   const progressed: string[] = [];
+  const exerciseChanges: { name: string; changePercent: number }[] = [];
   let currentVolume = 0;
   let previousVolume = 0;
   let mostRecentMatchDate: string | undefined;
@@ -142,15 +143,48 @@ export function summarizeProgressiveOverload(
       }
     }
     if (result.progressed) progressed.push(current.name);
+    const change = percentChange(result.currentBest, result.previousBest) ?? percentChange(result.currentVolume, result.previousVolume);
+    if (bestPrevious && change !== undefined) exerciseChanges.push({ name: current.name, changePercent: change });
   }
 
   const volumeChangePercent = previousVolume > 0 ? Math.round(((currentVolume - previousVolume) / previousVolume) * 100) : undefined;
   const status = progressed.length > 0 || currentVolume > previousVolume * IMPROVEMENT_TOLERANCE
     ? 'progressed'
     : currentVolume < previousVolume ? 'regressed' : 'maintained';
-  const message = status === 'progressed'
-    ? `Progressive overload detected${volumeChangePercent !== undefined ? `: ${volumeChangePercent >= 0 ? '+' : ''}${volumeChangePercent}% training volume` : ''}.`
-    : status === 'regressed' ? 'Training volume was lower than last time. Recover and build back up.' : 'Training matched your last session. Add a rep, set, or a little load next time.';
-  return { status, message, previousDate: mostRecentMatchDate, previousVolume, currentVolume, volumeChangePercent, exercisesProgressed: progressed, exercisesTracked: currentExercises.length };
+  exerciseChanges.sort((a, b) => b.changePercent - a.changePercent);
+  const message = describeOverload(status, volumeChangePercent, exerciseChanges);
+  return { status, message, previousDate: mostRecentMatchDate, previousVolume, currentVolume, volumeChangePercent, exercisesProgressed: progressed, exercisesTracked: currentExercises.length, exerciseChanges };
+}
+
+function percentChange(current: number, previous: number): number | undefined {
+  if (previous <= 0 || current <= 0) return undefined;
+  const change = Math.round(((current - previous) / previous) * 100);
+  return change === 0 ? undefined : change;
+}
+
+const signed = (n: number) => `${n > 0 ? '+' : ''}${n}%`;
+
+/** Plain-language summary with the volume change and the biggest per-exercise moves. */
+export function describeOverload(
+  status: ProgressiveOverloadSummary['status'],
+  volumeChangePercent: number | undefined,
+  changes: { name: string; changePercent: number }[],
+): string {
+  const gains = changes.filter(c => c.changePercent > 0).slice(0, 2);
+  const drops = changes.filter(c => c.changePercent < 0).slice(-2).reverse();
+  const list = (items: typeof changes) => items.map(c => `${c.name} ${signed(c.changePercent)}`).join(', ');
+
+  let headline: string;
+  if (volumeChangePercent === undefined) headline = 'New exercises logged. This session sets your baseline.';
+  else if (volumeChangePercent > 0) headline = `Training volume up ${volumeChangePercent}% vs your previous best.`;
+  else if (volumeChangePercent < 0) headline = `Training volume down ${Math.abs(volumeChangePercent)}% vs your previous best.`;
+  else headline = 'Training volume matched your previous best.';
+
+  const parts = [headline];
+  if (gains.length) parts.push(`Top gains: ${list(gains)}.`);
+  if (status === 'regressed' && drops.length) parts.push(`Biggest drops: ${list(drops)}.`);
+  if (status === 'regressed') parts.push('Recover well and build back up next time.');
+  if (status === 'maintained') parts.push('Add a rep, a set or a little load next time.');
+  return parts.join(' ');
 }
 

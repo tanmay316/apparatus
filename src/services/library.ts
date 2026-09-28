@@ -2223,8 +2223,10 @@ function generateSpecificCues(name: string, muscleGroup: string): string[] {
 }
 
 /** Seed the Exercise Library with default items */
-export const seedLibraryExercises = async (): Promise<void> => {
-  const batch = writeBatch(db);
+export const seedLibraryExercises = async (): Promise<number> => {
+  // Firestore batches cap at 500 writes, so commit in chunks.
+  let batch = writeBatch(db);
+  let pending = 0;
   
   for (const ex of COMPACT_LIBRARY) {
     // Generate document ID from the name
@@ -2255,9 +2257,15 @@ export const seedLibraryExercises = async (): Promise<void> => {
     };
 
     batch.set(ref, expandedEx);
+    if (++pending >= 400) {
+      await batch.commit();
+      batch = writeBatch(db);
+      pending = 0;
+    }
   }
   
-  await batch.commit();
+  if (pending) await batch.commit();
+  return COMPACT_LIBRARY.length;
 };
 
 function eqEstimate(equipment: string): number {

@@ -1,8 +1,9 @@
 import { collection, doc, setDoc, getDoc, runTransaction, Timestamp, query, where, getDocs, orderBy, limit, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
-import type { Workout, UserStats } from '@/types';
+import type { Workout, UserStats, ProgressiveOverloadSummary } from '@/types';
 import { findPersonalRecords, summarizeProgressiveOverload } from '@/lib/progressive-overload';
 import { applySession, bestHoldSeconds, completesPlanWeek, heaviestLiftKg, localDateKey } from '@/lib/stats';
+import { workoutMetrics } from '@/lib/performance';
 import { isFollowing, visibilityForUser } from '@/services/social';
 import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@/services/stats';
 
@@ -26,6 +27,7 @@ export interface SaveWorkoutResult {
   streakBonus: number;
   prCount: number;
   unlockedBadges: string[];
+  progressiveOverload?: ProgressiveOverloadSummary;
 }
 
 export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>): Promise<SaveWorkoutResult> => {
@@ -77,6 +79,7 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>):
       bestHold: bestHoldSeconds(workout),
       maxLiftKg: heaviestLiftKg(workout),
       fullWeek,
+      metrics: workoutMetrics(workout),
     });
 
     const workoutData: any = { ...workout, exercises, visibility, date: dateKey, id: newWorkoutId, finishedAt: Timestamp.now() };
@@ -119,7 +122,7 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>):
     }
   } catch { /* auto-track is non-critical */ }
 
-  return { id: newWorkoutId, xpEarned: result.xpEarned, streakBonus: result.streakBonus, prCount: personalRecords.size, unlockedBadges: result.unlocked };
+  return { id: newWorkoutId, xpEarned: result.xpEarned, streakBonus: result.streakBonus, prCount: personalRecords.size, unlockedBadges: result.unlocked, progressiveOverload };
 };
 
 export const getUserWorkouts = async (userId: string, limitCount = 10): Promise<Workout[]> => {

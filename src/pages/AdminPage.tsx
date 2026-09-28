@@ -1,482 +1,146 @@
-import { useMemo, useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { Activity, Ban, CheckCircle2, Database, Flag, Gauge, Search, ShieldAlert, Users, XCircle, Trash2, Terminal, Bell } from 'lucide-react';
-import { collection, doc, getDocs, writeBatch, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import {
+  Activity, Bike, Bot, CalendarClock, Database, Flag, Gauge, HardDrive, History, Megaphone, ShieldAlert, Terminal, UserPlus, Users, UsersRound,
+  type LucideIcon,
+} from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
-import { useUIStore } from '@/stores/ui-store';
-import { db } from '@/lib/firebase';
-import { SAMPLE_PLANS } from '@/data/sample-plans';
-import { seedLibraryExercises } from '@/services/library';
-import { getAdminBans, getAdminOverview, getAdminReports, getAdminUsers, setUserBan, updateReportStatus, calculateStorageUsage, cleanupDatabaseStorage, type AdminReport, type StorageCleanupOptions, type StorageUsageResult } from '@/services/admin';
-import { deletePlan } from '@/services/plans';
-import { getSystemLogs, clearAllSystemLogs } from '@/services/logger';
-import { getPendingCommunities, approveCommunity, rejectCommunity, getPendingEvents, updateEventStatus } from '@/services/events';
-import { getAvatarUrl } from '@/lib/avatar';
-import AdminNutritionSettings from '../components/admin/AdminNutritionSettings';
+import { getAdminOverview } from '@/services/admin';
+import { ErrorState, LoadingState, Metric, RefreshButton, SectionHeader, fmtCount, useIsAdmin } from '@/components/admin/AdminShared';
+import { AdminUsersTab } from '@/components/admin/AdminUsersTab';
+import { AdminReportsTab } from '@/components/admin/AdminReportsTab';
+import { AdminModerationTab } from '@/components/admin/AdminModerationTab';
+import { AdminContentTab } from '@/components/admin/AdminContentTab';
+import { AdminStorageTab } from '@/components/admin/AdminStorageTab';
+import { AdminLogsTab } from '@/components/admin/AdminLogsTab';
+import { AdminAnnouncementsTab } from '@/components/admin/AdminAnnouncementsTab';
+import { AdminAuditTab } from '@/components/admin/AdminAuditTab';
+import AdminNutritionSettings from '@/components/admin/AdminNutritionSettings';
+import { AdminBell } from '@/components/admin/AdminBell';
 
-type AdminTab = 'overview' | 'users' | 'reports' | 'logs' | 'seed' | 'communities' | 'events' | 'updates' | 'storage';
+const TABS = ['overview', 'users', 'reports', 'communities', 'events', 'content', 'updates', 'ai', 'logs', 'storage', 'audit'] as const;
+type AdminTab = typeof TABS[number];
 
-function Metric({ label, value, detail, icon: Icon, color = 'text-sienna' }: { label: string; value: number; detail: string; icon: typeof Users; color?: string }) {
-  return <div className="card p-4"><div className="flex items-start justify-between"><div className="font-mono text-[10px] text-bone-dim tracking-wider">{label}</div><Icon size={17} className={color} /></div><div className="font-display text-3xl mt-3">{value.toLocaleString()}</div><div className="text-[11px] text-bone-dim mt-1">{detail}</div></div>;
+function OverviewTab({ go }: { go: (tab: AdminTab) => void }) {
+  const overview = useQuery({ queryKey: ['adminOverview'], queryFn: getAdminOverview, refetchInterval: 60_000 });
+  if (overview.isLoading) return <LoadingState label="Loading analytics…" />;
+  if (overview.error) return <ErrorState error={overview.error} onRetry={() => overview.refetch()} />;
+  const d = overview.data!;
+
+  const queue = [
+    { label: 'Open reports', value: d.openReports, tab: 'reports' as const, icon: Flag },
+    { label: 'Pending communities', value: d.pendingCommunities, tab: 'communities' as const, icon: UsersRound },
+    { label: 'Pending events', value: d.pendingEvents, tab: 'events' as const, icon: CalendarClock },
+    { label: 'Errors in 24h', value: d.logs24h, tab: 'logs' as const, icon: Terminal },
+  ];
+  const pending = queue.filter(q => (q.value ?? 0) > 0);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex justify-end"><RefreshButton busy={overview.isFetching} onClick={() => overview.refetch()} /></div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Metric label="USERS" value={d.users} detail={`${fmtCount(d.newUsers7d)} new this week`} icon={Users} onClick={() => go('users')} />
+        <Metric label="ACTIVE (30D)" value={d.activeUsers30d} detail="Profiles updated in 30 days" icon={UserPlus} tone="text-amber" />
+        <Metric label="WORKOUTS" value={d.workouts} detail={`${fmtCount(d.workouts30d)} in 30 days`} icon={Activity} />
+        <Metric label="CARDIO" value={d.cardio} detail={`${fmtCount(d.cardio30d)} in 30 days`} icon={Bike} tone="text-amber" />
+        <Metric label="FEED POSTS" value={d.activities} detail="Published activity records" icon={Gauge} />
+        <Metric label="CLANS" value={d.clans} detail="Clans created" icon={UsersRound} />
+        <Metric label="OPEN REPORTS" value={d.openReports} detail="Open or in review" icon={Flag} tone="text-danger" onClick={() => go('reports')} />
+        <Metric label="ACTIVE BANS" value={d.bannedUsers} detail="Suspended accounts" icon={ShieldAlert} tone="text-danger" onClick={() => go('users')} />
+      </div>
+
+      <section className="card p-5">
+        <SectionHeader title="Needs attention" description="Queues waiting on an admin decision." />
+        {pending.length === 0 ? (
+          <div className="text-sm text-bone-dim">All queues are clear.</div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {pending.map(q => (
+              <button key={q.label} onClick={() => go(q.tab)} className="flex items-center justify-between gap-3 p-3 rounded-xl bg-ink-2 border border-line/50 hover:border-sienna/40 text-left">
+                <span className="flex items-center gap-2 text-sm"><q.icon size={15} className="text-sienna" /> {q.label}</span>
+                <span className="font-display text-xl text-danger">{fmtCount(q.value)}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {Object.values(d).some(v => v === null) && (
+        <p className="text-[11px] text-bone-dim">“—” means that count could not be loaded (missing index or permission).</p>
+      )}
+    </div>
+  );
 }
 
 export function AdminPage() {
-  const { profile } = useAuthStore();
-  const { showToast, theme } = useUIStore();
-  const queryClient = useQueryClient();
-  const [tab, setTab] = useState<AdminTab>('overview');
-  const [search, setSearch] = useState('');
-  const [seeding, setSeeding] = useState(false);
-  const [seedingLib, setSeedingLib] = useState(false);
-  const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
-  
-  const [updateTitle, setUpdateTitle] = useState('');
-  const [updateContent, setUpdateContent] = useState('');
-  const [updateId, setUpdateId] = useState('');
-  const [isPushingUpdate, setIsPushingUpdate] = useState(false);
+  const { initialized } = useAuthStore();
+  const isAdmin = useIsAdmin();
+  const [params, setParams] = useSearchParams();
+  const raw = params.get('tab');
+  const tab: AdminTab = (TABS as readonly string[]).includes(raw || '') ? (raw as AdminTab) : 'overview';
+  const go = (next: AdminTab) => setParams(next === 'overview' ? {} : { tab: next }, { replace: true });
 
-  const [storageOpts, setStorageOpts] = useState<StorageCleanupOptions>({
-    types: { images: true, gps: true, text: false },
-    collections: { feed: true, clan_posts: true, clan_messages: true, workouts: true },
-    olderThanDays: 30
-  });
-  const [storageResult, setStorageResult] = useState<StorageUsageResult | null>(null);
-  const [isCalculatingStorage, setIsCalculatingStorage] = useState(false);
-  const [isCleaningStorage, setIsCleaningStorage] = useState(false);
+  const overview = useQuery({ queryKey: ['adminOverview'], queryFn: getAdminOverview, enabled: isAdmin, refetchInterval: 60_000 });
 
-  const overview = useQuery({ queryKey: ['adminOverview'], queryFn: getAdminOverview, enabled: !!profile?.isAdmin });
-  const users = useQuery({ queryKey: ['adminUsers'], queryFn: getAdminUsers, enabled: !!profile?.isAdmin });
-  const bans = useQuery({ queryKey: ['adminBans'], queryFn: getAdminBans, enabled: !!profile?.isAdmin });
-  const reports = useQuery({ queryKey: ['adminReports'], queryFn: getAdminReports, enabled: !!profile?.isAdmin });
-  const plans = useQuery({ queryKey: ['adminPlans'], queryFn: async () => { const snap = await getDocs(collection(db, 'plans')); return snap.docs.map(item => ({ id: item.id, ...item.data() } as any)); }, enabled: !!profile?.isAdmin });
-  const logs = useQuery({ queryKey: ['adminLogs'], queryFn: () => getSystemLogs(100), enabled: !!profile?.isAdmin });
-  const pendingCommunities = useQuery({ queryKey: ['adminPendingCommunities'], queryFn: getPendingCommunities, enabled: !!profile?.isAdmin });
-  const pendingEvents = useQuery({ queryKey: ['adminPendingEvents'], queryFn: getPendingEvents, enabled: !!profile?.isAdmin });
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [tab]);
 
-  const filteredUsers = useMemo(() => {
-    const normalized = search.toLowerCase().trim();
-    return (users.data || []).filter((user: any) => !normalized || user.displayName?.toLowerCase().includes(normalized) || user.username?.toLowerCase().includes(normalized) || user.email?.toLowerCase().includes(normalized));
-  }, [users.data, search]);
-  
-  const approveCommunityMutation = useMutation({
-    mutationFn: (id: string) => approveCommunity(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['adminPendingCommunities'] });
-      queryClient.invalidateQueries({ queryKey: ['communities'] });
-      queryClient.invalidateQueries({ queryKey: ['userCommunities'] });
-      queryClient.invalidateQueries({ queryKey: ['userSubmittedCommunities'] });
-      showToast('Community approved & verified');
-    },
-    onError: (err: any) => showToast(err?.message || 'Error approving community', 'error'),
-  });
+  if (!initialized) return <LoadingState />;
+  if (!isAdmin) return <Navigate to="/" replace />;
 
-  const rejectCommunityMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason?: string }) => rejectCommunity(id, reason),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['adminPendingCommunities'] });
-      queryClient.invalidateQueries({ queryKey: ['userSubmittedCommunities'] });
-      showToast('Community rejected');
-    },
-    onError: (err: any) => showToast(err?.message || 'Error rejecting community', 'error'),
-  });
-
-  const approveEventMutation = useMutation({
-    mutationFn: (id: string) => updateEventStatus(id, 'published'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['adminPendingEvents'] });
-      queryClient.invalidateQueries({ queryKey: ['publishedEvents'] });
-      queryClient.invalidateQueries({ queryKey: ['userSubmittedEvents'] });
-      showToast('Event published');
-    },
-    onError: (err: any) => showToast(err?.message || 'Error publishing event', 'error'),
-  });
-
-  const rejectEventMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason?: string }) => updateEventStatus(id, 'rejected', reason),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['adminPendingEvents'] });
-      queryClient.invalidateQueries({ queryKey: ['userSubmittedEvents'] });
-      showToast('Event rejected');
-    },
-    onError: (err: any) => showToast(err?.message || 'Error rejecting event', 'error'),
-  });
-  const banIds = new Set((bans.data || []).map((ban: any) => ban.uid));
-
-  const banMutation = useMutation({
-    mutationFn: ({ uid, banned }: { uid: string; banned: boolean }) => setUserBan(uid, profile!.uid, banned),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['adminBans'] });
-      showToast(variables.banned ? 'User banned' : 'User ban lifted');
-    },
-    onError: (error: any) => showToast(error?.message || 'Could not update ban', 'error'),
-  });
-
-  const reportMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: AdminReport['status'] }) => updateReportStatus(id, status, profile!.uid),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminReports'] }); queryClient.invalidateQueries({ queryKey: ['adminOverview'] }); showToast('Report updated'); },
-    onError: (error: any) => showToast(error?.message || 'Could not update report', 'error'),
-  });
-
-  const clearLogsMutation = useMutation({
-    mutationFn: () => clearAllSystemLogs(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['adminLogs'] });
-      showToast('System logs cleared');
-    },
-    onError: (error: any) => showToast(error?.message || 'Could not clear logs', 'error'),
-  });
-
-  if (!profile?.isAdmin) return <Navigate to="/" replace />;
-
-  const handleSeedSamplePlans = async () => {
-    if (!confirm('Overwrite the matching sample plan documents?')) return;
-    setSeeding(true);
-    try {
-      const batch = writeBatch(db);
-      const expectedIds = new Set(SAMPLE_PLANS.map(plan => 'sample_' + plan.title.toLowerCase().replace(/[^a-z0-9]/g, '_')));
-      const existing = await getDocs(collection(db, 'samplePlans'));
-      for (const existingPlan of existing.docs) {
-        if (!expectedIds.has(existingPlan.id)) {
-          const oldDays = await getDocs(collection(db, `samplePlans/${existingPlan.id}/days`));
-          oldDays.docs.forEach(day => batch.delete(day.ref));
-          batch.delete(existingPlan.ref);
-        }
-      }
-      for (const plan of SAMPLE_PLANS) {
-        const planId = 'sample_' + plan.title.toLowerCase().replace(/[^a-z0-9]/g, '_');
-        const { days, ...planData } = plan;
-        batch.set(doc(db, 'samplePlans', planId), { ...planData, type: 'sample' });
-        days?.forEach(day => batch.set(doc(db, `samplePlans/${planId}/days`, `day_${day.dayNumber}`), day));
-      }
-      await batch.commit();
-      showToast('Sample plans seeded successfully');
-    } catch (error: any) { showToast(error?.message || 'Could not seed sample plans', 'error'); }
-    finally { setSeeding(false); }
-  };
-
-  const handleDeletePlan = async (planId: string, title: string) => {
-    if (!confirm(`Permanently delete “${title}” and all of its days?`)) return;
-    setDeletingPlanId(planId);
-    try {
-      await deletePlan(planId);
-      await queryClient.invalidateQueries({ queryKey: ['adminPlans'] });
-      showToast('Plan deleted');
-    } catch (error: any) { showToast(error?.message || 'Could not delete plan', 'error'); }
-    finally { setDeletingPlanId(null); }
-  };
-
-  const handleSeedExerciseLibrary = async () => {
-    if (!confirm('Overwrite matching default exercise documents?')) return;
-    setSeedingLib(true);
-    try { await seedLibraryExercises(); showToast('Exercise library seeded successfully'); }
-    catch (error: any) { showToast(error?.message || 'Could not seed exercise library', 'error'); }
-    finally { setSeedingLib(false); }
-  };
-
-  const nav: { id: AdminTab; label: string; icon: typeof Activity }[] = [
+  const nav: { id: AdminTab; label: string; icon: LucideIcon; badge?: number | null }[] = [
     { id: 'overview', label: 'Overview', icon: Gauge },
-    { id: 'users', label: 'Users & bans', icon: Users },
-    { id: 'reports', label: 'Reports', icon: Flag },
-    { id: 'communities', label: 'Communities', icon: Users },
-    { id: 'events', label: 'Events', icon: Activity },
-    { id: 'logs', label: 'System Logs', icon: Terminal },
-    { id: 'updates', label: 'App Updates', icon: Bell },
-    { id: 'seed', label: 'Database', icon: Database },
-    { id: 'storage', label: 'Storage', icon: Database },
+    { id: 'users', label: 'Users', icon: Users },
+    { id: 'reports', label: 'Reports', icon: Flag, badge: overview.data?.openReports },
+    { id: 'communities', label: 'Communities', icon: UsersRound, badge: overview.data?.pendingCommunities },
+    { id: 'events', label: 'Events', icon: CalendarClock, badge: overview.data?.pendingEvents },
+    { id: 'content', label: 'Content', icon: Database },
+    { id: 'updates', label: 'Announcements', icon: Megaphone },
+    { id: 'ai', label: 'AI keys', icon: Bot },
+    { id: 'logs', label: 'Logs', icon: Terminal, badge: overview.data?.logs24h },
+    { id: 'storage', label: 'Storage', icon: HardDrive },
+    { id: 'audit', label: 'Audit', icon: History },
   ];
 
-  return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-    <div className="pb-5 border-b border-line flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-      <div><div className="font-mono text-danger text-xs tracking-widest mb-1">OPERATIONS</div><h1 className="font-display text-3xl">Admin Console</h1><p className="text-bone-dim text-sm mt-1">Moderate the community, monitor product health, and maintain shared content.</p></div>
-      <div className="tag-amber inline-flex items-center gap-2"><ShieldAlert size={13} /> ADMIN ACCESS</div>
-    </div>
-
-    <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1">{nav.map(item => { const Icon = item.icon; return <button key={item.id} onClick={() => setTab(item.id)} className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full font-mono text-sm transition-colors ${tab === item.id ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}><Icon size={14} /> {item.label}</button>; })}</div>
-
-    {tab === 'overview' && <div className="space-y-5">
-      {overview.isLoading ? <div className="card p-10 text-center text-bone-dim">Loading analytics...</div> : overview.data && <>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3"><Metric label="USERS" value={overview.data.users} detail={`${overview.data.activeUsers30d} active in 30 days`} icon={Users} /><Metric label="WORKOUTS" value={overview.data.workouts} detail={`${overview.data.workouts30d} in 30 days`} icon={Activity} /><Metric label="ACTIVITIES" value={overview.data.activities} detail="Published feed records" icon={Gauge} color="text-amber" /><Metric label="OPEN REPORTS" value={overview.data.openReports} detail={`${overview.data.bannedUsers} active bans`} icon={Flag} color="text-danger" /></div>
-        
-        {/* Global AI Nutrition Settings */}
-        <section className="mb-10">
-          <h2 className="text-xl font-display font-semibold text-bone mb-6 uppercase tracking-wider">AI Nutrition Agent</h2>
-          <AdminNutritionSettings />
-        </section>
-
-        <div className="card p-5"><div className="flex items-center gap-2 mb-4"><Activity size={18} className="text-sienna" /><h2 className="font-display text-xl">Platform health</h2></div><div className="grid grid-cols-1 md:grid-cols-3 gap-3"><div className="bg-ink-2 border border-line/50 rounded-lg p-4"><div className="font-mono text-[10px] text-bone-dim">30-DAY USER ACTIVITY</div><div className="font-display text-2xl mt-2 text-sienna">{overview.data.activeUsers30d} users</div><div className="text-xs text-bone-dim mt-1">Profiles updated recently</div></div><div className="bg-ink-2 border border-line/50 rounded-lg p-4"><div className="font-mono text-[10px] text-bone-dim">30-DAY TRAINING</div><div className="font-display text-2xl mt-2 text-amber">{overview.data.workouts30d} sessions</div><div className="text-xs text-bone-dim mt-1">Completed workouts logged</div></div><div className="bg-ink-2 border border-line/50 rounded-lg p-4"><div className="font-mono text-[10px] text-bone-dim">MODERATION QUEUE</div><div className="font-display text-2xl mt-2 text-danger">{overview.data.openReports} reports</div><div className="text-xs text-bone-dim mt-1">Open or being reviewed</div></div></div></div>
-      </>}
-    </div>}
-
-    {tab === 'users' && <section className="card p-5"><div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5"><div><h2 className="font-display text-xl">Users and bans</h2><p className="text-xs text-bone-dim mt-1">Showing up to 200 newest accounts. Bans prevent access on the next sign-in.</p></div><div className="relative w-full sm:w-72"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" /><input id="admin-users-search" name="adminUsersSearch" autoComplete="off" value={search} onChange={event => setSearch(event.target.value)} className="input-field pl-9" placeholder="Search name, handle, email" /></div></div>{users.isLoading ? <div className="py-10 text-center text-bone-dim">Loading users...</div> : <div className="space-y-2">{filteredUsers.map((user: any) => { const isBanned = banIds.has(user.uid); return <div key={user.uid} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-line/50 bg-ink-2"><img src={user.photoURL || getAvatarUrl(user.displayName, theme)} alt="" className="w-9 h-9 rounded-full object-cover" /><div className="flex-1 min-w-0"><div className="font-semibold text-sm truncate">{user.displayName || 'Athlete'} <span className="font-mono text-[10px] text-sienna ml-1">@{user.username}</span></div><div className="text-xs text-bone-dim truncate">{user.email || user.uid}</div></div><div className={`font-mono text-[10px] ${isBanned ? 'text-danger' : 'text-sienna'}`}>{isBanned ? 'BANNED' : 'ACTIVE'}</div><button onClick={() => banMutation.mutate({ uid: user.uid, banned: !isBanned })} disabled={banMutation.isPending || user.uid === profile.uid} className={`${isBanned ? 'btn-secondary hover:text-sienna' : 'btn-danger'} py-2 inline-flex items-center gap-2`}>{isBanned ? <><CheckCircle2 size={13} /> Lift ban</> : <><Ban size={13} /> Ban</>}</button></div>; })}</div>}</section>}
-
-    {tab === 'reports' && <section className="card p-5"><div className="mb-5"><h2 className="font-display text-xl">Reports</h2><p className="text-xs text-bone-dim mt-1">Review user-submitted reports and record a moderation decision.</p></div>{reports.isLoading ? <div className="py-10 text-center text-bone-dim">Loading reports...</div> : reports.data?.length ? <div className="space-y-3">{reports.data.map(report => <div key={report.id} className="border border-line/50 rounded-lg p-4 bg-ink-2"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><div className="font-mono text-[10px] text-amber uppercase">{report.status} · {report.reason}</div><div className="text-sm mt-2">Reported user: <span className="font-mono text-sienna">{report.reportedUserId || 'Not specified'}</span></div><div className="text-xs text-bone-dim mt-1">Reporter: {report.reporterId}</div>{report.details && <p className="text-sm text-bone-dim mt-3">{report.details}</p>}</div><div className="flex gap-2 shrink-0"><button onClick={() => report.id && reportMutation.mutate({ id: report.id, status: 'reviewing' })} className="btn-secondary py-2">Review</button><button onClick={() => report.id && reportMutation.mutate({ id: report.id, status: 'resolved' })} className="btn-primary py-2">Resolve</button><button onClick={() => report.id && reportMutation.mutate({ id: report.id, status: 'dismissed' })} className="btn-secondary py-2"><XCircle size={14} /></button></div></div></div>)}</div> : <div className="py-10 text-center text-bone-dim">No reports in the queue.</div>}</section>}
-
-    {tab === 'communities' && <section className="card p-5"><div className="mb-5"><h2 className="font-display text-xl">Pending Communities</h2><p className="text-xs text-bone-dim mt-1">Review user requests to create communities.</p></div>{pendingCommunities.isLoading ? <div className="py-10 text-center text-bone-dim">Loading communities...</div> : pendingCommunities.data?.length ? <div className="space-y-3">{pendingCommunities.data.map((community: any) => <div key={community.id} className="border border-line/50 rounded-lg p-4 bg-ink-2"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><div className="font-semibold text-lg">{community.name}</div><div className="text-sm mt-1">{community.description}</div><div className="text-xs text-bone-dim mt-2">Owner ID: {community.ownerId}</div></div><div className="flex gap-2 shrink-0"><button onClick={() => community.id && approveCommunityMutation.mutate(community.id)} className="btn-primary py-2" disabled={approveCommunityMutation.isPending}>Approve</button><button onClick={() => { if (!community.id) return; const r = prompt('Reason for rejection (optional):'); if (r !== null) rejectCommunityMutation.mutate({ id: community.id, reason: r || undefined }); }} className="btn-secondary py-2 border-danger text-danger hover:bg-danger/10" disabled={rejectCommunityMutation.isPending}>Reject</button></div></div></div>)}</div> : <div className="py-10 text-center text-bone-dim">No pending communities.</div>}</section>}
-
-    {tab === 'events' && <section className="card p-5"><div className="mb-5"><h2 className="font-display text-xl">Pending Events</h2><p className="text-xs text-bone-dim mt-1">Review user requests to host events outside of a community.</p></div>{pendingEvents.isLoading ? <div className="py-10 text-center text-bone-dim">Loading events...</div> : pendingEvents.data?.length ? <div className="space-y-3">{pendingEvents.data.map((event: any) => <div key={event.id} className="border border-line/50 rounded-lg p-4 bg-ink-2"><div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><div className="font-semibold text-lg">{event.title} <span className="text-xs font-normal text-amber ml-2">{event.category}</span></div><div className="text-sm mt-1">{event.description}</div><div className="text-xs text-bone-dim mt-2">Organizer: {event.organizerName} | Date: {event.dateTime?.start?.toDate ? event.dateTime.start.toDate().toLocaleString() : 'TBD'}</div></div><div className="flex gap-2 shrink-0"><button onClick={() => event.id && approveEventMutation.mutate(event.id)} className="btn-primary py-2" disabled={approveEventMutation.isPending}>Approve</button><button onClick={() => { if (!event.id) return; const r = prompt('Reason for rejection (optional):'); if (r !== null) rejectEventMutation.mutate({ id: event.id, reason: r || undefined }); }} className="btn-secondary py-2 border-danger text-danger hover:bg-danger/10" disabled={rejectEventMutation.isPending}>Reject</button></div></div></div>)}</div> : <div className="py-10 text-center text-bone-dim">No pending events.</div>}</section>}
-
-    {tab === 'seed' && <section className="card p-6 border-danger/30 space-y-6"><div><h2 className="font-display text-xl mb-2 flex items-center gap-2"><Database size={18} /> Database tools</h2><p className="text-sm text-bone-dim">Seeding is idempotent: it uses stable document IDs, overwrites the expected catalog, and removes stale duplicate sample-plan documents.</p></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><button onClick={handleSeedSamplePlans} disabled={seeding} className="btn-secondary border-sienna text-sienna hover:bg-sienna hover:text-bone inline-flex items-center justify-center gap-2">{seeding ? 'Processing...' : <><CheckCircle2 size={15} /> Seed sample plans</>}</button><button onClick={handleSeedExerciseLibrary} disabled={seedingLib} className="btn-secondary border-sienna text-sienna hover:bg-sienna hover:text-bone inline-flex items-center justify-center gap-2">{seedingLib ? 'Processing...' : <><CheckCircle2 size={15} /> Seed exercise library</>}</button><button onClick={async () => { showToast('Scanning for concluded competitions...', 'info'); const { backfillCelebrationPosts } = await import('@/services/community'); const res = await backfillCelebrationPosts(); if (res.success) { queryClient.invalidateQueries({ queryKey: ['feed'] }); queryClient.invalidateQueries({ queryKey: ['clanPosts'] }); queryClient.invalidateQueries({ queryKey: ['allCommunityChallenges'] }); queryClient.invalidateQueries({ queryKey: ['allCommunityEvents'] }); showToast(`Backfill complete: ${res.events} event(s), ${res.challenges} challenge(s) generated.`, 'success'); } else { showToast(res.details || 'Backfill failed. See console for logs.', 'error'); } }} className="btn-secondary border-emerald-500 text-emerald-500 hover:bg-emerald-500 hover:text-bone inline-flex items-center justify-center gap-2"><CheckCircle2 size={15} /> Backfill Celebration Posts</button></div><div className="border-t border-line/50 pt-5"><div className="flex items-center justify-between mb-3"><div><h3 className="font-display text-lg">All user plans</h3><p className="text-xs text-bone-dim mt-1">Admin deletion permanently removes the plan and its day documents.</p></div></div>{plans.isLoading ? <div className="text-sm text-bone-dim">Loading plans...</div> : <div className="space-y-2">{plans.data?.length ? plans.data.map((plan: any) => <div key={plan.id} className="flex items-center justify-between gap-3 rounded-lg border border-line/50 bg-ink-2 p-3"><div className="min-w-0"><div className="font-semibold text-sm truncate">{plan.title}</div><div className="text-xs text-bone-dim truncate">{plan.ownerName || plan.ownerId} · {plan.isArchived ? 'archived' : 'active'}</div></div><button onClick={() => handleDeletePlan(plan.id, plan.title)} disabled={deletingPlanId === plan.id} className="btn-danger py-2 inline-flex items-center gap-2 shrink-0"><Trash2 size={13} /> {deletingPlanId === plan.id ? 'Deleting...' : 'Delete'}</button></div>) : <div className="text-sm text-bone-dim">No user plans found.</div>}</div>}</div></section>}
-
-    {tab === 'storage' && (
-      <section className="card p-6 border-danger/30 space-y-6">
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <div className="pb-5 border-b border-line flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
-          <h2 className="font-display text-xl mb-2 flex items-center gap-2">
-            <Database size={18} /> Storage Cleanup
-          </h2>
-          <p className="text-sm text-bone-dim leading-relaxed">
-            Scan and remove redundant data (Base64 images, GPS paths, text) from older records to free up Firestore database space. 
-            Removed images will be replaced with a placeholder text to avoid broken UI.
-          </p>
+          <div className="font-mono text-danger text-xs tracking-widest mb-1">OPERATIONS</div>
+          <h1 className="font-display text-3xl">Admin Console</h1>
+          <p className="text-bone-dim text-sm mt-1">Moderate the community, monitor product health, and maintain shared content.</p>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-ink-3 p-4 rounded-xl border border-line/30">
-          <div className="space-y-4">
-            <h3 className="font-bold text-sm text-sienna uppercase tracking-widest">Data to Remove</h3>
-            <label htmlFor="storage-clean-images" className="flex items-center gap-3 cursor-pointer">
-              <input id="storage-clean-images" name="storageCleanImages" type="checkbox" checked={storageOpts.types.images} onChange={(e) => setStorageOpts(prev => ({...prev, types: {...prev.types, images: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
-              <span className="text-sm text-bone">Base64 Images</span>
-            </label>
-            <label htmlFor="storage-clean-gps" className="flex items-center gap-3 cursor-pointer">
-              <input id="storage-clean-gps" name="storageCleanGps" type="checkbox" checked={storageOpts.types.gps} onChange={(e) => setStorageOpts(prev => ({...prev, types: {...prev.types, gps: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
-              <span className="text-sm text-bone">GPS Paths & Elevation Maps</span>
-            </label>
-            <label htmlFor="storage-clean-text" className="flex items-center gap-3 cursor-pointer">
-              <input id="storage-clean-text" name="storageCleanText" type="checkbox" checked={storageOpts.types.text} onChange={(e) => setStorageOpts(prev => ({...prev, types: {...prev.types, text: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
-              <span className="text-sm text-bone">Text Content & Descriptions</span>
-            </label>
-
-            <h3 className="font-bold text-sm text-sienna uppercase tracking-widest pt-2 border-t border-line/20">Target Collections</h3>
-            <label htmlFor="storage-coll-feed" className="flex items-center gap-3 cursor-pointer">
-              <input id="storage-coll-feed" name="storageCollFeed" type="checkbox" checked={storageOpts.collections.feed} onChange={(e) => setStorageOpts(prev => ({...prev, collections: {...prev.collections, feed: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
-              <span className="text-sm text-bone">Global Feed</span>
-            </label>
-            <label htmlFor="storage-coll-clan-posts" className="flex items-center gap-3 cursor-pointer">
-              <input id="storage-coll-clan-posts" name="storageCollClanPosts" type="checkbox" checked={storageOpts.collections.clan_posts} onChange={(e) => setStorageOpts(prev => ({...prev, collections: {...prev.collections, clan_posts: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
-              <span className="text-sm text-bone">Clan Posts</span>
-            </label>
-            <label htmlFor="storage-coll-clan-messages" className="flex items-center gap-3 cursor-pointer">
-              <input id="storage-coll-clan-messages" name="storageCollClanMessages" type="checkbox" checked={storageOpts.collections.clan_messages} onChange={(e) => setStorageOpts(prev => ({...prev, collections: {...prev.collections, clan_messages: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
-              <span className="text-sm text-bone">Clan Messages</span>
-            </label>
-            <label htmlFor="storage-coll-workouts" className="flex items-center gap-3 cursor-pointer">
-              <input id="storage-coll-workouts" name="storageCollWorkouts" type="checkbox" checked={storageOpts.collections.workouts} onChange={(e) => setStorageOpts(prev => ({...prev, collections: {...prev.collections, workouts: e.target.checked}}))} className="rounded border-line/30 bg-ink-2 text-sienna focus:ring-sienna/50" />
-              <span className="text-sm text-bone">Workouts</span>
-            </label>
-
-            <div className="pt-2 border-t border-line/20">
-              <label htmlFor="storage-older-than-days" className="block text-sm text-bone mb-2">Only remove from records older than:</label>
-              <select id="storage-older-than-days" name="storageOlderThanDays" value={storageOpts.olderThanDays} onChange={(e) => setStorageOpts(prev => ({...prev, olderThanDays: parseInt(e.target.value)}))} className="input-field max-w-[200px]">
-                <option value={7}>7 Days</option>
-                <option value={30}>30 Days</option>
-                <option value={90}>90 Days</option>
-                <option value={365}>1 Year</option>
-                <option value={0}>All Time (Careful!)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="bg-ink-2 p-4 rounded-lg border border-line/40 flex flex-col items-center justify-center text-center">
-            <h3 className="font-display text-lg mb-2">Storage Estimate</h3>
-            {storageResult ? (
-              <div className="w-full">
-                <div className="text-4xl font-display text-sienna mb-4">
-                  {(storageResult.totalBytes / 1024 / 1024).toFixed(2)} <span className="text-xl">MB</span>
-                </div>
-                <div className="text-xs font-mono text-bone-dim mb-4 space-y-1 bg-black/20 p-2 rounded">
-                  <div>Images: {(storageResult.imageBytes / 1024 / 1024).toFixed(2)} MB</div>
-                  <div>GPS Data: {(storageResult.gpsBytes / 1024 / 1024).toFixed(2)} MB</div>
-                  <div>Text Data: {(storageResult.textBytes / 1024 / 1024).toFixed(2)} MB</div>
-                  <div className="pt-1 mt-1 border-t border-line/20 text-bone">Scanned: {storageResult.scannedDocs} docs</div>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-bone-dim mb-6">Click Calculate to scan the database and estimate space savings.</p>
-            )}
-            
-            <button
-              disabled={isCalculatingStorage || isCleaningStorage}
-              onClick={async () => {
-                setIsCalculatingStorage(true);
-                try {
-                  const res = await calculateStorageUsage(storageOpts);
-                  setStorageResult(res);
-                  showToast('Storage calculated successfully', 'success');
-                } catch (e: any) {
-                  showToast(e.message, 'error');
-                } finally {
-                  setIsCalculatingStorage(false);
-                }
-              }}
-              className="btn-secondary w-full mb-3 py-2.5"
-            >
-              {isCalculatingStorage ? 'Calculating...' : 'Calculate Space'}
-            </button>
-
-            <button
-              disabled={isCalculatingStorage || isCleaningStorage || !storageResult || storageResult.totalBytes === 0}
-              onClick={async () => {
-                if (!confirm(`Are you sure you want to permanently delete ~${(storageResult!.totalBytes / 1024 / 1024).toFixed(2)} MB of data from ${storageResult!.scannedDocs} documents? This cannot be undone.`)) return;
-                setIsCleaningStorage(true);
-                try {
-                  const processed = await cleanupDatabaseStorage(storageOpts);
-                  showToast(`Cleanup complete. Processed ${processed} documents.`, 'success');
-                  setStorageResult(null);
-                } catch (e: any) {
-                  showToast(e.message, 'error');
-                } finally {
-                  setIsCleaningStorage(false);
-                }
-              }}
-              className="btn-danger w-full py-2.5"
-            >
-              {isCleaningStorage ? 'Cleaning Database...' : 'Run Storage Cleanup'}
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <div className="tag-amber inline-flex items-center gap-2"><ShieldAlert size={13} /> ADMIN ACCESS</div>
+          <AdminBell />
         </div>
-      </section>
-    )}
-
-    {tab === 'logs' && <section className="card p-5 space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
-        <div>
-          <h2 className="font-display text-xl">System Logs & Errors</h2>
-          <p className="text-xs text-bone-dim mt-1">
-            Displaying the 100 most recent client-side exceptions and unhandled rejections.
-          </p>
-        </div>
-        <button
-          onClick={() => { if(confirm('Clear all system logs permanently?')) clearLogsMutation.mutate(); }}
-          disabled={clearLogsMutation.isPending || logs.data?.length === 0}
-          className="btn-danger py-2 inline-flex items-center gap-1.5 self-start animate-pulse"
-        >
-          <Trash2 size={13} /> Clear Logs
-        </button>
       </div>
 
-      {logs.isLoading ? (
-        <div className="py-10 text-center text-bone-dim">Loading system logs...</div>
-      ) : logs.data?.length ? (
-        <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
-          {logs.data.map((log: any) => (
-            <div key={log.id} className="border border-line/40 rounded bg-ink-3 p-3 font-mono text-xs text-bone leading-relaxed">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line/30 pb-2 mb-2">
-                <div className="flex items-center gap-2">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${log.context === 'window_onerror' || log.context === 'unhandled_rejection' ? 'bg-danger/10 text-danger' : 'bg-amber/10 text-amber'}`}>
-                    {log.context?.toUpperCase()}
-                  </span>
-                  {log.userName && (
-                    <span className="text-sienna">@{log.userName}</span>
-                  )}
-                </div>
-                <div className="text-[10px] text-bone-dim">
-                  {log.createdAt?.toDate ? log.createdAt.toDate().toLocaleString() : 'Just now'}
-                </div>
-              </div>
-              
-              <div className="text-bone font-semibold mb-1 whitespace-pre-wrap break-words">{log.message}</div>
-              {log.stack && (
-                <pre className="text-[10px] text-bone-dim/80 bg-ink-2/65 p-2 rounded max-h-40 overflow-y-auto whitespace-pre-wrap select-text leading-snug border border-line/10">
-                  {log.stack}
-                </pre>
-              )}
-              
-              <div className="mt-2 pt-2 border-t border-line/20 grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] text-bone-dim">
-                <div className="truncate"><span className="text-bone">URL:</span> {log.url}</div>
-                <div className="truncate"><span className="text-bone">Browser:</span> {log.userAgent}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="py-16 text-center text-bone-dim border border-dashed border-line rounded">
-          No system logs or exceptions recorded. The app is running smoothly!
-        </div>
-      )}
-    </section>}
-    
-    {tab === 'updates' && <section className="card p-6 border-sienna/30">
-      <div className="mb-6">
-        <h2 className="font-display text-xl flex items-center gap-2"><Bell size={20} className="text-sienna" /> Push App Update Popup</h2>
-        <p className="text-sm text-bone-dim mt-1">Publish a release note popup that all users will see on their next app launch. They will only see it once per Update ID.</p>
-      </div>
-      
-      <div className="space-y-4 max-w-lg">
-        <div>
-          <label className="block text-xs font-mono text-bone-dim mb-1">UPDATE ID (E.G. v2.1.0)</label>
-          <input 
-            type="text" 
-            value={updateId} 
-            onChange={e => setUpdateId(e.target.value)} 
-            placeholder="v2.1.0"
-            className="w-full bg-ink-2 border border-line rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sienna"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-mono text-bone-dim mb-1">TITLE</label>
-          <input 
-            type="text" 
-            value={updateTitle} 
-            onChange={e => setUpdateTitle(e.target.value)} 
-            placeholder="New Update Available!"
-            className="w-full bg-ink-2 border border-line rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sienna"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-mono text-bone-dim mb-1">CONTENT (SUPPORTS MULTILINE)</label>
-          <textarea 
-            value={updateContent} 
-            onChange={e => setUpdateContent(e.target.value)} 
-            placeholder="We fixed bugs and improved performance..."
-            rows={5}
-            className="w-full bg-ink-2 border border-line rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-sienna resize-y"
-          />
-        </div>
-        <div className="flex gap-2 mt-2">
-          <button 
-            onClick={async () => {
-              if (!updateId || !updateTitle || !updateContent) return showToast('Fill all fields', 'error');
-              setIsPushingUpdate(true);
-              try {
-                await setDoc(doc(db, 'admin_settings', 'updates'), {
-                  latestUpdateId: updateId,
-                  title: updateTitle,
-                  content: updateContent,
-                  timestamp: new Date().toISOString()
-                });
-                showToast('Update popup pushed to all users!');
-                setUpdateId(''); setUpdateTitle(''); setUpdateContent('');
-              } catch (err: any) {
-                showToast(err?.message || 'Failed to push update', 'error');
-              } finally {
-                setIsPushingUpdate(false);
-              }
-            }}
-            disabled={isPushingUpdate}
-            className="btn-primary flex-1 py-3"
+      <nav className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden p-1 -mx-1">
+        {nav.map(item => (
+          <button
+            key={item.id}
+            onClick={() => go(item.id)}
+            className={`flex shrink-0 items-center gap-2 px-4 py-2 rounded-full font-mono text-sm transition-colors ${tab === item.id ? 'bg-ink text-bone font-bold shadow-sm border border-line/20' : 'bg-ink-2 text-bone-dim hover:bg-ink-3 hover:text-bone'}`}
           >
-            {isPushingUpdate ? 'Pushing...' : 'Push Update Popup'}
+            <item.icon size={14} /> {item.label}
+            {!!item.badge && <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[10px] leading-[18px] text-center">{item.badge > 99 ? '99+' : item.badge}</span>}
           </button>
-          
-          <button 
-            onClick={async () => {
-              if (!confirm('This will instantly delete the active update popup and stop showing it to users. Continue?')) return;
-              try {
-                await deleteDoc(doc(db, 'admin_settings', 'updates'));
-                showToast('Active popup retracted successfully!');
-              } catch (err: any) {
-                showToast(err?.message || 'Failed to retract update', 'error');
-              }
-            }}
-            disabled={isPushingUpdate}
-            className="btn-secondary border-danger/30 text-danger hover:bg-danger/10 py-3 px-4 shrink-0"
-            title="Retract currently active popup"
-          >
-            <Trash2 size={18} />
-          </button>
-        </div>
-      </div>
-    </section>}
-  </motion.div>;
+        ))}
+      </nav>
+
+      {tab === 'overview' && <OverviewTab go={go} />}
+      {tab === 'users' && <AdminUsersTab />}
+      {tab === 'reports' && <AdminReportsTab />}
+      {tab === 'communities' && <AdminModerationTab key="communities" kind="communities" />}
+      {tab === 'events' && <AdminModerationTab key="events" kind="events" />}
+      {tab === 'content' && <AdminContentTab />}
+      {tab === 'updates' && <AdminAnnouncementsTab />}
+      {tab === 'ai' && <AdminNutritionSettings />}
+      {tab === 'logs' && <AdminLogsTab />}
+      {tab === 'storage' && <AdminStorageTab />}
+      {tab === 'audit' && <AdminAuditTab />}
+    </motion.div>
+  );
 }

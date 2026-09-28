@@ -11,9 +11,10 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == uid;
     }
 
+    // Keep in sync with ADMIN_EMAILS in src/lib/firebase.ts.
     function isAdmin() {
       return isAuthenticated()
-        && request.auth.token.email == 'tanmay.sharma4334@gmail.com'
+        && request.auth.token.email in ['tanmay.sharma4334@gmail.com', 'sharmamoni913@gmail.com']
         && request.auth.token.email_verified == true;
     }
 
@@ -22,8 +23,11 @@ service cloud.firestore {
     }
 
     // Suspended accounts can still read and delete their data, but cannot publish.
+    // A ban with expiresAt lapses on its own.
     function notBanned() {
-      return !exists(banPath()) || get(banPath()).data.get('active', false) != true;
+      return !exists(banPath())
+        || get(banPath()).data.get('active', false) != true
+        || (get(banPath()).data.get('expiresAt', null) != null && get(banPath()).data.expiresAt <= request.time);
     }
 
     function canPost() {
@@ -248,6 +252,17 @@ service cloud.firestore {
         && legacyOptOk(o, n, 9, votedFor);
     }
 
+    function eventStatStep(key) {
+      return math.abs(request.resource.data.stats.get(key, 0) - resource.data.get('stats', {}).get(key, 0)) <= 1;
+    }
+
+    // Registration/check-in counters may only move by one per write.
+    function eventStatsStepOk() {
+      return request.resource.data.stats.diff(resource.data.get('stats', {})).affectedKeys()
+          .hasOnly(['registeredCount', 'checkInCount', 'views'])
+        && eventStatStep('registeredCount') && eventStatStep('checkInCount') && eventStatStep('views');
+    }
+
     // Like counters must move together with the caller's like document.
     function activityLikeOk(activityId) {
       let likePath = /databases/$(database)/documents/activities/$(activityId)/likes/$(request.auth.uid);
@@ -264,6 +279,13 @@ service cloud.firestore {
     match /admin_settings/{document} {
       allow read: if isAdmin() || (isAuthenticated() && document != 'api_keys');
       allow write: if isAdmin();
+    }
+
+    // Append-only trail of moderation actions.
+    match /adminAuditLog/{entryId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin() && request.resource.data.adminUid == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // ─── User Profiles ──────────────────────────────────────────
@@ -538,7 +560,8 @@ service cloud.firestore {
     match /communities/{communityId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid
-        && request.resource.data.get('isVerified', false) == false;
+        && request.resource.data.get('isVerified', false) == false
+        && request.resource.data.get('status', 'pending') == 'pending';
       allow update: if isAdmin()
         || (isAuthenticated() && resource.data.ownerId == request.auth.uid
           && !changedKeys().hasAny(['isVerified', 'status', 'ownerId']))
@@ -555,11 +578,13 @@ service cloud.firestore {
 
     match /events/{eventId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.resource.data.organizerId == request.auth.uid;
+      // New events wait in the admin approval queue.
+      allow create: if isAuthenticated() && request.resource.data.organizerId == request.auth.uid
+        && (isAdmin() || request.resource.data.get('status', 'pending') == 'pending');
       allow update: if isAdmin()
         || (isAuthenticated() && resource.data.organizerId == request.auth.uid
           && !changedKeys().hasAny(['status', 'organizerId']))
-        || (isAuthenticated() && onlyChanged(['stats']));
+        || (isAuthenticated() && onlyChanged(['stats']) && eventStatsStepOk());
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.organizerId == request.auth.uid);
     }
 
@@ -777,8 +802,12 @@ service cloud.firestore {
 
     // ─── Clan Posts ─────────────────────────────────────────────
     match /community_posts/{postId} {
-      allow read: if isAuthenticated()
-        && (resource.data.get('communityId', '') == '' || canReadClan(resource.data.communityId));
+      allow get: if isAdmin() || isOwner(resource.data.authorId) || (isAuthenticated()
+        && (resource.data.get('communityId', '') == '' || canReadClan(resource.data.communityId)));
+      // No get() default here: for queries an unconstrained field would resolve to the
+      // default ('') and let an unfiltered query read every private clan's posts.
+      allow list: if isAdmin() || isOwner(resource.data.authorId) || (isAuthenticated()
+        && (resource.data.communityId == '' || canReadClan(resource.data.communityId)));
 
       allow create: if canPost() && (
         (request.resource.data.authorId == request.auth.uid
@@ -812,8 +841,8 @@ service cloud.firestore {
     }
 
     match /community_post_comments/{commentId} {
-      allow read: if isAuthenticated()
-        && canReadPost(get(/databases/$(database)/documents/community_posts/$(resource.data.postId)).data);
+      allow read: if isOwner(resource.data.userId) || (isAuthenticated()
+        && canReadPost(get(/databases/$(database)/documents/community_posts/$(resource.data.postId)).data));
       allow create: if canPost() && request.resource.data.userId == request.auth.uid
         && request.resource.data.postId is string
         && canReadPost(get(/databases/$(database)/documents/community_posts/$(request.resource.data.postId)).data)
@@ -835,6 +864,19 @@ service cloud.firestore {
         || isPostModerator(get(/databases/$(database)/documents/community_posts/$(resource.data.postId)).data);
     }
 
+    // Admin alerts may only go to registered admins, and only about something the sender just submitted.
+    function adminAlertOk(d) {
+      let target = d.get('targetId', '');
+      return d.userId in get(/databases/$(database)/documents/admin_settings/admins).data.get('uids', [])
+        && d.get('link', '') is string && d.link.matches('/admin([?][^ ]*)?')
+        && target is string && target.size() > 0 && target.size() <= 128
+        && (
+          (d.get('kind', '') == 'report' && get(/databases/$(database)/documents/reports/$(target)).data.reporterId == request.auth.uid)
+          || (d.get('kind', '') == 'community' && get(/databases/$(database)/documents/communities/$(target)).data.ownerId == request.auth.uid)
+          || (d.get('kind', '') == 'event' && get(/databases/$(database)/documents/events/$(target)).data.organizerId == request.auth.uid)
+        );
+    }
+
     match /app_notifications/{notifId} {
       allow read, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
       allow update: if isAuthenticated() && resource.data.userId == request.auth.uid
@@ -845,13 +887,20 @@ service cloud.firestore {
         && request.resource.data.get('read', false) == false
         && textOk(request.resource.data, 'title', 150)
         && textOk(request.resource.data, 'body', 1000)
-        && linkOk(request.resource.data.get('link', null));
+        && linkOk(request.resource.data.get('link', null))
+        && (request.resource.data.get('type', '') != 'admin_alert' || adminAlertOk(request.resource.data));
     }
 
     // ─── Reports ────────────────────────────────────────────────
     match /reports/{reportId} {
       allow read: if isAdmin() || isOwner(resource.data.reporterId);
-      allow create: if isAuthenticated() && isOwner(request.resource.data.reporterId);
+      // Reporters can only file open reports; moderation fields belong to admins.
+      allow create: if isOwner(request.resource.data.reporterId)
+        && request.resource.data.status == 'open'
+        && !request.resource.data.keys().hasAny(['resolvedBy', 'resolvedAt', 'reviewedBy', 'reviewedAt', 'resolutionNote'])
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 100
+        && textOk(request.resource.data, 'details', 2000);
       allow update: if isAdmin();
       allow delete: if isAdmin() || isOwner(resource.data.reporterId);
     }

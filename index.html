@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>APPARATUS · Multi-User Fitness Platform</title>
     <meta name="description" content="Track workouts, build strength, follow friends. Calisthenics, gym, and bodyweight training in one place." />
-    <meta name="theme-color" content="#14151A" />
+    <meta name="theme-color" content="#FFFFFF" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Apparatus" />
@@ -30,10 +30,8 @@
               return;
             }
           }
-          // No stored preference yet (fresh install) - match the device's system setting
-          // instead of hardcoding one theme, so first paint doesn't look "wrong" and then flip.
-          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-          document.documentElement.dataset.theme = prefersDark ? 'dark' : 'light';
+          // Default to light theme for new installs
+          document.documentElement.dataset.theme = 'light';
         } catch (e) {}
       })();
     </script>

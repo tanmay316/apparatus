@@ -7,7 +7,7 @@ import { useCardioStore } from '@/stores/cardio-store';
 import { sendLiveMessage } from '@/services/social';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, MessageCircle, Flame } from 'lucide-react';
-import { showNotification } from '@/utils/notifications';
+import { notifyDevice } from '@/utils/notifications';
 import { createPortal } from 'react-dom';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
@@ -77,8 +77,8 @@ export function LiveChatOverlay() {
             });
 
             // Trigger sound / system push notification
-            showNotification(
-              Math.floor(Math.random() * 100000), 
+            notifyDevice(
+              'social',
               `🔥 Cheer from ${data.senderName}`, 
               data.text
             ).catch(() => {});

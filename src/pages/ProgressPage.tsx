@@ -433,7 +433,8 @@ function BarChart({ data, tone, unit, height = 188, fmt = formatNumber }: {
             const h = (d.value / yMax) * plotH;
             const isLast = i === n - 1;
             const isActive = hover === i || (hover === null && isLast);
-            const show = i % step === 0 || isLast;
+            const tooCloseToLast = !isLast && (n - 1 - i) * slot < 54;
+            const show = isLast || (i % step === 0 && !tooCloseToLast);
             return (
               <g key={d.key}>
                 <path
@@ -525,7 +526,13 @@ function CardioSpeedChart({ activities }: { activities: CardioActivity[] }) {
   return <LineChart data={data} tone="speed" unit="km/h" yMin={yMin} />;
 }
 
-function WeeklyVolumeChart({ workouts }: { workouts: Workout[] }) {
+function WeeklyVolumeChart({
+  workouts,
+  metric = 'volume',
+}: {
+  workouts: Workout[];
+  metric?: 'volume' | 'reps';
+}) {
   const data = useMemo<ChartPoint[]>(() => {
     const thisMonday = mondayOf(new Date());
     const buckets: { key: string; label: string; value: number; sessions: number }[] = [];
@@ -540,7 +547,19 @@ function WeeklyVolumeChart({ workouts }: { workouts: Workout[] }) {
       const k = toDateKey(mondayOf(parseDateKey(w.date.slice(0, 10))));
       const i = index.get(k);
       if (i !== undefined) {
-        buckets[i].value += w.volume || 0;
+        if (metric === 'reps') {
+          let reps = 0;
+          for (const ex of w.exercises || []) {
+            for (const s of ex.sets || []) {
+              if (s.completed !== false) {
+                reps += Number(s.reps) || 0;
+              }
+            }
+          }
+          buckets[i].value += reps;
+        } else {
+          buckets[i].value += w.volume || 0;
+        }
         buckets[i].sessions += 1;
       }
     }
@@ -550,9 +569,9 @@ function WeeklyVolumeChart({ workouts }: { workouts: Workout[] }) {
       value: b.value,
       sub: `${b.sessions} session${b.sessions === 1 ? '' : 's'}`,
     }));
-  }, [workouts]);
+  }, [workouts, metric]);
 
-  return <BarChart data={data} tone="strength" unit="kg" />;
+  return <BarChart data={data} tone="strength" unit={metric === 'reps' ? 'reps' : 'kg'} />;
 }
 
 function ConsistencyHeatmap({ workouts, cardio }: { workouts: Workout[]; cardio: CardioActivity[] }) {
@@ -636,6 +655,193 @@ function ConsistencyHeatmap({ workouts, cardio }: { workouts: Workout[]; cardio:
   );
 }
 
+interface CardioPRSummary {
+  maxDist: CardioActivity | null;
+  fastestPace: CardioActivity | null;
+  maxSpeed: CardioActivity | null;
+  longestDur: CardioActivity | null;
+  maxCal: CardioActivity | null;
+  maxElev: CardioActivity | null;
+  maxSteps: CardioActivity | null;
+}
+
+type CardioPrItem = {
+  key: string;
+  label: string;
+  value: string;
+  unit: string;
+  icon: LucideIcon;
+  tone: Tone;
+  act: CardioActivity;
+};
+
+function computeCardioPrs(list: CardioActivity[]): CardioPRSummary {
+  let maxDist: CardioActivity | null = null;
+  let fastestPace: CardioActivity | null = null;
+  let maxSpeed: CardioActivity | null = null;
+  let longestDur: CardioActivity | null = null;
+  let maxCal: CardioActivity | null = null;
+  let maxElev: CardioActivity | null = null;
+  let maxSteps: CardioActivity | null = null;
+
+  for (const c of list) {
+    const dist = c.distanceKm || 0;
+    const dur = c.movingDurationSec || c.durationSec || 0;
+
+    if (!maxDist || dist > (maxDist.distanceKm || 0)) {
+      if (dist > 0) maxDist = c;
+    }
+
+    if (dist >= 0.5 && dur > 0) {
+      const paceSec = dur / dist;
+      const currentBestPaceSec = fastestPace
+        ? ((fastestPace.movingDurationSec || fastestPace.durationSec || 0) / (fastestPace.distanceKm || 1))
+        : Infinity;
+      if (paceSec < currentBestPaceSec && paceSec >= 120) {
+        fastestPace = c;
+      }
+    }
+
+    const spd = c.avgSpeedKmh || (dur > 0 && dist > 0 ? (dist / (dur / 3600)) : 0);
+    const currentBestSpd = maxSpeed ? (maxSpeed.avgSpeedKmh || ((maxSpeed.distanceKm || 0) / (((maxSpeed.movingDurationSec || maxSpeed.durationSec || 1)) / 3600))) : 0;
+    if (spd > currentBestSpd && spd > 0) {
+      maxSpeed = c;
+    }
+
+    if (!longestDur || dur > (longestDur.movingDurationSec || longestDur.durationSec || 0)) {
+      if (dur > 0) longestDur = c;
+    }
+
+    if (!maxCal || (c.calories || 0) > (maxCal.calories || 0)) {
+      if ((c.calories || 0) > 0) maxCal = c;
+    }
+
+    if (!maxElev || (c.elevationGainM || 0) > (maxElev.elevationGainM || 0)) {
+      if ((c.elevationGainM || 0) > 0) maxElev = c;
+    }
+
+    if (!maxSteps || (c.steps || 0) > (maxSteps.steps || 0)) {
+      if ((c.steps || 0) > 0) maxSteps = c;
+    }
+  }
+
+  return { maxDist, fastestPace, maxSpeed, longestDur, maxCal, maxElev, maxSteps };
+}
+
+function buildCardioPrItems(prs: CardioPRSummary, type?: 'run' | 'walk' | 'cycle'): CardioPrItem[] {
+  const items: CardioPrItem[] = [];
+
+  if (prs.maxDist) {
+    items.push({
+      key: 'dist',
+      label: 'Longest distance',
+      value: (prs.maxDist.distanceKm || 0).toFixed(2),
+      unit: 'km',
+      icon: MapPin,
+      tone: 'cardio',
+      act: prs.maxDist,
+    });
+  }
+
+  if (type === 'walk' && prs.maxSteps) {
+    items.push({
+      key: 'steps',
+      label: 'Most steps',
+      value: (prs.maxSteps.steps || 0).toLocaleString(),
+      unit: 'steps',
+      icon: Footprints,
+      tone: 'elev',
+      act: prs.maxSteps,
+    });
+  }
+
+  if (type === 'cycle') {
+    if (prs.maxSpeed) {
+      items.push({
+        key: 'speed',
+        label: 'Top avg speed',
+        value: prs.maxSpeed.avgSpeedKmh ? prs.maxSpeed.avgSpeedKmh.toFixed(1) : '-',
+        unit: 'km/h',
+        icon: Gauge,
+        tone: 'speed',
+        act: prs.maxSpeed,
+      });
+    }
+    if (prs.fastestPace) {
+      items.push({
+        key: 'pace',
+        label: 'Best pace',
+        value: (prs.fastestPace.avgPace || '-').replace(' /km', ''),
+        unit: '/km',
+        icon: Timer,
+        tone: 'neutral',
+        act: prs.fastestPace,
+      });
+    }
+  } else {
+    if (prs.fastestPace) {
+      items.push({
+        key: 'pace',
+        label: 'Best pace',
+        value: (prs.fastestPace.avgPace || '-').replace(' /km', ''),
+        unit: '/km',
+        icon: Timer,
+        tone: 'speed',
+        act: prs.fastestPace,
+      });
+    }
+    if (prs.maxSpeed && type !== 'walk') {
+      items.push({
+        key: 'speed',
+        label: 'Top avg speed',
+        value: prs.maxSpeed.avgSpeedKmh ? prs.maxSpeed.avgSpeedKmh.toFixed(1) : '-',
+        unit: 'km/h',
+        icon: Gauge,
+        tone: 'event',
+        act: prs.maxSpeed,
+      });
+    }
+  }
+
+  if (prs.longestDur) {
+    items.push({
+      key: 'dur',
+      label: 'Longest session',
+      value: formatDurationSec(prs.longestDur.movingDurationSec || prs.longestDur.durationSec),
+      unit: '',
+      icon: Clock,
+      tone: 'neutral',
+      act: prs.longestDur,
+    });
+  }
+
+  if (prs.maxCal) {
+    items.push({
+      key: 'cal',
+      label: 'Most calories',
+      value: String(prs.maxCal.calories || 0),
+      unit: 'kcal',
+      icon: Flame,
+      tone: 'energy',
+      act: prs.maxCal,
+    });
+  }
+
+  if (prs.maxElev) {
+    items.push({
+      key: 'elev',
+      label: 'Most elevation',
+      value: String(prs.maxElev.elevationGainM || 0),
+      unit: 'm',
+      icon: Mountain,
+      tone: 'elev',
+      act: prs.maxElev,
+    });
+  }
+
+  return items;
+}
+
 /* ════════════════════════════════════════════════════════════════
    Page
    ════════════════════════════════════════════════════════════════ */
@@ -667,6 +873,11 @@ export function ProgressPage({
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week
   const [activeCategory, setActiveCategory] = useState<Category>('overview');
   const [timeRange, setTimeRange] = useState<Range>('30d');
+
+  // Personal Records & Strength Volume metrics state
+  const [cardioPrSection, setCardioPrSection] = useState<'all' | 'run' | 'walk' | 'cycle'>('all');
+  const [strengthMetric, setStrengthMetric] = useState<'volume' | 'reps'>('volume');
+  const [hasAutoSwitchedMetric, setHasAutoSwitchedMetric] = useState(false);
 
   // Month navigation for expanded month grid
   const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth());
@@ -848,58 +1059,20 @@ export function ProgressPage({
   }, [filteredCardio]);
 
   // ─── Cardio Personal Records (All Time) ────────────────
-  const cardioPRs = useMemo(() => {
-    let maxDist: CardioActivity | null = null;
-    let fastestPace: CardioActivity | null = null;
-    let maxSpeed: CardioActivity | null = null;
-    let longestDur: CardioActivity | null = null;
-    let maxCal: CardioActivity | null = null;
-    let maxElev: CardioActivity | null = null;
-    let maxSteps: CardioActivity | null = null;
+  const allRuns = useMemo(() => allCardio.filter(c => c.type === 'run'), [allCardio]);
+  const allWalks = useMemo(() => allCardio.filter(c => c.type === 'walk'), [allCardio]);
+  const allCycles = useMemo(() => allCardio.filter(c => c.type === 'cycle'), [allCardio]);
 
-    for (const c of allCardio) {
-      const dist = c.distanceKm || 0;
-      const dur = c.movingDurationSec || c.durationSec || 0;
+  const allCardioPRs = useMemo(() => computeCardioPrs(allCardio), [allCardio]);
+  const runPRs = useMemo(() => computeCardioPrs(allRuns), [allRuns]);
+  const walkPRs = useMemo(() => computeCardioPrs(allWalks), [allWalks]);
+  const cyclePRs = useMemo(() => computeCardioPrs(allCycles), [allCycles]);
 
-      if (!maxDist || dist > (maxDist.distanceKm || 0)) {
-        if (dist > 0) maxDist = c;
-      }
-
-      if (dist >= 0.5 && dur > 0) {
-        const paceSec = dur / dist;
-        const currentBestPaceSec = fastestPace
-          ? (fastestPace.movingDurationSec || fastestPace.durationSec) / fastestPace.distanceKm
-          : Infinity;
-        if (paceSec < currentBestPaceSec && paceSec >= 120) {
-          fastestPace = c;
-        }
-      }
-
-      const spd = c.avgSpeedKmh || (dur > 0 && dist > 0 ? (dist / (dur / 3600)) : 0);
-      const currentBestSpd = maxSpeed ? (maxSpeed.avgSpeedKmh || (maxSpeed.distanceKm / (maxSpeed.durationSec / 3600))) : 0;
-      if (spd > currentBestSpd && spd > 0) {
-        maxSpeed = c;
-      }
-
-      if (!longestDur || dur > (longestDur.movingDurationSec || longestDur.durationSec || 0)) {
-        if (dur > 0) longestDur = c;
-      }
-
-      if (!maxCal || (c.calories || 0) > (maxCal.calories || 0)) {
-        if ((c.calories || 0) > 0) maxCal = c;
-      }
-
-      if (!maxElev || (c.elevationGainM || 0) > (maxElev.elevationGainM || 0)) {
-        if ((c.elevationGainM || 0) > 0) maxElev = c;
-      }
-
-      if (!maxSteps || (c.steps || 0) > (maxSteps.steps || 0)) {
-        if ((c.steps || 0) > 0) maxSteps = c;
-      }
-    }
-
-    return { maxDist, fastestPace, maxSpeed, longestDur, maxCal, maxElev, maxSteps };
-  }, [allCardio]);
+  const cardioPRs = allCardioPRs;
+  const runPrItems = useMemo(() => buildCardioPrItems(runPRs, 'run'), [runPRs]);
+  const walkPrItems = useMemo(() => buildCardioPrItems(walkPRs, 'walk'), [walkPRs]);
+  const cyclePrItems = useMemo(() => buildCardioPrItems(cyclePRs, 'cycle'), [cyclePRs]);
+  const cardioPrItems = useMemo(() => buildCardioPrItems(allCardioPRs), [allCardioPRs]);
 
   // ─── Strength Personal Records (All Time) ──────────────
   const strengthPRs = useMemo(() => {
@@ -926,7 +1099,7 @@ export function ProgressPage({
 
     return Object.entries(bestByExercise)
       .filter(([, v]) => v.maxWeight > 0 || v.maxReps > 0)
-      .sort((a, b) => b[1].maxWeight - a[1].maxWeight)
+      .sort((a, b) => (b[1].maxWeight - a[1].maxWeight) || (b[1].maxReps - a[1].maxReps))
       .slice(0, 10);
   }, [allWorkouts]);
 
@@ -1059,9 +1232,38 @@ export function ProgressPage({
     (s, w) => s + (w.exercises || []).reduce((es, ex) => es + (ex.sets || []).filter(st => st.completed !== false).length, 0),
     0,
   );
+  const strengthTotalReps = filteredWorkouts.reduce(
+    (s, w) => s + (w.exercises || []).reduce((es, ex) => es + (ex.sets || []).reduce((ss, st) => ss + (st.completed !== false ? (Number(st.reps) || 0) : 0), 0), 0),
+    0,
+  );
   const thisWeekVolume = allWorkouts
     .filter(w => w.date >= toDateKey(mondayOf(new Date())))
     .reduce((s, w) => s + (w.volume || 0), 0);
+
+  const thisWeekReps = allWorkouts
+    .filter(w => w.date >= toDateKey(mondayOf(new Date())))
+    .reduce((acc, w) => {
+      return acc + (w.exercises || []).reduce((es, ex) => {
+        return es + (ex.sets || []).reduce((ss, st) => ss + (st.completed !== false ? (Number(st.reps) || 0) : 0), 0);
+      }, 0);
+    }, 0);
+
+  const totalAllVolume = allWorkouts.reduce((s, w) => s + (w.volume || 0), 0);
+  const totalAllReps = allWorkouts.reduce((acc, w) => {
+    return acc + (w.exercises || []).reduce((es, ex) => {
+      return es + (ex.sets || []).reduce((ss, s) => ss + (s.completed !== false ? (Number(s.reps) || 0) : 0), 0);
+    }, 0);
+  }, 0);
+
+  // Auto-switch default to reps if athlete does purely bodyweight exercises
+  useEffect(() => {
+    if (!hasAutoSwitchedMetric && allWorkouts.length > 0) {
+      if (totalAllVolume === 0 && totalAllReps > 0) {
+        setStrengthMetric('reps');
+        setHasAutoSwitchedMetric(true);
+      }
+    }
+  }, [allWorkouts, totalAllVolume, totalAllReps, hasAutoSwitchedMetric]);
 
   const weekStart = weekDays[0].date;
   const weekEnd = weekDays[6].date;
@@ -1087,14 +1289,13 @@ export function ProgressPage({
     const d = getCardioDateStr(c);
     return `${format(parseDateKey(d), 'MMM d, yyyy')} · ${cardioMeta(c.type).label}`;
   };
-  const cardioPrItems = [
-    cardioPRs.maxDist && { key: 'dist', label: 'Longest distance', value: (cardioPRs.maxDist.distanceKm || 0).toFixed(2), unit: 'km', icon: MapPin, tone: 'cardio' as Tone, act: cardioPRs.maxDist },
-    cardioPRs.fastestPace && { key: 'pace', label: 'Best pace', value: (cardioPRs.fastestPace.avgPace || '-').replace(' /km', ''), unit: '/km', icon: Timer, tone: 'speed' as Tone, act: cardioPRs.fastestPace },
-    cardioPRs.maxSpeed && { key: 'speed', label: 'Top avg speed', value: cardioPRs.maxSpeed.avgSpeedKmh ? cardioPRs.maxSpeed.avgSpeedKmh.toFixed(1) : '-', unit: 'km/h', icon: Gauge, tone: 'event' as Tone, act: cardioPRs.maxSpeed },
-    cardioPRs.longestDur && { key: 'dur', label: 'Longest session', value: formatDurationSec(cardioPRs.longestDur.movingDurationSec || cardioPRs.longestDur.durationSec), unit: '', icon: Clock, tone: 'neutral' as Tone, act: cardioPRs.longestDur },
-    cardioPRs.maxCal && { key: 'cal', label: 'Most calories', value: String(cardioPRs.maxCal.calories || 0), unit: 'kcal', icon: Flame, tone: 'energy' as Tone, act: cardioPRs.maxCal },
-    cardioPRs.maxElev && { key: 'elev', label: 'Most elevation', value: String(cardioPRs.maxElev.elevationGainM || 0), unit: 'm', icon: Mountain, tone: 'elev' as Tone, act: cardioPRs.maxElev },
-  ].filter(Boolean) as { key: string; label: string; value: string; unit: string; icon: LucideIcon; tone: Tone; act: CardioActivity }[];
+
+  const cardioSections = [
+    { id: 'all' as const, label: 'All', count: allCardio.length },
+    { id: 'run' as const, label: 'Run', icon: Activity, count: allRuns.length, items: runPrItems, tone: 'text-viz-cardio bg-viz-cardio/10' },
+    { id: 'walk' as const, label: 'Walk', icon: Footprints, count: allWalks.length, items: walkPrItems, tone: 'text-viz-elev bg-viz-elev/10' },
+    { id: 'cycle' as const, label: 'Ride', icon: Bike, count: allCycles.length, items: cyclePrItems, tone: 'text-viz-speed bg-viz-speed/10' },
+  ];
 
   const bodyMetrics = [
     { key: 'weight' as const, label: 'Weight', unit: 'kg', icon: Scale },
@@ -1652,26 +1853,229 @@ export function ProgressPage({
 
               {!isOverview && (
                 <Panel className="p-4 sm:p-5">
-                  <CardTitle title="Personal records" subtitle="Your all-time cardio bests" />
-                  {cardioPrItems.length === 0 ? (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                    <div>
+                      <div className="text-sm font-semibold text-bone">Personal records</div>
+                      <div className="text-xs text-bone-dim">Your all-time cardio bests by activity</div>
+                    </div>
+                    {/* Section Filter Pills */}
+                    <div
+                      className="inline-flex items-center gap-1 p-0.5 rounded-lg bg-surface-2 border border-line self-start sm:self-auto overflow-x-auto max-w-full [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                    >
+                      {cardioSections.map(s => {
+                        const isActive = cardioPrSection === s.id;
+                        const IconComponent = 'icon' in s ? s.icon : null;
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => setCardioPrSection(s.id)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors shrink-0 ${
+                              isActive
+                                ? 'bg-bone text-ink font-semibold shadow-sm'
+                                : 'text-bone-dim hover:text-bone'
+                            }`}
+                          >
+                            {IconComponent && <IconComponent size={12} />}
+                            <span>{s.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Content based on selected section */}
+                  {allCardio.length === 0 ? (
                     <EmptyState icon={Trophy} title="No records yet" text="Complete a cardio session to set your first record." />
-                  ) : (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      {cardioPrItems.map(pr => (
-                        <div key={pr.key} className="pro-tile p-3.5">
+                  ) : cardioPrSection === 'all' ? (
+                    <div className="space-y-6">
+                      {/* Run Section */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
-                              <pr.icon size={13} />
+                            <span className="w-6 h-6 rounded-lg flex items-center justify-center bg-viz-cardio/10 text-viz-cardio">
+                              <Activity size={13} />
                             </span>
-                            <span className="pro-label truncate">{pr.label}</span>
+                            <span className="text-xs font-semibold uppercase tracking-wider text-bone">Run Records</span>
                           </div>
-                          <div className="mt-2.5 flex items-baseline gap-1">
-                            <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
-                            {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
-                          </div>
-                          <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
+                          <span className="text-[11px] text-bone-dim">{allRuns.length} session{allRuns.length === 1 ? '' : 's'}</span>
                         </div>
-                      ))}
+                        {runPrItems.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-line p-3 text-center text-xs text-bone-dim">
+                            No running records yet. Complete a run to set your first record.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                            {runPrItems.map(pr => (
+                              <div key={pr.key} className="pro-tile p-3.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
+                                    <pr.icon size={13} />
+                                  </span>
+                                  <span className="pro-label truncate">{pr.label}</span>
+                                </div>
+                                <div className="mt-2.5 flex items-baseline gap-1">
+                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
+                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
+                                </div>
+                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="border-t border-line" />
+
+                      {/* Walk Section */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg flex items-center justify-center bg-viz-elev/10 text-viz-elev">
+                              <Footprints size={13} />
+                            </span>
+                            <span className="text-xs font-semibold uppercase tracking-wider text-bone">Walk Records</span>
+                          </div>
+                          <span className="text-[11px] text-bone-dim">{allWalks.length} session{allWalks.length === 1 ? '' : 's'}</span>
+                        </div>
+                        {walkPrItems.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-line p-3 text-center text-xs text-bone-dim">
+                            No walking records yet. Complete a walk to set your first record.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                            {walkPrItems.map(pr => (
+                              <div key={pr.key} className="pro-tile p-3.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
+                                    <pr.icon size={13} />
+                                  </span>
+                                  <span className="pro-label truncate">{pr.label}</span>
+                                </div>
+                                <div className="mt-2.5 flex items-baseline gap-1">
+                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
+                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
+                                </div>
+                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="border-t border-line" />
+
+                      {/* Ride Section */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-lg flex items-center justify-center bg-viz-speed/10 text-viz-speed">
+                              <Bike size={13} />
+                            </span>
+                            <span className="text-xs font-semibold uppercase tracking-wider text-bone">Ride Records</span>
+                          </div>
+                          <span className="text-[11px] text-bone-dim">{allCycles.length} session{allCycles.length === 1 ? '' : 's'}</span>
+                        </div>
+                        {cyclePrItems.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-line p-3 text-center text-xs text-bone-dim">
+                            No ride records yet. Complete a ride to set your first record.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                            {cyclePrItems.map(pr => (
+                              <div key={pr.key} className="pro-tile p-3.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
+                                    <pr.icon size={13} />
+                                  </span>
+                                  <span className="pro-label truncate">{pr.label}</span>
+                                </div>
+                                <div className="mt-2.5 flex items-baseline gap-1">
+                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
+                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
+                                </div>
+                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Specific Discipline View */
+                    <div>
+                      {cardioPrSection === 'run' && (
+                        runPrItems.length === 0 ? (
+                          <EmptyState icon={Activity} title="No run records yet" text="Log a run to track your personal distance, pace, and endurance records." />
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                            {runPrItems.map(pr => (
+                              <div key={pr.key} className="pro-tile p-3.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
+                                    <pr.icon size={13} />
+                                  </span>
+                                  <span className="pro-label truncate">{pr.label}</span>
+                                </div>
+                                <div className="mt-2.5 flex items-baseline gap-1">
+                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
+                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
+                                </div>
+                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      )}
+
+                      {cardioPrSection === 'walk' && (
+                        walkPrItems.length === 0 ? (
+                          <EmptyState icon={Footprints} title="No walk records yet" text="Log a walk to track your distance, steps, and duration records." />
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                            {walkPrItems.map(pr => (
+                              <div key={pr.key} className="pro-tile p-3.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
+                                    <pr.icon size={13} />
+                                  </span>
+                                  <span className="pro-label truncate">{pr.label}</span>
+                                </div>
+                                <div className="mt-2.5 flex items-baseline gap-1">
+                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
+                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
+                                </div>
+                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      )}
+
+                      {cardioPrSection === 'cycle' && (
+                        cyclePrItems.length === 0 ? (
+                          <EmptyState icon={Bike} title="No ride records yet" text="Log a ride to track your distance, speed, and elevation records." />
+                        ) : (
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                            {cyclePrItems.map(pr => (
+                              <div key={pr.key} className="pro-tile p-3.5">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
+                                    <pr.icon size={13} />
+                                  </span>
+                                  <span className="pro-label truncate">{pr.label}</span>
+                                </div>
+                                <div className="mt-2.5 flex items-baseline gap-1">
+                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
+                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
+                                </div>
+                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      )}
                     </div>
                   )}
                 </Panel>
@@ -1692,7 +2096,13 @@ export function ProgressPage({
               {!isOverview && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <Stat label="Workouts" value={filteredWorkouts.length} icon={Dumbbell} tone="strength" />
-                  <Stat label="Volume" value={formatNumber(strengthVolume)} unit="kg" icon={TrendingUp} tone="speed" />
+                  <Stat
+                    label={strengthMetric === 'reps' || (strengthVolume === 0 && strengthTotalReps > 0) ? 'Total reps' : 'Volume'}
+                    value={strengthMetric === 'reps' || (strengthVolume === 0 && strengthTotalReps > 0) ? formatNumber(strengthTotalReps) : formatNumber(strengthVolume)}
+                    unit={strengthMetric === 'reps' || (strengthVolume === 0 && strengthTotalReps > 0) ? 'reps' : 'kg'}
+                    icon={TrendingUp}
+                    tone="speed"
+                  />
                   <Stat label="Sets" value={strengthSets} icon={Layers} tone="neutral" />
                   <Stat
                     label="Avg duration"
@@ -1705,19 +2115,54 @@ export function ProgressPage({
               )}
 
               <Panel className="p-4 sm:p-5">
-                <CardTitle
-                  title="Weekly volume"
-                  subtitle="Total load lifted · last 8 weeks"
-                  right={
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <div>
+                    <div className="text-sm font-semibold text-bone">Weekly volume</div>
+                    <div className="text-xs text-bone-dim">
+                      {strengthMetric === 'volume'
+                        ? 'Total load lifted · last 8 weeks'
+                        : 'Total reps completed · last 8 weeks'}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-3">
+                    <div className="inline-flex items-center p-0.5 rounded-lg bg-surface-2 border border-line text-xs font-medium">
+                      <button
+                        type="button"
+                        onClick={() => setStrengthMetric('volume')}
+                        className={`px-2.5 py-1 rounded-md transition-colors ${
+                          strengthMetric === 'volume'
+                            ? 'bg-bone text-ink font-semibold shadow-sm'
+                            : 'text-bone-dim hover:text-bone'
+                        }`}
+                      >
+                        Weight (kg)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStrengthMetric('reps')}
+                        className={`px-2.5 py-1 rounded-md transition-colors ${
+                          strengthMetric === 'reps'
+                            ? 'bg-bone text-ink font-semibold shadow-sm'
+                            : 'text-bone-dim hover:text-bone'
+                        }`}
+                      >
+                        Reps (bodyweight)
+                      </button>
+                    </div>
+
                     <div className="text-right shrink-0">
                       <div className="text-lg font-semibold text-bone tabular-nums leading-tight">
-                        {formatNumber(thisWeekVolume)} <span className="text-xs font-medium text-bone-dim">kg</span>
+                        {formatNumber(strengthMetric === 'volume' ? thisWeekVolume : thisWeekReps)}{' '}
+                        <span className="text-xs font-medium text-bone-dim">
+                          {strengthMetric === 'volume' ? 'kg' : 'reps'}
+                        </span>
                       </div>
                       <div className="text-[11px] text-bone-dim">This week</div>
                     </div>
-                  }
-                />
-                <WeeklyVolumeChart workouts={allWorkouts} />
+                  </div>
+                </div>
+                <WeeklyVolumeChart workouts={allWorkouts} metric={strengthMetric} />
               </Panel>
 
               <Panel className="p-4 sm:p-5">
@@ -1749,9 +2194,15 @@ export function ProgressPage({
                         </div>
                         <div className="text-right shrink-0">
                           <div className="text-[15px] font-semibold text-bone tabular-nums">
-                            {pr.maxWeight > 0 ? <>{pr.maxWeight} <span className="text-[11px] font-medium text-bone-dim">kg</span></> : '-'}
+                            {pr.maxWeight > 0 ? (
+                              <>{pr.maxWeight} <span className="text-[11px] font-medium text-bone-dim">kg</span></>
+                            ) : pr.maxReps > 0 ? (
+                              <>{pr.maxReps} <span className="text-[11px] font-medium text-bone-dim">reps</span></>
+                            ) : '-'}
                           </div>
-                          <div className="text-[11px] text-bone-dim tabular-nums">{pr.maxReps} reps max</div>
+                          <div className="text-[11px] text-bone-dim tabular-nums">
+                            {pr.maxWeight > 0 ? `${pr.maxReps} reps max` : 'Bodyweight'}
+                          </div>
                         </div>
                       </div>
                     ))}

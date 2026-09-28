@@ -1,194 +1,147 @@
-import React, { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { useEffect, useState } from 'react';
+import { doc, getDoc, writeBatch } from 'firebase/firestore';
+import { Eye, EyeOff, Key, Save, Shield, X } from 'lucide-react';
 import { db } from '@/lib/firebase';
-import { Key, Shield, Save, Eye, EyeOff } from 'lucide-react';
-import { useAuthStore } from '../../stores/auth-store';
+import { useUIStore } from '@/stores/ui-store';
+import { logAdminAction } from '@/services/admin';
+import { Switch } from '@/components/ui/Toggle';
+import { LoadingState } from './AdminShared';
+
+const PROVIDERS = [
+  { field: 'groq_api_key', label: 'Groq', role: 'Primary', placeholder: 'gsk_…' },
+  { field: 'nvidia_api_key', label: 'NVIDIA', role: 'Fallback 1', placeholder: 'nvapi-…' },
+  { field: 'gemini_api_key', label: 'Gemini', role: 'Fallback 2', placeholder: 'AIza…' },
+  { field: 'openrouter_api_key', label: 'OpenRouter', role: 'Fallback 3', placeholder: 'sk-or-v1-…' },
+] as const;
+
+type KeyField = typeof PROVIDERS[number]['field'];
+type Keys = Record<KeyField, string>;
+
+const EMPTY_KEYS: Keys = { groq_api_key: '', nvidia_api_key: '', gemini_api_key: '', openrouter_api_key: '' };
+const mask = (v: string) => (v.length > 8 ? `••••${v.slice(-4)}` : v ? '••••' : 'not set');
 
 export default function AdminNutritionSettings() {
-  const { profile } = useAuthStore();
+  const showToast = useUIStore(s => s.showToast);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [settings, setSettings] = useState({
-    use_admin_keys: false,
-    groq_api_key: '',
-    nvidia_api_key: '',
-    gemini_api_key: '',
-    openrouter_api_key: ''
-  });
-  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
-  const [message, setMessage] = useState('');
-
-  const toggleShowKey = (keyName: string) => {
-    setShowKeys(prev => ({ ...prev, [keyName]: !prev[keyName] }));
-  };
+  const [useAdminKeys, setUseAdminKeys] = useState(false);
+  const [keys, setKeys] = useState<Keys>(EMPTY_KEYS);
+  const [saved, setSaved] = useState<{ useAdminKeys: boolean; keys: Keys }>({ useAdminKeys: false, keys: EMPTY_KEYS });
+  const [visible, setVisible] = useState<Partial<Record<KeyField, boolean>>>({});
 
   useEffect(() => {
-    async function loadSettings() {
-      if (!profile?.isAdmin) return;
+    let cancelled = false;
+    (async () => {
       try {
-        const docRef = doc(db, 'admin_settings', 'api_keys');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setSettings(prev => ({ ...prev, ...(docSnap.data() as any) }));
-        }
-      } catch (err) {
-        console.error("Error loading admin settings:", err);
+        const [keysSnap, modeSnap] = await Promise.all([
+          getDoc(doc(db, 'admin_settings', 'api_keys')),
+          getDoc(doc(db, 'admin_settings', 'ai_mode')),
+        ]);
+        if (cancelled) return;
+        const data = keysSnap.data() || {};
+        const loaded = { ...EMPTY_KEYS };
+        PROVIDERS.forEach(p => { if (typeof data[p.field] === 'string') loaded[p.field] = data[p.field]; });
+        // ai_mode is the flag the backend reads; fall back to the legacy copy in api_keys.
+        const mode = modeSnap.exists() ? !!modeSnap.data().use_admin_keys : !!data.use_admin_keys;
+        setKeys(loaded);
+        setUseAdminKeys(mode);
+        setSaved({ useAdminKeys: mode, keys: loaded });
+      } catch (err: any) {
+        if (!cancelled) showToast(err?.message || 'Could not load AI settings', 'error');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }
-    loadSettings();
-  }, [profile]);
+    })();
+    return () => { cancelled = true; };
+  }, [showToast]);
+
+  const trimmed = Object.fromEntries(PROVIDERS.map(p => [p.field, keys[p.field].trim()])) as Keys;
+  const dirty = useAdminKeys !== saved.useAdminKeys || PROVIDERS.some(p => trimmed[p.field] !== saved.keys[p.field]);
+  const anyKey = PROVIDERS.some(p => trimmed[p.field]);
 
   const handleSave = async () => {
+    if (useAdminKeys && !anyKey) {
+      showToast('Add at least one key before enabling global keys', 'error');
+      return;
+    }
     setSaving(true);
-    setMessage('');
     try {
-      await setDoc(doc(db, 'admin_settings', 'api_keys'), settings);
-      await setDoc(doc(db, 'admin_settings', 'ai_mode'), { use_admin_keys: settings.use_admin_keys });
-      setMessage('Settings saved successfully!');
-      setTimeout(() => setMessage(''), 3000);
-    } catch (err) {
-      console.error(err);
-      setMessage('Failed to save settings.');
+      // One batch so the backend never sees the flag on without the matching keys.
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'admin_settings', 'api_keys'), { ...trimmed, use_admin_keys: useAdminKeys });
+      batch.set(doc(db, 'admin_settings', 'ai_mode'), { use_admin_keys: useAdminKeys });
+      await batch.commit();
+      const changed = PROVIDERS.filter(p => trimmed[p.field] !== saved.keys[p.field]).map(p => p.label);
+      await logAdminAction('settings.ai_keys', 'settings', 'api_keys', {
+        details: `global keys ${useAdminKeys ? 'on' : 'off'}${changed.length ? ` · changed: ${changed.join(', ')}` : ''}`,
+      });
+      setKeys(trimmed);
+      setSaved({ useAdminKeys, keys: trimmed });
+      showToast('AI settings saved');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save settings', 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  if (!profile?.isAdmin) return null;
-  if (loading) return <div className="p-4 text-bone-dim animate-pulse">Loading settings...</div>;
+  if (loading) return <LoadingState label="Loading AI settings…" />;
 
   return (
-    <div className="card p-6 border-sienna/20">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-xl bg-sienna/20 flex items-center justify-center">
-          <Shield className="text-sienna" size={20} />
-        </div>
+    <div className="card p-5 space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-sienna/20 flex items-center justify-center"><Shield className="text-sienna" size={20} /></div>
         <div>
-          <h2 className="text-lg font-display text-bone font-semibold">Global AI Settings</h2>
-          <p className="text-xs text-bone-dim">Manage the global API keys for the AI Nutrition Agent (Priority: Groq → NVIDIA → Gemini → OpenRouter).</p>
+          <h2 className="text-lg font-display text-bone font-semibold">Global AI keys</h2>
+          <p className="text-xs text-bone-dim">Used by the nutrition and workout AI agents. Providers are tried in order: Groq → NVIDIA → Gemini → OpenRouter.</p>
         </div>
       </div>
 
-      <div className="space-y-5">
-        <label className="flex items-center gap-3 cursor-pointer p-4 rounded-xl bg-white/[0.02] border border-line">
-          <div className="relative inline-flex items-center">
-            <input
-              type="checkbox"
-              className="sr-only peer"
-              checked={settings.use_admin_keys}
-              onChange={(e) => setSettings({ ...settings, use_admin_keys: e.target.checked })}
-            />
-            <div className="w-11 h-6 bg-ink-3 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sienna"></div>
-          </div>
-          <div>
-            <div className="text-sm font-medium text-bone">Use Global Admin Keys</div>
-            <div className="text-xs text-bone-dim mt-0.5">
-              If enabled, all users will use these API keys instead of their own personal keys.
-            </div>
-          </div>
-        </label>
-
-        {settings.use_admin_keys && (
-          <div className="space-y-4 pt-2">
-            <div>
-              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">Groq API Key (Primary)</label>
-              <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" size={16} />
-                <input
-                  type={showKeys.groq ? "text" : "password"}
-                  value={settings.groq_api_key}
-                  onChange={(e) => setSettings({ ...settings, groq_api_key: e.target.value })}
-                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-10 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors font-mono"
-                  placeholder="gsk_..."
-                />
-                <button
-                  type="button"
-                  onClick={() => toggleShowKey('groq')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
-                >
-                  {showKeys.groq ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">Nvidia API Key (Fallback 1)</label>
-              <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" size={16} />
-                <input
-                  type={showKeys.nvidia ? "text" : "password"}
-                  value={settings.nvidia_api_key}
-                  onChange={(e) => setSettings({ ...settings, nvidia_api_key: e.target.value })}
-                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-10 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors font-mono"
-                  placeholder="nvapi-..."
-                />
-                <button
-                  type="button"
-                  onClick={() => toggleShowKey('nvidia')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
-                >
-                  {showKeys.nvidia ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">Gemini API Key (Fallback 2)</label>
-              <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" size={16} />
-                <input
-                  type={showKeys.gemini ? "text" : "password"}
-                  value={settings.gemini_api_key}
-                  onChange={(e) => setSettings({ ...settings, gemini_api_key: e.target.value })}
-                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-10 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors font-mono"
-                  placeholder="AIza..."
-                />
-                <button
-                  type="button"
-                  onClick={() => toggleShowKey('gemini')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
-                >
-                  {showKeys.gemini ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs text-bone-dim mb-1.5 uppercase tracking-wider font-semibold">OpenRouter API Key (Fallback 3)</label>
-              <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" size={16} />
-                <input
-                  type={showKeys.openrouter ? "text" : "password"}
-                  value={settings.openrouter_api_key}
-                  onChange={(e) => setSettings({ ...settings, openrouter_api_key: e.target.value })}
-                  className="w-full bg-ink border border-line rounded-xl pl-10 pr-10 py-2.5 text-sm text-bone focus:outline-none focus:border-sienna transition-colors font-mono"
-                  placeholder="sk-or-v1-..."
-                />
-                <button
-                  type="button"
-                  onClick={() => toggleShowKey('openrouter')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
-                >
-                  {showKeys.openrouter ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="pt-4 flex items-center justify-between">
-          <div className="text-xs text-sienna-light">{message}</div>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="btn-primary"
-          >
-            <Save size={16} />
-            {saving ? 'Saving...' : 'Save Settings'}
-          </button>
+      <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-ink-2 border border-line/40">
+        <div>
+          <div className="text-sm font-medium text-bone">Use global admin keys</div>
+          <div className="text-xs text-bone-dim mt-0.5">When on, every user's AI requests are billed to these keys instead of their personal ones.</div>
         </div>
+        <Switch checked={useAdminKeys} onChange={setUseAdminKeys} label="Use global admin keys" />
+      </div>
+
+      <div className="space-y-4">
+        {PROVIDERS.map(p => (
+          <div key={p.field}>
+            <label htmlFor={`ai-${p.field}`} className="label flex items-center justify-between">
+              <span>{p.label} <span className="normal-case font-normal">({p.role})</span></span>
+              <span className={`normal-case font-normal ${saved.keys[p.field] ? 'text-sienna' : 'text-bone-dim'}`}>{mask(saved.keys[p.field])}</span>
+            </label>
+            <div className="relative">
+              <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-bone-dim" size={15} />
+              <input
+                id={`ai-${p.field}`}
+                type={visible[p.field] ? 'text' : 'password'}
+                autoComplete="off"
+                spellCheck={false}
+                value={keys[p.field]}
+                onChange={e => setKeys(k => ({ ...k, [p.field]: e.target.value }))}
+                className="input-field pl-10 pr-20 font-mono"
+                placeholder={p.placeholder}
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                {keys[p.field] && (
+                  <button type="button" onClick={() => setKeys(k => ({ ...k, [p.field]: '' }))} className="text-bone-dim hover:text-danger" title="Clear"><X size={15} /></button>
+                )}
+                <button type="button" onClick={() => setVisible(v => ({ ...v, [p.field]: !v[p.field] }))} className="text-bone-dim hover:text-bone" title={visible[p.field] ? 'Hide' : 'Show'}>
+                  {visible[p.field] ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs text-bone-dim">{dirty ? 'Unsaved changes' : 'All changes saved'}</span>
+        <button onClick={handleSave} disabled={saving || !dirty} className="btn-primary">
+          <Save size={15} /> {saving ? 'Saving…' : 'Save settings'}
+        </button>
       </div>
     </div>
   );

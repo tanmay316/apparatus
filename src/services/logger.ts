@@ -1,4 +1,4 @@
-import { collection, addDoc, serverTimestamp, getDocs, query, orderBy, limit, writeBatch } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDocs, query, orderBy, limit, writeBatch, doc } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import type { SystemLog } from '@/types';
 
@@ -27,7 +27,8 @@ export async function logError(error: Error | unknown, context?: string): Promis
       message: error instanceof Error ? error.message : typeof error === 'object' ? JSON.stringify(error) : String(error),
       stack: error instanceof Error ? error.stack || null : null,
       context: typeof context === 'object' ? JSON.stringify(context) : context || 'app_error',
-      url: window.location.href,
+      // Query strings and hashes can carry auth/redirect tokens; keep only the route.
+      url: window.location.origin + window.location.pathname,
       userAgent: navigator.userAgent,
       createdAt: serverTimestamp(),
     };
@@ -55,6 +56,14 @@ export async function getSystemLogs(limitCount = 100): Promise<SystemLog[]> {
       createdAt: data.createdAt || null
     } as SystemLog;
   });
+}
+
+export async function deleteSystemLogs(ids: string[]): Promise<void> {
+  for (let i = 0; i < ids.length; i += 450) {
+    const batch = writeBatch(db);
+    ids.slice(i, i + 450).forEach(id => batch.delete(doc(db, 'systemLogs', id)));
+    await batch.commit();
+  }
 }
 
 export async function clearAllSystemLogs(): Promise<void> {

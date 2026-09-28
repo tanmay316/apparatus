@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -19,6 +19,7 @@ import {
   type Assessment, type LogResult, type Prescription, type ProgressMap, type SkillProgress, type TutorProfile,
 } from '@/lib/skill-tutor';
 import { loadSkillTutor, saveSkillTutor, type SkillTutorState } from '@/services/skills';
+import { syncTutorSkills } from '@/services/stats';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.04 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -77,6 +78,11 @@ export function SkillsPage() {
 
   const tutor = data?.profile ?? null;
   const progress = data?.progress ?? {};
+
+  // Skill progress feeds the athlete rank's Skill pillar.
+  useEffect(() => {
+    if (uid && data) syncTutorSkills(uid, data.progress).catch(() => {});
+  }, [uid, data]);
 
   const persist = (next: SkillTutorState, changed: { profile?: TutorProfile; progress?: SkillProgress[] }) => {
     if (!uid) return;

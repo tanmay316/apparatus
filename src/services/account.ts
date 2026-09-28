@@ -14,7 +14,7 @@ import {
   limit,
 } from 'firebase/firestore';
 import { deleteObject, ref } from 'firebase/storage';
-import { db, storage, ADMIN_EMAIL } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
 import { compressImageFile } from '@/utils/image-compression';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -221,9 +221,18 @@ async function gatherUserRefs(uid: string, onProgress?: (msg: string, pct: numbe
   const simpleEventPartDocs = await safeFetch(query(collection(db, 'simple_event_participants'), where('userId', '==', uid)));
   refs.push(...simpleEventPartDocs.map(d => d.ref));
 
-  // Phase 11: Community posts by user (36-38%)
+  // Phase 11: Clan posts and comments by user (36-38%)
   onProgress?.('Fetching community posts...', 36);
-  const communityPostDocs = await safeFetch(query(collection(db, 'community_posts'), where('userId', '==', uid)));
+  const [communityPostDocs, ownCommentDocs] = await Promise.all([
+    safeFetch(query(collection(db, 'community_posts'), where('authorId', '==', uid))),
+    safeFetch(query(collection(db, 'community_post_comments'), where('userId', '==', uid))),
+  ]);
+  // Other people's replies go before their post: the post author's delete right is checked against the post.
+  for (const post of communityPostDocs) {
+    const replies = await safeFetch(query(collection(db, 'community_post_comments'), where('postId', '==', post.id)));
+    refs.push(...replies.map(d => d.ref));
+  }
+  refs.push(...ownCommentDocs.map(d => d.ref));
   refs.push(...communityPostDocs.map(d => d.ref));
 
   // Phase 12: Active sessions (38-39%)
@@ -242,7 +251,9 @@ async function gatherUserRefs(uid: string, onProgress?: (msg: string, pct: numbe
   refs.push(doc(db, 'users', uid, 'stats', 'current'));
 
   onProgress?.(`Compiled ${refs.length} documents to delete`, 40);
-  return { refs, clanMembershipDocs };
+  // A batch may not touch the same document twice (e.g. own comment on own post).
+  const unique = [...new Map(refs.map(r => [r.path, r])).values()];
+  return { refs: unique, clanMembershipDocs };
 }
 
 // ─── Decrement community/clan member counts ───────────────────
@@ -261,27 +272,33 @@ async function decrementMemberCounts(clanMembershipDocs: any[]) {
 // ─── Transfer Ownership to Admin ──────────────────────────────
 
 async function transferOwnershipToAdmin(uid: string) {
-  if (!ADMIN_EMAIL) return;
+  // Profiles no longer carry emails, so the admin is found through the registered admin uids.
+  const adminsSnap = await getDoc(doc(db, 'admin_settings', 'admins')).catch(() => null);
+  const adminUids: unknown[] = adminsSnap?.data()?.uids || [];
+  const adminId = adminUids.find((id): id is string => typeof id === 'string' && id !== uid);
+  if (!adminId) return;
 
-  const adminQuery = await safeFetch(query(collection(db, 'users'), where('email', '==', ADMIN_EMAIL), limit(1)));
-  if (adminQuery.length === 0) return;
-
-  const adminDoc = adminQuery[0];
-  const adminId = adminDoc.id;
-  const adminData = adminDoc.data() as any;
+  const adminSnap = await getDoc(doc(db, 'users', adminId)).catch(() => null);
+  const adminData = adminSnap?.data() as any;
   const adminName = adminData?.displayName || 'Admin';
   const adminPhoto = adminData?.photoURL || '';
 
   const clansQuery = await safeFetch(query(collection(db, 'clans_v2'), where('leaderId', '==', uid)));
   for (const clan of clansQuery) {
-    const clanBatch = writeBatch(db);
-    clanBatch.update(clan.ref, { leaderId: adminId, leaderName: adminName, updatedAt: serverTimestamp() });
-    const memberId = `${clan.id}_${adminId}`;
-    clanBatch.set(doc(db, 'clan_memberships', memberId), {
-      clanId: clan.id, userId: adminId, userName: adminName, userPhoto: adminPhoto,
-      role: 'leader', joinedAt: serverTimestamp(), status: 'active'
-    }, { merge: true });
-    try { await clanBatch.commit(); } catch {}
+    const membershipRef = doc(db, 'clan_memberships', `${clan.id}_${adminId}`);
+    try {
+      // The create rule only lets a leader add plain members, so join first and promote in a second write.
+      await setDoc(membershipRef, {
+        clanId: clan.id, userId: adminId, userName: adminName, userPhoto: adminPhoto,
+        role: 'member', joinedAt: serverTimestamp(), status: 'active',
+      }, { merge: true });
+      const promote = writeBatch(db);
+      promote.update(membershipRef, { role: 'leader' });
+      promote.update(clan.ref, { leaderId: adminId, leaderName: adminName, updatedAt: serverTimestamp() });
+      await promote.commit();
+    } catch (err) {
+      console.warn('Could not transfer clan', clan.id, err);
+    }
   }
 
   const challengesQuery = await safeFetch(query(collection(db, 'challenges_v2'), where('createdBy', '==', uid)));

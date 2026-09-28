@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>APPARATUS · Multi-User Fitness Platform</title>
     <meta name="description" content="Track workouts, build strength, follow friends. Calisthenics, gym, and bodyweight training in one place." />
-    <meta name="theme-color" content="#14151A" />
+    <meta name="theme-color" content="#FFFFFF" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Apparatus" />
@@ -30,35 +30,35 @@
               return;
             }
           }
-          // No stored preference yet (fresh install) - match the device's system setting
-          // instead of hardcoding one theme, so first paint doesn't look "wrong" and then flip.
-          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-          document.documentElement.dataset.theme = prefersDark ? 'dark' : 'light';
+          // Default to light theme for new installs
+          document.documentElement.dataset.theme = 'light';
         } catch (e) {}
       })();
     </script>
-    <script type="module" crossorigin src="/assets/index-DQi3aM_b.js"></script>
+    <script type="module" crossorigin src="/assets/index-L6wHMtj0.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-CNC7AqOf.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-motion-BAg_v6Hw.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-react-Dvfw0867.js">
-    <link rel="modulepreload" crossorigin href="/assets/ui-store-SUXh61x6.js">
-    <link rel="modulepreload" crossorigin href="/assets/vendor-firebase-DYEXNVta.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-motion-B0gWxwwT.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-CwhvABy4.js">
+    <link rel="modulepreload" crossorigin href="/assets/esm-CtvCU-X_.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-firebase-D3xHcuTq.js">
     <link rel="modulepreload" crossorigin href="/assets/dist-CpqYoWTn.js">
     <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
     <link rel="modulepreload" crossorigin href="/assets/tslib.es6-CWjhVEFp.js">
-    <link rel="modulepreload" crossorigin href="/assets/firebase-Ct-w2uVi.js">
+    <link rel="modulepreload" crossorigin href="/assets/firebase-CeY7QvBW.js">
     <link rel="modulepreload" crossorigin href="/assets/validation-w9aTCOt8.js">
-    <link rel="modulepreload" crossorigin href="/assets/stats-DGspB11P.js">
+    <link rel="modulepreload" crossorigin href="/assets/stats-H_o50f_K.js">
     <link rel="modulepreload" crossorigin href="/assets/privacy-ByfCm57o.js">
-    <link rel="modulepreload" crossorigin href="/assets/auth-store-B0NxOTeV.js">
-    <link rel="modulepreload" crossorigin href="/assets/useLiveDisplayName-CB-Fq6RN.js">
-    <link rel="modulepreload" crossorigin href="/assets/social-BctBkcNU.js">
+    <link rel="modulepreload" crossorigin href="/assets/auth-store-DSWxRVgp.js">
     <link rel="modulepreload" crossorigin href="/assets/definitions-DtCSCS0p.js">
-    <link rel="modulepreload" crossorigin href="/assets/esm-D37yPvCY.js">
-    <link rel="modulepreload" crossorigin href="/assets/measurements-D547thr5.js">
+    <link rel="modulepreload" crossorigin href="/assets/esm-CVt1l_AZ.js">
+    <link rel="modulepreload" crossorigin href="/assets/admin-alerts-CY-1teb1.js">
+    <link rel="modulepreload" crossorigin href="/assets/useLiveDisplayName-CagA-0TS.js">
+    <link rel="modulepreload" crossorigin href="/assets/social-DQ9P3H2-.js">
+    <link rel="modulepreload" crossorigin href="/assets/measurements-BCnenDHa.js">
     <link rel="modulepreload" crossorigin href="/assets/esm-gYaGx3hm.js">
+    <link rel="modulepreload" crossorigin href="/assets/html2canvas-BnoT3jMu.js">
     <link rel="modulepreload" crossorigin href="/assets/esm-CW-nM7WG.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-DS_IylzB.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-7vwpV3jK.css">
   </head>
   <body class="bg-ink text-bone antialiased">
     <div id="root">

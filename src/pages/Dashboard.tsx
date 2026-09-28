@@ -14,6 +14,7 @@ import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioSh
 import { HeroDashboard } from '@/components/dashboard/HeroDashboard';
 import { TodayFocusCard } from '@/components/dashboard/TodayFocusCard';
 import { StatsPills } from '@/components/dashboard/StatsPills';
+import { StepGoalCard } from '@/components/dashboard/StepGoalCard';
 import { WeeklyTimeline } from '@/components/dashboard/WeeklyTimeline';
 import { XPPanel } from '@/components/dashboard/XPPanel';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
@@ -274,6 +275,9 @@ export function Dashboard() {
               totalCalories={totalCalories}
               totalHours={totalHours}
             />
+          </div>
+          <div className="order-2">
+            <StepGoalCard userId={profile.uid} goal={profile.stepGoal} />
           </div>
           <div className="order-4">
             <XPPanel xp={xp} streak={streak} badges={badges} />

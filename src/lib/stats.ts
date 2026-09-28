@@ -1,9 +1,12 @@
 import type { BadgeContext, CardioActivity, UserStats, Workout } from '@/types';
 import { evaluateBadges } from '@/lib/badges';
 import { findPersonalRecords } from '@/lib/progressive-overload';
+import { cardioMetrics, dayNumber, mergePerformance, workoutMetrics, type SessionMetrics } from '@/lib/performance';
 
 /** Bump to force every user's stats to be rebuilt from their history on next login. */
-export const STATS_VERSION = 5;
+export const STATS_VERSION = 6;
+
+const TRAINING_DAYS_KEPT = 120;
 
 export function localDateKey(date: Date = new Date()): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -121,6 +124,8 @@ export interface SessionInput {
   cardioType?: string;
   maxLiftKg?: number;
   fullWeek?: boolean;
+  /** Rank metrics from workoutMetrics()/cardioMetrics(). */
+  metrics?: SessionMetrics;
 }
 
 export interface SessionResult {
@@ -176,10 +181,27 @@ export function applySession(previous: Partial<UserStats> | undefined, session: 
     prCount: (base.prCount || 0) + (session.prCount || 0),
     bestHold: Math.max(base.bestHold || 0, session.bestHold || 0),
     fullWeekAchieved: !!base.fullWeekAchieved || !!session.fullWeek,
+    performance: mergePerformance(base.performance, session.metrics || {}, session.dateKey),
+    recentTrainingDays: addTrainingDay(base.recentTrainingDays, session),
   };
   const { badges, unlocked } = mergeBadges(base.badges, stats);
   stats.badges = badges;
   return { stats, xpEarned, streakBonus, unlocked };
+}
+
+/** A few minutes of token effort doesn't count toward training adherence. */
+export function isQualifyingSession(session: Pick<SessionInput, 'kind' | 'durationMin' | 'volume' | 'distanceKm'>): boolean {
+  if ((session.durationMin || 0) >= 15) return true;
+  return session.kind === 'workout' ? (session.volume || 0) >= 1500 : (session.distanceKm || 0) >= 2;
+}
+
+function addTrainingDay(days: string[] | undefined, session: SessionInput): string[] {
+  const set = new Set(days || []);
+  if (isQualifyingSession(session)) set.add(session.dateKey);
+  const sorted = [...set].sort();
+  if (!sorted.length) return sorted;
+  const newest = dayNumber(sorted[sorted.length - 1]);
+  return sorted.filter(day => newest - dayNumber(day) < TRAINING_DAYS_KEPT);
 }
 
 /** Heaviest completed set weight in a session (kg). */
@@ -238,7 +260,11 @@ export function rebuildStats(
     ...cardio.map(c => ({ kind: 'cardio' as const, time: timeOf(c.startedAt, c.date), cardio: c })),
   ].sort((a, b) => a.time - b.time);
 
-  let stats: UserStats = { ...emptyStats(), badges: [...(previous?.badges || [])] };
+  let stats: UserStats = {
+    ...emptyStats(),
+    badges: [...(previous?.badges || [])],
+    ...(previous?.tutorSkills ? { tutorSkills: previous.tutorSkills } : {}),
+  };
   const history: Workout[] = [];
 
   for (const session of sessions) {
@@ -255,6 +281,7 @@ export function rebuildStats(
         bestHold: bestHoldSeconds(w),
         maxLiftKg: heaviestLiftKg(w),
         fullWeek: completesPlanWeek({ ...w, date: dateKey }, history, planDaysPerWeek[w.planId] || 0),
+        metrics: workoutMetrics(w),
       }).stats;
       history.push({ ...w, date: dateKey });
     } else {
@@ -266,6 +293,7 @@ export function rebuildStats(
         durationMin: cardioDurationMin(c),
         distanceKm: c.distanceKm || 0,
         cardioType: c.type,
+        metrics: cardioMetrics(c),
       }).stats;
     }
   }

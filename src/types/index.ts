@@ -41,7 +41,17 @@ export interface UserProfile {
   privacySettings?: PrivacySettings;
   communityBadges?: EarnedCommunityBadge[];
   unseenMedalAward?: EarnedCommunityBadge | null;
-  athleteRank?: { tier: string; track: string | null; label: string; score: number; strength: number; endurance: number };
+  athleteRank?: {
+    tier: string;
+    division?: number;
+    track: string | null;
+    label: string;
+    score: number;
+    strength: number;
+    endurance: number;
+    skill?: number;
+    consistency?: number;
+  };
 }
 
 export interface EarnedCommunityBadge {
@@ -79,6 +89,17 @@ export interface UserStats {
   maxLiftKg?: number;
   fullWeekAchieved?: boolean;
   statsVersion?: number;
+  /** Best result per rank metric (see lib/performance.ts) and the day it was set. */
+  performance?: Record<string, PerformanceBest>;
+  /** Days (YYYY-MM-DD) with a qualifying session, last ~17 weeks. */
+  recentTrainingDays?: string[];
+  /** Skills tutor progress: curriculum skill id → share of steps passed (0–1). */
+  tutorSkills?: Record<string, number>;
+}
+
+export interface PerformanceBest {
+  v: number;
+  d: string;
 }
 
 // ─── Plans ───────────────────────────────────────────────────
@@ -186,6 +207,8 @@ export interface ProgressiveOverloadSummary {
   volumeChangePercent?: number;
   exercisesProgressed: string[];
   exercisesTracked: number;
+  /** Per-exercise change vs its previous best, highest first. */
+  exerciseChanges?: { name: string; changePercent: number }[];
 }
 
 // ─── Social ──────────────────────────────────────────────────
@@ -561,7 +584,8 @@ export type AppNotificationType =
   | 'clan_announcement'
   | 'clan_message'
   | 'clan_join_request'
-  | 'clan_join_accepted';
+  | 'clan_join_accepted'
+  | 'admin_alert';
 
 export interface AppNotificationItem {
   id?: string;
@@ -572,6 +596,10 @@ export interface AppNotificationItem {
   read: boolean;
   createdAt: Timestamp | null;
   link?: string;
+  /** admin_alert only: what was submitted and its document id. */
+  kind?: 'report' | 'community' | 'event';
+  targetId?: string;
+  senderId?: string;
 }
 
 // ─── Cardio / GPS Activities ─────────────────────────────────

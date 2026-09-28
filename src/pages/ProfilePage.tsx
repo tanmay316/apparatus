@@ -4,7 +4,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { doc, getDoc, query, collection, where, limit, getDocs } from 'firebase/firestore';
-import { ChevronLeft, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus, Clock, Loader2, ImagePlus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus, Clock, Loader2, ImagePlus, Trophy } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -426,7 +426,7 @@ export function ProfilePage() {
   const joinDate = viewProfile.createdAt?.toDate
     ? new Date(viewProfile.createdAt.toDate()).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
     : 'Recently';
-  const athleteRank = stats ? computeAthleteRank(stats, p.weight) : null;
+  const athleteRank = stats ? computeAthleteRank(stats, p.weight, { gender: p.gender }) : null;
 
   // Completion score calculation
   const fields = [
@@ -672,9 +672,14 @@ export function ProfilePage() {
             <div className="mt-3.5 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-[22px] sm:text-[26px] font-semibold tracking-tight leading-tight break-words">{p.displayName}</h1>
-                <span className="dx-pill dx-pill--accent" title={athleteRank ? `Rank score ${athleteRank.score}/1000` : undefined}>
-                  {athleteRank?.label || p.athleteRank?.label || 'Beginner'}
-                </span>
+                <Link
+                  to="/ranks"
+                  className="dx-pill dx-pill--accent hover:opacity-85 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1 group"
+                  title={athleteRank ? `Rank score ${athleteRank.score}/1000 · Tap to view all ranks` : 'Tap to view all ranks'}
+                >
+                  <span>{athleteRank?.label || p.athleteRank?.label || 'Beginner'}</span>
+                  <ChevronRight size={11} className="opacity-70 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
               </div>
               <div className="text-[13.5px] dx-muted mt-0.5">@{p.username}</div>
 
@@ -1197,34 +1202,39 @@ export function ProfilePage() {
                 <div className="flex items-center gap-2 mb-3">
                   <TrendingUp className="dx-accent" size={17} />
                   <h3 className="dx-section-title flex-1">Athlete rank</h3>
-                  <span className="dx-pill dx-pill--accent">{athleteRank.label}</span>
+                  <Link
+                    to="/ranks"
+                    className="dx-pill dx-pill--accent hover:opacity-85 active:scale-95 transition-all cursor-pointer inline-flex items-center gap-1 group"
+                    title="Click to view all ranks and score requirements"
+                  >
+                    <span>{athleteRank.label}</span>
+                    <ChevronRight size={12} className="opacity-70 group-hover:translate-x-0.5 transition-transform" />
+                  </Link>
                 </div>
                 <div className="flex items-baseline justify-between text-[12px]">
                   <span className="dx-muted">Rank score</span>
                   <span className="tabular">
                     <span className="font-semibold" style={{ color: 'var(--dx-text)' }}>{athleteRank.score}</span>
-                    {athleteRank.nextTier ? ` / ${athleteRank.nextTier.min} for ${athleteRank.nextTier.name}` : ' · top tier'}
+                    {athleteRank.nextStep ? ` / ${athleteRank.nextStep.min} for ${athleteRank.nextStep.label}` : ' · top rank'}
                   </span>
                 </div>
                 <div className="dx-progress mt-1.5">
-                  <span style={{ width: `${athleteRank.nextTier ? Math.min(100, (athleteRank.score / athleteRank.nextTier.min) * 100) : 100}%` }} />
+                  <span style={{ width: `${athleteRank.nextStep ? Math.min(100, Math.max(0, ((athleteRank.score - athleteRank.currentStep.min) / (athleteRank.nextStep.min - athleteRank.currentStep.min)) * 100)) : 100}%` }} />
                 </div>
-                <div className="mt-4 grid grid-cols-3 gap-2">
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
-                    { label: 'Strength', value: athleteRank.strengthScore, max: 1000 },
-                    { label: 'Endurance', value: athleteRank.enduranceScore, max: 1000 },
-                    { label: 'Consistency', value: athleteRank.consistencyScore, max: 100 },
+                    { label: 'Strength', value: athleteRank.strengthScore },
+                    { label: 'Endurance', value: athleteRank.enduranceScore },
+                    { label: 'Skill', value: athleteRank.skillScore },
+                    { label: 'Consistency', value: athleteRank.consistencyScore },
                   ].map(row => (
                     <div key={row.label} className="dx-inset p-2.5">
                       <div className="text-[11px] dx-muted">{row.label}</div>
-                      <div className="text-[15px] font-semibold tabular leading-tight">{row.value}<span className="text-[10px] font-medium dx-muted">/{row.max}</span></div>
-                      <div className="dx-progress !h-1 mt-1.5"><span style={{ width: `${(row.value / row.max) * 100}%` }} /></div>
+                      <div className="text-[15px] font-semibold tabular leading-tight">{row.value}<span className="text-[10px] font-medium dx-muted">/1000</span></div>
+                      <div className="dx-progress !h-1 mt-1.5"><span style={{ width: `${(row.value / 1000) * 100}%` }} /></div>
                     </div>
                   ))}
                 </div>
-                <p className="mt-3 text-[11.5px] dx-muted leading-relaxed">
-                  Updated automatically from logged workouts and cardio: sessions, load lifted vs bodyweight, distance and streaks.
-                </p>
               </motion.section>
             )}
 
@@ -1373,7 +1383,7 @@ export function ProfilePage() {
               </div>
               <div>
                 <label className="label">Details</label>
-                <textarea value={reportDetails} onChange={event => setReportDetails(event.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-[var(--text)] min-h-24 resize-none" placeholder="What should an admin review?" />
+                <textarea maxLength={2000} value={reportDetails} onChange={event => setReportDetails(event.target.value)} className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--teal)] text-[var(--text)] min-h-24 resize-none" placeholder="What should an admin review?" />
               </div>
               <button onClick={submitReport} disabled={reporting} className="btn-danger w-full py-2.5 font-bold uppercase tracking-wider text-xs bg-red-600 hover:bg-red-700 text-white rounded-xl">
                 {reporting ? 'Submitting...' : 'Submit report'}

@@ -1,45 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { Key, Save, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Save, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth-store';
 
+type KeyName = 'groq_api_key' | 'nvidia_api_key' | 'gemini_api_key' | 'openrouter_api_key';
+
+const KEY_FIELDS: { name: KeyName; label: string; placeholder: string }[] = [
+  { name: 'groq_api_key', label: 'Groq (primary)', placeholder: 'gsk_...' },
+  { name: 'nvidia_api_key', label: 'NVIDIA (fallback 1)', placeholder: 'nvapi-...' },
+  { name: 'gemini_api_key', label: 'Gemini (fallback 2)', placeholder: 'AIza...' },
+  { name: 'openrouter_api_key', label: 'OpenRouter (fallback 3)', placeholder: 'sk-or-v1-...' },
+];
+
+/** Personal AI provider keys, rendered inside a settings section. */
 export default function PersonalAISettings() {
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [keys, setKeys] = useState({
+  const [keys, setKeys] = useState<Record<KeyName, string>>({
     groq_api_key: '',
     nvidia_api_key: '',
     gemini_api_key: '',
-    openrouter_api_key: ''
+    openrouter_api_key: '',
   });
-  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+  const [showKeys, setShowKeys] = useState<Partial<Record<KeyName, boolean>>>({});
   const [globalMode, setGlobalMode] = useState(false);
   const [message, setMessage] = useState('');
-
-  const toggleShowKey = (keyName: string) => {
-    setShowKeys(prev => ({ ...prev, [keyName]: !prev[keyName] }));
-  };
 
   useEffect(() => {
     async function loadKeys() {
       if (!user) return;
       try {
-        // Check if global mode is on
         const globalDoc = await getDoc(doc(db, 'admin_settings', 'ai_mode'));
-        if (globalDoc.exists() && globalDoc.data().use_admin_keys) {
-          setGlobalMode(true);
-        }
-
-        // Load personal keys
-        const docRef = doc(db, 'users', user.uid, 'private', 'api_keys');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setKeys(prev => ({ ...prev, ...(docSnap.data() as any) }));
-        }
+        if (globalDoc.exists() && globalDoc.data().use_admin_keys) setGlobalMode(true);
+        const docSnap = await getDoc(doc(db, 'users', user.uid, 'private', 'api_keys'));
+        if (docSnap.exists()) setKeys(prev => ({ ...prev, ...(docSnap.data() as any) }));
       } catch (err) {
-        console.error("Error loading personal AI settings:", err);
+        console.error('Error loading personal AI settings:', err);
       } finally {
         setLoading(false);
       }
@@ -54,130 +52,67 @@ export default function PersonalAISettings() {
     setMessage('');
     try {
       await setDoc(doc(db, 'users', user.uid, 'private', 'api_keys'), keys);
-      setMessage('API keys saved securely.');
+      setMessage('Saved');
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
       console.error(err);
-      setMessage('Failed to save API keys.');
+      setMessage('Could not save keys');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return null;
+  if (loading) return <div className="py-6 text-[13px] dx-muted">Loading…</div>;
+
+  if (globalMode) {
+    return (
+      <div className="py-4 flex items-start gap-3">
+        <span className="dx-badge-icon !w-9 !h-9 !rounded-xl" style={{ background: 'var(--dx-success-soft)', color: 'var(--dx-success)' }}>
+          <ShieldCheck size={17} />
+        </span>
+        <div>
+          <div className="text-[14px] font-medium" style={{ color: 'var(--dx-text)' }}>Provided by Apparatus</div>
+          <div className="text-[12.5px] dx-muted mt-0.5">AI features are enabled for everyone. No personal keys needed.</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="card p-5 space-y-4">
-      <div className="flex items-center gap-2 pb-2 border-b border-line/30 mb-2">
-        <Key size={18} className="text-amber" />
-        <h3 className="font-display text-base uppercase tracking-wide text-bone">AI Nutrition API Keys</h3>
+    <form onSubmit={handleSave} className="py-4 space-y-4">
+      <p className="text-[12.5px] dx-muted">Keys are stored in your private profile and tried in this order.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {KEY_FIELDS.map(field => (
+          <div key={field.name}>
+            <label className="dx-label" htmlFor={field.name}>{field.label}</label>
+            <div className="relative">
+              <input
+                id={field.name}
+                type={showKeys[field.name] ? 'text' : 'password'}
+                className="dx-input font-mono !text-[13px] pr-10"
+                value={keys[field.name]}
+                onChange={e => setKeys({ ...keys, [field.name]: e.target.value })}
+                placeholder={field.placeholder}
+                autoComplete="off"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKeys(prev => ({ ...prev, [field.name]: !prev[field.name] }))}
+                className="absolute right-3 top-1/2 -translate-y-1/2 dx-muted hover:opacity-80"
+                aria-label={showKeys[field.name] ? 'Hide key' : 'Show key'}
+              >
+                {showKeys[field.name] ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
-
-      {globalMode ? (
-        <div className="bg-sienna/10 border border-sienna/30 rounded-xl p-4 flex items-start gap-3">
-          <AlertCircle className="text-sienna mt-0.5" size={18} />
-          <div>
-            <div className="text-sm font-semibold text-sienna-light">Global Keys Active</div>
-            <div className="text-xs text-bone-dim mt-1">
-              The administrator has enabled global AI API keys. You do not need to provide your own API keys at this time.
-            </div>
-          </div>
-        </div>
-      ) : (
-        <form onSubmit={handleSave} className="space-y-4">
-          <p className="text-xs text-bone-dim">
-            To use the AI Nutrition features, you must provide your own API keys. These are stored securely in your private profile. Priority: Groq → NVIDIA → Gemini → OpenRouter.
-          </p>
-
-          <div>
-            <label className="label">Groq API Key (Primary)</label>
-            <div className="relative">
-              <input
-                type={showKeys.groq ? "text" : "password"}
-                className="input-field font-mono text-sm pr-10"
-                value={keys.groq_api_key}
-                onChange={e => setKeys({ ...keys, groq_api_key: e.target.value })}
-                placeholder="gsk_..."
-              />
-              <button
-                type="button"
-                onClick={() => toggleShowKey('groq')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
-              >
-                {showKeys.groq ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="label">Nvidia API Key (Fallback 1)</label>
-            <div className="relative">
-              <input
-                type={showKeys.nvidia ? "text" : "password"}
-                className="input-field font-mono text-sm pr-10"
-                value={keys.nvidia_api_key}
-                onChange={e => setKeys({ ...keys, nvidia_api_key: e.target.value })}
-                placeholder="nvapi-..."
-              />
-              <button
-                type="button"
-                onClick={() => toggleShowKey('nvidia')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
-              >
-                {showKeys.nvidia ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="label">Gemini API Key (Fallback 2)</label>
-            <div className="relative">
-              <input
-                type={showKeys.gemini ? "text" : "password"}
-                className="input-field font-mono text-sm pr-10"
-                value={keys.gemini_api_key}
-                onChange={e => setKeys({ ...keys, gemini_api_key: e.target.value })}
-                placeholder="AIza..."
-              />
-              <button
-                type="button"
-                onClick={() => toggleShowKey('gemini')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
-              >
-                {showKeys.gemini ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="label">OpenRouter API Key (Fallback 3)</label>
-            <div className="relative">
-              <input
-                type={showKeys.openrouter ? "text" : "password"}
-                className="input-field font-mono text-sm pr-10"
-                value={keys.openrouter_api_key}
-                onChange={e => setKeys({ ...keys, openrouter_api_key: e.target.value })}
-                placeholder="sk-or-v1-..."
-              />
-              <button
-                type="button"
-                onClick={() => toggleShowKey('openrouter')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-bone-dim hover:text-bone transition-colors"
-              >
-                {showKeys.openrouter ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2">
-            <span className="text-xs text-teal">{message}</span>
-            <button type="submit" disabled={saving} className="btn-primary text-xs py-2 px-4">
-              <Save size={14} />
-              {saving ? 'Saving...' : 'Save Keys'}
-            </button>
-          </div>
-        </form>
-      )}
-    </div>
+      <div className="flex items-center justify-end gap-3">
+        {message && <span className="text-[12px] dx-muted">{message}</span>}
+        <button type="submit" disabled={saving} className="dx-btn !h-10 !text-[13px]">
+          <Save size={14} /> {saving ? 'Saving…' : 'Save keys'}
+        </button>
+      </div>
+    </form>
   );
 }

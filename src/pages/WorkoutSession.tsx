@@ -7,7 +7,7 @@ import { CustomSelect } from '@/components/ui/CustomSelect';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { getPlan, getPlanDays, savePlanDay } from '@/services/plans';
-import { getUserWorkouts, saveWorkout } from '@/services/workouts';
+import { saveWorkout } from '@/services/workouts';
 import { startActiveSession, updateActiveSession, endActiveSession, createSelfNotification, postActivity } from '@/services/social';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -470,17 +470,16 @@ export function WorkoutSession() {
         commentsCount: 0
       });
 
-      let savedProgress = null;
-      try {
-        const lastWorkouts = await getUserWorkouts(user.uid, 1);
-        savedProgress = lastWorkouts[0]?.progressiveOverload;
-      } catch (workoutQueryError) {
-        console.error('Failed to query workouts for progressive overload check:', workoutQueryError);
-      }
-
-      if (savedProgress?.message) {
+      const overload = saved.progressiveOverload;
+      if (overload?.message) {
+        const change = overload.volumeChangePercent;
         try {
-          await createSelfNotification(user.uid, savedProgress.message);
+          await createSelfNotification(user.uid, overload.message, saved.id, {
+            kind: 'progress',
+            trend: change === undefined || change === 0 ? 'flat' : change > 0 ? 'up' : 'down',
+            ...(change !== undefined ? { volumeChangePercent: change } : {}),
+            link: '/progress',
+          });
         } catch (notificationError) {
           console.error('Failed to create progression notification:', notificationError);
         }
@@ -546,7 +545,10 @@ export function WorkoutSession() {
 
       // Celebration and Notifications
       clearNotification(1001);
-      showNotification(1002, 'Workout Complete', `You completed your session in ${formatStopwatch(elapsedSec)}.`);
+      const volumeNote = overload?.volumeChangePercent !== undefined
+        ? ` Volume ${overload.volumeChangePercent > 0 ? '+' : ''}${overload.volumeChangePercent}% vs your previous best.`
+        : '';
+      showNotification(1002, 'Workout complete', `${formatStopwatch(elapsedSec)} session.${volumeNote}`, { link: '/progress' }, 'general_notifications');
       stopWorkoutForegroundService();
       if (user) {
         endActiveSession(user.uid, 'workout').catch(console.error);

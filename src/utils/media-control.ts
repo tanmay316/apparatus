@@ -4,6 +4,8 @@ import type { PluginListenerHandle } from '@capacitor/core';
 /** Snapshot of the system "now playing" media session (e.g. Spotify). */
 export interface NowPlayingState {
   granted: boolean;
+  /** Controls work via media keys but track details aren't available. */
+  basic?: boolean;
   hasSession: boolean;
   packageName?: string;
   appName?: string;

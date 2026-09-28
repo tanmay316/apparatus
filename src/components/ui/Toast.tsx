@@ -21,7 +21,8 @@ export function Toast() {
     <AnimatePresence>
       {toast && (
         <motion.div
-          className={`fixed bottom-6 left-1/2 z-[400] px-5 py-3 rounded-lg font-mono text-sm font-bold shadow-2xl flex items-center gap-2.5 max-w-[90vw] cursor-pointer ${colors[toast.type]}`}
+          className={`fixed left-1/2 z-[10060] px-5 py-3 rounded-xl text-sm font-semibold shadow-2xl flex items-center gap-2.5 w-max max-w-[90vw] cursor-pointer ${colors[toast.type]}`}
+          style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)' }}
           initial={{ opacity: 0, y: 20, x: '-50%' }}
           animate={{ opacity: 1, y: 0, x: '-50%' }}
           exit={{ opacity: 0, y: 20, x: '-50%' }}

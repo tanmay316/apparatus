@@ -223,9 +223,6 @@ function StrengthPostHero({ details, title, createdAtSec, activeMuscles, calorie
   const secondary: { label: string; value: string; unit?: string; icon: typeof Flame }[] = [
     { label: 'Calories', value: String(Math.round(calories || 0)), unit: 'kcal', icon: Flame },
     { label: 'Exercises', value: String(exercises.length), icon: Dumbbell },
-    topLift > 0
-      ? { label: 'Top lift', value: String(Math.round(toUnit(topLift) * 10) / 10), unit: weightUnit, icon: TrendingUp }
-      : { label: 'Reps', value: totalReps.toLocaleString(), icon: TrendingUp },
   ];
 
   const bestSet = (sets: LoggedSet[]) => {
@@ -240,7 +237,7 @@ function StrengthPostHero({ details, title, createdAtSec, activeMuscles, calorie
     return `${sets.length} sets`;
   };
 
-  const visible = showAll ? exercises : exercises.slice(0, 3);
+  const visible = showAll ? exercises : exercises.slice(0, 1);
   const inactive = dark ? { fill: '#241613', stroke: '#3a2620' } : { fill: '#e2dbd3', stroke: '#b9aea3' };
 
   return (
@@ -301,7 +298,7 @@ function StrengthPostHero({ details, title, createdAtSec, activeMuscles, calorie
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2.5 mt-3">
+      <div className="grid grid-cols-2 gap-2.5 mt-3">
         {secondary.map(s => (
           <div key={s.label} className="cardio-post-stat flex items-center gap-2.5 px-2.5 py-2.5 min-w-0 min-h-[52px]">
             <span className="cardio-post-badge w-7 h-7 rounded-full inline-flex items-center justify-center shrink-0">
@@ -346,7 +343,7 @@ function StrengthPostHero({ details, title, createdAtSec, activeMuscles, calorie
               <span className="shrink-0 text-[11px] font-mono text-[#777b86] tabular-nums">{bestSet(ex.sets)}</span>
             </div>
           ))}
-          {exercises.length > 3 && (
+          {exercises.length > 1 && (
             <button
               type="button"
               onClick={() => setShowAll(v => !v)}

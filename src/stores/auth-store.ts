@@ -2,8 +2,9 @@ import { create } from 'zustand';
 import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult, signOut as firebaseSignOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile as updateAuthProfile } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { SocialLogin } from '@capgo/capacitor-social-login';
-import { deleteField, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db, googleProvider, ADMIN_EMAIL } from '@/lib/firebase';
+import { deleteField, doc, getDoc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db, googleProvider, isAdminUser } from '@/lib/firebase';
+import { isBanActive } from '@/lib/ban';
 import { sanitizeUsername, validateDisplayName } from '@/lib/validation';
 import { STATS_VERSION, emptyStats } from '@/lib/stats';
 import { getProfileVisibility } from '@/lib/privacy';
@@ -30,6 +31,9 @@ interface AuthState {
 
 const DEFAULT_STATS: UserStats = { ...emptyStats(), statsVersion: STATS_VERSION };
 
+const SUSPENDED_MESSAGE = 'This account has been suspended. Contact support if you believe this is a mistake.';
+let stopBanWatch: (() => void) | null = null;
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs = 8000, errorMsg = 'Operation timed out'): Promise<T> {
   return Promise.race([
     promise,
@@ -51,6 +55,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
 
     onAuthStateChanged(auth, async (firebaseUser) => {
+      stopBanWatch?.();
+      stopBanWatch = null;
       try {
         if (firebaseUser) {
           // Fetch or create profile asynchronously
@@ -103,7 +109,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               experienceLevel: 'beginner',
               preferredWorkoutType: '',
               isPublic: true,
-              isAdmin: firebaseUser.email === ADMIN_EMAIL,
+              isAdmin: isAdminUser(firebaseUser),
               createdAt: serverTimestamp() as any,
               updatedAt: serverTimestamp() as any,
             };
@@ -131,13 +137,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             );
           }
 
+          // The rules decide admin rights from the verified email; keep the profile flag in step with them.
+          const adminNow = isAdminUser(firebaseUser);
+          if (adminNow && !profile.isAdmin) setDoc(profileRef, { isAdmin: true }, { merge: true }).catch(() => {});
+          profile.isAdmin = adminNow;
+          if (adminNow) {
+            import('@/services/admin-alerts').then(m => m.registerAdmin(firebaseUser.uid)).catch(() => {});
+          }
+
           const banSnap = await withTimeout(
             getDoc(doc(db, 'bans', firebaseUser.uid)),
             8000,
             'Failed to verify account status.'
           );
-          if (banSnap.exists() && banSnap.data().active === true) {
-            useUIStore.getState().showToast('This account has been suspended. Contact support if you believe this is a mistake.', 'error');
+          if (banSnap.exists() && isBanActive(banSnap.data())) {
+            useUIStore.getState().showToast(SUSPENDED_MESSAGE, 'error');
             await firebaseSignOut(auth);
             set({ user: null, profile: null, stats: null, loading: false, initialized: true });
             return;
@@ -160,6 +174,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           }
 
           set({ user: firebaseUser, profile, stats, loading: false, initialized: true });
+          // A ban issued while the user is signed in takes effect immediately.
+          stopBanWatch = onSnapshot(doc(db, 'bans', firebaseUser.uid), snap => {
+            if (snap.exists() && isBanActive(snap.data()) && auth.currentUser?.uid === firebaseUser.uid) {
+              useUIStore.getState().showToast(SUSPENDED_MESSAGE, 'error');
+              get().signOut().catch(() => {});
+            }
+          }, () => {});
           // Heal accounts that renamed before Settings synced the Auth profile.
           syncAuthIdentity(profile.displayName || undefined, profile.photoURL || undefined);
           runAccountMaintenance(firebaseUser.uid, profile, stats);
@@ -307,6 +328,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const profileSnap = await getDoc(profileRef);
     if (profileSnap.exists()) {
       const pData = { uid: user.uid, ...profileSnap.data() } as UserProfile;
+      pData.isAdmin = isAdminUser(user);
       if (user.photoURL && (!pData.photoURL || pData.photoURL === '')) {
         pData.photoURL = user.photoURL;
         setDoc(profileRef, { photoURL: user.photoURL }, { merge: true }).catch(() => {});
@@ -325,18 +347,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { user, profile } = get();
     if (!user || !profile) return;
 
+    // isAdmin is derived from the account email and must never be written from here.
+    const { isAdmin: _isAdmin, ...rest } = data;
     const profileRef = doc(db, 'users', user.uid);
     const updates = {
-      ...data,
+      ...rest,
       ...(data.displayName !== undefined ? { displayNameLower: data.displayName.toLowerCase().trim() } : {}),
       updatedAt: serverTimestamp(),
     };
     await setDoc(profileRef, updates, { merge: true });
-    set({ profile: { ...profile, ...data } });
+    set({ profile: { ...profile, ...rest } });
     await syncAuthIdentity(data.displayName, data.photoURL);
-    // Strength rank is relative to bodyweight.
+    // Rank standards depend on bodyweight and sex.
     const { stats } = get();
-    if (data.weight !== undefined && stats) {
+    if ((data.weight !== undefined || data.gender !== undefined) && stats) {
       import('@/services/stats').then(({ syncAthleteRank }) => syncAthleteRank(user.uid, stats, { notify: false })).catch(() => {});
     }
   },
@@ -346,6 +370,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 function runAccountMaintenance(uid: string, profile: UserProfile, stats: UserStats) {
   if ((stats.statsVersion || 0) < STATS_VERSION) {
     import('@/services/stats').then(({ scheduleStatsReconcile }) => scheduleStatsReconcile(uid)).catch(() => {});
+  } else {
+    // Consistency and old bests fade with time, so the stored rank can go stale between sessions.
+    import('@/services/stats').then(({ syncAthleteRank }) => syncAthleteRank(uid, stats, { notify: false })).catch(() => {});
+  }
+  if (!stats.tutorSkills) {
+    Promise.all([import('@/services/skills'), import('@/services/stats')])
+      .then(([{ loadSkillTutor }, { syncTutorSkills }]) => loadSkillTutor(uid).then(tutor => syncTutorSkills(uid, tutor.progress)))
+      .catch(() => {});
   }
   const flag = `apparatus_privacy_synced_${uid}`;
   if (getProfileVisibility(profile) !== 'public' && !localStorage.getItem(flag)) {
