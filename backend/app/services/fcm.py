@@ -171,6 +171,13 @@ def send_push_notification(user_id: str, title: str, body: str, data_payload: di
                     priority="high",
                 ),
             ),
+            # iOS: without an explicit sound/priority APNs delivers silently or late.
+            apns=messaging.APNSConfig(
+                headers={"apns-priority": "10", "apns-push-type": "alert"},
+                payload=messaging.APNSPayload(
+                    aps=messaging.Aps(sound="default"),
+                ),
+            ),
             data=str_data_payload,
             tokens=unique_tokens,
         )
@@ -182,7 +189,13 @@ def send_push_notification(user_id: str, title: str, body: str, data_payload: di
             failed_tokens = []
             for idx, resp in enumerate(response.responses):
                 if not resp.success:
-                    if resp.exception and resp.exception.code in ["messaging/invalid-registration-token", "messaging/registration-token-not-registered"]:
+                    exc = resp.exception
+                    # Admin SDK reports stale tokens as UnregisteredError / SenderIdMismatchError;
+                    # malformed ones (e.g. raw APNs tokens) as INVALID_ARGUMENT naming the token.
+                    stale = isinstance(exc, (messaging.UnregisteredError, messaging.SenderIdMismatchError)) or (
+                        getattr(exc, "code", None) == "INVALID_ARGUMENT" and "registration token" in str(exc).lower()
+                    )
+                    if stale:
                         failed_tokens.append(unique_tokens[idx])
             
             if failed_tokens:

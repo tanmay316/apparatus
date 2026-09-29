@@ -16,6 +16,12 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
+
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}${path}`, {
@@ -25,16 +31,16 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || `API Error ${res.status}`);
+    throw new ApiError(typeof err.detail === 'string' ? err.detail : `API Error ${res.status}`, res.status);
   }
   return res.json();
 }
 
 export async function wakeUpServer(): Promise<void> {
   try {
-    // Fire a lightweight unauthenticated request just to wake up the Render instance
-    await fetch(`${API_BASE.replace('/api/v1', '')}/docs`, { mode: 'no-cors' });
-  } catch (e) {
+    // Lightweight unauthenticated ping to wake the free-tier instance.
+    await fetch(`${API_BASE.replace('/api/v1', '')}/ping`, { mode: 'no-cors' });
+  } catch {
     // Ignore errors for this background ping
   }
 }
@@ -91,22 +97,35 @@ export interface NutritionResult {
 
 export interface FoodAnalyzeResponse {
   success: boolean;
+  /** ok = foods found; not_food = no food in the photo; failed = vision providers unavailable. */
+  status?: 'ok' | 'not_food' | 'failed';
+  message?: string;
   vision?: VisionResult;
   nutrition?: NutritionResult;
   errors?: string[];
   session_id?: number;
   image_id?: number;
+  assistant_message_id?: string;
+}
+
+/** True when the result has items that can be tracked. */
+export function hasTrackableNutrition(data?: FoodAnalyzeResponse | null): boolean {
+  return !!data?.nutrition?.nutrition?.items?.length;
 }
 
 
 
-// ─── Chat ────────────────────────────────────────────────
+// ─── Chat ────────────────────────────────────────────────────────
 
 export interface ChatMessageResponse {
   response: string;
+  reasoning?: string | null;
   session_id: number;
   tokens_used: number;
-  nutritionData?: FoodAnalyzeResponse;
+  nutritionData?: FoodAnalyzeResponse | null;
+  message_id?: string;
+  tools_used?: string[];
+  profile_updated?: boolean;
 }
 
 export interface ChatSessionItem {
@@ -162,10 +181,10 @@ export async function generateMealPlan(planType: string = 'daily') {
 
 // ─── Food Logging ────────────────────────────────────────
 
-export async function analyzeFood(base64Data: string, mimeType: string, mealType: string = 'snack', sessionId?: number, signal?: AbortSignal) {
-  return apiRequest<any>('/nutrition/food/analyze', {
+export async function analyzeFood(base64Data: string, mimeType: string, mealType: string = 'snack', sessionId?: number, signal?: AbortSignal, note = '') {
+  return apiRequest<FoodAnalyzeResponse>('/nutrition/food/analyze', {
     method: 'POST',
-    body: JSON.stringify({ image_base64: base64Data, mime_type: mimeType, meal_type: mealType, session_id: sessionId }),
+    body: JSON.stringify({ image_base64: base64Data, mime_type: mimeType, meal_type: mealType, session_id: sessionId, note: note.slice(0, 500) }),
     signal,
   });
 }

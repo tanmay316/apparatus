@@ -91,6 +91,10 @@ _ON_TOPIC_TERMS = {
     "hydration", "water", "supplement", "creatine", "whey", "vegan", "vegetarian", "keto",
     "paleo", "fasting", "hungry", "hunger", "craving", "portion", "serving", "gram", "grams",
     "fitness", "healthy", "health", "body", "fatloss", "physique", "metabolism", "digest",
+    "run", "running", "runner", "walk", "walking", "steps", "cycling", "ride", "bike", "pace", "marathon", "5k", "10k",
+    "squat", "deadlift", "bench", "press", "pullup", "pushup", "dip", "dips", "plank", "handstand", "planche", "lever",
+    "calisthenics", "skill", "strength", "hypertrophy", "volume", "rpe", "deload", "program", "split", "recovery",
+    "sleep", "stretch", "mobility", "rank", "streak",
 }
 _WORD_RE = re.compile(r"[a-z]+")
 

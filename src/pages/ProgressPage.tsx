@@ -8,11 +8,13 @@ import {
   ArrowDownRight, LayoutGrid, Layers, type LucideIcon,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { RouteMap } from '@/components/cardio/RouteMap';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
+import { CardioAnalysisPanel, InlineSessionAnalysis, StrengthAnalysisPanel } from '@/components/analysis/ProgressAnalysis';
 import { getUserWorkouts } from '@/services/workouts';
 import { getUserCardioActivities } from '@/services/cardio';
 import { getUserPlans, getPlan, getPlanDays, getPublicPlansForUser, clonePlan } from '@/services/plans';
@@ -864,15 +866,26 @@ export function ProgressPage({
   initialCalendarOpen?: boolean;
 } = {}) {
   const { profile, stats } = useAuthStore();
-  const { showToast, theme } = useUIStore();
+  const { showToast, theme, units } = useUIStore();
+  const imperial = units === 'imperial';
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
+  const dateParam = searchParams.get('date');
+  const tabParam = searchParams.get('tab');
+  const sessionParam = searchParams.get('session');
 
   // Navigation & Date State
-  const [selectedDate, setSelectedDate] = useState<string | null>(initialDate);
+  const [selectedDate, setSelectedDate] = useState<string | null>(initialDate ?? dateParam);
   const [isMonthViewOpen, setIsMonthViewOpen] = useState(initialCalendarOpen);
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week
-  const [activeCategory, setActiveCategory] = useState<Category>('overview');
+  const [activeCategory, setActiveCategory] = useState<Category>(tabParam === 'cardio' || tabParam === 'strength' ? tabParam : 'overview');
   const [timeRange, setTimeRange] = useState<Range>('30d');
+
+  // Links from analysis sheets / notifications can land here while the page is already open.
+  useEffect(() => {
+    if (dateParam) setSelectedDate(dateParam);
+    if (tabParam === 'cardio' || tabParam === 'strength') setActiveCategory(tabParam);
+  }, [dateParam, tabParam, sessionParam]);
 
   // Personal Records & Strength Volume metrics state
   const [cardioPrSection, setCardioPrSection] = useState<'all' | 'run' | 'walk' | 'cycle'>('all');
@@ -1618,6 +1631,15 @@ export function ProgressPage({
                         </div>
                       ))}
                     </div>
+
+                    <InlineSessionAnalysis
+                      key={sessionParam || 'none'}
+                      kind="cardio"
+                      session={c}
+                      cardio={allCardio}
+                      imperial={imperial}
+                      defaultOpen={!!c.id && c.id === sessionParam}
+                    />
                   </Panel>
                 );
               })}
@@ -1685,6 +1707,15 @@ export function ProgressPage({
                       })}
                     </div>
                   )}
+
+                  <InlineSessionAnalysis
+                    key={sessionParam || 'none'}
+                    kind="workout"
+                    session={w}
+                    workouts={allWorkouts}
+                    imperial={imperial}
+                    defaultOpen={!!w.id && w.id === sessionParam}
+                  />
                 </Panel>
               ))}
             </div>
@@ -1784,6 +1815,8 @@ export function ProgressPage({
                 {!isOverview && <Stat label="Steps" value={formatNumber(cardioKPIs.totalSteps)} icon={Footprints} tone="neutral" />}
                 {!isOverview && <Stat label="Activities" value={cardioKPIs.totalSessions} icon={Activity} tone="cardio" />}
               </div>
+
+              {!isOverview && <CardioAnalysisPanel activities={allCardio} />}
 
               {!isOverview && mixTotal > 0 && (
                 <Panel className="p-4 sm:p-5">
@@ -2113,6 +2146,8 @@ export function ProgressPage({
                   />
                 </div>
               )}
+
+              {!isOverview && <StrengthAnalysisPanel workouts={allWorkouts} imperial={imperial} />}
 
               <Panel className="p-4 sm:p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">

@@ -2,7 +2,7 @@
   "name": "apparatus",
   "private": true,
   "version": "2.0.91",
-  "nativeVersion": "2.1.1",
+  "nativeVersion": "2.1.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,7 @@
     "deploy": "npm run build && firebase deploy --only hosting",
     "ota:upload": "npm run build && npx otakit upload --release",
     "ios:setup": "bash ./ios-native/setup-ios.sh",
-    "ios:sync": "npm run build && cp ios-native/App/*.swift ios/App/App/ && npx cap sync ios",
+    "ios:sync": "npm run build && node ios-native/patch-ios.cjs && npx cap sync ios",
     "ios:open": "npx cap open ios"
   },
   "dependencies": {

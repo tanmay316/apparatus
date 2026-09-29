@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Footprints, Play } from 'lucide-react';
-import { DEFAULT_STEP_GOAL, getStepsForDate } from '@/services/cardio';
+import { DEFAULT_STEP_GOAL, getDailySteps } from '@/services/cardio';
 import { localDateKey } from '@/lib/stats';
 
 const RING = 2 * Math.PI * 26;
@@ -12,7 +12,8 @@ export function StepGoalCard({ userId, goal }: { userId: string; goal?: number }
   const today = localDateKey();
   const { data: steps = 0 } = useQuery({
     queryKey: ['stepsToday', userId, today],
-    queryFn: () => getStepsForDate(userId, today),
+    queryFn: () => getDailySteps(userId, today),
+    refetchInterval: 60_000,
   });
 
   const pct = Math.round((steps / target) * 100);

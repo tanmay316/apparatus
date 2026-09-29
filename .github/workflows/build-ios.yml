@@ -42,6 +42,18 @@ jobs:
       - name: Patch Dependencies
         run: node ./ios-native/patch-ios.cjs
 
+      # .env is gitignored; without it the web bundle throws "Missing required environment
+      # variables" on launch. Store the whole file as the ENV_FILE repository secret.
+      - name: Create .env
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          if [ -z "$ENV_FILE" ]; then
+            echo "::error::Add a repository secret named ENV_FILE containing your .env file (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          printf '%s\n' "$ENV_FILE" > .env
+
       - name: Build Web Application
         run: npm run build
 

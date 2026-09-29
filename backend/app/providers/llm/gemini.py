@@ -1,88 +1,108 @@
 """
-Gemini LLM Provider.
+Gemini provider (chat + vision) on the async google-genai client.
+
+The previous version called the blocking client from async code, which froze the
+whole event loop for the duration of every Gemini request.
 """
+from __future__ import annotations
+
+import base64
+import logging
 import time
-import json
 from typing import List, Optional
 
 from google import genai
 from google.genai import types as genai_types
 
-from app.providers.llm.base import BaseLLMProvider, LLMResponse, ChatMessage
 from app.core.config import settings
+from app.providers import registry
+from app.providers.llm.base import BaseLLMProvider, ChatMessage, LLMResponse
+from app.providers.llm.openai_compat import ProviderError
+
+logger = logging.getLogger(__name__)
 
 
-class GeminiLLMProvider(BaseLLMProvider):
+class GeminiProvider(BaseLLMProvider):
     provider_name = "gemini"
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "gemini-3.1-flash-lite"):
-        self.api_key = api_key or settings.GEMINI_API_KEY
-        self.client = genai.Client(api_key=self.api_key) if self.api_key else None
-        self.model = model
+    def __init__(self, api_key: str, chat_models: List[str], vision_models: List[str]):
+        self.api_key = api_key
+        self.client = genai.Client(api_key=api_key)
+        self.chat_models = chat_models
+        self.vision_models = vision_models
 
-    async def chat(
-        self,
-        messages: List[ChatMessage],
-        system_prompt: Optional[str] = None,
-        temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        json_mode: bool = False,
-    ) -> LLMResponse:
-        if not self.client:
-            return LLMResponse(content="Error: Gemini API key not provided", provider_used=self.provider_name)
+    def _config(self, system_prompt: Optional[str], temperature: float, max_tokens: Optional[int], json_mode: bool):
+        return genai_types.GenerateContentConfig(
+            system_instruction=system_prompt or None,
+            temperature=temperature,
+            max_output_tokens=max_tokens or None,
+            response_mime_type="application/json" if json_mode else None,
+            # No tools are registered; AFC only adds overhead and warnings.
+            automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
+        )
+
+    async def _generate(self, contents, config, kind: str, timeout: float) -> LLMResponse:
+        import asyncio
+
+        models = [m for m in (self.vision_models if kind == "vision" else self.chat_models) if not registry.is_dead("gemini", m)]
+        if not models:
+            raise ProviderError("gemini: no model available")
         start = time.time()
-        try:
-            contents = []
-            if system_prompt:
-                contents.append(genai_types.Content(
-                    role="user",
-                    parts=[genai_types.Part.from_text(text=f"[System Instructions]: {system_prompt}")]
-                ))
-                contents.append(genai_types.Content(
-                    role="model",
-                    parts=[genai_types.Part.from_text(text="Understood. I will follow these instructions.")]
-                ))
+        last_error = ""
+        for model in models:
+            try:
+                response = await asyncio.wait_for(
+                    self.client.aio.models.generate_content(model=model, contents=contents, config=config),
+                    timeout=timeout,
+                )
+                text = (response.text or "").strip()
+                if not text:
+                    last_error = f"{model}: empty or blocked reply"
+                    continue
+                content, reasoning = registry.strip_reasoning(text)
+                usage = getattr(response, "usage_metadata", None)
+                return LLMResponse(
+                    content=content,
+                    reasoning=reasoning,
+                    provider_used=f"gemini ({model})",
+                    model_used=model,
+                    tokens_used=getattr(usage, "total_token_count", 0) or 0,
+                    latency_ms=(time.time() - start) * 1000,
+                )
+            except asyncio.TimeoutError:
+                last_error = f"{model}: timed out"
+            except Exception as exc:
+                code = getattr(exc, "code", None)
+                message = str(exc)
+                if registry.is_model_gone_error(code if isinstance(code, int) else None, message):
+                    registry.mark_dead("gemini", model, message)
+                last_error = f"{model}: {message[:200]}"
+            logger.info("gemini model failed: %s", last_error)
+        raise ProviderError(f"gemini: {last_error}")
 
-            for msg in messages:
-                role = "model" if msg.role == "assistant" else "user"
-                contents.append(genai_types.Content(
-                    role=role,
-                    parts=[genai_types.Part.from_text(text=msg.content)]
-                ))
+    async def chat(self, messages: List[ChatMessage], system_prompt: Optional[str] = None, temperature: float = 0.7,
+                   max_tokens: Optional[int] = None, json_mode: bool = False) -> LLMResponse:
+        contents = [
+            genai_types.Content(
+                role="model" if m.role == "assistant" else "user",
+                parts=[genai_types.Part.from_text(text=m.content)],
+            )
+            for m in messages if m.role != "system"
+        ]
+        return await self._generate(contents, self._config(system_prompt, temperature, max_tokens, json_mode), "chat",
+                                     settings.LLM_CALL_TIMEOUT)
 
-            config = genai_types.GenerateContentConfig(
-                temperature=temperature,
-            )
-            if max_tokens is not None:
-                config.max_output_tokens = max_tokens
-            if json_mode:
-                config.response_mime_type = "application/json"
-
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=contents,
-                config=config,
-            )
-
-            latency = (time.time() - start) * 1000
-            return LLMResponse(
-                content=response.text.strip(),
-                provider_used=self.provider_name,
-                model_used=self.model,
-                latency_ms=latency,
-            )
-        except Exception as e:
-            latency = (time.time() - start) * 1000
-            return LLMResponse(
-                content=f"Error: {str(e)}",
-                provider_used=self.provider_name,
-                model_used=self.model,
-                latency_ms=latency,
-            )
+    async def vision(self, prompt: str, image_base64: str, mime_type: str = "image/jpeg",
+                     json_mode: bool = True, max_tokens: int = 2048) -> LLMResponse:
+        contents = [genai_types.Content(role="user", parts=[
+            genai_types.Part.from_text(text=prompt),
+            genai_types.Part.from_bytes(data=base64.b64decode(image_base64), mime_type=mime_type),
+        ])]
+        return await self._generate(contents, self._config(None, 0.1, max_tokens, json_mode), "vision",
+                                    settings.VISION_CALL_TIMEOUT)
 
     async def analyze(self, prompt: str, data: str, json_mode: bool = True) -> LLMResponse:
-        messages = [ChatMessage(role="user", content=f"{prompt}\n\nData:\n{data}")]
-        return await self.chat(messages, json_mode=json_mode, temperature=0.1)
+        return await self.chat([ChatMessage(role="user", content=f"{prompt}\n\nData:\n{data}")], json_mode=json_mode, temperature=0.1)
 
     async def health_check(self) -> bool:
         return bool(self.api_key)

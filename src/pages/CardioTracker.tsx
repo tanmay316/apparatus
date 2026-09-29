@@ -83,6 +83,7 @@ export function CardioTracker() {
   } as React.CSSProperties;
 
   const pedometerStore = usePedometerStore();
+  const strideProfile = { heightCm: profile?.height, gender: profile?.gender };
 
   const [searchParams, setSearchParams] = useSearchParams();
   const urlType = searchParams.get('type') as CardioActivityType | null;
@@ -145,6 +146,21 @@ export function CardioTracker() {
       }
     });
   }, [screen, store.isPaused]);
+
+  // After a WebView reload / process restart mid-session, re-attach the step
+  // counter and carry over steps counted before the restart.
+  useEffect(() => {
+    if (screen !== 'tracking' || !store.isTracking || !store.startedAt) return;
+    if (store.activityType !== 'walk' && store.activityType !== 'run') return;
+    const s = useCardioStore.getState();
+    usePedometerStore.getState().resumeIfNeeded({
+      sessionStartedAt: s.startedAt!,
+      distanceKm: s.distanceKm,
+      type: s.activityType,
+      profile: { heightCm: profile?.height, gender: profile?.gender },
+    }).catch(console.error);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, store.isTracking, store.startedAt, store.activityType]);
 
   const [saveState, setSaveState] = useState<SaveState>('saving');
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -252,6 +268,8 @@ export function CardioTracker() {
       endActiveSession(user.uid, 'cardio').catch(console.error);
     }
 
+    const stepResult = await usePedometerStore.getState().finalize({ type, distanceKm: dist, movingSec: durationSec, profile: strideProfile });
+
     if (user && dist > 0.01) {
       const durationMin = durationSec / 60;
       const movingDurationSec = durationSec;
@@ -285,8 +303,8 @@ export function CardioTracker() {
         route,
         visibility: 'followers',
         notes: 'Auto-saved session',
-        steps: getLiveSteps(type, dist, usePedometerStore.getState()),
-        stepSource: usePedometerStore.getState().stepSource,
+        steps: stepResult.steps,
+        stepSource: stepResult.source,
       }).then(() => useAuthStore.getState().refreshProfile()).catch(console.error);
     }
   };
@@ -353,10 +371,6 @@ export function CardioTracker() {
     if (processingRef.current) return;
     processingRef.current = true;
     try {
-    if (store.activityType === 'walk' || store.activityType === 'run') {
-      await pedometerStore.stopSession();
-    }
-
     // Measure before finishTracking(): stopping clears an in-progress pause without crediting it.
     const activeSecAtStop = getCardioActiveSec(useCardioStore.getState());
     const finalStore = await finishTracking();
@@ -376,7 +390,10 @@ export function CardioTracker() {
     const avgSpeed = movingDurationSec > 0 ? (dist / movingDurationSec) * 3600 : 0;
     const pace = formatPace(dist, movingDurationSec);
 
-    const steps = getLiveSteps(finalStore.activityType!, dist, pedometerStore);
+    // Read steps only after tracking stopped (final distance known); finalize also stops the sensor.
+    const { steps, source: stepSource } = await usePedometerStore.getState().finalize({
+      type: finalStore.activityType, distanceKm: dist, movingSec: movingDurationSec, profile: strideProfile,
+    });
 
     // Recompute elevation gain from the full route (DEM lookup, or noise-filtered
     // GPS altitude). Its result is authoritative even when 0 - flat routes must
@@ -455,7 +472,7 @@ export function CardioTracker() {
           visibility: 'followers',
           notes: 'Effort: moderate',
           steps: steps,
-          stepSource: usePedometerStore.getState().stepSource,
+          stepSource,
         });
         setSavedId(id);
         setSaveState('saved');
@@ -532,9 +549,8 @@ export function CardioTracker() {
     try {
       if (user) endActiveSession(user.uid, 'cardio').catch(console.error);
       await stopGpsWatch();
-      if (store.activityType === 'walk' || store.activityType === 'run') {
-        await pedometerStore.stopSession();
-      }
+      await pedometerStore.stopSession();
+      pedometerStore.resetSession();
       store.reset();
       setSearchParams({});
       setScreen('select');
@@ -977,7 +993,7 @@ export function CardioTracker() {
                         { label: 'Calories', value: String(calories), unit: 'kcal' },
                         { label: 'Elevation', value: String(Math.round(store.elevationGainM)), unit: 'm' },
                         (activityType === 'walk' || activityType === 'run')
-                          ? { label: 'Steps', value: getLiveSteps(store.activityType, store.distanceKm, pedometerStore)?.toLocaleString() || '0', unit: '' }
+                          ? { label: 'Steps', value: getLiveSteps(store.activityType, store.distanceKm, pedometerStore, { movingSec: store.movingDurationSec, profile: strideProfile })?.toLocaleString() || '0', unit: '' }
                           : { label: 'Moving Time', value: formatDuration(Math.min(store.movingDurationSec, elapsedSec)), unit: '' },
                       ],
                     ].map((row, ri) => (
@@ -1050,6 +1066,7 @@ export function CardioTracker() {
           onShare={() => { setShareDataOverride(toShareData(summaryData, { currentLocation: store.currentLocation })); setShowShare(true); }}
           onDone={handleDone}
           onRetry={() => { pendingSaveRef.current?.(); }}
+          history={recentActivities}
         />
         {showShare && shareDataOverride && (
           <CardioShareModal

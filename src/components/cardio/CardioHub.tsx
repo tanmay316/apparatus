@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, ChevronRight, Clock, Dumbbell, Flame, Navigation, Play, Share2, Timer, Trash2, TrendingUp, Trophy } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronRight, Clock, Dumbbell, Flame, Navigation, Play, Share2, Timer, Trash2, TrendingUp, Trophy } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
 import { RouteMap } from '@/components/cardio/RouteMap';
 import type { CardioActivity, CardioActivityType } from '@/types';
+
+const CardioAnalysisSheet = lazy(() => import('@/components/analysis/AnalysisSheets').then(m => ({ default: m.CardioAnalysisSheet })));
 import {
   CARDIO_TYPES, activityMovingSec, activityStartMs, activityTitle, formatActivityDate, formatDuration, formatDurationShort, formatPace, primaryRate,
 } from './cardio-format';
@@ -190,8 +192,8 @@ function BestsCard({ activities }: { activities: CardioActivity[] }) {
   );
 }
 
-function HistoryRow({ activity, expanded, onToggle, onShare, onDelete }: {
-  activity: CardioActivity; expanded: boolean; onToggle: () => void; onShare: () => void; onDelete: () => void;
+function HistoryRow({ activity, expanded, onToggle, onShare, onDelete, onAnalyze }: {
+  activity: CardioActivity; expanded: boolean; onToggle: () => void; onShare: () => void; onDelete: () => void; onAnalyze: () => void;
 }) {
   const theme = useUIStore(s => s.theme);
   const meta = CARDIO_TYPES[activity.type] ?? CARDIO_TYPES.walk;
@@ -255,6 +257,7 @@ function HistoryRow({ activity, expanded, onToggle, onShare, onDelete }: {
               </div>
               {note && <p className="text-[13px] text-[var(--dx-muted)] whitespace-pre-wrap break-words">{note}</p>}
               <div className="flex gap-2">
+                <button onClick={onAnalyze} className="dx-btn flex-1 !h-10 !rounded-xl !text-[13px] font-semibold gap-1.5"><BarChart3 size={14} /> Analysis</button>
                 <button onClick={onShare} className="dx-btn-secondary flex-1 !h-10 !rounded-xl !text-[13px] font-semibold gap-1.5"><Share2 size={14} /> Share</button>
                 <button onClick={onDelete} className="dx-btn-secondary !h-10 !w-10 !px-0 !rounded-xl text-rose-500" aria-label="Delete session"><Trash2 size={15} /></button>
               </div>
@@ -279,6 +282,7 @@ export function CardioHub({ activities, loading, gpsStatus, onStart, onShare, on
   const [filter, setFilter] = useState<Filter>('all');
   const [visible, setVisible] = useState(PAGE);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState<CardioActivity | null>(null);
 
   const counts = useMemo(() => {
     const c: Record<Filter, number> = { all: activities.length, walk: 0, run: 0, cycle: 0 };
@@ -354,6 +358,7 @@ export function CardioHub({ activities, loading, gpsStatus, onStart, onShare, on
                       onToggle={() => setExpanded(expanded === a.id ? null : a.id!)}
                       onShare={() => onShare(a)}
                       onDelete={() => onDelete(a)}
+                      onAnalyze={() => setAnalyzing(a)}
                     />
                   ))}
                 </div>
@@ -377,6 +382,11 @@ export function CardioHub({ activities, loading, gpsStatus, onStart, onShare, on
         <ChevronRight size={17} className="text-[var(--dx-muted)]" />
       </Link>
       <div className="h-2" />
+      {analyzing && (
+        <Suspense fallback={null}>
+          <CardioAnalysisSheet activity={analyzing} history={activities} onClose={() => setAnalyzing(null)} />
+        </Suspense>
+      )}
     </div>
   );
 }

@@ -1,10 +1,10 @@
-import type { BadgeContext, CardioActivity, UserStats, Workout } from '@/types';
-import { evaluateBadges } from '@/lib/badges';
+import type { BadgeContext, CardioActivity, CardioActivityType, CardioTypeStats, UserStats, Workout } from '@/types';
+import { evaluateBadges, knownBadgeIds } from '@/lib/badges';
 import { findPersonalRecords } from '@/lib/progressive-overload';
 import { cardioMetrics, dayNumber, mergePerformance, workoutMetrics, type SessionMetrics } from '@/lib/performance';
 
 /** Bump to force every user's stats to be rebuilt from their history on next login. */
-export const STATS_VERSION = 6;
+export const STATS_VERSION = 7;
 
 const TRAINING_DAYS_KEPT = 120;
 
@@ -101,12 +101,47 @@ export function badgeContextFromStats(stats: Partial<UserStats>): BadgeContext {
     totalCardioMin: stats.totalCardioMin || 0,
     totalDistanceKm: stats.totalDistanceKm || 0,
     longestCardioKm: stats.longestCardioKm || 0,
+    run: typeStats(stats.cardioByType?.run),
+    walk: typeStats(stats.cardioByType?.walk),
+    ride: typeStats(stats.cardioByType?.cycle),
   };
+}
+
+function typeStats(s?: CardioTypeStats): CardioTypeStats {
+  return { sessions: 0, totalKm: 0, longestKm: 0, ...(s || {}) };
+}
+
+// Above these average speeds the GPS track is unreliable, so no records are set.
+const MAX_PLAUSIBLE_KMH: Record<CardioActivityType, number> = { run: 22, walk: 9, cycle: 60 };
+
+/** Folds one run, walk or ride into that activity type's totals and bests. */
+export function applyCardioTypeStats(
+  previous: CardioTypeStats | undefined,
+  type: CardioActivityType,
+  session: { distanceKm: number; movingSec: number; elevationGainM?: number; steps?: number },
+): CardioTypeStats {
+  const s = typeStats(previous);
+  const km = session.distanceKm || 0;
+  const sec = session.movingSec || 0;
+  const next: CardioTypeStats = { ...s, sessions: s.sessions + 1, totalKm: Math.round((s.totalKm + km) * 100) / 100 };
+  const kmh = sec > 0 ? km / (sec / 3600) : 0;
+  if (km <= 0 || sec <= 0 || kmh > MAX_PLAUSIBLE_KMH[type]) return next;
+
+  const best = (current: number | undefined, value: number, lowerIsBetter = false) =>
+    current === undefined ? value : lowerIsBetter ? Math.min(current, value) : Math.max(current, value);
+  next.longestKm = Math.max(s.longestKm, km);
+  if (km >= 5) next.best5kSec = Math.round(best(s.best5kSec, (sec / km) * 5, true));
+  if (km >= 10) next.best10kSec = Math.round(best(s.best10kSec, (sec / km) * 10, true));
+  if (km >= 3) next.bestSpeed3k = Math.round(best(s.bestSpeed3k, kmh) * 10) / 10;
+  if (km >= 20) next.bestSpeed20k = Math.round(best(s.bestSpeed20k, kmh) * 10) / 10;
+  if (session.elevationGainM) next.maxClimbM = Math.round(best(s.maxClimbM, session.elevationGainM));
+  if (session.steps) next.maxSteps = best(s.maxSteps, session.steps);
+  return next;
 }
 
 /** Badges are never revoked: newly earned ones are appended to what the user already has. */
 export function mergeBadges(previous: string[] | undefined, stats: Partial<UserStats>) {
-  const before = (previous || []).filter(Boolean);
+  const before = knownBadgeIds(previous);
   const owned = new Set(before);
   const unlocked = evaluateBadges(badgeContextFromStats(stats)).filter(id => !owned.has(id));
   return { badges: [...before, ...unlocked], unlocked };
@@ -122,6 +157,8 @@ export interface SessionInput {
   bestHold?: number;
   distanceKm?: number;
   cardioType?: string;
+  elevationGainM?: number;
+  steps?: number;
   maxLiftKg?: number;
   fullWeek?: boolean;
   /** Rank metrics from workoutMetrics()/cardioMetrics(). */
@@ -184,6 +221,18 @@ export function applySession(previous: Partial<UserStats> | undefined, session: 
     performance: mergePerformance(base.performance, session.metrics || {}, session.dateKey),
     recentTrainingDays: addTrainingDay(base.recentTrainingDays, session),
   };
+  const cardioType = session.cardioType as CardioActivityType | undefined;
+  if (session.kind === 'cardio' && cardioType && cardioType in MAX_PLAUSIBLE_KMH) {
+    stats.cardioByType = {
+      ...(base.cardioByType || {}),
+      [cardioType]: applyCardioTypeStats(base.cardioByType?.[cardioType], cardioType, {
+        distanceKm: distance,
+        movingSec: (session.durationMin || 0) * 60,
+        elevationGainM: session.elevationGainM,
+        steps: session.steps,
+      }),
+    };
+  }
   const { badges, unlocked } = mergeBadges(base.badges, stats);
   stats.badges = badges;
   return { stats, xpEarned, streakBonus, unlocked };
@@ -262,7 +311,7 @@ export function rebuildStats(
 
   let stats: UserStats = {
     ...emptyStats(),
-    badges: [...(previous?.badges || [])],
+    badges: knownBadgeIds(previous?.badges),
     ...(previous?.tutorSkills ? { tutorSkills: previous.tutorSkills } : {}),
   };
   const history: Workout[] = [];
@@ -293,6 +342,8 @@ export function rebuildStats(
         durationMin: cardioDurationMin(c),
         distanceKm: c.distanceKm || 0,
         cardioType: c.type,
+        elevationGainM: c.elevationGainM || 0,
+        steps: c.steps || 0,
         metrics: cardioMetrics(c),
       }).stats;
     }

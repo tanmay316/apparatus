@@ -15,7 +15,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { deleteAccountData, deleteAvatar, downloadJson, exportAccountData, resetUserData, uploadAvatar } from '@/services/account';
-import { DEFAULT_STEP_GOAL, getStepsForDate } from '@/services/cardio';
+import { DEFAULT_STEP_GOAL, getDailySteps } from '@/services/cardio';
 import { getAvatarUrl } from '@/lib/avatar';
 import { localDateKey } from '@/lib/stats';
 import { acceptAllFollowRequests, restrictPublicContent } from '@/services/social';
@@ -127,7 +127,7 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
   const today = localDateKey();
   const { data: stepsToday = 0 } = useQuery({
     queryKey: ['stepsToday', profile.uid, today],
-    queryFn: () => getStepsForDate(profile.uid, today),
+    queryFn: () => getDailySteps(profile.uid, today),
   });
 
   useEffect(() => {
@@ -255,6 +255,18 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
       icon: 'trash',
     });
     if (!confirmed) return;
+
+    // Apple requires apps to revoke Sign in with Apple tokens when the account is deleted.
+    if (user.providerData.some(p => p.providerId === 'apple.com')) {
+      try {
+        await useAuthStore.getState().revokeAppleAccess();
+      } catch (e) {
+        console.warn('Apple token revocation failed', e);
+        showToast('Confirm with Apple to delete your account.', 'error');
+        return;
+      }
+    }
+
     setDeleting(true);
     setDeleteProgressMsg('Starting deletion...');
     setDeleteProgressPct(0);

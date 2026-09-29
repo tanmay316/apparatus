@@ -8,6 +8,7 @@ import { getWorkoutsByDateRange } from '@/services/workouts';
 import { getFollowing, getFeed } from '@/services/social';
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { effectiveStreak } from '@/lib/stats';
+import { computeAthleteRank } from '@/lib/rank';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 
@@ -131,6 +132,7 @@ export function Dashboard() {
   if (!profile) return null;
 
   // ─── Computed values ─────────────────────────────────────
+  const rank = computeAthleteRank(stats, profile.weight, { gender: profile.gender });
   const displayFeed = feed;
   const streakDays: { label: string; done: boolean }[] = [];
   const now = new Date();
@@ -250,7 +252,8 @@ export function Dashboard() {
       <HeroDashboard
         displayName={profile.displayName || 'Athlete'}
         streak={streak}
-        xp={xp}
+        rankLabel={rank.label}
+        rankScore={rank.score}
         completedCount={completedCount}
         targetDays={targetDays}
       />

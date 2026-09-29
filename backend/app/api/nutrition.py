@@ -1,47 +1,54 @@
 """
-Nutrition API Endpoints.
-All AI features route through the NutritionGraph orchestrator.
-"""
-import logging
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from sqlalchemy.orm import Session
-from sqlalchemy import text
+Nutrition & coaching API.
 
-from app.db.session import get_db
+- /food/analyze : photo → vision (hedged provider fallback) → nutrition tools → chat message + trackable card
+- /chat         : Astra coach agent (tool-using loop over nutrition + training data)
+- /food/log     : persist a card the user chose to track
+"""
+import asyncio
+import logging
+from datetime import date
+from typing import Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
+
+from app.agents.coach import training
+from app.agents.coach.agent import run_coach
+from app.agents.coach.tools import ToolContext, generate_meal_plan as build_meal_plan
+from app.core.guardrails import check_rate_limit, validate_chat_message, validate_image
 from app.core.security import get_current_user
-from app.core.guardrails import (
-    check_rate_limit,
-    validate_chat_message,
-    validate_image,
-)
+from app.database.models import ChatMessage as ChatMessageRow, ChatSession
+from app.db.session import get_db
 from app.middleware.api_keys import resolve_api_keys
-from app.graph.state import GraphState
-from app.graph.nutrition_graph import orchestrator
-from app.services.meal_service import MealService
-from app.repositories.user_repository import UserRepository
+from app.providers.llm import get_llm_providers
 from app.repositories.chat_repository import ChatRepository
+from app.repositories.image_repository import ImageRepository, cleanup_old_images_job
+from app.repositories.user_repository import UserRepository
 from app.schemas.nutrition import (
-    FoodAnalyzeRequest, ChatRequest, RecipeGenerateRequest,
-    MealPlanRequest, FoodAnalyzeResponse, ChatResponse,
-    TodayNutritionResponse,
+    ChatRequest, ChatResponse, FoodAnalyzeRequest, FoodAnalyzeResponse, MealPlanRequest,
+    RecipeGenerateRequest, TodayNutritionResponse,
 )
+from app.services.food_scan import scan_food, user_goals
+from app.services.meal_service import MealService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
 
+MEAL_TYPES = ("breakfast", "lunch", "dinner", "snack", "snacks")
 
-def _build_state(user: dict, keys: dict, **kwargs) -> GraphState:
-    """Build a GraphState from the authenticated user and resolved keys."""
-    return GraphState(
-        user_id=user.get("uid", ""),
-        user_email=user.get("email", ""),
-        groq_key=keys.get("groq_key", ""),
-        nvidia_key=keys.get("nvidia_key", ""),
-        gemini_key=keys.get("gemini_key", ""),
-        openrouter_key=keys.get("openrouter_key", ""),
-        **kwargs,
-    )
+
+def _llm(keys: dict):
+    return get_llm_providers(keys.get("groq_key", ""), keys.get("nvidia_key", ""), keys.get("gemini_key", ""), keys.get("openrouter_key", ""))
+
+
+def _prefs(db: Session, uid: str) -> dict:
+    prefs = UserRepository(db).get_preferences(uid)
+    if not prefs:
+        return {}
+    return {"dietary_restrictions": prefs.dietary_restrictions or [], "allergies": prefs.allergies or []}
 
 
 # ─── POST /food/analyze ──────────────────────────────────────────
@@ -53,119 +60,48 @@ async def analyze_food(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Analyze a food image.
-    Pipeline: Scanner Agent → Nutrition Agent → Health Score → Save Meal.
-    """
     uid = current_user["uid"]
-
-    # Vision calls are the most expensive path — gate them before any work.
     rate = check_rate_limit(uid, limit=12, window_seconds=60)
     if not rate.allowed:
         raise HTTPException(status_code=429, detail=rate.message)
-
-    img_verdict = validate_image(req.image_base64, req.mime_type)
-    if not img_verdict.allowed:
-        raise HTTPException(status_code=400, detail=img_verdict.message)
+    verdict = validate_image(req.image_base64, req.mime_type)
+    if not verdict.allowed:
+        raise HTTPException(status_code=400, detail=verdict.message)
+    meal_type = req.meal_type.lower() if req.meal_type.lower() in MEAL_TYPES else "snack"
 
     keys = await resolve_api_keys(current_user)
+    UserRepository(db).get_or_create_user(uid, current_user.get("email", ""))
+    background_tasks.add_task(cleanup_old_images_job, 7)
 
-    # Save image to db immediately and schedule cleanup
-    from app.repositories.image_repository import ImageRepository
-    image_repo = ImageRepository(db)
-    scanned_image = image_repo.save_image(uid, req.image_base64, req.mime_type)
-    
-    background_tasks.add_task(image_repo.delete_old_images, days=7)
+    result = await scan_food(db, uid, keys, req.image_base64, req.mime_type, meal_type, req.note, req.session_id)
+    return FoodAnalyzeResponse(**result)
 
-    # Load user goals from DB
-    user_repo = UserRepository(db)
-    user_repo.get_or_create_user(uid, current_user.get("email", ""))
-    goals = user_repo.get_goals(uid)
-    
-    if not goals or not goals.calorie_goal:
-        raise HTTPException(
-            status_code=400,
-            detail="Please provide your weight, height, age, activity level, etc. data from the profile icon filling."
-        )
-        
-    prefs = user_repo.get_preferences(uid)
-
-    user_goals = {}
-    if goals:
-        user_goals = {
-            "calorie_goal": goals.calorie_goal,
-            "protein_goal": goals.protein_goal,
-            "carb_goal": goals.carb_goal,
-            "fat_goal": goals.fat_goal,
-            "fitness_goal": goals.fitness_goal,
-        }
-
-    user_prefs = {}
-    if prefs:
-        user_prefs = {
-            "dietary_restrictions": prefs.dietary_restrictions or [],
-            "allergies": prefs.allergies or [],
-        }
-
-    state = _build_state(
-        current_user, keys,
-        uploaded_images=[req.image_base64],
-        image_mime_type=req.mime_type,
-        meal_type=req.meal_type,
-        user_goals=user_goals,
-        user_preferences=user_prefs,
-    )
-
-    # Run the graph
-    result_state = await orchestrator.run(state)
-
-    response_data = {
-        "success": result_state.response.get("success", False),
-        "vision": result_state.response.get("vision"),
-        "nutrition": result_state.response.get("nutrition"),
-        "errors": result_state.response.get("errors", []),
-        "image_id": scanned_image.id,
-    }
-    
-    provider_used = response_data["vision"].get("provider_used", "Unknown") if response_data.get("vision") else "Unknown"
-    logger.info(f"Food analysis complete. Provider used: {provider_used}")
-
-    chat_repo = ChatRepository(db)
-    if req.session_id:
-        session = chat_repo.get_session(req.session_id)
-        if not session or session.user_id != uid:
-            session = chat_repo.create_session(uid, title="Food Analysis")
-    else:
-        session = chat_repo.create_session(uid, title="Food Analysis")
-        
-    chat_repo.add_message(
-        session.id, 
-        "user", 
-        f"[Image Uploaded] Please analyze this {req.meal_type}.",
-        metadata={"nutrition_data": {"image_id": scanned_image.id}}
-    )
-    
-    # Save assistant message with metadata
-    chat_repo.add_message(
-        session.id, 
-        "assistant", 
-        "Here's the analysis of your food:" if response_data["success"] else "I couldn't analyze that food. Please try again.",
-        metadata={"nutrition_data": response_data}
-    )
-    
-    db.commit()
-    response_data["session_id"] = session.id
-
-    return FoodAnalyzeResponse(**response_data)
 
 # ─── POST /food/log ──────────────────────────────────────────────
 
-from pydantic import BaseModel, Field
 class LogMealRequest(BaseModel):
     meal_type: str = Field("snack", max_length=20)
     vision_data: dict
     message_id: Optional[str] = Field(None, max_length=40)
     image_id: Optional[int] = None
+
+
+def _mark_message_logged(db: Session, uid: str, message_id: Optional[str]) -> None:
+    raw = str(message_id or "").replace("msg-", "")
+    if not raw.isdigit():
+        return
+    row = (
+        db.query(ChatMessageRow)
+        .join(ChatSession, ChatSession.id == ChatMessageRow.session_id)
+        .filter(ChatMessageRow.id == int(raw), ChatSession.user_id == uid)
+        .first()
+    )
+    if row:
+        meta = dict(row.metadata_ or {})
+        meta["logged"] = True
+        row.metadata_ = meta
+        flag_modified(row, "metadata_")
+
 
 @router.post("/food/log")
 async def log_food(
@@ -173,88 +109,56 @@ async def log_food(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Manually log an analyzed meal to the database."""
     uid = current_user["uid"]
+    nutrition_dict = req.vision_data.get("nutrition") or {}
+    inner = nutrition_dict.get("nutrition") or {}
+    items = [it for it in (inner.get("items") or []) if isinstance(it, dict)][:50]
+    if not items:
+        raise HTTPException(status_code=400, detail="There's nothing to track in this result.")
 
     image_id = req.image_id
     if image_id is not None:
-        from app.repositories.image_repository import ImageRepository
         img = ImageRepository(db).get_image(image_id)
         if not img or img.user_id != uid:
             image_id = None
-    
-    user_repo = UserRepository(db)
-    goals = user_repo.get_goals(uid)
-    calorie_goal = goals.calorie_goal if goals else 2000.0
-    protein_goal = goals.protein_goal if goals else 140.0
 
+    meal_type = req.meal_type.lower() if req.meal_type.lower() in MEAL_TYPES else "snack"
     try:
         from app.repositories.meal_repository import MealRepository
+        UserRepository(db).get_or_create_user(uid, current_user.get("email", ""))
         meal_repo = MealRepository(db)
-        
-        # req.vision_data contains the full FoodAnalyzeResponse from frontend
-        vision_dict = req.vision_data.get("vision", {})
-        nutrition_dict = req.vision_data.get("nutrition", {})
-        
-        # 1. Create the MealLog
-        meal = meal_repo.create_meal(user_id=uid, meal_type=req.meal_type, image_id=image_id)
-        
-        # 2. Add meal items
-        nutrition_inner = nutrition_dict.get("nutrition", {})
-        items = nutrition_inner.get("items", [])
-        
-        if items:
-            allowed = {"food_name", "weight_grams", "calories", "protein", "carbs", "fat", "fiber", "confidence", "category"}
-            mapped_items = []
-            for it in items[:50]:
-                if not isinstance(it, dict):
-                    continue
-                mapped = it.copy()
-                if "name" in mapped and "food_name" not in mapped:
-                    mapped["food_name"] = mapped.pop("name")
-                mapped_items.append({k: v for k, v in mapped.items() if k in allowed})
-            meal_repo.add_meal_items(meal.id, mapped_items)
-            
-        # 3. Update totals
-        score_data = nutrition_dict.get("health_score", {})
+        meal = meal_repo.create_meal(user_id=uid, meal_type=meal_type, image_id=image_id)
+
+        allowed = {"food_name", "weight_grams", "calories", "protein", "carbs", "fat", "fiber", "confidence", "category"}
+        mapped = []
+        for it in items:
+            item = dict(it)
+            if "name" in item and "food_name" not in item:
+                item["food_name"] = item.pop("name")
+            mapped.append({k: v for k, v in item.items() if k in allowed})
+        meal_repo.add_meal_items(meal.id, mapped)
+
+        def total(key: str) -> float:
+            value = inner.get(f"total_{key}")
+            return float(value) if isinstance(value, (int, float)) else sum(float(i.get(key) or 0) for i in items)
+
+        score = nutrition_dict.get("health_score") or {}
         meal_repo.update_meal_totals(
             meal_id=meal.id,
-            calories=nutrition_inner.get("total_calories", 0.0),
-            protein=nutrition_inner.get("total_protein", 0.0),
-            carbs=nutrition_inner.get("total_carbs", 0.0),
-            fat=nutrition_inner.get("total_fat", 0.0),
-            fiber=nutrition_inner.get("total_fiber", 0.0),
-            health_score=score_data.get("score", 0),
-            health_grade=score_data.get("grade", "C"),
-            suggestions=score_data.get("suggestions", []),
+            calories=total("calories"), protein=total("protein"), carbs=total("carbs"),
+            fat=total("fat"), fiber=total("fiber"),
+            health_score=score.get("score", 0), health_grade=score.get("grade", "C"),
+            suggestions=score.get("suggestions", []),
         )
-        
-        # 4. Upsert daily summary
-        from datetime import date
         meal_repo.upsert_daily_summary(uid, date.today().isoformat())
-        
-        # 5. Mark the chat message as logged if message_id is provided
-        if req.message_id:
-            chat_repo = ChatRepository(db)
-            # Remove the 'msg-' prefix if it exists
-            db_msg_id = int(req.message_id.replace("msg-", "")) if str(req.message_id).startswith("msg-") else None
-            if db_msg_id:
-                db.execute(
-                    text(
-                        "UPDATE chat_messages SET metadata = json_insert(metadata, '$.logged', true) "
-                        "WHERE id = :mid AND session_id IN (SELECT id FROM chat_sessions WHERE user_id = :uid)"
-                    ),
-                    {"mid": db_msg_id, "uid": uid}
-                )
-
+        _mark_message_logged(db, uid, req.message_id)
         db.commit()
-
-        from app.providers.llm import clear_llm_cache
-        clear_llm_cache()
-
         return {"success": True, "meal_id": meal.id}
-    except Exception as e:
-        logger.error(f"Failed to persist meal manually: {e}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        logger.error("Failed to persist meal for %s: %s", uid, exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Could not save this meal. Please try again.")
 
 
@@ -266,19 +170,13 @@ async def get_image(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    from app.repositories.image_repository import ImageRepository
-    image_repo = ImageRepository(db)
-    img = image_repo.get_image(image_id)
-    
+    img = ImageRepository(db).get_image(image_id)
     if not img or img.user_id != current_user["uid"]:
         raise HTTPException(status_code=404, detail="Image not found")
-        
-    return {
-        "id": img.id,
-        "base64_data": img.base64_data,
-        "mime_type": img.mime_type
-    }
+    return {"id": img.id, "base64_data": img.base64_data, "mime_type": img.mime_type}
 
+
+# ─── Profile ─────────────────────────────────────────────────────
 
 class NutritionProfileUpdate(BaseModel):
     weight_kg: Optional[float] = None
@@ -288,29 +186,22 @@ class NutritionProfileUpdate(BaseModel):
     activity_level: Optional[str] = None
     fitness_goal: Optional[str] = None
 
+
 @router.get("/profile")
 async def get_nutrition_profile(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    uid = current_user["uid"]
-    user_repo = UserRepository(db)
-    goals = user_repo.get_goals(uid)
+    goals = UserRepository(db).get_goals(current_user["uid"])
     if not goals:
         return {}
     return {
-        "weight_kg": goals.weight_kg,
-        "height_cm": goals.height_cm,
-        "age": goals.age,
-        "gender": goals.gender,
-        "activity_level": goals.activity_level,
-        "fitness_goal": goals.fitness_goal,
-        "calorie_goal": goals.calorie_goal,
-        "protein_goal": goals.protein_goal,
-        "carb_goal": goals.carb_goal,
-        "fat_goal": goals.fat_goal,
-        "fiber_goal": goals.fiber_goal,
+        "weight_kg": goals.weight_kg, "height_cm": goals.height_cm, "age": goals.age, "gender": goals.gender,
+        "activity_level": goals.activity_level, "fitness_goal": goals.fitness_goal,
+        "calorie_goal": goals.calorie_goal, "protein_goal": goals.protein_goal, "carb_goal": goals.carb_goal,
+        "fat_goal": goals.fat_goal, "fiber_goal": goals.fiber_goal,
     }
+
 
 @router.post("/profile")
 async def update_nutrition_profile(
@@ -318,43 +209,53 @@ async def update_nutrition_profile(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    uid = current_user["uid"]
-    email = current_user.get("email", "")
-    user_repo = UserRepository(db)
-    user_repo.get_or_create_user(uid, email)
-    
-    # Calculate TDEE
     from app.tools.tdee_calculator import calculate_tdee_and_macros
+    uid = current_user["uid"]
+    user_repo = UserRepository(db)
+    user_repo.get_or_create_user(uid, current_user.get("email", ""))
     macros = calculate_tdee_and_macros(
-        weight_kg=req.weight_kg,
-        height_cm=req.height_cm,
-        age=req.age,
-        gender=req.gender,
-        activity_level=req.activity_level,
-        fitness_goal=req.fitness_goal
+        weight_kg=req.weight_kg, height_cm=req.height_cm, age=req.age, gender=req.gender,
+        activity_level=req.activity_level, fitness_goal=req.fitness_goal,
     )
-    
-    update_payload = {
-        "weight_kg": req.weight_kg,
-        "height_cm": req.height_cm,
-        "age": req.age,
-        "gender": req.gender,
-        "activity_level": req.activity_level,
-        "fitness_goal": req.fitness_goal,
-        "calorie_goal": macros["calories"],
-        "protein_goal": macros["protein"],
-        "carb_goal": macros["carbs"],
-        "fat_goal": macros["fat"],
-        "fiber_goal": macros["fiber"]
+    payload = {
+        "weight_kg": req.weight_kg, "height_cm": req.height_cm, "age": req.age, "gender": req.gender,
+        "activity_level": req.activity_level, "fitness_goal": req.fitness_goal,
+        "calorie_goal": macros["calories"], "protein_goal": macros["protein"], "carb_goal": macros["carbs"],
+        "fat_goal": macros["fat"], "fiber_goal": macros["fiber"],
     }
-    
-    user_repo.upsert_goals(uid, update_payload)
+    user_repo.upsert_goals(uid, payload)
     db.commit()
-    
-    return update_payload
+    return payload
 
 
 # ─── POST /chat ──────────────────────────────────────────────────
+
+def _context_text(db: Session, uid: str, goals: dict, prefs: dict, training_data: dict, today: str) -> str:
+    g = UserRepository(db).get_goals(uid)
+    lines = []
+    if goals.get("is_default"):
+        lines.append("Body profile: NOT SET (targets below are defaults). If they ask for personal targets, ask for "
+                     "weight, height, age, gender, activity level and goal, then call update_body_profile.")
+    else:
+        body = ", ".join(f"{label} {v}" for label, v in (
+            ("weight", f"{g.weight_kg} kg" if g and g.weight_kg else None), ("height", f"{g.height_cm} cm" if g and g.height_cm else None),
+            ("age", g.age if g else None), ("gender", g.gender if g else None), ("activity", g.activity_level if g else None),
+        ) if v)
+        lines.append(f"Body: {body or 'partially set'}; goal: {goals.get('fitness_goal')}")
+    lines.append(f"Daily targets: {round(goals.get('calorie_goal') or 0)} kcal, {round(goals.get('protein_goal') or 0)} g protein, "
+                 f"{round(goals.get('carb_goal') or 0)} g carbs, {round(goals.get('fat_goal') or 0)} g fat")
+    if prefs.get("dietary_restrictions"):
+        lines.append("Diet: " + ", ".join(prefs["dietary_restrictions"]))
+    if prefs.get("allergies"):
+        lines.append("Allergies: " + ", ".join(prefs["allergies"]))
+    try:
+        s = MealService(db).get_today_summary(uid)
+        lines.append(f"Eaten today: {round(s['total_calories'])} kcal, {round(s['total_protein'])} g protein in {s['meal_count']} logged meals")
+    except Exception:
+        db.rollback()
+    lines.append(training.training_snapshot(training_data, today))
+    return "\n".join(f"- {l}" for l in lines if l)
+
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
@@ -362,10 +263,7 @@ async def chat(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Chat with the AI nutrition assistant."""
     uid = current_user["uid"]
-
-    # Guardrails run before any LLM work so abuse and off-topic traffic cost nothing.
     rate = check_rate_limit(uid, limit=20, window_seconds=60)
     if not rate.allowed:
         raise HTTPException(status_code=429, detail=rate.message)
@@ -374,201 +272,71 @@ async def chat(
     if not verdict.allowed:
         logger.info("Chat blocked for %s: %s", uid, verdict.reason)
         if verdict.reason in ("off_topic", "injection"):
-            # Answer in-band so the conversation stays natural instead of erroring.
-            return ChatResponse(
-                response=verdict.message,
-                session_id=req.session_id or 0,
-                tokens_used=0,
-            )
+            return ChatResponse(response=verdict.message, session_id=req.session_id or 0)
         raise HTTPException(status_code=400, detail=verdict.message)
 
     keys = await resolve_api_keys(current_user)
-
-    # Ensure user exists in database before creating any sessions
     user_repo = UserRepository(db)
     user_repo.get_or_create_user(uid, current_user.get("email", ""))
 
-    # Chat history from DB
     chat_repo = ChatRepository(db)
-    if req.session_id:
-        session = chat_repo.get_session(req.session_id)
-        # Never continue (or leak the history of) another user's conversation.
-        if not session or session.user_id != uid:
-            title = req.message[:35] if req.message else "New Chat"
-            session = chat_repo.create_session(uid, title=title)
-    else:
-        title = req.message[:35] if req.message else "New Chat"
-        session = chat_repo.create_session(uid, title=title)
+    session = chat_repo.get_session(req.session_id) if req.session_id else None
+    if not session or session.user_id != uid:
+        session = chat_repo.create_session(uid, title=req.message[:40])
+    elif session.title in ("New Chat", "Food scan") and req.message:
+        session.title = req.message[:40]
 
-    if session.title == "New Chat" and req.message:
-        session.title = req.message[:35]
-
-    # Load recent messages
-    messages = chat_repo.get_recent_messages(session.id, limit=15)
-    history = [{"role": m.role, "content": m.content} for m in messages]
-
-    # Save user message
+    history = [{"role": m.role, "content": m.content} for m in chat_repo.get_recent_messages(session.id, limit=14)]
     chat_repo.add_message(session.id, "user", req.message)
-
-    # Load user context
-    goals = user_repo.get_goals(uid)
-    prefs = user_repo.get_preferences(uid)
-
-    if not goals or not goals.calorie_goal:
-        raise HTTPException(
-            status_code=400,
-            detail="Please provide your weight, height, age, activity level, etc. data from the profile icon filling."
-        )
-
-    user_goals = {
-        "calorie_goal": goals.calorie_goal,
-        "protein_goal": goals.protein_goal,
-        "fitness_goal": goals.fitness_goal,
-        "weight_kg": goals.weight_kg,
-        "height_cm": goals.height_cm,
-        "age": goals.age,
-        "gender": goals.gender,
-        "activity_level": goals.activity_level,
-    }
-
-    user_prefs = {}
-    if prefs:
-        user_prefs = {
-            "dietary_restrictions": prefs.dietary_restrictions or [],
-            "allergies": prefs.allergies or [],
-        }
-
-    state = _build_state(
-        current_user, keys,
-        user_message=req.message,
-        chat_history=history,
-        user_goals=user_goals,
-        user_preferences=user_prefs,
-    )
-
-    try:
-        result_state = await orchestrator.run(state)
-        
-        if result_state.chat_response:
-            assistant_msg = result_state.chat_response
-        elif result_state.response.get("chat"):
-            assistant_msg = result_state.response["chat"]
-        elif result_state.recipe_result:
-            r = result_state.recipe_result
-            md = f"### {r.get('title', 'Recipe')}\n\n"
-            md += f"**Prep Time:** {r.get('prep_time_min', '?')} mins\n"
-            md += f"**Macros:** {r.get('calories_per_serving', 0)} kcal | {r.get('protein_per_serving', 0)}g P | {r.get('carbs_per_serving', 0)}g C | {r.get('fat_per_serving', 0)}g F\n\n"
-            md += "**Ingredients:**\n"
-            for ing in r.get("ingredients", []):
-                # Handle both dict and string ingredients for robustness
-                if isinstance(ing, dict):
-                    md += f"- {ing.get('amount', '')} {ing.get('item', '')}\n"
-                else:
-                    md += f"- {ing}\n"
-            md += "\n**Instructions:**\n"
-            for i, step in enumerate(r.get("instructions", []), 1):
-                md += f"{i}. {step}\n"
-            assistant_msg = md.strip()
-        elif result_state.meal_plan:
-            p = result_state.meal_plan
-            md = f"### {p.get('plan_name', 'Meal Plan')}\n\n"
-            for meal in p.get("meals", []):
-                md += f"**{str(meal.get('meal_type')).title()}:** {meal.get('suggestion')}\n"
-                md += f"*~{meal.get('estimated_calories', 0)} kcal, {meal.get('estimated_protein', 0)}g protein*\n\n"
-            tips = p.get("tips", [])
-            if tips:
-                md += "**Tips:**\n"
-                for tip in tips:
-                    md += f"- {tip}\n"
-            assistant_msg = md.strip()
-        elif result_state.response.get("nutrition"):
-            assistant_msg = "Here are the macros for your meal!"
-        else:
-            assistant_msg = "I couldn't generate a response."
-    except Exception as e:
-        logger.error(f"Error during AI chat generation: {e}")
-        assistant_msg = "I'm sorry, I encountered an error while processing your request. Please try again."
-    
-    # Check if AI collected profile data
-    if "_update_profile" in assistant_msg:
-        import re, json
-        from app.tools.tdee_calculator import calculate_tdee_and_macros
-        
-        # Try to extract the JSON block
-        match = re.search(r"```json\s*(\{.*?\})\s*```", assistant_msg, re.DOTALL)
-        if match:
-            try:
-                data = json.loads(match.group(1))
-                if "_update_profile" in data:
-                    prof_data = data["_update_profile"]
-                    
-                    # Calculate TDEE
-                    macros = calculate_tdee_and_macros(
-                        weight_kg=prof_data.get("weight_kg"),
-                        height_cm=prof_data.get("height_cm"),
-                        age=prof_data.get("age"),
-                        gender=prof_data.get("gender"),
-                        activity_level=prof_data.get("activity_level"),
-                        fitness_goal=goals.fitness_goal if goals else "maintain"
-                    )
-                    
-                    # Merge and save to goals
-                    update_payload = {
-                        "weight_kg": prof_data.get("weight_kg"),
-                        "height_cm": prof_data.get("height_cm"),
-                        "age": prof_data.get("age"),
-                        "gender": prof_data.get("gender"),
-                        "activity_level": prof_data.get("activity_level"),
-                        "calorie_goal": macros["calories"],
-                        "protein_goal": macros["protein"],
-                        "carb_goal": macros["carbs"],
-                        "fat_goal": macros["fat"],
-                        "fiber_goal": macros["fiber"]
-                    }
-                    user_repo.upsert_goals(uid, update_payload)
-                    
-                    # Strip the JSON block from the message
-                    assistant_msg = assistant_msg[:match.start()] + assistant_msg[match.end():]
-            except Exception as e:
-                logger.error(f"Failed to parse profile update: {e}")
-
-    # Save assistant message
-    chat_repo.add_message(session.id, "assistant", assistant_msg)
     db.commit()
 
-    nutrition_data = None
-    if result_state.response and "nutrition" in result_state.response:
-        # Reconstruct FoodAnalyzeResponse structure for the UI
-        nutrition_data = {
-            "success": True,
-            "vision": result_state.response.get("vision"),
-            "nutrition": result_state.response.get("nutrition"),
-        }
+    today = date.today().isoformat()
+    goals = user_goals(db, uid)
+    prefs = _prefs(db, uid)
+    ctx = ToolContext(db=db, uid=uid, token=current_user.get("_token"), keys=keys, llm=_llm(keys), goals=goals, prefs=prefs, today=today)
+    training_data = await ctx.training_data()
+    context = _context_text(db, uid, goals, prefs, training_data, today)
+
+    try:
+        result = await asyncio.wait_for(run_coach(ctx, req.message, history, context), timeout=90)
+    except Exception as exc:
+        db.rollback()
+        logger.error("Coach failed for %s: %s", uid, exc, exc_info=True)
+        from app.agents.coach.agent import CoachResult
+        from app.core.guardrails import FALLBACK_REPLY
+        result = CoachResult(answer=FALLBACK_REPLY)
+
+    card = result.nutrition_card
+    metadata = {"tools": result.tools_used, "provider": result.provider}
+    if card:
+        metadata["nutrition_data"] = card
+    if result.reasoning:
+        metadata["reasoning"] = result.reasoning
+    assistant = chat_repo.add_message(session.id, "assistant", result.answer, metadata=metadata)
+    db.commit()
 
     return ChatResponse(
-        response=assistant_msg,
-        reasoning=result_state.chat_reasoning,
+        response=result.answer,
+        reasoning=result.reasoning,
         session_id=session.id,
-        tokens_used=0,
-        nutritionData=nutrition_data,
+        nutritionData=card,
+        message_id=f"msg-{assistant.id}",
+        tools_used=result.tools_used,
+        profile_updated=result.profile_updated,
     )
 
 
-# ─── GET /chat/sessions ──────────────────────────────────────────
+# ─── Chat sessions ───────────────────────────────────────────────
 
 @router.get("/chat/sessions")
 async def get_chat_sessions(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get all past chat sessions for current user."""
-    uid = current_user["uid"]
-    chat_repo = ChatRepository(db)
-    sessions = chat_repo.get_user_sessions(uid, limit=30)
+    sessions = ChatRepository(db).get_user_sessions(current_user["uid"], limit=30)
     return [
         {
-            "id": s.id,
-            "title": s.title,
+            "id": s.id, "title": s.title,
             "created_at": s.created_at.isoformat() if s.created_at else None,
             "updated_at": s.updated_at.isoformat() if s.updated_at else None,
         }
@@ -576,35 +344,24 @@ async def get_chat_sessions(
     ]
 
 
-# ─── GET /chat/sessions/{session_id}/messages ────────────────────
-
 @router.get("/chat/sessions/{session_id}/messages")
 async def get_chat_session_messages(
     session_id: int,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get all messages for a specific session in strict chronological order."""
-    uid = current_user["uid"]
     chat_repo = ChatRepository(db)
     session = chat_repo.get_session(session_id)
-    if not session or session.user_id != uid:
+    if not session or session.user_id != current_user["uid"]:
         raise HTTPException(status_code=404, detail="Session not found")
-
-    messages = chat_repo.get_recent_messages(session_id, limit=500)
     return [
         {
-            "id": f"msg-{m.id}",
-            "role": m.role,
-            "content": m.content,
-            "metadata_": m.metadata_,
+            "id": f"msg-{m.id}", "role": m.role, "content": m.content, "metadata_": m.metadata_,
             "created_at": m.created_at.isoformat() if m.created_at else None,
         }
-        for m in messages
+        for m in chat_repo.get_recent_messages(session_id, limit=500)
     ]
 
-
-# ─── DELETE /chat/sessions/{session_id} ──────────────────────────
 
 @router.delete("/chat/sessions/{session_id}")
 async def delete_chat_session(
@@ -612,18 +369,15 @@ async def delete_chat_session(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Delete a chat session idempotently."""
-    uid = current_user["uid"]
     chat_repo = ChatRepository(db)
     session = chat_repo.get_session(session_id)
-    if session:
-        if session.user_id == uid:
-            chat_repo.delete_session(session_id)
-            db.commit()
+    if session and session.user_id == current_user["uid"]:
+        chat_repo.delete_session(session_id)
+        db.commit()
     return {"success": True}
 
 
-# ─── POST /recipe/generate ───────────────────────────────────────
+# ─── Recipe & meal plan ──────────────────────────────────────────
 
 @router.post("/recipe/generate")
 async def generate_recipe(
@@ -631,62 +385,24 @@ async def generate_recipe(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Generate a recipe using the Recipe Agent."""
+    from app.agents.recipe.agent import RecipeAgent
     uid = current_user["uid"]
     rate = check_rate_limit(f"{uid}:recipe", limit=8, window_seconds=60)
     if not rate.allowed:
         raise HTTPException(status_code=429, detail=rate.message)
     keys = await resolve_api_keys(current_user)
-
-    user_repo = UserRepository(db)
-    user_repo.get_or_create_user(uid)
-    goals = user_repo.get_goals(uid)
-    prefs = user_repo.get_preferences(uid)
-
-    user_goals = {}
-    if goals:
-        user_goals = {
-            "calorie_goal": goals.calorie_goal,
-            "protein_goal": goals.protein_goal,
-            "fitness_goal": goals.fitness_goal,
-        }
-
-    user_prefs = {}
-    if prefs:
-        user_prefs = {
-            "dietary_restrictions": prefs.dietary_restrictions or [],
-        }
-
-    state = _build_state(
-        current_user, keys,
-        user_message=req.query,
-        intent="recipe",
-        user_goals=user_goals,
-        user_preferences=user_prefs,
+    UserRepository(db).get_or_create_user(uid)
+    goals = user_goals(db, uid)
+    result = await RecipeAgent().generate_recipe(
+        query=req.query, llm_providers=_llm(keys),
+        dietary_restrictions=_prefs(db, uid).get("dietary_restrictions", []),
+        goal=goals.get("fitness_goal") or "maintain",
+        calorie_target=goals.get("calorie_goal"), protein_target=goals.get("protein_goal"),
     )
-
-    # Force recipe intent
-    from app.agents.recipe.agent import RecipeAgent
-    from app.providers.llm import get_llm_providers
-
-    recipe_agent = RecipeAgent()
-    llm_providers = get_llm_providers(keys.get("groq_key", ""), keys.get("nvidia_key", ""), keys.get("gemini_key", ""), keys.get("openrouter_key", ""))
-
-    result = await recipe_agent.generate_recipe(
-        query=req.query,
-        llm_providers=llm_providers,
-        dietary_restrictions=user_prefs.get("dietary_restrictions", []),
-        goal=user_goals.get("fitness_goal", "build_muscle"),
-        calorie_target=user_goals.get("calorie_goal"),
-        protein_target=user_goals.get("protein_goal"),
-    )
-
     if result:
         return {"success": True, "recipe": result.model_dump()}
     return {"success": False, "error": "Could not generate recipe"}
 
-
-# ─── POST /meal-plan/generate ────────────────────────────────────
 
 @router.post("/meal-plan/generate")
 async def generate_meal_plan(
@@ -694,7 +410,6 @@ async def generate_meal_plan(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Generate a meal plan."""
     uid = current_user["uid"]
     rate = check_rate_limit(f"{uid}:mealplan", limit=5, window_seconds=60)
     if not rate.allowed:
@@ -702,71 +417,32 @@ async def generate_meal_plan(
     if req.plan_type not in ("daily", "weekly"):
         raise HTTPException(status_code=400, detail="Invalid plan type")
     keys = await resolve_api_keys(current_user)
-
-    user_repo = UserRepository(db)
-    user_repo.get_or_create_user(uid)
-    goals = user_repo.get_goals(uid)
-    prefs = user_repo.get_preferences(uid)
-
-    user_goals = {}
-    if goals:
-        user_goals = {
-            "calorie_goal": goals.calorie_goal,
-            "protein_goal": goals.protein_goal,
-            "fitness_goal": goals.fitness_goal,
-        }
-
-    user_prefs = {}
-    if prefs:
-        user_prefs = {
-            "dietary_restrictions": prefs.dietary_restrictions or [],
-        }
-
-    state = _build_state(
-        current_user, keys,
-        user_message=f"Generate a {req.plan_type} meal plan",
-        user_goals=user_goals,
-        user_preferences=user_prefs,
-    )
-
-    # Override intent to plan
-    state.intent = "plan"
-    from app.graph.nutrition_graph import NutritionGraphOrchestrator
-    orch = NutritionGraphOrchestrator()
-    state = await orch._run_plan(state)
-
-    if state.meal_plan:
-        return {"success": True, "meal_plan": state.meal_plan}
+    UserRepository(db).get_or_create_user(uid)
+    plan = await build_meal_plan(_llm(keys), user_goals(db, uid), _prefs(db, uid), f"{req.plan_type} plan")
+    if plan:
+        return {"success": True, "meal_plan": plan}
     return {"success": False, "error": "Could not generate meal plan"}
 
 
-# ─── GET /nutrition/today ─────────────────────────────────────────
+# ─── Today / history ─────────────────────────────────────────────
 
 @router.get("/today", response_model=TodayNutritionResponse)
 async def get_today_nutrition(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get today's nutrition summary and goals."""
     uid = current_user["uid"]
-    meal_svc = MealService(db)
-    summary = meal_svc.get_today_summary(uid)
-    
-    user_repo = UserRepository(db)
-    goals = user_repo.get_goals(uid)
-    goals_dict = {
+    summary = MealService(db).get_today_summary(uid)
+    goals = UserRepository(db).get_goals(uid)
+    summary["goals"] = {
         "calories": goals.calorie_goal if goals else 2000,
         "protein": goals.protein_goal if goals else 140,
         "carbs": goals.carb_goal if goals else 250,
         "fat": goals.fat_goal if goals else 65,
         "fiber": goals.fiber_goal if goals else 30,
     }
-    summary["goals"] = goals_dict
-    
     return TodayNutritionResponse(**summary)
 
-
-# ─── GET /nutrition/history ───────────────────────────────────────
 
 @router.get("/history")
 async def get_nutrition_history(
@@ -774,15 +450,13 @@ async def get_nutrition_history(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Get nutrition history."""
-    uid = current_user["uid"]
     days = max(1, min(days, 90))
-    meal_svc = MealService(db)
-    return {"history": meal_svc.get_history(uid, days)}
+    return {"history": MealService(db).get_history(current_user["uid"], days)}
 
 
 class UpdateMealTypeRequest(BaseModel):
     meal_type: str
+
 
 @router.patch("/meals/{meal_id}/type")
 async def update_meal_type(
@@ -791,18 +465,9 @@ async def update_meal_type(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Update the meal type of a logged meal."""
-    uid = current_user["uid"]
     from app.repositories.meal_repository import MealRepository
-    meal_repo = MealRepository(db)
-    
-    # Validate allowed meal types
-    allowed_types = ["breakfast", "lunch", "dinner", "snack", "snacks"]
-    if req.meal_type.lower() not in allowed_types:
+    if req.meal_type.lower() not in MEAL_TYPES:
         raise HTTPException(status_code=400, detail="Invalid meal type")
-        
-    success = meal_repo.update_meal_type(meal_id, uid, req.meal_type.lower())
-    if not success:
+    if not MealRepository(db).update_meal_type(meal_id, current_user["uid"], req.meal_type.lower()):
         raise HTTPException(status_code=404, detail="Meal not found or unauthorized")
-        
     return {"success": True}

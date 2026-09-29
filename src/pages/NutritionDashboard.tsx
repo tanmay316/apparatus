@@ -7,7 +7,7 @@ import NutritionChat from '@/components/nutrition/NutritionChat';
 import NutritionProfileModal from '@/components/nutrition/NutritionProfileModal';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { analyzeFood, getTodayNutrition, getNutritionHistory, type FoodAnalyzeResponse, type TodayNutrition } from '@/services/nutrition-api';
+import { analyzeFood, getTodayNutrition, getNutritionHistory, hasTrackableNutrition, logMeal, type FoodAnalyzeResponse, type TodayNutrition } from '@/services/nutrition-api';
 import MealDetailsModal from '@/components/nutrition/MealDetailsModal';
 
 const container = {
@@ -75,6 +75,8 @@ export default function NutritionDashboard() {
   const [showChat, setShowChat] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [scanResult, setScanResult] = useState<FoodAnalyzeResponse | null>(null);
+  const [scanTracked, setScanTracked] = useState(false);
+  const [trackingScan, setTrackingScan] = useState(false);
   const [todayData, setTodayData] = useState<TodayNutrition | null>(null);
   const [historyData, setHistoryData] = useState<any[]>([]);
   const [loadingToday, setLoadingToday] = useState(true);
@@ -146,15 +148,35 @@ export default function NutritionDashboard() {
     setError('');
     try {
       const result = await analyzeFood(base64, mimeType, 'snack');
-      setScanResult(result);
       setShowScanner(false);
-      // Refresh today's data
-      loadToday();
+      if (hasTrackableNutrition(result)) {
+        setScanResult(result);
+        setScanTracked(false);
+      } else {
+        setError(result.message || "Couldn't find any food in that photo. Try again.");
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to analyze food. Check your API keys.');
+      setError(err.message || 'Failed to analyze food. Please try again.');
       setShowScanner(false);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleTrackScan = async () => {
+    if (!scanResult || scanTracked) return;
+    setTrackingScan(true);
+    try {
+      const hour = new Date().getHours();
+      const mealType = hour >= 5 && hour < 11 ? 'breakfast' : hour < 16 ? 'lunch' : hour < 19 ? 'snack' : 'dinner';
+      await logMeal(scanResult, mealType, scanResult.assistant_message_id, scanResult.image_id);
+      setScanTracked(true);
+      loadToday();
+      loadHistory();
+    } catch (err: any) {
+      setError(err.message || 'Could not track this meal.');
+    } finally {
+      setTrackingScan(false);
     }
   };
 
@@ -226,7 +248,12 @@ export default function NutritionDashboard() {
           <div>
             <div className="flex items-center justify-between mb-2.5">
               <h2 className="dx-section-title">Scan result</h2>
-              <button onClick={() => setScanResult(null)} className="dx-link">Dismiss</button>
+              <div className="flex items-center gap-3">
+                <button onClick={handleTrackScan} disabled={scanTracked || trackingScan} className="dx-btn h-9 text-[13px]">
+                  {scanTracked ? 'Tracked' : trackingScan ? 'Tracking…' : 'Track meal'}
+                </button>
+                <button onClick={() => setScanResult(null)} className="dx-link">Dismiss</button>
+              </div>
             </div>
             <NutritionResultCard result={scanResult} onClose={() => setScanResult(null)} />
           </div>

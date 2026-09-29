@@ -1,5 +1,5 @@
 import {
-  Apple, Award, BookOpen, Compass, Dumbbell, Globe, MapPin, Medal, Ruler, Settings, Target, TrendingUp, Users,
+  Apple, Award, BookOpen, Compass, Dumbbell, Globe, Medal, Ruler, Settings, Target, TrendingUp, Users,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -23,7 +23,6 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: 'home', path: '/', label: 'Home', icon: Dumbbell, match: ['/workout'] },
       { id: 'plans', path: '/plans', label: 'Plans', icon: BookOpen },
-      { id: 'cardio', path: '/cardio', label: 'Cardio', icon: MapPin },
       { id: 'nutrition', path: '/nutrition', label: 'Nutrition', icon: Apple },
     ],
   },

@@ -35,7 +35,10 @@ export function CardioLivePublisher() {
       const movingSec = Math.min(st.movingDurationSec, activeSec);
       const distanceKm = Math.round(st.distanceKm * 100) / 100;
       const avgSpeedKmh = movingSec > 0 ? (st.distanceKm / movingSec) * 3600 : 0;
-      const steps = getLiveSteps(type, st.distanceKm, usePedometerStore.getState());
+      const profile = useAuthStore.getState().profile;
+      const steps = getLiveSteps(type, st.distanceKm, usePedometerStore.getState(), {
+        movingSec, profile: { heightCm: profile?.height, gender: profile?.gender },
+      });
 
       upsertActiveSession(uid, {
         planId: 'cardio',

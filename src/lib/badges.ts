@@ -1,6 +1,8 @@
-import type { Badge, BadgeContext } from '@/types';
+import type { Badge, BadgeCategory, BadgeContext, CardioTypeStats } from '@/types';
 
-export const BADGES: Badge[] = [
+type BadgeDef = Omit<Badge, 'category'>;
+
+const DEFINITIONS: BadgeDef[] = [
   // ─── Workout Milestones (strength + cardio sessions) ─────
   {
     id: 'first_workout',
@@ -245,69 +247,6 @@ export const BADGES: Badge[] = [
     desc: 'Complete 100 cardio sessions',
     cond: (ctx) => ctx.totalCardioSessions >= 100,
   },
-  {
-    id: 'distance_5k',
-    icon: '🥾',
-    name: '5K Finisher',
-    desc: 'Cover 5 km in a single session',
-    cond: (ctx) => ctx.longestCardioKm >= 5,
-  },
-  {
-    id: 'distance_10k',
-    icon: '🏅',
-    name: '10K Club',
-    desc: 'Cover 10 km in a single session',
-    cond: (ctx) => ctx.longestCardioKm >= 10,
-  },
-  {
-    id: 'distance_half_marathon',
-    icon: '🎽',
-    name: 'Half Marathon',
-    desc: 'Cover 21.1 km in a single session',
-    cond: (ctx) => ctx.longestCardioKm >= 21.1,
-  },
-  {
-    id: 'distance_marathon',
-    icon: '🏁',
-    name: 'Marathon Distance',
-    desc: 'Cover 42.2 km in a single session',
-    cond: (ctx) => ctx.longestCardioKm >= 42.2,
-  },
-  {
-    id: 'total_50km',
-    icon: '🗺️',
-    name: 'Explorer',
-    desc: 'Cover 50 km in total',
-    cond: (ctx) => ctx.totalDistanceKm >= 50,
-  },
-  {
-    id: 'total_100km',
-    icon: '🌍',
-    name: 'Globetrotter',
-    desc: 'Cover 100 km in total',
-    cond: (ctx) => ctx.totalDistanceKm >= 100,
-  },
-  {
-    id: 'total_250km',
-    icon: '🧭',
-    name: 'Pathfinder',
-    desc: 'Cover 250 km in total',
-    cond: (ctx) => ctx.totalDistanceKm >= 250,
-  },
-  {
-    id: 'total_500km',
-    icon: '🚵',
-    name: 'Long Haul',
-    desc: 'Cover 500 km in total',
-    cond: (ctx) => ctx.totalDistanceKm >= 500,
-  },
-  {
-    id: 'total_1000km',
-    icon: '🌐',
-    name: 'Thousand K Club',
-    desc: 'Cover 1,000 km in total',
-    cond: (ctx) => ctx.totalDistanceKm >= 1000,
-  },
 
   // ─── Time & Energy ────────────────────────────────────────
   {
@@ -365,6 +304,106 @@ export const BADGES: Badge[] = [
   },
 ];
 
+// ─── Run / walk / ride ───────────────────────────────────────
+// Judged per activity: 21 km is a feat on foot but an easy ride.
+type Kind = 'run' | 'walk' | 'ride';
+type Metric = Exclude<keyof CardioTypeStats, 'best5kSec' | 'best10kSec'>;
+
+function reach(kind: Kind, metric: Metric, target: number, id: string, icon: string, name: string, desc: string): BadgeDef {
+  return {
+    id, icon, name, desc,
+    cond: ctx => (ctx[kind][metric] || 0) >= target,
+    progress: ctx => ({ value: Math.min(ctx[kind][metric] || 0, target), target }),
+  };
+}
+
+function under(kind: Kind, metric: 'best5kSec' | 'best10kSec', maxSec: number, id: string, icon: string, name: string, desc: string): BadgeDef {
+  return { id, icon, name, desc, cond: ctx => { const v = ctx[kind][metric]; return !!v && v <= maxSec; } };
+}
+
+const TYPE_BADGES: [Kind, BadgeDef[]][] = [
+  ['run', [
+    reach('run', 'sessions', 1, 'run_first', '👟', 'First Run', 'Complete your first run'),
+    reach('run', 'sessions', 10, 'run_10', '🏃', 'Run Regular', 'Complete 10 runs'),
+    reach('run', 'sessions', 50, 'run_50', '🛣️', 'Road Runner', 'Complete 50 runs'),
+    reach('run', 'sessions', 100, 'run_100', '💯', 'Run Century', 'Complete 100 runs'),
+    reach('run', 'longestKm', 5, 'run_5k', '🥉', '5K Runner', 'Run 5 km in a single run'),
+    reach('run', 'longestKm', 10, 'run_10k', '🏅', '10K Runner', 'Run 10 km in a single run'),
+    reach('run', 'longestKm', 21.1, 'run_half', '🎽', 'Half Marathoner', 'Run a half marathon (21.1 km)'),
+    reach('run', 'longestKm', 42.2, 'run_marathon', '🏁', 'Marathoner', 'Run a full marathon (42.2 km)'),
+    under('run', 'best5kSec', 30 * 60, 'run_5k_30', '⏱️', 'Sub-30 5K', 'Run 5 km in under 30 minutes'),
+    under('run', 'best5kSec', 25 * 60, 'run_5k_25', '⚡', 'Sub-25 5K', 'Run 5 km in under 25 minutes'),
+    under('run', 'best5kSec', 20 * 60, 'run_5k_20', '🚀', 'Sub-20 5K', 'Run 5 km in under 20 minutes'),
+    under('run', 'best10kSec', 60 * 60, 'run_10k_60', '🕐', 'Sub-60 10K', 'Run 10 km in under an hour'),
+    under('run', 'best10kSec', 50 * 60, 'run_10k_50', '🔥', 'Sub-50 10K', 'Run 10 km in under 50 minutes'),
+    reach('run', 'totalKm', 50, 'run_total_50', '🗺️', 'Run 50', 'Run 50 km in total'),
+    reach('run', 'totalKm', 100, 'run_total_100', '🌍', 'Run 100', 'Run 100 km in total'),
+    reach('run', 'totalKm', 250, 'run_total_250', '🧭', 'Run 250', 'Run 250 km in total'),
+    reach('run', 'totalKm', 500, 'run_total_500', '🏔️', 'Run 500', 'Run 500 km in total'),
+    reach('run', 'totalKm', 1000, 'run_total_1000', '🌐', 'Thousand K Runner', 'Run 1,000 km in total'),
+  ]],
+  ['walk', [
+    reach('walk', 'sessions', 1, 'walk_first', '🚶', 'First Walk', 'Complete your first walk'),
+    reach('walk', 'sessions', 10, 'walk_10', '🌳', 'Daily Stroller', 'Complete 10 walks'),
+    reach('walk', 'sessions', 50, 'walk_50', '🌄', 'Walk Habit', 'Complete 50 walks'),
+    reach('walk', 'sessions', 100, 'walk_100', '💯', 'Walk Century', 'Complete 100 walks'),
+    reach('walk', 'longestKm', 5, 'walk_5k', '🥾', '5K Walk', 'Walk 5 km in a single walk'),
+    reach('walk', 'longestKm', 10, 'walk_10k', '🧳', '10K Trek', 'Walk 10 km in a single walk'),
+    reach('walk', 'longestKm', 21.1, 'walk_half', '🏕️', 'Half Marathon Walk', 'Walk 21.1 km in a single walk'),
+    reach('walk', 'longestKm', 42.2, 'walk_marathon', '🏔️', 'Marathon Walker', 'Walk 42.2 km in a single walk'),
+    reach('walk', 'maxSteps', 10000, 'walk_steps_10k', '👣', '10K Steps', 'Take 10,000 steps in a single walk'),
+    reach('walk', 'maxSteps', 20000, 'walk_steps_20k', '🦶', '20K Steps', 'Take 20,000 steps in a single walk'),
+    reach('walk', 'bestSpeed3k', 5.5, 'walk_brisk', '💨', 'Brisk Walker', 'Average 5.5 km/h over a walk of 3 km or more'),
+    reach('walk', 'bestSpeed3k', 6.5, 'walk_power', '⚡', 'Power Walker', 'Average 6.5 km/h over a walk of 3 km or more'),
+    reach('walk', 'totalKm', 50, 'walk_total_50', '🗺️', 'Walk 50', 'Walk 50 km in total'),
+    reach('walk', 'totalKm', 100, 'walk_total_100', '🌍', 'Walk 100', 'Walk 100 km in total'),
+    reach('walk', 'totalKm', 250, 'walk_total_250', '🧭', 'Walk 250', 'Walk 250 km in total'),
+    reach('walk', 'totalKm', 500, 'walk_total_500', '🌐', 'Walk 500', 'Walk 500 km in total'),
+  ]],
+  ['ride', [
+    reach('ride', 'sessions', 1, 'ride_first', '🚲', 'First Ride', 'Complete your first ride'),
+    reach('ride', 'sessions', 10, 'ride_10', '🚴', 'Ride Regular', 'Complete 10 rides'),
+    reach('ride', 'sessions', 50, 'ride_50', '🛤️', 'Saddle Time', 'Complete 50 rides'),
+    reach('ride', 'sessions', 100, 'ride_100', '💯', 'Ride Century', 'Complete 100 rides'),
+    reach('ride', 'longestKm', 20, 'ride_20k', '🚴', '20K Ride', 'Ride 20 km in a single ride'),
+    reach('ride', 'longestKm', 50, 'ride_50k', '🏅', 'Half Century', 'Ride 50 km in a single ride'),
+    reach('ride', 'longestKm', 100, 'ride_100k', '🏆', 'Century Ride', 'Ride 100 km in a single ride'),
+    reach('ride', 'longestKm', 200, 'ride_200k', '👑', 'Double Century', 'Ride 200 km in a single ride'),
+    reach('ride', 'bestSpeed20k', 20, 'ride_speed_20', '💨', 'Cruiser', 'Average 20 km/h over a ride of 20 km or more'),
+    reach('ride', 'bestSpeed20k', 25, 'ride_speed_25', '⚡', 'Pace Setter', 'Average 25 km/h over a ride of 20 km or more'),
+    reach('ride', 'bestSpeed20k', 30, 'ride_speed_30', '🚀', 'Speed Demon', 'Average 30 km/h over a ride of 20 km or more'),
+    reach('ride', 'maxClimbM', 500, 'ride_climb_500', '⛰️', 'Hill Climber', 'Climb 500 m in a single ride'),
+    reach('ride', 'maxClimbM', 1000, 'ride_climb_1000', '🏔️', 'Mountain Goat', 'Climb 1,000 m in a single ride'),
+    reach('ride', 'totalKm', 100, 'ride_total_100', '🗺️', 'Ride 100', 'Ride 100 km in total'),
+    reach('ride', 'totalKm', 500, 'ride_total_500', '🌍', 'Ride 500', 'Ride 500 km in total'),
+    reach('ride', 'totalKm', 1000, 'ride_total_1000', '🧭', 'Ride 1,000', 'Ride 1,000 km in total'),
+    reach('ride', 'totalKm', 2500, 'ride_total_2500', '🌐', 'Ride 2,500', 'Ride 2,500 km in total'),
+    reach('ride', 'totalKm', 5000, 'ride_total_5000', '🚀', 'Ride 5,000', 'Ride 5,000 km in total'),
+  ]],
+];
+
+function categoryOf(id: string): BadgeCategory {
+  if (id.startsWith('streak_')) return 'streak';
+  if (/^(volume_|lift_|hold_|first_pr|ten_prs|twenty_five_prs|fifty_prs|full_week)/.test(id)) return 'strength';
+  if (/^(first_cardio|cardio_)/.test(id)) return 'cardio';
+  return 'general';
+}
+
+export const BADGES: Badge[] = [
+  ...DEFINITIONS.map(b => ({ ...b, category: categoryOf(b.id) })),
+  ...TYPE_BADGES.flatMap(([kind, list]) => list.map(b => ({ ...b, category: kind }))),
+];
+
+export const BADGE_CATEGORY_LABELS: Record<BadgeCategory, string> = {
+  general: 'Milestones',
+  streak: 'Streaks',
+  strength: 'Strength',
+  cardio: 'Cardio',
+  run: 'Running',
+  walk: 'Walking',
+  ride: 'Cycling',
+};
+
 /** Numeric thresholds so the UI can show how close a locked badge is. */
 const TARGETS: Record<string, [keyof BadgeContext, number]> = {
   first_workout: ['totalSessions', 1],
@@ -400,15 +439,6 @@ const TARGETS: Record<string, [keyof BadgeContext, number]> = {
   cardio_25: ['totalCardioSessions', 25],
   cardio_50: ['totalCardioSessions', 50],
   cardio_100: ['totalCardioSessions', 100],
-  distance_5k: ['longestCardioKm', 5],
-  distance_10k: ['longestCardioKm', 10],
-  distance_half_marathon: ['longestCardioKm', 21.1],
-  distance_marathon: ['longestCardioKm', 42.2],
-  total_50km: ['totalDistanceKm', 50],
-  total_100km: ['totalDistanceKm', 100],
-  total_250km: ['totalDistanceKm', 250],
-  total_500km: ['totalDistanceKm', 500],
-  total_1000km: ['totalDistanceKm', 1000],
   time_10h: ['totalDurationMin', 600],
   time_50h: ['totalDurationMin', 3000],
   time_100h: ['totalDurationMin', 6000],
@@ -440,4 +470,11 @@ export function evaluateBadges(context: BadgeContext): string[] {
 /** Get badge definition by ID */
 export function getBadge(id: string): Badge | undefined {
   return BADGES.find(b => b.id === id);
+}
+
+const KNOWN_IDS = new Set(BADGES.map(b => b.id));
+
+/** Drops ids of retired badges (e.g. the old combined cardio distance badges). */
+export function knownBadgeIds(ids: string[] | undefined): string[] {
+  return (ids || []).filter(id => KNOWN_IDS.has(id));
 }

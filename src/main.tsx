@@ -17,13 +17,17 @@ useAuthStore.getState().init();
 // to the web OAuth flow in auth-store. iOSServerClientId must be the web client id
 // so the returned idToken carries the audience Firebase Auth expects.
 const GOOGLE_WEB_CLIENT_ID = '716398124057-hhg54cto4lnft33chuh0gmb5ofkp4qki.apps.googleusercontent.com';
+// Same value as CLIENT_ID in ios-native/App/GoogleService-Info.plist (public identifier).
+const GOOGLE_IOS_CLIENT_ID = '716398124057-1vfpa7irbqk0505dhs7ao12ltgn5ilu2.apps.googleusercontent.com';
 SocialLogin.initialize({
   google: {
     webClientId: GOOGLE_WEB_CLIENT_ID,
-    iOSClientId: import.meta.env.VITE_GOOGLE_IOS_CLIENT_ID || undefined,
+    iOSClientId: import.meta.env.VITE_GOOGLE_IOS_CLIENT_ID || GOOGLE_IOS_CLIENT_ID,
     iOSServerClientId: GOOGLE_WEB_CLIENT_ID,
     mode: 'online',
   },
+  // Sign in with Apple uses the system sheet on iOS; clientId is only a provider marker there.
+  ...(Capacitor.getPlatform() === 'ios' ? { apple: { clientId: 'com.tms.apparatus' } } : {}),
 }).catch(console.error);
 
 // Global unhandled error logging

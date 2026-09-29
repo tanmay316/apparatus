@@ -112,6 +112,8 @@ Return JSON:
             system_prompt="You are a concise nutrition advisor. Return only valid JSON.",
             temperature=0.3,
             json_mode=True,
+            # Tips are optional; never let them hold up the meal result.
+            total_timeout=10.0,
         )
 
         try:

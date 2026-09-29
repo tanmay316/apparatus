@@ -59,6 +59,8 @@ export interface UnifiedNotification {
   icon?: string;
   /** Small highlighted value such as a volume change. */
   badge?: { text: string; tone: 'up' | 'down' | 'flat' };
+  /** Session whose analysis this progress notification opens. */
+  analysis?: { kind: 'workout' | 'cardio'; id: string };
 }
 
 export function timestampMs(value: any): number {
@@ -85,11 +87,13 @@ export function fromSocial(n: SocialNotification, username?: string): UnifiedNot
   const extra = n.extra || {};
   let icon: string | undefined;
   let badge: UnifiedNotification['badge'];
-  if (extra.kind === 'progress') {
+  if (extra.kind === 'progress' || extra.kind === 'cardio_progress') {
     const tone: 'up' | 'down' | 'flat' = extra.trend === 'up' || extra.trend === 'down' ? extra.trend : 'flat';
     icon = `progress_${tone}`;
-    if (typeof extra.volumeChangePercent === 'number') {
+    if (extra.kind === 'progress' && typeof extra.volumeChangePercent === 'number') {
       badge = { text: `${extra.volumeChangePercent > 0 ? '+' : ''}${extra.volumeChangePercent}% volume`, tone };
+    } else if (extra.kind === 'cardio_progress' && typeof extra.delta === 'string') {
+      badge = { text: extra.delta, tone };
     }
   } else if (extra.kind === 'steps') {
     icon = 'steps';
@@ -110,6 +114,8 @@ export function fromSocial(n: SocialNotification, username?: string): UnifiedNot
     link: socialLink(n, username),
     icon,
     badge,
+    ...(extra.kind === 'progress' && n.targetId ? { analysis: { kind: 'workout' as const, id: n.targetId } } : {}),
+    ...(extra.kind === 'cardio_progress' && n.targetId ? { analysis: { kind: 'cardio' as const, id: n.targetId } } : {}),
   };
 }
 

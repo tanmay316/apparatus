@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, signInWithCredential, GoogleAuthProvider, getRedirectResult, signOut as firebaseSignOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile as updateAuthProfile } from 'firebase/auth';
+import { User, onAuthStateChanged, signInWithPopup, signInWithRedirect, signInWithCredential, GoogleAuthProvider, OAuthProvider, getRedirectResult, signOut as firebaseSignOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile as updateAuthProfile } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { SocialLogin } from '@capgo/capacitor-social-login';
+import { createAppleNonce } from '@/lib/nonce';
 import { deleteField, doc, getDoc, onSnapshot, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, googleProvider, isAdminUser } from '@/lib/firebase';
 import { isBanActive } from '@/lib/ban';
@@ -20,6 +21,10 @@ interface AuthState {
 
   init: () => void;
   signInWithGoogle: () => Promise<void>;
+  /** iOS only: Sign in with Apple (App Store guideline 4.8). */
+  signInWithApple: () => Promise<void>;
+  /** Revokes the Apple token before account deletion (App Store guideline 5.1.1(v)). */
+  revokeAppleAccess: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string) => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -33,6 +38,15 @@ const DEFAULT_STATS: UserStats = { ...emptyStats(), statsVersion: STATS_VERSION 
 
 const SUSPENDED_MESSAGE = 'This account has been suspended. Contact support if you believe this is a mistake.';
 let stopBanWatch: (() => void) | null = null;
+// Apple shares the user's name only on the very first authorization, and only with the
+// app (not in the ID token), so hand it to first-login profile creation.
+let pendingAppleName: string | null = null;
+
+export const isAppleSignInAvailable = () => Capacitor.getPlatform() === 'ios';
+
+function hasProvider(user: User, providerId: string) {
+  return user.providerData.some(p => p.providerId === providerId);
+}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs = 8000, errorMsg = 'Operation timed out'): Promise<T> {
   return Promise.race([
@@ -49,14 +63,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initialized: false,
 
   init: () => {
-    // Handle mobile redirect login resolution
-    getRedirectResult(auth).catch(err => {
-      console.error('Redirect sign-in error:', err);
-    });
+    // Web-only: native builds sign in with credentials and have no redirect resolver.
+    if (!Capacitor.isNativePlatform()) {
+      getRedirectResult(auth).catch(err => {
+        console.error('Redirect sign-in error:', err);
+      });
+    }
 
     onAuthStateChanged(auth, async (firebaseUser) => {
       stopBanWatch?.();
       stopBanWatch = null;
+      const appleName = pendingAppleName;
+      pendingAppleName = null;
       try {
         if (firebaseUser) {
           // Fetch or create profile asynchronously
@@ -92,7 +110,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             // The UID suffix makes first-login username creation deterministic and
             // avoids one new user silently claiming another user's handle.
             const username = `${usernameBase.slice(0, 20)}${firebaseUser.uid.slice(0, 5).toLowerCase()}`;
-            const safeDisplayName = validateDisplayName(firebaseUser.displayName || '');
+            const safeDisplayName = validateDisplayName(firebaseUser.displayName || appleName || '');
             profile = {
               uid: firebaseUser.uid,
               displayName: safeDisplayName,
@@ -219,9 +237,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           const msg = nativeErr?.message || String(nativeErr);
           const platform = Capacitor.getPlatform();
 
+          // User dismissed the account picker (GIDSignInError.canceled = -5 / Android 12501).
+          if (/cancel|12501|-5\b/i.test(msg)) return;
+
           if (platform === 'ios') {
             useUIStore.getState().showToast(
-              'Native Google Sign-In unavailable. Set VITE_GOOGLE_IOS_CLIENT_ID and add the reversed client id URL scheme in Xcode.',
+              `Google Sign-In failed: ${msg}`,
               'error'
             );
           } else if (msg.includes('12500') || msg.includes('APIException')) {
@@ -244,6 +265,52 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       } else {
         throw error;
       }
+    }
+  },
+
+  signInWithApple: async () => {
+    if (!isAppleSignInAvailable()) throw new Error('Sign in with Apple is only available in the iOS app.');
+    set({ loading: true });
+    try {
+      const nonce = await createAppleNonce();
+      const result = await SocialLogin.login({ provider: 'apple', options: { nonce: nonce.hashed } });
+      const apple = result.result as { idToken?: string | null; profile?: { givenName?: string | null; familyName?: string | null } };
+      if (!apple.idToken) throw new Error('Sign in with Apple did not return an identity token');
+
+      const name = [apple.profile?.givenName, apple.profile?.familyName].filter(Boolean).join(' ').trim();
+      pendingAppleName = name || null;
+      const credential = new OAuthProvider('apple.com').credential({ idToken: apple.idToken, rawNonce: nonce.raw });
+      const { user } = await signInWithCredential(auth, credential);
+      if (name && !user.displayName) updateAuthProfile(user, { displayName: name }).catch(() => {});
+      set({ loading: false });
+    } catch (error: any) {
+      pendingAppleName = null;
+      set({ loading: false });
+      const msg = String(error?.message || error);
+      // ASAuthorizationError.canceled (1001): the user closed the sheet.
+      if (/1001|cancel/i.test(msg)) return;
+      console.error('Apple sign-in failed:', error);
+      if (/1000|unknown/i.test(msg)) {
+        throw new Error('Sign in with Apple is not set up for this build. Enable the "Sign in with Apple" capability in Xcode.');
+      }
+      throw error;
+    }
+  },
+
+  revokeAppleAccess: async () => {
+    const user = auth.currentUser;
+    if (!user || !hasProvider(user, 'apple.com') || !isAppleSignInAvailable()) return;
+    const nonce = await createAppleNonce();
+    const result = await SocialLogin.login({ provider: 'apple', options: { nonce: nonce.hashed } });
+    const apple = result.result as { idToken?: string | null; accessToken?: { token?: string } | null; authorizationCode?: string };
+    const code = apple.authorizationCode || apple.accessToken?.token;
+    if (apple.idToken) {
+      const { reauthenticateWithCredential } = await import('firebase/auth');
+      await reauthenticateWithCredential(user, new OAuthProvider('apple.com').credential({ idToken: apple.idToken, rawNonce: nonce.raw }));
+    }
+    if (code) {
+      const { revokeAccessToken } = await import('firebase/auth');
+      await revokeAccessToken(auth, code);
     }
   },
 
@@ -306,10 +373,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signOut: async () => {
     try {
       if (Capacitor.isNativePlatform()) {
+        const current = auth.currentUser;
+        const provider = current && hasProvider(current, 'apple.com') ? 'apple' : 'google';
         try {
-          await SocialLogin.logout({ provider: 'google' });
+          await SocialLogin.logout({ provider });
         } catch (e) {
-          console.error('Failed to sign out of native GoogleAuth:', e);
+          console.error('Failed to sign out of native provider:', e);
         }
       }
       await firebaseSignOut(auth);

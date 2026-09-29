@@ -44,9 +44,43 @@ class ImageRepository:
         self.db.flush()
         return cache
 
-    def delete_old_images(self, days: int = 7):
+    def delete_old_images(self, days: int = 7) -> int:
+        """Deletes old scans that no meal log references (logged meals keep their photo)."""
         from datetime import datetime, timedelta, timezone
+        from app.database.models import MealLog
+
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        deleted = self.db.query(ScannedImage).filter(ScannedImage.created_at < cutoff).delete()
+        referenced = self.db.query(MealLog.image_id).filter(MealLog.image_id.isnot(None))
+        deleted = (
+            self.db.query(ScannedImage)
+            .filter(ScannedImage.created_at < cutoff, ScannedImage.id.notin_(referenced))
+            .delete(synchronize_session=False)
+        )
         self.db.flush()
         return deleted
+
+
+_last_cleanup = 0.0
+
+
+def cleanup_old_images_job(days: int = 7) -> None:
+    """Background job with its own session; runs at most once an hour."""
+    import logging
+    import time
+    from app.db.session import SessionLocal
+
+    global _last_cleanup
+    if time.time() - _last_cleanup < 3600:
+        return
+    _last_cleanup = time.time()
+    db = SessionLocal()
+    try:
+        deleted = ImageRepository(db).delete_old_images(days)
+        db.commit()
+        if deleted:
+            logging.getLogger(__name__).info("Deleted %d old scanned images", deleted)
+    except Exception as exc:
+        db.rollback()
+        logging.getLogger(__name__).warning("Image cleanup failed: %s", exc)
+    finally:
+        db.close()

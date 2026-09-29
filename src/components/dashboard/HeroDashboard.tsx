@@ -1,10 +1,13 @@
 import { motion } from 'framer-motion';
-import { Flame, Sparkles } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ChevronRight, Flame, Shield } from 'lucide-react';
 
 interface HeroDashboardProps {
   displayName: string;
   streak: number;
-  xp: number;
+  /** Athlete rank label, e.g. "Developing II · Strength". */
+  rankLabel: string;
+  rankScore: number;
   completedCount: number;
   targetDays: number;
 }
@@ -16,21 +19,10 @@ function getGreeting(): string {
   return 'Good evening';
 }
 
-function getLevel(xp: number): number {
-  return Math.floor(Math.max(0, xp) / 500) + 1;
-}
-
-function getLevelTitle(xp: number): string {
-  if (xp < 100) return 'Ground Zero';
-  if (xp < 500) return 'Bar Novice';
-  if (xp < 1400) return 'Skill Seeker';
-  return 'Apparatus Master';
-}
-
 const RING_R = 13;
 const RING_C = 2 * Math.PI * RING_R;
 
-export function HeroDashboard({ displayName, streak, xp, completedCount, targetDays }: HeroDashboardProps) {
+export function HeroDashboard({ displayName, streak, rankLabel, rankScore, completedCount, targetDays }: HeroDashboardProps) {
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const progressPct = targetDays ? Math.min(Math.round((completedCount / targetDays) * 100), 100) : 0;
 
@@ -56,10 +48,12 @@ export function HeroDashboard({ displayName, streak, xp, completedCount, targetD
             <span className="tabular font-semibold">{streak}</span> day streak
           </span>
         )}
-        <span className="dx-chip">
-          <Sparkles size={12} className="dx-accent" />
-          Level {getLevel(xp)} · {getLevelTitle(xp)}
-        </span>
+        <Link to="/ranks" className="dx-chip hover:opacity-85 transition-opacity" aria-label={`Athlete rank ${rankLabel}, score ${rankScore}`}>
+          <Shield size={12} className="dx-accent" />
+          <span className="font-semibold">{rankLabel}</span>
+          <span className="tabular dx-muted">{rankScore}</span>
+          <ChevronRight size={12} className="dx-muted" />
+        </Link>
 
         {/* Weekly progress now shares the metadata row, leaving the name full width. */}
         <div className="shrink-0 flex items-center gap-1.5" aria-label={`${completedCount} of ${targetDays} sessions this week`}>

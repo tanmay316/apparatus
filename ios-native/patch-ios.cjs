@@ -108,6 +108,15 @@ if (fs.existsSync(podfile)) {
     console.log('✔ Injected local source IONGeolocationLib pod into Podfile');
   }
 
+  // AppDelegate exchanges the APNs token for an FCM token (backend sends via FCM).
+  if (!content.includes("pod 'FirebaseMessaging'")) {
+    content = content.replace(
+      /target\s+['"]App['"]\s+do/,
+      "target 'App' do\n  pod 'FirebaseMessaging'"
+    );
+    console.log('✔ Injected FirebaseMessaging pod into Podfile');
+  }
+
   if (!content.includes("config.build_settings['SWIFT_ENABLE_EXPLICIT_MODULES']")) {
     content = content.replace(
       'assertDeploymentTarget(installer)',
@@ -152,7 +161,8 @@ if (fs.existsSync(pbxPath)) {
     { name: 'WorkoutLocationStore.swift', type: 'sourcecode.swift', phase: 'Sources' },
     { name: 'WorkoutLocationManager.swift', type: 'sourcecode.swift', phase: 'Sources' },
     { name: 'WorkoutLocationPlugin.swift', type: 'sourcecode.swift', phase: 'Sources' },
-    { name: 'GoogleService-Info.plist', type: 'text.plist.xml', phase: 'Resources' }
+    { name: 'GoogleService-Info.plist', type: 'text.plist.xml', phase: 'Resources' },
+    { name: 'MainViewController.swift', type: 'sourcecode.swift', phase: 'Sources' }
   ];
 
   let buildFiles = '';
@@ -192,6 +202,25 @@ if (fs.existsSync(pbxPath)) {
   }
 
   fs.writeFileSync(pbxPath, pbx, 'utf8');
+}
+
+// App-target plugins (WorkoutLocation) are registered by MainViewController, so the
+// storyboard must instantiate it instead of the stock CAPBridgeViewController.
+const storyboard = path.join(ROOT, 'ios', 'App', 'App', 'Base.lproj', 'Main.storyboard');
+if (fs.existsSync(storyboard)) {
+  let sb = fs.readFileSync(storyboard, 'utf8');
+  if (!sb.includes('customClass="MainViewController"')) {
+    sb = sb.replace(
+      /customClass="CAPBridgeViewController"\s+customModule="Capacitor"/,
+      'customClass="MainViewController" customModule="App" customModuleProvider="target"'
+    );
+    if (sb.includes('customClass="MainViewController"')) {
+      fs.writeFileSync(storyboard, sb, 'utf8');
+      console.log('✔ Main.storyboard now uses MainViewController');
+    } else {
+      console.warn('⚠ Could not patch Main.storyboard — set the view controller class to MainViewController in Xcode');
+    }
+  }
 }
 
 // 6. Ensure native files are present in ios/App and ios/App/App

@@ -6,6 +6,13 @@ import { Capacitor } from '@capacitor/core';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { NativeWorkoutLocation, type NativeWorkoutPoint, type NativeWorkoutSessionSummary } from '@/utils/native-workout-location';
 
+/**
+ * The native GPS engine is an app-target plugin (Android service / iOS MainViewController).
+ * If a build ships without it registered, every call would reject and tracking would record
+ * nothing, so fall back to the in-WebView engine instead.
+ */
+const hasNativeEngine = () => Capacitor.isNativePlatform() && Capacitor.isPluginAvailable('WorkoutLocation');
+
 // ────────────────────────────────────────────────────────────
 // Haversine distance (km)
 // ────────────────────────────────────────────────────────────
@@ -149,7 +156,7 @@ function attachVisibilityListener() {
 
   const resyncIfTracking = async () => {
     const state = useCardioStore.getState();
-    if (Capacitor.isNativePlatform() && state.isTracking) {
+    if (hasNativeEngine() && state.isTracking) {
       await reattachNativeListeners();
       await syncWithNativeSession();
     }
@@ -178,7 +185,7 @@ function attachVisibilityListener() {
  * Replays or syncs the native service's state directly into the store.
  */
 export const syncWithNativeSession = async (): Promise<boolean> => {
-  if (!Capacitor.isNativePlatform()) return false;
+  if (!hasNativeEngine()) return false;
 
   try {
     const summary: NativeWorkoutSessionSummary = await NativeWorkoutLocation.getSessionSummary();
@@ -231,7 +238,7 @@ export const syncWithNativeSession = async (): Promise<boolean> => {
 
 /** Flush native points before stopping and retrieve full resolution route for saving. */
 export const finishTracking = async () => {
-  if (Capacitor.isNativePlatform()) {
+  if (hasNativeEngine()) {
     try {
       const summary = await NativeWorkoutLocation.getSessionSummary();
       const allPoints = await NativeWorkoutLocation.getDownsampledPoints({ maxPoints: 1500 });
@@ -459,10 +466,10 @@ function handleWebGpsPosition(pos: GeolocationPosition) {
 
 export const startGpsWatch = async (newSession = false) => {
   if (watchIdRef !== null) {
-    if (newSession && Capacitor.isNativePlatform() && watchIdRef !== 'native-workout-location') {
+    if (newSession && hasNativeEngine() && watchIdRef !== 'native-workout-location') {
       await stopGpsWatch();
     } else {
-      if (Capacitor.isNativePlatform() && watchIdRef === 'native-workout-location' && useCardioStore.getState().isTracking) {
+      if (hasNativeEngine() && watchIdRef === 'native-workout-location' && useCardioStore.getState().isTracking) {
         await syncWithNativeSession();
       }
       return;
@@ -471,7 +478,7 @@ export const startGpsWatch = async (newSession = false) => {
 
   attachVisibilityListener();
 
-  if (Capacitor.isNativePlatform()) {
+  if (hasNativeEngine()) {
     const hasPerm = await checkPermissionsNative();
     if (!hasPerm) {
       console.warn('[CardioStore] GPS permission denied natively');
@@ -540,7 +547,7 @@ export const startGpsWatch = async (newSession = false) => {
 };
 
 export const stopGpsWatch = async () => {
-  if (Capacitor.isNativePlatform()) {
+  if (hasNativeEngine()) {
     if (watchIdRef === 'native-workout-location') {
       await nativeLocationListener?.remove();
       await nativeStateListener?.remove();
@@ -664,7 +671,7 @@ export const useCardioStore = create<CardioState>()(
       },
 
       pauseTracking: () => {
-        if (Capacitor.isNativePlatform()) {
+        if (hasNativeEngine()) {
           NativeWorkoutLocation.pause().catch(console.warn);
         } else {
           stopGpsWatch();
@@ -686,7 +693,7 @@ export const useCardioStore = create<CardioState>()(
       },
 
       resumeTracking: () => {
-        if (Capacitor.isNativePlatform()) {
+        if (hasNativeEngine()) {
           NativeWorkoutLocation.resume().catch(console.warn);
         } else {
           startGpsWatch();

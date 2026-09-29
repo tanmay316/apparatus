@@ -40,7 +40,7 @@ echo "==> Installing native WorkoutLocation plugin sources and config"
 mkdir -p "$ROOT/ios/App"
 mkdir -p "$IOS_APP_DIR"
 
-for file in "GpsKalmanFilter.swift" "WorkoutLocationStore.swift" "WorkoutLocationManager.swift" "WorkoutLocationPlugin.swift"; do
+for file in "GpsKalmanFilter.swift" "WorkoutLocationStore.swift" "WorkoutLocationManager.swift" "WorkoutLocationPlugin.swift" "MainViewController.swift" "AppDelegate.swift"; do
   cp -f "$SRC_DIR/$file" "$ROOT/ios/App/"
   cp -f "$SRC_DIR/$file" "$IOS_APP_DIR/"
 done
@@ -85,6 +85,25 @@ pb "Add :UIBackgroundModes:2 string fetch"
 # Match the Android splash/status-bar behaviour.
 pb "Delete :UIViewControllerBasedStatusBarAppearance"
 pb "Add :UIViewControllerBasedStatusBarAppearance bool false"
+
+# Only standard HTTPS/TLS is used, so no export-compliance paperwork per upload.
+pb "Delete :ITSAppUsesNonExemptEncryption"
+pb "Add :ITSAppUsesNonExemptEncryption bool false"
+
+# Google Sign-In returns to the app through the reversed iOS client id URL scheme.
+GSI_PLIST="$SRC_DIR/GoogleService-Info.plist"
+if [ -f "$GSI_PLIST" ]; then
+  REVERSED_ID=$(/usr/libexec/PlistBuddy -c "Print :REVERSED_CLIENT_ID" "$GSI_PLIST" 2>/dev/null || true)
+  if [ -n "$REVERSED_ID" ]; then
+    echo "==> Registering Google Sign-In URL scheme $REVERSED_ID"
+    pb "Delete :CFBundleURLTypes"
+    pb "Add :CFBundleURLTypes array"
+    pb "Add :CFBundleURLTypes:0 dict"
+    pb "Add :CFBundleURLTypes:0:CFBundleURLName string google-signin"
+    pb "Add :CFBundleURLTypes:0:CFBundleURLSchemes array"
+    pb "Add :CFBundleURLTypes:0:CFBundleURLSchemes:0 string $REVERSED_ID"
+  fi
+fi
 
 echo "==> Registering native files and project settings via Node.js"
 node "$ROOT/ios-native/patch-ios.cjs"

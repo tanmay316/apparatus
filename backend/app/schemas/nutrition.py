@@ -12,6 +12,8 @@ class FoodAnalyzeRequest(BaseModel):
     mime_type: str = Field("image/jpeg", max_length=64)
     meal_type: str = Field("snack", max_length=20)  # breakfast, lunch, dinner, snack
     session_id: Optional[int] = None
+    # What the user typed with the photo, e.g. "2 rotis cooked in ghee".
+    note: str = Field("", max_length=500)
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
@@ -48,11 +50,14 @@ class NutritionItemResponse(BaseModel):
 
 class FoodAnalyzeResponse(BaseModel):
     success: bool = True
+    status: str = "ok"  # ok | not_food | failed
+    message: str = ""
     vision: Optional[dict] = None
     nutrition: Optional[dict] = None
     errors: List[str] = []
     session_id: Optional[int] = None
     image_id: Optional[int] = None
+    assistant_message_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -60,6 +65,9 @@ class ChatResponse(BaseModel):
     session_id: int
     tokens_used: int = 0
     nutritionData: Optional[dict] = None
+    message_id: Optional[str] = None
+    tools_used: List[str] = []
+    profile_updated: bool = False
 
 class TodayNutritionResponse(BaseModel):
     date: str

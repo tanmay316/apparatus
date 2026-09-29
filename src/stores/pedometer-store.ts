@@ -1,130 +1,247 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { pedometerService } from '@/services/pedometer';
+import { useCardioStore } from '@/stores/cardio-store';
+import {
+  activeSegments, estimateSteps, gapSteps, isPlausiblePedometerCount,
+  type PauseSpan, type StepSource, type StrideProfile,
+} from '@/lib/steps';
+import type { CardioActivityType } from '@/types';
 
-const PEDOMETER_CONFIG = {
-  counterResetThreshold: 100,
-};
+// Android only delivers step events while the app is in the foreground; beyond this silence
+// with distance still growing, the missing stretch is extrapolated from the measured stride.
+const STALE_STREAM_MS = 30_000;
+
+interface FinalizeInput {
+  type: CardioActivityType | null;
+  distanceKm: number;
+  movingSec?: number;
+  profile?: StrideProfile;
+}
+
+export interface StepResult {
+  steps: number | undefined;
+  source: StepSource;
+}
 
 interface PedometerState {
   isSupported: boolean | null;
+  /** Session total shown to the user: counted steps minus steps taken during manual pauses. */
   sessionSteps: number;
-  lastUpdated: number;
+  stepSource: StepSource;
   lastStepAt: number | null;
   isSessionActive: boolean;
-  
-  nativeBaseline: number | null;
-  accumulatedBeforeReset: number;
-  lastNativeSteps: number | null;
-  
-  stepSource: 'native' | 'gps_estimate' | 'motion_estimate' | 'none';
-  
+
+  // Persisted so a WebView reload or process restart can resume the same session.
+  sessionStartedAt: number | null;
+  pauses: PauseSpan[];
+  /** Steps carried over from before the current native stream started (restarts). */
+  offsetSteps: number;
+  /** Raw count reported by the current native stream. */
+  liveSteps: number;
+  /** Live-stream steps that fell inside finished pauses. */
+  excludedSteps: number;
+  /** liveSteps at the moment the running pause began. */
+  pausedAtLive: number | null;
+  /** Cardio distance when sessionSteps last increased (for gap extrapolation). */
+  lastStepDistanceKm: number;
+
   startSession: () => Promise<boolean>;
+  pause: () => void;
+  resume: () => void;
+  resumeIfNeeded: (opts: { sessionStartedAt: number; distanceKm: number; type: CardioActivityType | null; profile?: StrideProfile }) => Promise<void>;
+  finalize: (input: FinalizeInput) => Promise<StepResult>;
   stopSession: () => Promise<void>;
   resetSession: () => void;
   setSupported: (supported: boolean) => void;
 }
 
+/** Not persisted: true only while this JS context has a native listener attached. */
+let listening = false;
+
+const EMPTY_SESSION = {
+  sessionSteps: 0,
+  stepSource: 'none' as StepSource,
+  lastStepAt: null,
+  isSessionActive: false,
+  sessionStartedAt: null,
+  pauses: [] as PauseSpan[],
+  offsetSteps: 0,
+  liveSteps: 0,
+  excludedSteps: 0,
+  pausedAtLive: null,
+  lastStepDistanceKm: 0,
+};
+
+function computeSessionSteps(s: Pick<PedometerState, 'offsetSteps' | 'liveSteps' | 'excludedSteps' | 'pausedAtLive'>) {
+  const counted = s.pausedAtLive != null ? s.pausedAtLive : s.liveSteps;
+  return Math.max(0, s.offsetSteps + counted - s.excludedSteps);
+}
+
+/** iOS: exact active-time steps straight from CoreMotion history. */
+async function queryActiveSteps(startedAt: number, pauses: PauseSpan[], until = Date.now()): Promise<number | null> {
+  const segments = activeSegments(startedAt, pauses, until);
+  let total = 0;
+  for (const [a, b] of segments) {
+    const n = await pedometerService.getStepsBetween(a, b);
+    if (n == null) return null;
+    total += n;
+  }
+  return total;
+}
+
 export const usePedometerStore = create<PedometerState>()(
   persist(
-    (set, get) => ({
-      isSupported: null,
-      sessionSteps: 0,
-      lastUpdated: Date.now(),
-      lastStepAt: null,
-      isSessionActive: false,
-      
-      nativeBaseline: null,
-      accumulatedBeforeReset: 0,
-      lastNativeSteps: null,
-      stepSource: 'none',
-      
-      setSupported: (supported) => set({ isSupported: supported }),
-
-
-      
-      startSession: async () => {
-        set({ 
-          sessionSteps: 0, 
-          isSupported: true, 
-          isSessionActive: true, 
-          nativeBaseline: null, 
-          accumulatedBeforeReset: 0,
-          lastNativeSteps: null,
-          stepSource: 'none',
-          lastStepAt: null 
-        });
-        
+    (set, get) => {
+      const attach = async (): Promise<boolean> => {
         const started = await pedometerService.start((steps, isNative) => {
-          const state = get();
-          if (!state.isSessionActive) return;
-
-          if (typeof steps === 'number') {
-            if (!isNative) {
-               set({ sessionSteps: steps, stepSource: 'motion_estimate' });
-            }
-             if (isNative) {
-               let { nativeBaseline, accumulatedBeforeReset, lastNativeSteps } = state;
-               
-               if (nativeBaseline === null) {
-                 nativeBaseline = steps;
-               } else if (
-                 lastNativeSteps !== null && 
-                 steps < lastNativeSteps && 
-                 (lastNativeSteps - steps > PEDOMETER_CONFIG.counterResetThreshold)
-               ) {
-                 // Sensor reset/reboot detected (huge backwards movement)
-                 accumulatedBeforeReset = state.sessionSteps; // Freeze current total
-                 nativeBaseline = steps; // Set new baseline
-               }
-               
-               // Small backwards movements (temporary anomalies) are ignored for baseline resets, 
-               // but we still update the step count relative to the stable baseline.
-               const currentContribution = Math.max(0, steps - nativeBaseline);
-               const calculatedSession = accumulatedBeforeReset + currentContribution;
-               
-               // Never allow session steps to decrease during an active session
-               const sessionSteps = Math.max(state.sessionSteps, calculatedSession);
-               
-               // Update lastStepAt only if the session steps actually increased
-               const lastStepAt = sessionSteps > state.sessionSteps ? Date.now() : state.lastStepAt;
-               
-               set({ 
-                 nativeBaseline,
-                 accumulatedBeforeReset,
-                 lastNativeSteps: steps,
-                 sessionSteps,
-                 stepSource: 'native',
-                 lastUpdated: Date.now(),
-                 lastStepAt
-               });
-             }
-          }
-        });
-
-        if (!started) {
+          const st = get();
+          if (!st.isSessionActive || !Number.isFinite(steps)) return;
+          // Streams only grow; ignore out-of-order or reset readings.
+          const liveSteps = Math.max(st.liveSteps, steps);
+          const next = { ...st, liveSteps };
+          const sessionSteps = computeSessionSteps(next);
+          const grew = sessionSteps > st.sessionSteps;
           set({
-            stepSource: 'none',
-            isSessionActive: false,
-            isSupported: false,
+            liveSteps,
+            sessionSteps,
+            stepSource: isNative ? 'native' : 'motion_estimate',
+            lastStepAt: grew ? Date.now() : st.lastStepAt,
+            lastStepDistanceKm: grew ? useCardioStore.getState().distanceKm : st.lastStepDistanceKm,
           });
-          return false;
-        }
-        return true;
-      },
-      
-      stopSession: async () => {
-        set({ isSessionActive: false });
-        await pedometerService.stop();
-      },
-      
-      resetSession: () => set({ sessionSteps: 0, nativeBaseline: null, accumulatedBeforeReset: 0, lastNativeSteps: null, stepSource: 'none' }),
-    }),
+        });
+        listening = started;
+        return started;
+      };
+
+      return {
+        isSupported: null,
+        ...EMPTY_SESSION,
+
+        setSupported: (supported) => set({ isSupported: supported }),
+
+        startSession: async () => {
+          set({ ...EMPTY_SESSION, isSessionActive: true, sessionStartedAt: Date.now(), lastStepAt: Date.now() });
+          const started = await attach();
+          if (!started) {
+            set({ isSessionActive: false, isSupported: false, stepSource: 'none' });
+            return false;
+          }
+          set({ isSupported: true });
+          return true;
+        },
+
+        pause: () => {
+          const st = get();
+          if (!st.isSessionActive || st.pausedAtLive != null) return;
+          set({ pausedAtLive: st.liveSteps, pauses: [...st.pauses, { start: Date.now(), end: null }] });
+        },
+
+        resume: () => {
+          const st = get();
+          if (!st.isSessionActive || st.pausedAtLive == null) return;
+          const excludedSteps = st.excludedSteps + Math.max(0, st.liveSteps - st.pausedAtLive);
+          const pauses = st.pauses.map((p, i) => (i === st.pauses.length - 1 && p.end == null ? { ...p, end: Date.now() } : p));
+          set({ excludedSteps, pausedAtLive: null, pauses, sessionSteps: computeSessionSteps({ ...st, excludedSteps, pausedAtLive: null }) });
+        },
+
+        resumeIfNeeded: async ({ sessionStartedAt, distanceKm, type, profile }) => {
+          if (type !== 'walk' && type !== 'run') return;
+          const st = get();
+          if (listening && st.isSessionActive) return;
+          const sameSession = st.sessionStartedAt != null && Math.abs(st.sessionStartedAt - sessionStartedAt) < 5 * 60_000;
+          const startedAt = sameSession ? st.sessionStartedAt! : sessionStartedAt;
+          const pauses = sameSession ? st.pauses : [];
+          const paused = useCardioStore.getState().isPaused;
+
+          let carried = sameSession ? st.sessionSteps : 0;
+          if (pedometerService.canQueryHistory) {
+            const exact = await queryActiveSteps(startedAt, pauses);
+            if (exact != null) carried = exact;
+          } else {
+            const measuredDistanceKm = sameSession ? st.lastStepDistanceKm : 0;
+            carried += gapSteps({ type, measuredSteps: carried, measuredDistanceKm, gapDistanceKm: distanceKm - measuredDistanceKm, profile });
+          }
+
+          set({
+            isSessionActive: true,
+            sessionStartedAt: startedAt,
+            pauses,
+            offsetSteps: carried,
+            liveSteps: 0,
+            excludedSteps: 0,
+            pausedAtLive: paused ? 0 : null,
+            sessionSteps: carried,
+            lastStepDistanceKm: distanceKm,
+            lastStepAt: Date.now(),
+          });
+          const started = await attach();
+          if (!started && carried === 0) set({ isSessionActive: false, stepSource: 'none' });
+          else if (st.stepSource !== 'none') set({ stepSource: st.stepSource });
+        },
+
+        finalize: async ({ type, distanceKm, movingSec, profile }) => {
+          if (type !== 'walk' && type !== 'run') {
+            await get().stopSession();
+            return { steps: undefined, source: 'none' };
+          }
+          if (get().pausedAtLive != null) get().resume();
+          const st = get();
+          let steps: number | null = null;
+          let source: StepSource = st.stepSource;
+
+          if (st.isSessionActive && st.sessionStartedAt && pedometerService.canQueryHistory) {
+            steps = await queryActiveSteps(st.sessionStartedAt, st.pauses);
+            if (steps != null) source = 'native';
+          }
+          if (steps == null && st.isSessionActive && (st.stepSource === 'native' || st.stepSource === 'motion_estimate')) {
+            steps = st.sessionSteps;
+            const stale = st.lastStepAt == null || Date.now() - st.lastStepAt > STALE_STREAM_MS;
+            if (st.stepSource === 'native' && stale) {
+              steps += gapSteps({
+                type, measuredSteps: st.sessionSteps, measuredDistanceKm: st.lastStepDistanceKm,
+                gapDistanceKm: distanceKm - st.lastStepDistanceKm, movingSec, profile,
+              });
+            }
+          }
+
+          await get().stopSession();
+
+          if (steps == null || (source !== 'gps_estimate' && !isPlausiblePedometerCount(type, steps, distanceKm, movingSec, profile))) {
+            return { steps: estimateSteps(type, distanceKm, movingSec, profile) ?? 0, source: 'gps_estimate' };
+          }
+          return { steps, source };
+        },
+
+        stopSession: async () => {
+          set({ isSessionActive: false });
+          listening = false;
+          await pedometerService.stop();
+        },
+
+        resetSession: () => set({ ...EMPTY_SESSION }),
+      };
+    },
     {
       name: 'pedometer-storage',
-      partialize: (state) => ({ 
-        lastUpdated: state.lastUpdated
+      version: 2,
+      partialize: (s) => ({
+        sessionStartedAt: s.sessionStartedAt,
+        pauses: s.pauses,
+        sessionSteps: s.sessionSteps,
+        stepSource: s.stepSource,
+        lastStepDistanceKm: s.lastStepDistanceKm,
+        lastStepAt: s.lastStepAt,
       }),
-    }
-  )
+      migrate: () => ({ ...EMPTY_SESSION }) as unknown as PedometerState,
+    },
+  ),
 );
+
+// Pauses can come from the tracker UI or the native notification, so follow the cardio store.
+useCardioStore.subscribe((state, prev) => {
+  if (state.isPaused === prev.isPaused) return;
+  const ped = usePedometerStore.getState();
+  if (state.isPaused) ped.pause();
+  else ped.resume();
+});

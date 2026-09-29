@@ -1946,8 +1946,8 @@ export async function getUserCommunityBadges(userId: string): Promise<EarnedComm
     for (const d of snap.docs) {
       const data = d.data();
       const sourceKey = `challenge_${data.challengeId}`;
-      const rawRank = data.badgeAwarded !== undefined ? data.badgeAwarded : (typeof data.rank === 'number' && data.rank <= 3 && data.rank >= 1 ? data.rank : undefined);
-      const rank = rawRank as 1 | 2 | 3 | undefined;
+      // Live leaderboard `rank` (e.g. creator starts at #1) is not a trophy; only explicit awards are.
+      const rank = data.badgeAwarded as 1 | 2 | 3 | null | undefined;
 
       if (rank && rankTitles[rank]) {
         let cTitle = 'Challenge Victory';
@@ -1978,10 +1978,9 @@ export async function getUserCommunityBadges(userId: string): Promise<EarnedComm
           awardedAt: data.updatedAt || data.joinedAt || Timestamp.now(),
           badgeStyle: info.style
         };
-        // Always overwrite with the live participant rank
         badgeMap.set(sourceKey, bObj);
-      } else if (data.challengeId) {
-        // If participant is no longer ranked top 3 and has no badge, remove stale badge
+      } else if (data.challengeId && rank === null) {
+        // Medal explicitly revoked by the organiser
         badgeMap.delete(sourceKey);
       }
     }
@@ -2000,8 +1999,7 @@ export async function getUserCommunityBadges(userId: string): Promise<EarnedComm
     for (const d of snap.docs) {
       const data = d.data();
       const sourceKey = `event_${data.eventId}`;
-      const rawRank = data.badgeAwarded !== undefined ? data.badgeAwarded : (typeof data.rank === 'number' && data.rank <= 3 && data.rank >= 1 ? data.rank : undefined);
-      const rank = rawRank as 1 | 2 | 3 | undefined;
+      const rank = data.badgeAwarded as 1 | 2 | 3 | null | undefined;
 
       if (rank && rankTitles[rank]) {
         let eTitle = 'Event Victory';
@@ -2033,7 +2031,7 @@ export async function getUserCommunityBadges(userId: string): Promise<EarnedComm
           badgeStyle: info.style
         };
         badgeMap.set(sourceKey, bObj);
-      } else if (data.eventId) {
+      } else if (data.eventId && rank === null) {
         badgeMap.delete(sourceKey);
       }
     }

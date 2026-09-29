@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { doc, getDoc, query, collection, where, limit, getDocs } from 'firebase/firestore';
@@ -11,12 +11,12 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
 import { useUserWeight } from '@/hooks/use-user-weight';
-import { followUser, unfollowUser, isFollowing, hasRequestedFollow, removeFollower, acceptFollowRequest, declineFollowRequest, getFollowRequests, getFollowCounts, getFollowers, getFollowing, getUsersByUids, getBookmarkedActivities, getUserFeedActivities } from '@/services/social';
+import { followUser, unfollowUser, isFollowing, hasRequestedFollow, removeFollower, acceptFollowRequest, declineFollowRequest, subscribeFollowRequests, getFollowCounts, getFollowers, getFollowing, getUsersByUids, getBookmarkedActivities, getUserFeedActivities } from '@/services/social';
 import type { Activity as ActivityType, UserProfile, UserStats } from '@/types';
 import { createReport } from '@/services/admin';
 import { getPublicWorkoutsForUser, getUserWorkouts } from '@/services/workouts';
 import { getUserCardioActivities, getVisibleCardioActivitiesForUser } from '@/services/cardio';
-import { BADGES, evaluateBadges } from '@/lib/badges';
+import { BADGES, evaluateBadges, knownBadgeIds } from '@/lib/badges';
 import { badgeContextFromStats, effectiveStreak } from '@/lib/stats';
 import { computeAthleteRank } from '@/lib/rank';
 import { getProfileVisibility } from '@/lib/privacy';
@@ -117,23 +117,10 @@ export function ProfilePage() {
     enabled: !!viewProfile?.uid,
   });
 
-  const targetUid = viewProfile?.uid || currentUser?.uid || myProfile?.uid;
-  const { data: userCommunityBadges = [] } = useQuery({
+  const targetUid = viewProfile?.uid;
+  const { data: userCommunityBadges } = useQuery({
     queryKey: ['userCommunityBadges', targetUid],
     queryFn: () => getUserCommunityBadges(targetUid!),
-    enabled: !!targetUid,
-    staleTime: 0,
-    refetchOnMount: 'always',
-  });
-
-  const { data: freshUserProfile } = useQuery({
-    queryKey: ['freshUserProfile', targetUid],
-    queryFn: async () => {
-      if (!targetUid) return null;
-      const snap = await getDoc(doc(db, 'users', targetUid));
-      if (!snap.exists()) return null;
-      return { uid: targetUid, ...snap.data() } as UserProfile;
-    },
     enabled: !!targetUid,
     staleTime: 0,
     refetchOnMount: 'always',
@@ -1157,9 +1144,7 @@ export function ProfilePage() {
 
             {/* SECTION: COMMUNITY TROPHIES (PODIUM TROPHIES) */}
             {((isOwnProfile || viewProfile.privacySettings?.showBadgesToFollowers !== false)) && (() => {
-              const cBadges = userCommunityBadges.length > 0
-                ? userCommunityBadges
-                : (freshUserProfile?.communityBadges || viewProfile?.communityBadges || myProfile?.communityBadges || []);
+              const cBadges = userCommunityBadges ?? viewProfile.communityBadges ?? [];
               return (
                 <motion.section variants={item} className={`dx-card p-4 sm:p-5 ${sectionClass('awards')}`}>
                   <div className="flex items-center justify-between mb-3.5">
@@ -1241,7 +1226,7 @@ export function ProfilePage() {
             {/* SECTION 6: ACHIEVEMENTS / BADGES */}
             {(() => {
               const earnedIds = new Set([
-                ...(stats?.badges || []),
+                ...knownBadgeIds(stats?.badges),
                 ...(stats ? evaluateBadges(badgeContextFromStats(stats)) : []),
               ]);
               const ordered = [...BADGES.filter(b => earnedIds.has(b.id)), ...BADGES.filter(b => !earnedIds.has(b.id))].slice(0, 6);
@@ -1465,9 +1450,22 @@ function FollowButton({ myUid, targetUid }: { myUid: string; targetUid: string }
 }
 
 // ─── Follow Counts ──────────────────────────────────────
+/** Pending follow requests, kept live so new requests and accepts show instantly. */
+function useLiveFollowRequests(uid?: string): string[] {
+  const [ids, setIds] = useState<string[]>([]);
+  useEffect(() => {
+    setIds([]);
+    if (!uid) return;
+    return subscribeFollowRequests(uid, setIds);
+  }, [uid]);
+  return ids;
+}
+
 function FollowCountDisplay({ uid }: { uid: string }) {
   const [modalType, setModalType] = useState<'followers' | 'following' | null>(null);
   const { user } = useAuthStore();
+  const { search } = useLocation();
+  const queryClient = useQueryClient();
   const isOwnProfile = user?.uid === uid;
 
   const { data: counts } = useQuery({
@@ -1475,20 +1473,19 @@ function FollowCountDisplay({ uid }: { uid: string }) {
     queryFn: () => getFollowCounts(uid),
   });
 
-  const { data: requests = [] } = useQuery({
-    queryKey: ['followRequests', uid],
-    queryFn: () => getFollowRequests(uid),
-    enabled: isOwnProfile,
-  });
-
+  const requests = useLiveFollowRequests(isOwnProfile ? uid : undefined);
   const hasRequests = requests.length > 0;
 
+  const requestKey = requests.join(',');
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('modal') === 'followers' && isOwnProfile) {
+    if (isOwnProfile) queryClient.invalidateQueries({ queryKey: ['followCounts', uid] });
+  }, [requestKey, isOwnProfile, uid, queryClient]);
+
+  useEffect(() => {
+    if (new URLSearchParams(search).get('modal') === 'followers' && isOwnProfile) {
       setModalType('followers');
     }
-  }, [isOwnProfile]);
+  }, [isOwnProfile, search]);
 
   return (
     <>
@@ -1509,6 +1506,7 @@ function FollowCountDisplay({ uid }: { uid: string }) {
 
       <FollowListModal
         uid={uid}
+        requestIds={requests}
         type={modalType}
         isOpen={modalType !== null}
         onClose={() => setModalType(null)}
@@ -1518,7 +1516,7 @@ function FollowCountDisplay({ uid }: { uid: string }) {
 }
 
 // ─── Follow List Modal ──────────────────────────────────
-function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'followers' | 'following' | null, isOpen: boolean, onClose: () => void }) {
+function FollowListModal({ uid, requestIds, type, isOpen, onClose }: { uid: string, requestIds: string[], type: 'followers' | 'following' | null, isOpen: boolean, onClose: () => void }) {
   const { theme } = useUIStore();
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
@@ -1534,15 +1532,13 @@ function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'f
     enabled: isOpen && !!type,
   });
 
-  const { data: requestUsers = [] } = useQuery({
-    queryKey: ['followRequestsList', uid],
-    queryFn: async () => {
-      const uids = await getFollowRequests(uid);
-      if (uids.length === 0) return [];
-      return getUsersByUids(uids);
-    },
-    enabled: isOpen && type === 'followers' && isOwnList,
+  const { data: requestProfiles = [] } = useQuery({
+    queryKey: ['followRequestsList', uid, requestIds],
+    queryFn: () => getUsersByUids(requestIds),
+    enabled: isOpen && type === 'followers' && isOwnList && requestIds.length > 0,
+    placeholderData: prev => prev,
   });
+  const requestUsers = requestIds.length ? requestProfiles.filter((u: any) => requestIds.includes(u.uid)) : [];
 
   const removeMutation = useMutation({
     mutationFn: (followerId: string) => removeFollower(uid, followerId),
@@ -1555,7 +1551,6 @@ function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'f
   const acceptMutation = useMutation({
     mutationFn: (requesterId: string) => acceptFollowRequest(uid, requesterId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['followRequestsList', uid] });
       queryClient.invalidateQueries({ queryKey: ['followList', uid, type] });
       queryClient.invalidateQueries({ queryKey: ['followCounts', uid] });
     }
@@ -1563,9 +1558,6 @@ function FollowListModal({ uid, type, isOpen, onClose }: { uid: string, type: 'f
 
   const declineMutation = useMutation({
     mutationFn: (requesterId: string) => declineFollowRequest(uid, requesterId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['followRequestsList', uid] });
-    }
   });
 
   const themeStyles = theme === 'dark' ? {

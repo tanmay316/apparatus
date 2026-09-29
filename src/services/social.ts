@@ -230,6 +230,14 @@ export async function getFollowRequests(uid: string): Promise<string[]> {
   return snap.docs.map(d => d.id);
 }
 
+export function subscribeFollowRequests(uid: string, onChange: (uids: string[]) => void): () => void {
+  return onSnapshot(
+    collection(db, `followers/${uid}/requests`),
+    snap => onChange(snap.docs.map(d => d.id)),
+    err => console.warn('Follow requests listener failed', err),
+  );
+}
+
 export async function getFollowers(uid: string): Promise<string[]> {
   const snap = await getDocs(collection(db, `followers/${uid}/followers`));
   return snap.docs.map(d => d.id);

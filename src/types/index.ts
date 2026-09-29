@@ -95,6 +95,22 @@ export interface UserStats {
   recentTrainingDays?: string[];
   /** Skills tutor progress: curriculum skill id → share of steps passed (0–1). */
   tutorSkills?: Record<string, number>;
+  /** Per activity type, so run/walk/ride achievements are judged separately. */
+  cardioByType?: Partial<Record<CardioActivityType, CardioTypeStats>>;
+}
+
+export interface CardioTypeStats {
+  sessions: number;
+  totalKm: number;
+  longestKm: number;
+  /** Fastest 5 km / 10 km time (s) at the average pace of a session at least that long. */
+  best5kSec?: number;
+  best10kSec?: number;
+  /** Best average speed (km/h) over a session of at least 3 km / 20 km. */
+  bestSpeed3k?: number;
+  bestSpeed20k?: number;
+  maxClimbM?: number;
+  maxSteps?: number;
 }
 
 export interface PerformanceBest {
@@ -209,6 +225,18 @@ export interface ProgressiveOverloadSummary {
   exercisesTracked: number;
   /** Per-exercise change vs its previous best, highest first. */
   exerciseChanges?: { name: string; changePercent: number }[];
+  /** Per-exercise training volume vs the session it was compared against. */
+  exerciseVolumes?: ExerciseVolumeChange[];
+}
+
+export interface ExerciseVolumeChange {
+  name: string;
+  /** kg = load × reps, reps = bodyweight reps, s = hold seconds. */
+  unit: 'kg' | 'reps' | 's';
+  currentVolume: number;
+  /** Missing when the exercise has no earlier session. */
+  previousVolume?: number;
+  changePercent?: number;
 }
 
 // ─── Social ──────────────────────────────────────────────────
@@ -292,11 +320,14 @@ export interface LibraryExercise {
 }
 
 // ─── Gamification ────────────────────────────────────────────
+export type BadgeCategory = 'general' | 'streak' | 'strength' | 'cardio' | 'run' | 'walk' | 'ride';
+
 export interface Badge {
   id: string;
   icon: string;
   name: string;
   desc: string;
+  category: BadgeCategory;
   cond: (ctx: BadgeContext) => boolean;
   progress?: (ctx: BadgeContext) => { value: number; target: number };
 }
@@ -320,6 +351,9 @@ export interface BadgeContext {
   totalCardioMin: number;
   totalDistanceKm: number;
   longestCardioKm: number;
+  run: CardioTypeStats;
+  walk: CardioTypeStats;
+  ride: CardioTypeStats;
 }
 
 export interface LevelInfo {

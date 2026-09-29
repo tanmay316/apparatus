@@ -1,7 +1,14 @@
-import type { ExerciseLog, ProgressiveOverloadSummary, SetData, Workout } from '@/types';
+import type { ExerciseLog, ExerciseVolumeChange, ProgressiveOverloadSummary, SetData, Workout } from '@/types';
 
-function completedSets(exercise?: ExerciseLog | null): SetData[] {
+export function completedSets(exercise?: ExerciseLog | null): SetData[] {
   return (exercise?.sets || []).filter(set => set.completed !== false && (Number(set.reps) > 0 || Number(set.seconds) > 0 || Number(set.weight) > 0));
+}
+
+export function exerciseVolumeUnit(exercise?: ExerciseLog | null): ExerciseVolumeChange['unit'] {
+  const sets = completedSets(exercise);
+  if (sets.some(set => Number(set.weight) > 0)) return 'kg';
+  if (exercise?.mode === 'hold' || (sets.length > 0 && sets.every(set => !(Number(set.reps) > 0) && Number(set.seconds) > 0))) return 's';
+  return 'reps';
 }
 
 export function exerciseTrainingVolume(exercise?: ExerciseLog | null): number {
@@ -14,7 +21,7 @@ export function exerciseTrainingVolume(exercise?: ExerciseLog | null): number {
 
 // Epley formula: estimates the 1-rep-max a lifter could achieve at a given weight/reps,
 // so a heavier-but-lower-rep set and a lighter-but-higher-rep set can be compared fairly.
-function estimatedOneRepMax(weight: number, reps: number): number {
+export function estimatedOneRepMax(weight: number, reps: number): number {
   if (weight <= 0 || reps <= 0) return 0;
   return weight * (1 + reps / 30);
 }
@@ -23,7 +30,7 @@ function estimatedOneRepMax(weight: number, reps: number): number {
 // (strength load for weighted lifts, reps for bodyweight work, hold time for isometrics).
 // Mixing these units together (e.g. treating "20 reps" as bigger than "10kg") was the root
 // cause of false "progress" being reported before.
-function bestSetMetric(exercise?: ExerciseLog | null): number {
+export function bestSetMetric(exercise?: ExerciseLog | null): number {
   const sets = completedSets(exercise);
   if (sets.length === 0) return 0;
 
@@ -111,6 +118,7 @@ export function summarizeProgressiveOverload(
 
   const progressed: string[] = [];
   const exerciseChanges: { name: string; changePercent: number }[] = [];
+  const exerciseVolumes: ExerciseVolumeChange[] = [];
   let currentVolume = 0;
   let previousVolume = 0;
   let mostRecentMatchDate: string | undefined;
@@ -145,6 +153,15 @@ export function summarizeProgressiveOverload(
     if (result.progressed) progressed.push(current.name);
     const change = percentChange(result.currentBest, result.previousBest) ?? percentChange(result.currentVolume, result.previousVolume);
     if (bestPrevious && change !== undefined) exerciseChanges.push({ name: current.name, changePercent: change });
+    exerciseVolumes.push({
+      name: current.name,
+      unit: exerciseVolumeUnit(current),
+      currentVolume: Math.round(result.currentVolume),
+      ...(bestPrevious ? { previousVolume: Math.round(result.previousVolume) } : {}),
+      ...(bestPrevious && result.previousVolume > 0
+        ? { changePercent: Math.round(((result.currentVolume - result.previousVolume) / result.previousVolume) * 100) }
+        : {}),
+    });
   }
 
   const volumeChangePercent = previousVolume > 0 ? Math.round(((currentVolume - previousVolume) / previousVolume) * 100) : undefined;
@@ -153,7 +170,7 @@ export function summarizeProgressiveOverload(
     : currentVolume < previousVolume ? 'regressed' : 'maintained';
   exerciseChanges.sort((a, b) => b.changePercent - a.changePercent);
   const message = describeOverload(status, volumeChangePercent, exerciseChanges);
-  return { status, message, previousDate: mostRecentMatchDate, previousVolume, currentVolume, volumeChangePercent, exercisesProgressed: progressed, exercisesTracked: currentExercises.length, exerciseChanges };
+  return { status, message, previousDate: mostRecentMatchDate, previousVolume, currentVolume, volumeChangePercent, exercisesProgressed: progressed, exercisesTracked: currentExercises.length, exerciseChanges, exerciseVolumes };
 }
 
 function percentChange(current: number, previous: number): number | undefined {

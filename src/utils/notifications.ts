@@ -73,9 +73,12 @@ export async function initPushNotifications(userId: string) {
     }
     if (perm.receive !== 'granted') return;
 
-    await PushNotifications.register();
+    // Listeners must exist before register(): the token event can fire immediately.
+    // Clearing first keeps repeat calls (re-login) from stacking duplicate handlers.
+    await PushNotifications.removeAllListeners();
 
-    // Register token in user profile
+    // Register token in user profile. On iOS, AppDelegate swaps the APNs token for an
+    // FCM token so the backend can use the same FCM send path as Android.
     await PushNotifications.addListener('registration', async (token) => {
       if (userId && token.value) {
         try {
@@ -99,6 +102,8 @@ export async function initPushNotifications(userId: string) {
         window.location.href = `/clan/${encodeURIComponent(data.clanId)}/chat`;
       }
     });
+
+    await PushNotifications.register();
   } catch (err) {
     console.warn('Push notification setup error:', err);
   }

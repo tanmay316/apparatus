@@ -3,17 +3,20 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Lock, Check, Flame, Trophy, Dumbbell, Footprints, Share2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
-import { BADGES, evaluateBadges } from '@/lib/badges';
+import { BADGES, BADGE_CATEGORY_LABELS, evaluateBadges } from '@/lib/badges';
 import { badgeContextFromStats, effectiveStreak } from '@/lib/stats';
 import { AchievementShareModal } from '@/components/achievements/AchievementShareModal';
-import type { Badge } from '@/types';
+import type { Badge, BadgeCategory } from '@/types';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.03 } } };
 const item = { hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } };
 
+const CATEGORY_ORDER: BadgeCategory[] = ['general', 'streak', 'strength', 'cardio', 'run', 'walk', 'ride'];
+
 export function AchievementsPage() {
   const { stats } = useAuthStore();
   const [sharing, setSharing] = useState<Badge | null>(null);
+  const [filter, setFilter] = useState<BadgeCategory | 'all'>('all');
 
   if (!stats) return null;
 
@@ -23,7 +26,18 @@ export function AchievementsPage() {
   const earnedCount = BADGES.filter(b => earnedIds.has(b.id)).length;
   const totalCount = BADGES.length;
   const progressPct = (earnedCount / totalCount) * 100;
-  const ordered = [...BADGES.filter(b => earnedIds.has(b.id)), ...BADGES.filter(b => !earnedIds.has(b.id))];
+  const sections = CATEGORY_ORDER
+    .filter(category => filter === 'all' || filter === category)
+    .map(category => {
+      const list = BADGES.filter(b => b.category === category);
+      return {
+        category,
+        earned: list.filter(b => earnedIds.has(b.id)).length,
+        total: list.length,
+        badges: [...list.filter(b => earnedIds.has(b.id)), ...list.filter(b => !earnedIds.has(b.id))],
+      };
+    })
+    .filter(s => s.total > 0);
 
   const summary = [
     { icon: Dumbbell, label: 'Workouts', value: stats.totalWorkouts || 0 },
@@ -46,7 +60,7 @@ export function AchievementsPage() {
           <span className="dx-badge-icon !w-11 !h-11 !rounded-2xl"><Trophy size={20} /></span>
           <div className="flex-1 min-w-0">
             <div className="text-[15px] font-semibold">{earnedCount} of {totalCount} unlocked</div>
-            <div className="text-[12px] dx-muted">Workouts and cardio sessions both count toward your badges.</div>
+            <div className="text-[12px] dx-muted">Runs, walks and rides each have their own badges.</div>
           </div>
           <span className="text-[13px] font-semibold tabular">{Math.round(progressPct)}%</span>
         </div>
@@ -63,8 +77,30 @@ export function AchievementsPage() {
         </div>
       </motion.section>
 
+      <motion.div variants={item} className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-0.5" style={{ scrollbarWidth: 'none' }} role="tablist">
+        {(['all', ...CATEGORY_ORDER] as const).map(c => (
+          <button
+            key={c}
+            role="tab"
+            aria-selected={filter === c}
+            onClick={() => setFilter(c)}
+            className={`shrink-0 h-8 px-3.5 rounded-full text-[12.5px] font-semibold border transition-colors ${
+              filter === c ? 'border-[var(--dx-accent)] bg-[var(--dx-accent-soft)] text-[var(--dx-text)]' : 'border-[var(--dx-border)] dx-muted'
+            }`}
+          >
+            {c === 'all' ? 'All' : BADGE_CATEGORY_LABELS[c]}
+          </button>
+        ))}
+      </motion.div>
+
+      {sections.map(section => (
+      <section key={section.category} className="space-y-2.5">
+        <div className="flex items-baseline justify-between px-1">
+          <h2 className="text-[15px] font-semibold">{BADGE_CATEGORY_LABELS[section.category]}</h2>
+          <span className="text-[12px] dx-muted tabular">{section.earned}/{section.total}</span>
+        </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {ordered.map(badge => {
+        {section.badges.map(badge => {
           const isEarned = earnedIds.has(badge.id);
           const progress = !isEarned ? badge.progress?.(context) : undefined;
           const pct = progress ? Math.round((progress.value / progress.target) * 100) : 0;
@@ -106,6 +142,8 @@ export function AchievementsPage() {
           );
         })}
       </div>
+      </section>
+      ))}
 
       {sharing && (
         <AchievementShareModal

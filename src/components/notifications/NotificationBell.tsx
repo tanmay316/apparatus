@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,6 +10,9 @@ import {
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { LiveSenderMessage } from '@/components/ui/LiveUser';
+
+const WorkoutAnalysisSheet = lazy(() => import('@/components/analysis/AnalysisSheets').then(m => ({ default: m.WorkoutAnalysisSheet })));
+const CardioAnalysisSheet = lazy(() => import('@/components/analysis/AnalysisSheets').then(m => ({ default: m.CardioAnalysisSheet })));
 import { deleteNotification, getNotifications, markAllNotificationsRead, markNotificationRead } from '@/services/social';
 import { deleteAppNotification, markAllAppNotificationsRead, markNotificationAsRead, subscribeToAppNotifications } from '@/services/notifications';
 import {
@@ -98,6 +101,8 @@ export function NotificationBell() {
   const [lastSeen, setLastSeen] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [ring, setRing] = useState(false);
+  const [analysis, setAnalysis] = useState<UnifiedNotification['analysis'] | null>(null);
+  const closeAnalysis = useCallback(() => setAnalysis(null), []);
 
   // Social notifications are kept fresh by the global listener in App.tsx.
   const { data: socialItems = [] } = useQuery({
@@ -204,6 +209,11 @@ export function NotificationBell() {
 
   const openItem = (n: UnifiedNotification) => {
     markRead(n);
+    if (n.analysis) {
+      setOpen(false);
+      setAnalysis(n.analysis);
+      return;
+    }
     if (n.link) {
       setOpen(false);
       navigate(n.link);
@@ -399,6 +409,13 @@ export function NotificationBell() {
           </motion.div>
         )}
       </AnimatePresence>
+      {analysis && uid && (
+        <Suspense fallback={null}>
+          {analysis.kind === 'workout'
+            ? <WorkoutAnalysisSheet uid={uid} workoutId={analysis.id} onClose={closeAnalysis} />
+            : <CardioAnalysisSheet uid={uid} activityId={analysis.id} onClose={closeAnalysis} />}
+        </Suspense>
+      )}
     </div>
   );
 }

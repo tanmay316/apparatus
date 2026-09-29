@@ -125,6 +125,16 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>):
   return { id: newWorkoutId, xpEarned: result.xpEarned, streakBonus: result.streakBonus, prCount: personalRecords.size, unlockedBadges: result.unlocked, progressiveOverload };
 };
 
+/** A saved workout plus the user's full workout history, for session analysis. */
+export const getWorkoutWithHistory = async (userId: string, workoutId: string): Promise<{ workout: Workout; history: Workout[] } | null> => {
+  const snap = await getDoc(doc(db, 'workouts', workoutId));
+  if (!snap.exists()) return null;
+  const workout = { id: snap.id, ...snap.data() } as Workout;
+  if (workout.userId !== userId) return null;
+  const historySnap = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)));
+  return { workout, history: historySnap.docs.map(item => ({ id: item.id, ...item.data() } as Workout)) };
+};
+
 export const getUserWorkouts = async (userId: string, limitCount = 10): Promise<Workout[]> => {
   const q = query(
     collection(db, 'workouts'),

@@ -1,66 +1,77 @@
 """
-LLM Provider Registry with automatic fallback.
-Order: Nvidia → Gemini → OpenRouter
+LLM provider registry with ordered fallback.
+
+Order comes from LLM_PROVIDER_ORDER / VISION_PROVIDER_ORDER; each provider also
+walks its own list of candidate models (see app.providers.registry).
 """
 from typing import List, Optional
 import asyncio
-import logging
-
-from app.providers.llm.base import BaseLLMProvider, LLMResponse, ChatMessage
-from app.providers.llm.groq import GroqLLMProvider
-from app.providers.llm.nvidia import NvidiaLLMProvider
-from app.providers.llm.gemini import GeminiLLMProvider
-from app.providers.llm.openrouter import OpenRouterLLMProvider
-
 import hashlib
+import logging
 import time
+
+from app.core.config import settings
+from app.providers.llm.base import BaseLLMProvider, LLMResponse, ChatMessage
+from app.providers.llm.openai_compat import OpenAICompatProvider
+from app.providers.llm.gemini import GeminiProvider
 
 logger = logging.getLogger(__name__)
 
-# In-memory TTL cache for identical LLM queries (30 minutes TTL)
+# Short-lived cache for identical single-turn prompts (e.g. repeated recipe asks).
 _llm_cache = {}
 CACHE_TTL_SECONDS = 1800
 
 
 def _compute_cache_key(messages: List[ChatMessage], system_prompt: Optional[str], json_mode: bool) -> str:
     msg_str = "|".join(f"{m.role}:{m.content.strip().lower()}" for m in messages)
-    sys_str = (system_prompt or "").strip().lower()
-    raw = f"{msg_str}__sys:{sys_str}__json:{json_mode}"
+    raw = f"{msg_str}__sys:{(system_prompt or '').strip().lower()}__json:{json_mode}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def clear_llm_cache():
-    """Invalidate all cached LLM responses when new user data or meals arrive."""
-    global _llm_cache
     _llm_cache.clear()
-    logger.info("Cleared LLM response cache.")
 
 
-def get_llm_providers(
+def build_providers(
     groq_key: str = "",
     nvidia_key: str = "",
     gemini_key: str = "",
     openrouter_key: str = "",
+    order: Optional[str] = None,
 ) -> List[BaseLLMProvider]:
-    """Build an ordered list of available LLM providers with automatic environment key fallbacks."""
-    from app.core.config import settings
-
-    grk = groq_key or settings.GROQ_API_KEY
-    nk = nvidia_key or settings.NVIDIA_API_KEY
-    gk = gemini_key or settings.GEMINI_API_KEY
-    ok = openrouter_key or settings.OPENROUTER_API_KEY
-
+    """Providers with a usable key, in configured order. Request keys win over env keys."""
+    s = settings
+    keys = {
+        "groq": (groq_key or s.GROQ_API_KEY or "").strip(),
+        "nvidia": (nvidia_key or s.NVIDIA_API_KEY or "").strip(),
+        "gemini": (gemini_key or s.GEMINI_API_KEY or "").strip(),
+        "openrouter": (openrouter_key or s.OPENROUTER_API_KEY or "").strip(),
+    }
+    models = {
+        "groq": (s.csv(s.GROQ_CHAT_MODELS), s.csv(s.GROQ_VISION_MODELS)),
+        "nvidia": (s.csv(s.NVIDIA_CHAT_MODELS), s.csv(s.NVIDIA_VISION_MODELS)),
+        "gemini": (s.csv(s.GEMINI_CHAT_MODELS), s.csv(s.GEMINI_VISION_MODELS)),
+        "openrouter": (s.csv(s.OPENROUTER_CHAT_MODELS), s.csv(s.OPENROUTER_VISION_MODELS)),
+    }
     providers: List[BaseLLMProvider] = []
-    # Priority Order: Groq -> NVIDIA -> Gemini -> OpenRouter
-    if grk and grk.strip():
-        providers.append(GroqLLMProvider(api_key=grk.strip()))
-    if nk and nk.strip():
-        providers.append(NvidiaLLMProvider(api_key=nk.strip()))
-    if gk and gk.strip():
-        providers.append(GeminiLLMProvider(api_key=gk.strip()))
-    if ok and ok.strip():
-        providers.append(OpenRouterLLMProvider(api_key=ok.strip()))
+    for name in s.csv(order or s.LLM_PROVIDER_ORDER):
+        key = keys.get(name)
+        if not key or name not in models:
+            continue
+        chat_models, vision_models = models[name]
+        if name == "gemini":
+            providers.append(GeminiProvider(key, chat_models, vision_models))
+        else:
+            providers.append(OpenAICompatProvider(name, key, chat_models, vision_models))
     return providers
+
+
+def get_llm_providers(groq_key: str = "", nvidia_key: str = "", gemini_key: str = "", openrouter_key: str = "") -> List[BaseLLMProvider]:
+    return build_providers(groq_key, nvidia_key, gemini_key, openrouter_key)
+
+
+def failed(response: LLMResponse) -> bool:
+    return response.provider_used == "none"
 
 
 async def chat_with_fallback(
@@ -72,58 +83,37 @@ async def chat_with_fallback(
     json_mode: bool = False,
     total_timeout: float = 45.0,
 ) -> LLMResponse:
-    """Try each LLM provider in order until one succeeds, with 0ms response caching for repeated queries."""
+    """Try each provider in order until one answers, within an overall time budget."""
     cache_key = None
     if len(messages) <= 2 and not json_mode and temperature <= 0.8:
         cache_key = _compute_cache_key(messages, system_prompt, json_mode)
         cached = _llm_cache.get(cache_key)
-        if cached:
-            ts, cached_res = cached
-            if time.time() - ts < CACHE_TTL_SECONDS:
-                logger.info("Returning cached LLM response (0ms latency)")
-                return cached_res
+        if cached and time.time() - cached[0] < CACHE_TTL_SECONDS:
+            return cached[1]
 
     deadline = time.monotonic() + total_timeout
     last_error = "No LLM providers configured"
     for provider in providers:
-        # A slow chain must not outlive the client's patience; stop trying once
-        # the overall budget is spent rather than walking every provider.
         remaining = deadline - time.monotonic()
         if remaining <= 1.0:
-            last_error = f"Timed out after {total_timeout:.0f}s before {provider.provider_name}"
-            logger.warning(last_error)
+            last_error = f"time budget spent before {provider.provider_name}"
             break
-
         try:
-            logger.info("Trying LLM provider: %s", provider.provider_name)
             result = await asyncio.wait_for(
                 provider.chat(messages, system_prompt, temperature, max_tokens, json_mode),
                 timeout=remaining,
             )
-
-            if not result.content.startswith("Error:"):
+            if result.content and not result.content.startswith("Error:"):
                 if cache_key:
                     _llm_cache[cache_key] = (time.time(), result)
-                logger.info(
-                    "LLM ok provider=%s tokens=%s latency_ms=%s",
-                    result.provider_used, result.tokens_used, result.latency_ms,
-                )
+                logger.info("LLM ok provider=%s tokens=%s latency_ms=%.0f", result.provider_used, result.tokens_used, result.latency_ms)
                 return result
-
             last_error = result.content
-            logger.warning("LLM provider %s failed: %s", provider.provider_name, last_error)
-
         except asyncio.TimeoutError:
             last_error = f"{provider.provider_name}: timed out"
-            logger.warning("LLM provider %s timed out", provider.provider_name)
-            continue
-        except Exception as e:
-            error_msg = str(e)
-            if hasattr(e, "response") and hasattr(e.response, "text"):
-                error_msg += f" - Body: {e.response.text}"
-            last_error = f"{provider.provider_name}: {error_msg}"
-            logger.warning("LLM provider %s raised: %s", provider.provider_name, error_msg)
-            continue
+        except Exception as exc:
+            last_error = str(exc)
+        logger.warning("LLM provider %s failed: %s", provider.provider_name, last_error[:300])
 
-    logger.error("All LLM providers failed: %s", last_error)
+    logger.error("All LLM providers failed: %s", last_error[:300])
     return LLMResponse(content=f"All LLM providers failed: {last_error}", provider_used="none")

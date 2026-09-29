@@ -248,8 +248,8 @@ function PreferencesSync() {
           }
           // Workout reminders are already scheduled as native local notifications.
           if (newNote.type === 'reminder' && newNote.extra?.kind === 'workout_reminder' && Capacitor.isNativePlatform()) return;
-          // The workout-complete banner already carries the volume change.
-          if (newNote.extra?.kind === 'progress') return;
+          // The workout-complete banner already carries the volume change; cardio shows it on the summary.
+          if (newNote.extra?.kind === 'progress' || newNote.extra?.kind === 'cardio_progress') return;
           const createdAtMillis = newNote.createdAt && typeof (newNote.createdAt as any).toMillis === 'function'
             ? (newNote.createdAt as any).toMillis()
             : ((newNote.createdAt as any)?.seconds ? (newNote.createdAt as any).seconds * 1000 : 0);

@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { Check, Loader2, Share2, AlertTriangle, CloudOff } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
 import { RouteMap } from '@/components/cardio/RouteMap';
+import { CardioAnalysisView } from '@/components/analysis/CardioAnalysisView';
+import { analyzeCardio } from '@/lib/cardio-analysis';
 import type { CardioActivity } from '@/types';
 import { CARDIO_TYPES, formatDuration, formatDurationShort, primaryRate } from './cardio-format';
 
@@ -24,9 +27,11 @@ interface Props {
   onShare: () => void;
   onDone: () => void;
   onRetry: () => void;
+  /** Earlier sessions, for comparison and coaching. */
+  history?: CardioActivity[];
 }
 
-export function CardioSummary({ data, saveState, effort, onEffort, notes, onNotes, onShare, onDone, onRetry }: Props) {
+export function CardioSummary({ data, saveState, effort, onEffort, notes, onNotes, onShare, onDone, onRetry, history }: Props) {
   const theme = useUIStore(s => s.theme);
   const type = data.type || 'run';
   const meta = CARDIO_TYPES[type];
@@ -35,6 +40,17 @@ export function CardioSummary({ data, saveState, effort, onEffort, notes, onNote
     movingDurationSec: data.movingDurationSec, durationSec: data.durationSec || 0,
   });
   const hasRoute = Array.isArray(data.route) && data.route.length > 1;
+
+  const analysis = useMemo(() => {
+    if (!data.distanceKm || data.distanceKm <= 0.01) return null;
+    const current = {
+      ...data,
+      type,
+      route: data.route || [],
+      startedAt: data.startedAt ?? { seconds: Math.floor(Date.now() / 1000) },
+    } as CardioActivity;
+    return analyzeCardio(current, history || []);
+  }, [data, type, history]);
 
   const stats = [
     { label: 'Moving time', value: formatDuration(data.durationSec || 0), unit: '' },
@@ -92,6 +108,13 @@ export function CardioSummary({ data, saveState, effort, onEffort, notes, onNote
           </div>
         </div>
       </section>
+
+      {analysis && (
+        <section className="dx-card p-4 sm:p-5">
+          <h2 className="text-sm font-bold mb-3">Session analysis</h2>
+          <CardioAnalysisView analysis={analysis} />
+        </section>
+      )}
 
       <section className="dx-card p-4 sm:p-5">
         <h2 className="text-sm font-bold mb-3">How did it feel?</h2>

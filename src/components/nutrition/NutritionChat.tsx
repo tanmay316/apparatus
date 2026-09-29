@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2, Brain, ChevronDown, ChevronUp, History, Plus, Trash2, MessageSquare, Square, Flame, ChefHat, CalendarDays, Scale, Copy, Check, RefreshCw } from 'lucide-react';
-import { sendChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionMessages, deleteChatSession, wakeUpServer, type FoodAnalyzeResponse, type ChatSessionItem } from '@/services/nutrition-api';
+import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2, Brain, ChevronDown, ChevronUp, History, Plus, Trash2, MessageSquare, Square, Flame, ChefHat, CalendarDays, Scale, Copy, Check, RefreshCw, Dumbbell, TrendingUp, Utensils } from 'lucide-react';
+import { sendChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionMessages, deleteChatSession, wakeUpServer, getNutritionImage, hasTrackableNutrition, ApiError, type FoodAnalyzeResponse, type ChatSessionItem } from '@/services/nutrition-api';
+import { compressImageFile } from '@/utils/image-compression';
+import { useUIStore } from '@/stores/ui-store';
 import NutritionResultCard from './NutritionResultCard';
 import CameraScanner from './CameraScanner';
 import ReactMarkdown from 'react-markdown';
@@ -15,6 +17,8 @@ interface ChatMessage {
   timestamp: Date;
   isImage?: boolean;
   imageUrl?: string;
+  /** Server-side photo, loaded lazily for past conversations. */
+  imageId?: number;
   nutritionData?: FoodAnalyzeResponse;
   logged?: boolean;
   recipeData?: any;
@@ -50,12 +54,36 @@ function ReasoningCard({ reasoning }: { reasoning: string }) {
   );
 }
 
+function HistoryImage({ imageId }: { imageId: number }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getNutritionImage(imageId)
+      .then(img => { if (!cancelled && img?.base64_data) setSrc(`data:${img.mime_type || 'image/jpeg'};base64,${img.base64_data}`); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [imageId]);
+  if (!src) return null;
+  return (
+    <div className="rounded-2xl overflow-hidden max-w-[220px] self-end" style={{ border: '1px solid var(--dx-border)' }}>
+      <img src={src} alt="Uploaded food" className="w-full h-auto object-cover" />
+    </div>
+  );
+}
+
+const WELCOME = "Hey! I'm **Astra**, your nutrition and training coach.\n\nI can scan meals from a photo, estimate macros from a description, build recipes and meal plans, and review your strength, calisthenics and cardio sessions.\n\nFirst time? Tap **Body Metrics** (👤) up top, or just tell me your weight, height, age and goal.\n\n*Tip: add a note with food photos, like \"2 rotis, cooked in ghee\", for a far more accurate estimate.*";
+
+/** Cold starts and gateway hiccups are worth retrying; real server errors are not. */
+const isRetryable = (err: any) =>
+  err instanceof ApiError ? [502, 503, 504].includes(err.status) : /failed to fetch|network|load failed/i.test(err?.message || '');
+
 export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
+  const showToast = useUIStore(s => s.showToast);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       role: 'assistant',
-      content: "Hey! I'm **Astra**, your nutrition coach.\n\nI can scan meals from a photo, break down macros, build recipes and plan your day around your calorie and protein targets.\n\nFirst time? Tap the **Body Metrics** button (👤) up top so I can tailor everything to you.\n\n*Tip: when you send a food photo, add a note like \"2 rotis, cooked in ghee\" for a far more accurate estimate.*",
+      content: WELCOME,
       timestamp: new Date(),
     },
   ]);
@@ -164,8 +192,11 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
           role: m.role,
           content: m.content,
           timestamp: new Date(),
-          nutritionData: m.metadata_?.nutrition_data,
+          reasoning: m.metadata_?.reasoning,
+          nutritionData: m.metadata_?.nutrition_data || undefined,
           logged: m.metadata_?.logged,
+          isImage: !!m.metadata_?.is_image,
+          imageId: typeof m.metadata_?.image_id === 'number' ? m.metadata_.image_id : undefined,
         }));
         setMessages(formatted);
         setCachedData(`apparatus_cached_messages_${sid}`, formatted);
@@ -203,7 +234,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       {
         id: 'welcome',
         role: 'assistant',
-        content: "Hey! 👋 I'm your AI nutrition assistant.\n\nAsk me anything, scan your food by uploading a photo, or tell me to generate a personalized recipe or meal plan!",
+        content: WELCOME,
         timestamp: new Date(),
       },
     ]);
@@ -240,18 +271,19 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     if (isOpen && !previewImage) inputRef.current?.focus();
   }, [isOpen, previewImage]);
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(',')[1];
-      const mime = file.type || 'image/jpeg';
+    try {
+      // Large gallery photos upload slowly and add nothing for recognition.
+      const dataUrl = await compressImageFile(file, 1280, 1280, 0.78);
+      const [header, base64] = dataUrl.split(',');
+      const mime = header.match(/data:(.*?);/)?.[1] || 'image/jpeg';
       setPreviewImage({ url: dataUrl, base64, mime });
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      showToast('Could not read that image', 'error');
+    }
   };
 
   const getMealType = () => {
@@ -263,15 +295,17 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   };
 
   const handleLogMeal = async (msgId: string, nutritionData?: FoodAnalyzeResponse) => {
-    if (!nutritionData) return;
+    if (!hasTrackableNutrition(nutritionData)) return;
     setLoggingMessageId(msgId);
     try {
       const mealType = getMealType();
-      await logMeal(nutritionData, mealType, msgId, nutritionData.image_id);
+      await logMeal(nutritionData, mealType, msgId, nutritionData!.image_id);
       setMessages(prev => prev.map(m => m.id === msgId ? { ...m, logged: true } : m));
       window.dispatchEvent(new Event('refresh-nutrition'));
-    } catch (err) {
+      showToast(`Added to ${mealType}`, 'success');
+    } catch (err: any) {
       console.error("Failed to log meal", err);
+      showToast(err?.message || 'Could not track this meal. Please try again.', 'error');
     } finally {
       setLoggingMessageId(null);
     }
@@ -305,7 +339,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       try {
         if (currentPreview) {
           // Image Scan Flow
-          const res = await analyzeFood(currentPreview.base64, currentPreview.mime, getMealType(), sessionId, controller.signal);
+          const res = await analyzeFood(currentPreview.base64, currentPreview.mime, getMealType(), sessionId, controller.signal, text);
           
           if (res.session_id && res.session_id !== sessionId) {
             setSessionId(res.session_id);
@@ -313,15 +347,16 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             loadSessions();
           }
 
+          const trackable = res.status !== 'not_food' && res.status !== 'failed' && hasTrackableNutrition(res);
           setMessages(prev => {
             const newMessages = [
               ...prev,
               {
-                id: `ai-${Date.now()}`,
+                id: res.assistant_message_id || `ai-${Date.now()}`,
                 role: 'assistant' as const,
-                content: res.success ? "Here's the analysis of your food:" : "I couldn't analyze that food. Please try again.",
+                content: res.message || (trackable ? 'Here is the breakdown of your meal.' : "I couldn't analyze that photo. Please try again or describe the meal."),
                 timestamp: new Date(),
-                nutritionData: res.success ? res : undefined,
+                nutritionData: trackable ? res : undefined,
               },
             ];
             const activeSid = res.session_id || sessionId;
@@ -333,23 +368,26 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         } else {
           // Text Chat Flow
           const res = await sendChatMessage(userMsg.content, sessionId, controller.signal);
-          setSessionId(res.session_id);
-          localStorage.setItem('apparatus_active_session_id', String(res.session_id));
+          if (res.session_id) {
+            setSessionId(res.session_id);
+            localStorage.setItem('apparatus_active_session_id', String(res.session_id));
+          }
           loadSessions();
+          if (res.profile_updated) window.dispatchEvent(new Event('refresh-nutrition'));
           
           setMessages(prev => {
             const newMessages = [
               ...prev,
               {
-                id: `ai-${Date.now()}`,
+                id: res.message_id || `ai-${Date.now()}`,
                 role: 'assistant' as const,
                 content: res.response,
-                reasoning: (res as any).reasoning,
-                nutritionData: (res as any).nutritionData,
+                reasoning: res.reasoning || undefined,
+                nutritionData: hasTrackableNutrition(res.nutritionData) ? res.nutritionData! : undefined,
                 timestamp: new Date(),
               },
             ];
-            setCachedData(`apparatus_cached_messages_${res.session_id}`, newMessages);
+            if (res.session_id) setCachedData(`apparatus_cached_messages_${res.session_id}`, newMessages);
             return newMessages;
           });
         }
@@ -367,24 +405,25 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             },
           ]);
         } else {
-          const errMsg = (err.message || '').toLowerCase();
-          
-          // Auto-retry up to 12 times (60s) for cold starts
-          if ((errMsg.includes("failed to fetch") || errMsg.includes("network") || errMsg.includes("502") || errMsg.includes("503") || errMsg.includes("500")) && retryCount < 12) {
+          // Only cold starts / gateway errors are retried (~60 s); a 500 means the request itself failed.
+          if (isRetryable(err) && retryCount < 12) {
             setIsWakingUp(true);
             await new Promise(resolve => setTimeout(resolve, 5000));
+            if (controller.signal.aborted) return;
             return attemptRequest(retryCount + 1);
           }
 
           setIsWakingUp(false);
-          let content = "An error occurred. Please try again.";
-          
-          if (errMsg.includes("400") || errMsg.includes("provide your weight")) {
-            content = "To get started, please tap the **Body Metrics** button (👤) at the top right and fill in your body data (weight, height, age, etc.) so I can calculate your nutrition accurately!";
-          } else if (errMsg.includes("failed to fetch") || errMsg.includes("network")) {
-            content = "Connection/Network issue. Please try again.";
-          } else if (errMsg.includes("api key") || errMsg.includes("unauthorized") || errMsg.includes("401")) {
-            content = "No API key in settings. Please configure it.";
+          const status = err instanceof ApiError ? err.status : 0;
+          const errMsg = (err.message || '').toLowerCase();
+          let content = err instanceof ApiError && err.message ? err.message : "Something went wrong. Please try again.";
+
+          if (status === 429) {
+            content = err.message || "You're sending messages too quickly. Wait a moment and try again.";
+          } else if (status === 401) {
+            content = "Your session expired. Please sign in again.";
+          } else if (!status && /failed to fetch|network|load failed/.test(errMsg)) {
+            content = "Couldn't reach the coach. Check your connection and try again.";
           }
 
           setMessages(prev => [
@@ -466,6 +505,25 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       send: true,
     },
     {
+      icon: Utensils,
+      label: 'Log a meal by text',
+      hint: 'Describe → macros',
+      prompt: 'I just ate 2 rotis, a bowl of dal and some curd. Track it.',
+    },
+    {
+      icon: TrendingUp,
+      label: 'Review my training',
+      hint: 'Last 2 weeks',
+      prompt: 'Review my last 2 weeks of training and tell me what to improve.',
+      send: true,
+    },
+    {
+      icon: Dumbbell,
+      label: 'Break a plateau',
+      hint: 'Strength & skills',
+      prompt: 'My bench press has stalled. Check my recent sessions and tell me how to progress.',
+    },
+    {
       icon: Scale,
       label: 'Compare two foods',
       hint: 'Side by side',
@@ -494,7 +552,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             <h3 className="text-[15px] font-semibold leading-tight">Astra AI</h3>
             <div className="text-[11.5px] dx-muted flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--dx-success)' }} />
-              Nutrition coach
+              Nutrition & training coach
             </div>
           </div>
         </div>
@@ -592,6 +650,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
                   <img src={msg.imageUrl} alt="Uploaded food" className="w-full h-auto object-cover" />
                 </div>
               )}
+              {msg.isImage && !msg.imageUrl && msg.imageId && <HistoryImage imageId={msg.imageId} />}
 
               {/* Reasoning Block */}
               {msg.role === 'assistant' && msg.reasoning && (
@@ -628,7 +687,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
               )}
 
               {/* Rich UI Cards (Assistant) */}
-              {msg.nutritionData && (
+              {msg.nutritionData && hasTrackableNutrition(msg.nutritionData) && (
                 <div className="w-full mt-1 self-start">
                   <NutritionResultCard result={msg.nutritionData} onClose={() => {}} />
                   <div className="mt-2.5 flex justify-end">

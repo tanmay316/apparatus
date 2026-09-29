@@ -3,7 +3,8 @@ import { auth, db } from '@/lib/firebase';
 import type { CardioActivity, RoutePoint, UserStats } from '@/types';
 import { applySession, cardioDurationMin, localDateKey } from '@/lib/stats';
 import { cardioMetrics } from '@/lib/performance';
-import { getLiveSteps } from '@/lib/cardio-steps';
+import { estimateSteps } from '@/lib/steps';
+import { pedometerService } from '@/services/pedometer';
 import { scheduleInactivityReminders } from '@/utils/notifications';
 import { isFollowing, visibilityForUser } from '@/services/social';
 import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@/services/stats';
@@ -120,6 +121,8 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
       durationMin: cardioDurationMin(activity),
       distanceKm: activity.distanceKm || 0,
       cardioType: activity.type,
+      elevationGainM: activity.elevationGainM || 0,
+      steps: activity.steps || 0,
       metrics: cardioMetrics(activity),
     });
     transaction.set(ref, dataToSave);
@@ -130,6 +133,7 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
   syncAthleteRank(userId, outcome.stats).catch(() => {});
   scheduleInactivityReminders().catch(() => {});
   notifyStepGoal(userId, activity).catch(() => {});
+  notifyCardioAnalysis(userId, id, activity.type).catch(() => {});
 
   // Auto-track challenge progress (fire-and-forget)
   try {
@@ -167,9 +171,9 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
 export const DEFAULT_STEP_GOAL = 10000;
 
 /** Steps from a walk or run: pedometer count when recorded, otherwise a stride estimate. */
-export function activitySteps(activity: Pick<CardioActivity, 'type' | 'distanceKm' | 'steps'>): number {
+export function activitySteps(activity: Pick<CardioActivity, 'type' | 'distanceKm' | 'steps'> & { movingDurationSec?: number }): number {
   if (activity.steps && activity.steps > 0) return activity.steps;
-  return getLiveSteps(activity.type, activity.distanceKm || 0, { isSessionActive: false, sessionSteps: 0, stepSource: 'none' }) || 0;
+  return estimateSteps(activity.type, activity.distanceKm || 0, activity.movingDurationSec) || 0;
 }
 
 export const getStepsForDate = async (userId: string, dateKey: string): Promise<number> => {
@@ -179,6 +183,20 @@ export const getStepsForDate = async (userId: string, dateKey: string): Promise<
     where('date', '==', dateKey),
   ));
   return snap.docs.reduce((sum, d) => sum + activitySteps(d.data() as CardioActivity), 0);
+};
+
+/**
+ * Daily total for display. On iOS the phone counts every step all day (CoreMotion), so that
+ * count is used, with tracked sessions as a floor; elsewhere only tracked sessions are known.
+ */
+export const getDailySteps = async (userId: string, dateKey: string): Promise<number> => {
+  const tracked = await getStepsForDate(userId, dateKey);
+  if (!pedometerService.canQueryHistory) return tracked;
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const start = new Date(y, m - 1, d).getTime();
+  const end = Math.min(Date.now(), new Date(y, m - 1, d + 1).getTime());
+  const device = await pedometerService.getStepsBetween(start, end);
+  return Math.max(tracked, device ?? 0);
 };
 
 /** Posts one notification the first time today's tracked steps pass the daily goal. */
@@ -198,6 +216,49 @@ async function notifyStepGoal(userId: string, activity: Omit<CardioActivity, 'id
     { kind: 'steps', link: '/cardio' },
   );
 }
+
+/** Self notification comparing the session with the last one of the same type; opens the analysis. */
+async function notifyCardioAnalysis(userId: string, activityId: string, type: CardioActivity['type']) {
+  const loaded = await getCardioWithHistory(userId, activityId);
+  if (!loaded) return;
+  const { analyzeCardio, formatPaceSec } = await import('@/lib/cardio-analysis');
+  const { current: c, previous: p } = analyzeCardio(loaded.activity, loaded.history);
+  const noun = type === 'cycle' ? 'ride' : type;
+  const label = `${noun[0].toUpperCase()}${noun.slice(1)}`;
+  const rate = type === 'cycle' ? `${c.kmh} km/h` : `${formatPaceSec(c.paceSec)} /km`;
+  let trend: 'up' | 'down' | 'flat' = 'flat';
+  let delta = '';
+  if (p && p.km > 0) {
+    if (type === 'cycle') {
+      const d = Math.round((c.kmh - p.kmh) * 10) / 10;
+      trend = d > 0 ? 'up' : d < 0 ? 'down' : 'flat';
+      delta = `${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)} km/h`;
+    } else {
+      const d = c.paceSec - p.paceSec;
+      trend = d < 0 ? 'up' : d > 0 ? 'down' : 'flat';
+      delta = `${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)} s/km`;
+    }
+  }
+  const comparison = p
+    ? trend === 'flat' ? `same ${type === 'cycle' ? 'speed' : 'pace'} as your last ${noun}`
+      : `${delta.replace(/^[+−]/, '')} ${trend === 'up' ? 'faster' : 'slower'} than your last ${noun}`
+    : `your first ${noun} on record`;
+  const { createSelfNotification } = await import('@/services/social');
+  await createSelfNotification(
+    userId,
+    `${label} ${c.km.toFixed(2)} km at ${rate}: ${comparison}. Tap for splits and coaching.`,
+    activityId,
+    { kind: 'cardio_progress', trend, cardioType: type, ...(delta ? { delta } : {}), link: '/cardio' },
+  );
+}
+
+/** A saved session plus the user's full cardio history, for session analysis. */
+export const getCardioWithHistory = async (userId: string, activityId: string): Promise<{ activity: CardioActivity; history: CardioActivity[] } | null> => {
+  const snap = await getDocs(query(collection(db, 'cardioActivities'), where('userId', '==', userId)));
+  const history = snap.docs.map(d => ({ id: d.id, ...d.data() } as CardioActivity));
+  const activity = history.find(a => a.id === activityId);
+  return activity ? { activity, history } : null;
+};
 
 export const getUserCardioActivities = async (userId: string, count = 20): Promise<CardioActivity[]> => {
   const q = query(

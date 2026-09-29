@@ -20,6 +20,26 @@ class PedometerService {
   }
 
   /**
+   * iOS keeps a 7-day CoreMotion step history, so any time range can be re-queried exactly,
+   * even after the app was suspended or killed. Android's step counter has no history API.
+   */
+  get canQueryHistory(): boolean {
+    return this.isNative && Capacitor.getPlatform() === 'ios';
+  }
+
+  /** Exact steps between two epoch-ms instants (iOS only). Resolves null when unavailable. */
+  async getStepsBetween(start: number, end: number): Promise<number | null> {
+    if (!this.canQueryHistory || !(end > start)) return null;
+    try {
+      const res = await NativePedometer.getMeasurement({ start, end });
+      const steps = res?.numberOfSteps;
+      return typeof steps === 'number' && Number.isFinite(steps) && steps >= 0 ? steps : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Check if pedometer is available
    */
   async isAvailable(): Promise<PedometerAvailability> {
@@ -78,9 +98,8 @@ class PedometerService {
     if (this.isNative) {
       try {
         this.isTracking = true;
-        // Native pedometer usually resets daily or we must keep track of diffs
-        // We'll listen for step events if supported
-        this.nativeListener = await (NativePedometer as any).addListener('measurement', (data: any) => {
+        // Both native plugins report steps counted since startMeasurementUpdates(), not a device total.
+        this.nativeListener = await NativePedometer.addListener('measurement', (data) => {
           if (!this.isTracking) return;
           const steps = data?.numberOfSteps;
           if (typeof steps === 'number' && Number.isFinite(steps) && steps >= 0) {
