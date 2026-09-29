@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Apparatus AI Nutrition Backend"
     API_V1_STR: str = "/api/v1"
 
-    # CORS — stored as comma-separated string, parsed at runtime
-    BACKEND_CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    # CORS — stored as comma-separated string, parsed at runtime. Defaults to * to allow web & mobile apps.
+    BACKEND_CORS_ORIGINS: str = "*"
 
     @property
     def cors_origins(self) -> List[str]:

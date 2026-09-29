@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity, ArrowDown, ArrowRight, ArrowUp, Check, ChevronRight, Clock, Compass, Dumbbell, Flame,
-  Footprints, GraduationCap, Lock, Minus, Play, Plus, RotateCcw, Settings2, Shield, Sparkles,
+  Footprints, GraduationCap, Lock, Minus, Plus, RotateCcw, Settings2, Shield, Sparkles,
   Target, Timer, TrendingUp, Trophy, X, Youtube,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
@@ -184,7 +184,7 @@ export function SkillsPage() {
         <motion.div variants={item} className="dx-card p-3 text-[13px]" style={{ borderColor: 'var(--dx-warning)' }}>{saveError}</motion.div>
       )}
 
-      <CoachHero tutor={tutor} progress={progress} onStart={() => setTab('today')} />
+      <CoachHero tutor={tutor} progress={progress} />
 
       <motion.div variants={item} className="dx-segment" role="tablist">
         {([['today', 'Today'], ['path', 'My path'], ['library', 'All skills']] as [Tab, string][]).map(([id, label]) => (
@@ -239,7 +239,7 @@ export function SkillsPage() {
 
 /* ─── Hero ─────────────────────────────────────────────────── */
 
-function CoachHero({ tutor, progress, onStart }: { tutor: TutorProfile; progress: ProgressMap; onStart: () => void }) {
+function CoachHero({ tutor, progress }: { tutor: TutorProfile; progress: ProgressMap }) {
   const level = effectiveLevel(tutor, progress);
   const mastered = SKILLS.filter(s => progress[s.id]?.mastered).length;
   const session = buildSession(tutor, progress, new Date().getDay());
@@ -270,9 +270,6 @@ function CoachHero({ tutor, progress, onStart }: { tutor: TutorProfile; progress
       <div className="mt-4 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.15)' }}>
         <motion.div className="h-full rounded-full" style={{ background: 'var(--dx-hero-btn)' }} initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 0.9 }} />
       </div>
-      <button onClick={onStart} className="dx-hero-btn w-full mt-4">
-        <Play size={16} /> {session.isRestDay ? 'See recovery plan' : "Start today's lesson"}
-      </button>
     </motion.section>
   );
 }

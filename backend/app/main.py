@@ -18,13 +18,44 @@ app = FastAPI(
 )
 
 # Auth is a Bearer token, never a cookie, so credentialed CORS is not needed.
+_raw_origins = set(settings.cors_origins)
+if not _raw_origins or "*" in _raw_origins:
+    _allow_origins = ["*"]
+else:
+    # Always ensure website, APK, and dev origins are allowed
+    _raw_origins.update([
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+        "https://apparatus-46b1b.web.app",
+        "https://apparatus-46b1b.firebaseapp.com",
+        "https://apparatus.app",
+        "capacitor://apparatus.app",
+    ])
+    _allow_origins = list(_raw_origins)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins or ["*"],
+    allow_origins=_allow_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
+
+
+@app.options("/{full_path:path}")
+def preflight_options_handler(full_path: str):
+    from fastapi.responses import Response
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
 
 
 @app.get("/")

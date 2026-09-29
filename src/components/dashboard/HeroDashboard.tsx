@@ -1,13 +1,13 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Flame, Shield } from 'lucide-react';
+import { Flame, Shield } from 'lucide-react';
 
 interface HeroDashboardProps {
   displayName: string;
   streak: number;
   /** Athlete rank label, e.g. "Developing II · Strength". */
   rankLabel: string;
-  rankScore: number;
+  rankScore?: number;
   completedCount: number;
   targetDays: number;
 }
@@ -22,7 +22,7 @@ function getGreeting(): string {
 const RING_R = 13;
 const RING_C = 2 * Math.PI * RING_R;
 
-export function HeroDashboard({ displayName, streak, rankLabel, rankScore, completedCount, targetDays }: HeroDashboardProps) {
+export function HeroDashboard({ displayName, streak, rankLabel, completedCount, targetDays }: HeroDashboardProps) {
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   const progressPct = targetDays ? Math.min(Math.round((completedCount / targetDays) * 100), 100) : 0;
 
@@ -41,23 +41,25 @@ export function HeroDashboard({ displayName, streak, rankLabel, rankScore, compl
         </h1>
       </div>
 
-      <div className="flex items-center gap-2 mt-3 flex-wrap">
-        {streak > 0 && (
-          <span className="dx-chip">
-            <Flame size={12} className="text-orange-500" />
-            <span className="tabular font-semibold">{streak}</span> day streak
-          </span>
-        )}
-        <Link to="/ranks" className="dx-chip hover:opacity-85 transition-opacity" aria-label={`Athlete rank ${rankLabel}, score ${rankScore}`}>
-          <Shield size={12} className="dx-accent" />
-          <span className="font-semibold">{rankLabel}</span>
-          <span className="tabular dx-muted">{rankScore}</span>
-          <ChevronRight size={12} className="dx-muted" />
+      <div className="flex items-center gap-1.5 sm:gap-2 mt-3 flex-nowrap w-full overflow-hidden">
+        <span className="dx-chip shrink-0 text-[10px] sm:text-[11px] h-7 px-2 sm:px-2.5 gap-1 sm:gap-1.5">
+          <Flame size={12} className="text-orange-500 shrink-0" />
+          <span className="tabular font-semibold shrink-0">{streak}</span>
+          <span className="whitespace-nowrap"><span className="hidden min-[380px]:inline">day </span>streak</span>
+        </span>
+
+        <Link
+          to="/ranks"
+          className="dx-chip hover:opacity-85 transition-opacity min-w-0 shrink flex-1 max-w-fit text-[10px] sm:text-[11px] h-7 px-2 sm:px-2.5 gap-1 sm:gap-1.5"
+          aria-label={`Athlete rank ${rankLabel}`}
+        >
+          <Shield size={12} className="dx-accent shrink-0" />
+          <span className="font-semibold truncate">{rankLabel}</span>
         </Link>
 
-        {/* Weekly progress now shares the metadata row, leaving the name full width. */}
-        <div className="shrink-0 flex items-center gap-1.5" aria-label={`${completedCount} of ${targetDays} sessions this week`}>
-          <div className="relative w-9 h-9">
+        {/* Weekly progress shares the metadata row, never wraps down */}
+        <div className="shrink-0 flex items-center" aria-label={`${completedCount} of ${targetDays} sessions this week`}>
+          <div className="relative w-8 h-8 sm:w-9 sm:h-9">
             <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
               <circle cx="18" cy="18" r={RING_R} fill="none" strokeWidth="3.5" style={{ stroke: 'var(--dx-card-2)' }} />
               <circle
@@ -70,7 +72,7 @@ export function HeroDashboard({ displayName, streak, rankLabel, rankScore, compl
               />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-[9px] font-bold tabular">{completedCount}/{targetDays}</span>
+              <span className="text-[8px] sm:text-[9px] font-bold tabular">{completedCount}/{targetDays}</span>
             </div>
           </div>
         </div>
