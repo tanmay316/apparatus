@@ -44,8 +44,8 @@ class Settings(BaseSettings):
     GROQ_VISION_MODELS: str = "qwen/qwen3.8-27b,meta-llama/llama-4-scout-17b-16e-instruct,meta-llama/llama-4-maverick-17b-128e-instruct"
     NVIDIA_CHAT_MODELS: str = "deepseek-ai/deepseek-v4.1-flash,nvidia/nemotron-3-super-120b-a12b,mistralai/mistral-large-2-instruct,google/gemma-4-31b-it,openai/gpt-oss-20b"
     NVIDIA_VISION_MODELS: str = "google/gemma-4-31b-it,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning,meta/llama-3.2-90b-vision-instruct"
-    GEMINI_CHAT_MODELS: str = "gemini-3.1-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite"
-    GEMINI_VISION_MODELS: str = "gemini-3.1-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite"
+    GEMINI_CHAT_MODELS: str = "gemini-3.5-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite"
+    GEMINI_VISION_MODELS: str = "gemini-3.5-flash-lite,gemini-2.5-flash,gemini-2.5-flash-lite"
     OPENROUTER_CHAT_MODELS: str = "google/gemma-4-31b-it:free,meta-llama/llama-3.3-70b-instruct:free,openai/gpt-oss-120b:free,qwen/qwen3-235b-a22b:free"
     OPENROUTER_VISION_MODELS: str = "google/gemma-4-31b-it:free,nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,meta-llama/llama-4-scout:free,google/gemma-3-27b-it:free"
 

@@ -59,8 +59,8 @@ export interface VisionResult {
   raw_description: string;
   is_food: boolean;
   plate_count: number;
-  provider_used: string;
-  latency_ms: number;
+  provider_used?: string;
+  latency_ms?: number;
 }
 
 export interface NutritionItem {

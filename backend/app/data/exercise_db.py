@@ -1,5 +1,6 @@
 from typing import List, Dict, Any
 from app.engine.models import ExerciseMetadata, MovementPattern, ExerciseCategory
+from app.engine.programming import allowed_equipment
 
 # Helper function to easily create metadata
 def _ex(
@@ -143,20 +144,37 @@ EXERCISES: List[ExerciseMetadata] = [
     _ex("Woodchoppers", "cable", MovementPattern.ROTATION, ExerciseCategory.CORE, ["core", "obliques"], cns=3, spine=3, hyper=85, str_score=40),
     _ex("Plank", "bodyweight", MovementPattern.CORE, ExerciseCategory.CORE, ["core"], cns=2, spine=2, hyper=50, str_score=30, calis=80),
     _ex("L-Sit", "bodyweight", MovementPattern.CORE, ExerciseCategory.SKILL, ["core", "hip_flexors", "triceps"], cns=7, shoulder=6, hyper=50, str_score=70, calis=100),
+
+    # ── Kettlebell / band / extra bodyweight (so small-equipment plans fill every slot) ──
+    _ex("Kettlebell Goblet Squat", "kettlebell", MovementPattern.SQUAT, ExerciseCategory.SECONDARY_COMPOUND, ["quads", "glutes", "core"], cns=5, spine=4, knee=6, hip=5, hyper=75, str_score=50),
+    _ex("Kettlebell Floor Press", "kettlebell", MovementPattern.HORIZONTAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND, ["chest", "triceps"], cns=5, shoulder=4, elbow=4, hyper=75, str_score=60),
+    _ex("Kettlebell Overhead Press", "kettlebell", MovementPattern.VERTICAL_PUSH, ExerciseCategory.SECONDARY_COMPOUND, ["front_delt", "triceps"], cns=6, spine=4, shoulder=7, elbow=4, hyper=80, str_score=65),
+    _ex("Kettlebell Row", "kettlebell", MovementPattern.HORIZONTAL_PULL, ExerciseCategory.SECONDARY_COMPOUND, ["lats", "rhomboids", "biceps"], cns=5, spine=3, shoulder=4, elbow=4, hyper=85, str_score=65),
+    _ex("Kettlebell Romanian Deadlift", "kettlebell", MovementPattern.HINGE, ExerciseCategory.SECONDARY_COMPOUND, ["hamstrings", "glutes"], cns=6, spine=5, knee=2, hip=7, hyper=85, str_score=60),
+    _ex("Kettlebell Reverse Lunge", "kettlebell", MovementPattern.LUNGE, ExerciseCategory.SECONDARY_COMPOUND, ["quads", "glutes"], cns=6, spine=3, knee=6, hip=7, hyper=90, str_score=60),
+    _ex("Band Lat Pulldown", "band", MovementPattern.VERTICAL_PULL, ExerciseCategory.MACHINE_COMPOUND, ["lats", "biceps"], cns=2, shoulder=3, elbow=2, hyper=70, str_score=30),
+    _ex("Band Pull-Apart", "band", MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION, ["rear_delt", "rhomboids"], cns=1, shoulder=2, hyper=75, str_score=10),
+    _ex("Band Lateral Raise", "band", MovementPattern.ISOLATION_SHOULDERS, ExerciseCategory.ISOLATION, ["lateral_delt"], cns=1, shoulder=3, hyper=85, str_score=10),
+    _ex("Band Bicep Curl", "band", MovementPattern.ISOLATION_BICEPS, ExerciseCategory.ISOLATION, ["biceps"], cns=1, elbow=3, hyper=80, str_score=20),
+    _ex("Band Tricep Pushdown", "band", MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION, ["triceps"], cns=1, elbow=3, hyper=80, str_score=20),
+    _ex("Diamond Push-Ups", "bodyweight", MovementPattern.ISOLATION_TRICEPS, ExerciseCategory.ISOLATION, ["triceps", "chest"], cns=3, shoulder=4, elbow=5, hyper=80, str_score=40, calis=90),
+    _ex("Single-Leg Calf Raises", "bodyweight", MovementPattern.CALF, ExerciseCategory.ISOLATION, ["calves"], cns=1, hyper=85, str_score=30, calis=60),
+    _ex("Glute Bridge", "bodyweight", MovementPattern.HINGE, ExerciseCategory.ISOLATION, ["glutes", "hamstrings"], cns=2, spine=1, hip=4, hyper=75, str_score=30, calis=60),
+    _ex("Bodyweight Squat", "bodyweight", MovementPattern.SQUAT, ExerciseCategory.SECONDARY_COMPOUND, ["quads", "glutes"], cns=2, knee=4, hip=4, hyper=55, str_score=20, calis=70),
+    _ex("Bodyweight Split Squat", "bodyweight", MovementPattern.LUNGE, ExerciseCategory.SECONDARY_COMPOUND, ["quads", "glutes"], cns=4, knee=6, hip=6, hyper=80, str_score=40, calis=80),
 ]
 
+# Kettlebell/band stand-ins that only make sense when the real implement is missing.
+SMALL_EQUIPMENT_SUBSTITUTES = {
+    "Kettlebell Goblet Squat", "Kettlebell Floor Press", "Kettlebell Overhead Press", "Kettlebell Row",
+    "Kettlebell Romanian Deadlift", "Kettlebell Reverse Lunge", "Band Lat Pulldown", "Band Lateral Raise",
+    "Band Bicep Curl", "Band Tricep Pushdown",
+}
+
+
 def get_exercises_for_equipment(equipment: str) -> List[ExerciseMetadata]:
-    # Filter out exercises that require equipment the user doesn't have
-    if equipment == "Full Gym":
-        return EXERCISES
-    elif equipment == "Dumbbells Only":
-        allowed = ["bodyweight", "dumbbell"]
-        return [ex for ex in EXERCISES if ex.equipment in allowed]
-    elif equipment == "Bodyweight" or equipment == "Calisthenics Park":
-        allowed = ["bodyweight", "rings", "parallettes"]
-        return [ex for ex in EXERCISES if ex.equipment in allowed]
-    elif equipment == "Home Gym":
-        allowed = ["bodyweight", "dumbbell", "barbell", "band"]
-        return [ex for ex in EXERCISES if ex.equipment in allowed]
-    else:
-        return EXERCISES
+    """Exercises the user can do with the equipment they have."""
+    allowed = allowed_equipment(equipment)
+    if allowed is None:
+        return [ex for ex in EXERCISES if ex.name not in SMALL_EQUIPMENT_SUBSTITUTES]
+    return [ex for ex in EXERCISES if ex.equipment in allowed]

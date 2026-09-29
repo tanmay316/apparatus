@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { X, Apple, Check, Flame, Beef, Droplet, Wheat, Activity } from 'lucide-react';
 import { getNutritionImage, updateMealType } from '@/services/nutrition-api';
@@ -59,8 +60,9 @@ export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetail
     { label: 'Fiber', value: meal.fiber, color: '#10b981', icon: Activity },
   ];
 
-  return (
-    <div className="dx pro-scope dx-overlay z-[100]">
+  // Portaled so the page's stacking context can't put the bottom nav / AI button above it.
+  return createPortal(
+    <div className="dx pro-scope dx-overlay z-[9999]">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -171,6 +173,7 @@ export default function MealDetailsModal({ meal, onClose, onUpdate }: MealDetail
           )}
         </div>
       </motion.div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -62,7 +62,7 @@ export function CommunityPage() {
       </div>
 
       {/* Primary tabs */}
-      <div className="sticky top-[72px] z-30 px-4 py-3 bg-ink/90 backdrop-blur-xl border-b border-line">
+      <div className="sticky z-30 px-4 py-3 bg-ink/90 backdrop-blur-xl border-b border-line" style={{ top: 'calc(72px * var(--topbar-visible, 1))', transition: 'top 0.3s ease-out' }}>
         <Segmented
           layoutId="community-primary-tab"
           fullWidth

@@ -24,6 +24,12 @@ class FatigueManager:
         
     def register_skill_session(self, skill_name: str):
         self.skills_trained_this_week[skill_name] = self.skills_trained_this_week.get(skill_name, 0) + 1
+
+    def new_day(self, carry_over: float = 0.5):
+        """Recovery between sessions: only part of the previous load carries into the next day."""
+        self.cns_fatigue *= carry_over
+        for joint in self.joint_fatigue:
+            self.joint_fatigue[joint] *= carry_over
         
     def add_exercise_fatigue(self, ex: ExerciseMetadata):
         """Add the fatigue loads from an exercise."""

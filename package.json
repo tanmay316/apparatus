@@ -2,7 +2,7 @@
   "name": "apparatus",
   "private": true,
   "version": "2.0.91",
-  "nativeVersion": "2.1.2",
+  "nativeVersion": "2.1.3",
   "type": "module",
   "scripts": {
     "dev": "vite",

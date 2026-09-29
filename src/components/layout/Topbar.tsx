@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { ArrowLeft, Menu, Search, Settings } from 'lucide-react';
@@ -41,9 +41,39 @@ export function Topbar() {
     return () => window.removeEventListener('keydown', onKey);
   }, [navigate]);
 
+  const [hidden, setHidden] = useState(false);
+  useEffect(() => setHidden(false), [pathname]);
+  // Sticky sub-headers (e.g. Community tabs) read this to slide up with the bar.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--topbar-visible', hidden ? '0' : '1');
+  }, [hidden]);
+  useEffect(() => () => { document.documentElement.style.removeProperty('--topbar-visible'); }, []);
+  useEffect(() => {
+    let lastY = window.scrollY;
+    let frame = 0;
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const y = Math.max(0, window.scrollY);
+        const delta = y - lastY;
+        if (y < 64) setHidden(false);
+        else if (delta > 6) setHidden(true);
+        else if (delta < -6) setHidden(false);
+        // Small jitters don't move the reference point, so slow scrolls still register.
+        if (Math.abs(delta) > 6 || y < 64) lastY = y;
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
+
   return (
     <header
-      className="sticky top-0 z-50 border-b border-line/70 bg-ink/85 backdrop-blur-xl"
+      className={`sticky top-0 z-50 border-b border-line/70 bg-ink/85 backdrop-blur-xl transition-transform duration-300 ease-out will-change-transform ${hidden ? '-translate-y-full' : 'translate-y-0'}`}
       style={{ paddingTop: Capacitor.getPlatform() === 'android' ? '0px' : 'env(safe-area-inset-top, 0px)' }}
     >
       <div className="h-14 px-2 sm:px-4 lg:px-6 flex items-center gap-1 sm:gap-2">

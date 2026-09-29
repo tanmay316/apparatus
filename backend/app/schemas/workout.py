@@ -13,6 +13,7 @@ class WorkoutDay(BaseModel):
     dayNumber: int
     title: str
     time: str
+    skill: str = ""
     warmup: List[Exercise] = []
     skillWork: List[Exercise] = []
     strength: List[Exercise] = []

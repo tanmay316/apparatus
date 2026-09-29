@@ -1,4 +1,4 @@
-import { collection, doc, getDocs, deleteDoc, query, where, Timestamp, runTransaction, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, deleteDoc, query, where, Timestamp, runTransaction, updateDoc, writeBatch } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { CardioActivity, RoutePoint, UserStats } from '@/types';
 import { applySession, cardioDurationMin, localDateKey } from '@/lib/stats';
@@ -186,16 +186,15 @@ export const getStepsForDate = async (userId: string, dateKey: string): Promise<
 };
 
 /**
- * Daily total for display. On iOS the phone counts every step all day (CoreMotion), so that
- * count is used, with tracked sessions as a floor; elsewhere only tracked sessions are known.
+ * Daily total for display. On phones the device counts every step all day (CoreMotion on
+ * iOS, the hardware step counter on Android), so that count is used with tracked sessions
+ * as a floor; elsewhere only tracked sessions are known.
  */
 export const getDailySteps = async (userId: string, dateKey: string): Promise<number> => {
-  const tracked = await getStepsForDate(userId, dateKey);
-  if (!pedometerService.canQueryHistory) return tracked;
-  const [y, m, d] = dateKey.split('-').map(Number);
-  const start = new Date(y, m - 1, d).getTime();
-  const end = Math.min(Date.now(), new Date(y, m - 1, d + 1).getTime());
-  const device = await pedometerService.getStepsBetween(start, end);
+  const [tracked, device] = await Promise.all([
+    getStepsForDate(userId, dateKey),
+    pedometerService.getDeviceStepsForDay(dateKey),
+  ]);
   return Math.max(tracked, device ?? 0);
 };
 
@@ -293,6 +292,21 @@ export const getVisibleCardioActivitiesForUser = async (userId: string, viewerId
 
 export const updateCardioActivityNotes = async (activityId: string, notes: string): Promise<void> => {
   await updateDoc(doc(db, 'cardioActivities', activityId), { notes: notes.slice(0, 500) });
+};
+
+/** Changes who can see a saved session and its feed post; returns the level actually applied. */
+export const updateCardioVisibility = async (
+  userId: string,
+  activityId: string,
+  feedPostId: string | null,
+  visibility: CardioActivity['visibility'],
+): Promise<CardioActivity['visibility']> => {
+  const applied = await visibilityForUser(userId, visibility);
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'cardioActivities', activityId), { visibility: applied });
+  if (feedPostId) batch.update(doc(db, 'activities', feedPostId), { visibility: applied });
+  await batch.commit();
+  return applied;
 };
 
 export const deleteCardioActivity = async (activityId: string): Promise<void> => {

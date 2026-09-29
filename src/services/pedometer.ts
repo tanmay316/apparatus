@@ -1,11 +1,20 @@
 import { Capacitor } from '@capacitor/core';
 import { CapacitorPedometer as NativePedometer } from '@capgo/capacitor-pedometer';
+import { DailySteps, hasDailyStepsPlugin, type StepCounterReading } from '@/utils/native-daily-steps';
 
 import type { PluginListenerHandle } from '@capacitor/core';
 
 export type StepUpdateCallback = (steps: number, isNative: boolean) => void;
 
 export type PedometerAvailability = 'native' | 'motion' | 'unavailable';
+
+export type StepsPermission = 'granted' | 'prompt' | 'denied' | 'unsupported';
+
+function toStepsPermission(state?: string): StepsPermission {
+  if (state === 'granted') return 'granted';
+  if (state === 'denied') return 'denied';
+  return 'prompt';
+}
 
 class PedometerService {
   private isNative: boolean;
@@ -25,6 +34,63 @@ class PedometerService {
    */
   get canQueryHistory(): boolean {
     return this.isNative && Capacitor.getPlatform() === 'ios';
+  }
+
+  /** Android: the hardware step counter can be read directly for exact session deltas. */
+  get hasStepCounter(): boolean {
+    return this.isNative && hasDailyStepsPlugin();
+  }
+
+  /** Raw Android step counter; null when unavailable or not permitted. */
+  async readCounter(): Promise<StepCounterReading | null> {
+    if (!this.hasStepCounter) return null;
+    try {
+      const r = await DailySteps.readCounter();
+      return Number.isFinite(r?.counter) && r.counter >= 0 ? r : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Everything the phone counted on a local day (yyyy-MM-dd): CoreMotion on iOS, the
+   * hardware step counter (sampled by DailyStepsPlugin) on Android. Null when unknown.
+   */
+  async getDeviceStepsForDay(dateKey: string): Promise<number | null> {
+    if (this.canQueryHistory) {
+      const [y, m, d] = dateKey.split('-').map(Number);
+      const start = new Date(y, m - 1, d).getTime();
+      const end = Math.min(Date.now(), new Date(y, m - 1, d + 1).getTime());
+      return this.getStepsBetween(start, end);
+    }
+    if (!this.hasStepCounter) return null;
+    try {
+      const res = await DailySteps.getSteps({ date: dateKey });
+      return res.available && res.steps >= 0 ? Math.round(res.steps) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Motion & Fitness (iOS) / Physical activity (Android) permission for all-day steps. */
+  async stepsPermission(): Promise<StepsPermission> {
+    if (!this.isNative) return 'unsupported';
+    try {
+      if (this.hasStepCounter) return toStepsPermission((await DailySteps.checkPermissions()).activityRecognition);
+      if (this.canQueryHistory) return toStepsPermission((await NativePedometer.checkPermissions()).activityRecognition);
+    } catch { /* fall through */ }
+    return 'unsupported';
+  }
+
+  async requestStepsPermission(): Promise<boolean> {
+    if (this.hasStepCounter) {
+      try {
+        return (await DailySteps.requestPermissions()).activityRecognition === 'granted';
+      } catch {
+        return false;
+      }
+    }
+    return this.isNative ? this.requestPermission() : false;
   }
 
   /** Exact steps between two epoch-ms instants (iOS only). Resolves null when unavailable. */

@@ -127,7 +127,7 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
           title: d.title,
           time: d.time,
           type: 'strength',
-          skill: '',
+          skill: d.skill || '',
           warmup: d.warmup || [],
           skillWork: d.skillWork || [],
           strength: d.strength || [],

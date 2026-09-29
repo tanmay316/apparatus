@@ -13,15 +13,16 @@ import { useUIStore } from '@/stores/ui-store';
 import { useCardioStore, startGpsWatch, stopGpsWatch, finishTracking, checkGpsStaleness, getCardioActiveSec } from '@/stores/cardio-store';
 import { usePedometerStore } from '@/stores/pedometer-store';
 import { useUserWeight } from '@/hooks/use-user-weight';
-import { saveCardioActivity, getUserCardioActivities, updateCardioActivityNotes, deleteCardioActivity } from '@/services/cardio';
+import { saveCardioActivity, getUserCardioActivities, updateCardioActivityNotes, deleteCardioActivity, updateCardioVisibility } from '@/services/cardio';
 import { CALORIE_MODEL_VERSION, calculateCardioCalories } from '@/lib/calories';
-import { startActiveSession, endActiveSession, postActivity } from '@/services/social';
+import { startActiveSession, endActiveSession, postActivity, visibilityForUser } from '@/services/social';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 import { SwipeToStart } from '@/components/cardio/SwipeToStart';
 import { NowPlayingCard } from '@/components/cardio/NowPlayingCard';
 import { CardioHub } from '@/components/cardio/CardioHub';
 import { CardioSummary, EFFORT_LEVELS, type SaveState } from '@/components/cardio/CardioSummary';
+import { CardioVisibilityPicker, loadCardioVisibility, storeCardioVisibility, type CardioVisibility } from '@/components/cardio/CardioVisibilityPicker';
 import { CARDIO_TYPES, formatDuration, formatPace, formatPaceMs, localDateKey } from '@/components/cardio/cardio-format';
 import { getLiveSteps } from '@/lib/cardio-steps';
 import { updateUserChallengeProgress } from '@/services/community';
@@ -171,6 +172,15 @@ export function CardioTracker() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [workoutEffort, setWorkoutEffort] = useState<string>('moderate');
   const [workoutNotes, setWorkoutNotes] = useState<string>('');
+  const [visibility, setVisibilityState] = useState<CardioVisibility>(loadCardioVisibility);
+  // Read at save time so a restored session (or background save) uses the latest choice.
+  const visibilityRef = useRef(visibility);
+  const feedPostIdRef = useRef<string | null>(null);
+  const setVisibility = (v: CardioVisibility) => {
+    visibilityRef.current = v;
+    storeCardioVisibility(v);
+    setVisibilityState(v);
+  };
   // Retries the last save if the network dropped at the finish line.
   const pendingSaveRef = useRef<(() => Promise<void>) | null>(null);
 
@@ -301,7 +311,7 @@ export function CardioTracker() {
         bodyweight: userWeight || undefined,
         elevationGainM: Math.round(elevation),
         route,
-        visibility: 'followers',
+        visibility: visibilityRef.current,
         notes: 'Auto-saved session',
         steps: stepResult.steps,
         stepSource: stepResult.source,
@@ -435,6 +445,7 @@ export function CardioTracker() {
 
     setSummaryData({ ...data, date: localDateKey(new Date(finalStore.startedAt || Date.now())) });
     setSavedId(null);
+    feedPostIdRef.current = null;
     setWorkoutEffort('moderate');
     setWorkoutNotes('');
     setScreen('summary');
@@ -447,6 +458,11 @@ export function CardioTracker() {
 
     const persist = async () => {
       setSaveState('saving');
+      const chosenVisibility = await visibilityForUser(user.uid, visibilityRef.current);
+      if (chosenVisibility !== visibilityRef.current) {
+        visibilityRef.current = chosenVisibility;
+        setVisibilityState(chosenVisibility);
+      }
       try {
         const id = await saveCardioActivity(user.uid, {
           userId: user.uid,
@@ -469,7 +485,7 @@ export function CardioTracker() {
           bodyweight: userWeight || undefined,
           elevationGainM: finalElevationGain,
           route: finalStore.routePoints,
-          visibility: 'followers',
+          visibility: chosenVisibility,
           notes: 'Effort: moderate',
           steps: steps,
           stepSource,
@@ -486,7 +502,7 @@ export function CardioTracker() {
 
       try {
         const typeLabel = CARDIO_TYPES[data.type!]?.label ?? 'Cardio';
-        await postActivity({
+        feedPostIdRef.current = await postActivity({
           userId: user.uid,
           userName: user.displayName || 'Athlete',
           username: profile?.username || '',
@@ -509,7 +525,7 @@ export function CardioTracker() {
             elapsedDurationSec,
             pausedDurationSec,
           },
-          visibility: 'followers',
+          visibility: chosenVisibility,
           likesCount: 0,
           commentsCount: 0,
         });
@@ -561,6 +577,23 @@ export function CardioTracker() {
 
   // Assign the stop handler ref
   handleStopRef.current = handleStop;
+
+  const handleVisibilityChange = async (next: CardioVisibility) => {
+    const previous = visibility;
+    setVisibility(next);
+    if (!user || !savedId) return;
+    try {
+      const applied = await updateCardioVisibility(user.uid, savedId, feedPostIdRef.current, next);
+      if (applied !== next) {
+        setVisibility(applied);
+        showToast('Your profile is private, so this session is shared with followers only.');
+      }
+    } catch (err) {
+      console.error('Could not update visibility:', err);
+      setVisibility(previous);
+      showToast('Could not change who can see this session.', 'error');
+    }
+  };
 
   const handleDone = async () => {
     // Effort and notes are picked after the auto-save, so write them onto the saved session.
@@ -690,6 +723,11 @@ export function CardioTracker() {
                   <span className="truncate">{gpsText}</span>
                 </div>
               </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-[11px] font-semibold text-[var(--muted)] mb-1.5 px-0.5">Who can see this session</div>
+              <CardioVisibilityPicker value={visibility} onChange={setVisibility} />
             </div>
 
             <div className="mt-4">
@@ -1066,6 +1104,8 @@ export function CardioTracker() {
           onShare={() => { setShareDataOverride(toShareData(summaryData, { currentLocation: store.currentLocation })); setShowShare(true); }}
           onDone={handleDone}
           onRetry={() => { pendingSaveRef.current?.(); }}
+          visibility={visibility}
+          onVisibility={handleVisibilityChange}
           history={recentActivities}
         />
         {showShare && shareDataOverride && (

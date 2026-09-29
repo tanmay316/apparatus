@@ -104,9 +104,6 @@ export default function NutritionResultCard({ result, onClose, onLogMeal }: Nutr
             <p className="mt-1 text-[12.5px] dx-muted line-clamp-2">
               {vision?.raw_description || 'Your meal has been analyzed'}
             </p>
-            {vision?.provider_used && vision?.latency_ms != null && (
-              <span className="dx-tag mt-2">via {vision.provider_used} · {vision.latency_ms.toFixed(0)}ms</span>
-            )}
           </div>
         </div>
       </motion.div>

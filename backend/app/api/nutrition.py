@@ -307,7 +307,7 @@ async def chat(
         result = CoachResult(answer=FALLBACK_REPLY)
 
     card = result.nutrition_card
-    metadata = {"tools": result.tools_used, "provider": result.provider}
+    metadata = {"tools": result.tools_used}
     if card:
         metadata["nutrition_data"] = card
     if result.reasoning:

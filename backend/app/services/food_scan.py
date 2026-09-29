@@ -126,7 +126,7 @@ async def scan_food(
         "success": status == "ok",
         "status": status,
         "message": message,
-        "vision": vision.model_dump(),
+        "vision": vision.model_dump(exclude={"provider_used", "latency_ms"}),
         "nutrition": nutrition,
         "errors": errors,
         "image_id": image.id,

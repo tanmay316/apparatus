@@ -64,7 +64,7 @@ pb "Add :NSLocationAlwaysUsageDescription string 'Apparatus needs background loc
 
 # Motion — step counting via the pedometer.
 pb "Delete :NSMotionUsageDescription"
-pb "Add :NSMotionUsageDescription string 'Apparatus uses motion data to count your steps during walks and runs.'"
+pb "Add :NSMotionUsageDescription string 'Apparatus uses motion data to count your daily steps and the steps in your walks and runs.'"
 
 # Camera / photo library — profile photos and community post images.
 pb "Delete :NSCameraUsageDescription"

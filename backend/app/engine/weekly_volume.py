@@ -1,5 +1,19 @@
 from typing import Dict
 
+# Exercise DB muscle names -> volume-landmark buckets.
+_BUCKET = {
+    "lats": "back", "rhomboids": "back", "upper_back": "back", "lower_back": "back",
+    "upper_chest": "chest",
+    "brachialis": "biceps",
+    "obliques": "core", "hip_flexors": "core",
+    "shoulders": "lateral_delt",
+}
+
+
+def canonical_muscle(muscle: str) -> str:
+    return _BUCKET.get(muscle, muscle)
+
+
 def get_weekly_volume_targets(goal: str, experience: str) -> Dict[str, int]:
     """
     Returns the target number of weekly sets per muscle group.
@@ -33,6 +47,8 @@ def get_weekly_volume_targets(goal: str, experience: str) -> Dict[str, int]:
         multiplier *= 0.8  # Lower volume, higher intensity
     elif goal == "hypertrophy":
         multiplier *= 1.1  # Higher volume
+    elif goal in ("endurance", "fat_loss"):
+        multiplier *= 0.9
         
     return {k: int(v * multiplier) for k, v in targets.items()}
 
@@ -42,11 +58,12 @@ class VolumeTracker:
         self.current = {k: 0 for k in self.targets.keys()}
         
     def add_sets(self, muscles: list[str], sets: int):
-        for m in muscles:
+        for m in {canonical_muscle(m) for m in muscles}:
             if m in self.current:
                 self.current[m] += sets
                 
     def needs_volume(self, muscle: str) -> bool:
+        muscle = canonical_muscle(muscle)
         if muscle not in self.targets:
             return False
         return self.current[muscle] < self.targets[muscle]

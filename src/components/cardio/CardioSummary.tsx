@@ -6,6 +6,7 @@ import { CardioAnalysisView } from '@/components/analysis/CardioAnalysisView';
 import { analyzeCardio } from '@/lib/cardio-analysis';
 import type { CardioActivity } from '@/types';
 import { CARDIO_TYPES, formatDuration, formatDurationShort, primaryRate } from './cardio-format';
+import { CardioVisibilityPicker, type CardioVisibility } from './CardioVisibilityPicker';
 
 export const EFFORT_LEVELS = [
   { id: 'easy', emoji: '😌', label: 'Easy' },
@@ -27,11 +28,13 @@ interface Props {
   onShare: () => void;
   onDone: () => void;
   onRetry: () => void;
+  visibility: CardioVisibility;
+  onVisibility: (v: CardioVisibility) => void;
   /** Earlier sessions, for comparison and coaching. */
   history?: CardioActivity[];
 }
 
-export function CardioSummary({ data, saveState, effort, onEffort, notes, onNotes, onShare, onDone, onRetry, history }: Props) {
+export function CardioSummary({ data, saveState, effort, onEffort, notes, onNotes, onShare, onDone, onRetry, visibility, onVisibility, history }: Props) {
   const theme = useUIStore(s => s.theme);
   const type = data.type || 'run';
   const meta = CARDIO_TYPES[type];
@@ -144,6 +147,12 @@ export function CardioSummary({ data, saveState, effort, onEffort, notes, onNote
           placeholder="Route, weather, how your legs felt…"
           className="w-full rounded-xl px-3 py-2.5 text-sm bg-[var(--dx-card-2)] border border-[var(--dx-border)] text-[var(--dx-text)] placeholder:text-[var(--dx-muted)] focus:outline-none focus:border-[var(--dx-accent)] resize-none"
         />
+        {saveState !== 'skipped' && (
+          <>
+            <h2 className="text-sm font-bold mt-4 mb-2">Who can see this</h2>
+            <CardioVisibilityPicker value={visibility} onChange={onVisibility} disabled={saveState === 'saving'} />
+          </>
+        )}
       </section>
 
       <div className="sticky z-10 -mx-4 px-4 pt-3 pb-3 bg-gradient-to-t from-[rgb(var(--color-ink-3))] via-[rgb(var(--color-ink-3))] to-transparent" style={{ bottom: 0, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>

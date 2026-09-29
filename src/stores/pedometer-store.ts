@@ -7,6 +7,7 @@ import {
   type PauseSpan, type StepSource, type StrideProfile,
 } from '@/lib/steps';
 import type { CardioActivityType } from '@/types';
+import type { StepCounterReading } from '@/utils/native-daily-steps';
 
 // Android only delivers step events while the app is in the foreground; beyond this silence
 // with distance still growing, the missing stretch is extrapolated from the measured stride.
@@ -46,6 +47,13 @@ interface PedometerState {
   /** Cardio distance when sessionSteps last increased (for gap extrapolation). */
   lastStepDistanceKm: number;
 
+  // Android hardware step counter (steps since boot), read at start / pause / resume / finish.
+  // It keeps counting while the app is in the background, so the delta is exact.
+  counterStart: number | null;
+  counterBootAt: number | null;
+  counterExcluded: number;
+  counterAtPause: number | null;
+
   startSession: () => Promise<boolean>;
   pause: () => void;
   resume: () => void;
@@ -71,7 +79,29 @@ const EMPTY_SESSION = {
   excludedSteps: 0,
   pausedAtLive: null,
   lastStepDistanceKm: 0,
+  counterStart: null,
+  counterBootAt: null,
+  counterExcluded: 0,
+  counterAtPause: null,
 };
+
+/** Serialises counter reads so pause/resume/finish deltas are applied in order. */
+let counterQueue: Promise<void> = Promise.resolve();
+
+function withCounter(fn: (reading: StepCounterReading | null) => void): Promise<void> {
+  counterQueue = counterQueue.then(async () => fn(await pedometerService.readCounter())).catch(() => {});
+  return counterQueue;
+}
+
+const sameBoot = (a: number | null, b: number | null) => a != null && b != null && Math.abs(a - b) < 60_000;
+
+/** Android: counted steps from the hardware counter, or null when the reading chain broke. */
+function counterSteps(s: Pick<PedometerState, 'counterStart' | 'counterBootAt' | 'counterExcluded' | 'counterAtPause'>, reading: StepCounterReading | null): number | null {
+  if (s.counterStart == null || !reading || !sameBoot(reading.bootAt, s.counterBootAt)) return null;
+  const end = s.counterAtPause ?? reading.counter;
+  if (end < s.counterStart) return null;
+  return Math.max(0, Math.round(end - s.counterStart - s.counterExcluded));
+}
 
 function computeSessionSteps(s: Pick<PedometerState, 'offsetSteps' | 'liveSteps' | 'excludedSteps' | 'pausedAtLive'>) {
   const counted = s.pausedAtLive != null ? s.pausedAtLive : s.liveSteps;
@@ -122,6 +152,9 @@ export const usePedometerStore = create<PedometerState>()(
 
         startSession: async () => {
           set({ ...EMPTY_SESSION, isSessionActive: true, sessionStartedAt: Date.now(), lastStepAt: Date.now() });
+          if (pedometerService.hasStepCounter) {
+            withCounter(r => { if (r) set({ counterStart: r.counter, counterBootAt: r.bootAt }); });
+          }
           const started = await attach();
           if (!started) {
             set({ isSessionActive: false, isSupported: false, stepSource: 'none' });
@@ -135,6 +168,13 @@ export const usePedometerStore = create<PedometerState>()(
           const st = get();
           if (!st.isSessionActive || st.pausedAtLive != null) return;
           set({ pausedAtLive: st.liveSteps, pauses: [...st.pauses, { start: Date.now(), end: null }] });
+          if (pedometerService.hasStepCounter) {
+            withCounter(r => {
+              if (get().counterStart == null) return;
+              if (r && sameBoot(r.bootAt, get().counterBootAt)) set({ counterAtPause: r.counter });
+              else set({ counterStart: null });
+            });
+          }
         },
 
         resume: () => {
@@ -143,6 +183,17 @@ export const usePedometerStore = create<PedometerState>()(
           const excludedSteps = st.excludedSteps + Math.max(0, st.liveSteps - st.pausedAtLive);
           const pauses = st.pauses.map((p, i) => (i === st.pauses.length - 1 && p.end == null ? { ...p, end: Date.now() } : p));
           set({ excludedSteps, pausedAtLive: null, pauses, sessionSteps: computeSessionSteps({ ...st, excludedSteps, pausedAtLive: null }) });
+          if (pedometerService.hasStepCounter) {
+            withCounter(r => {
+              const s = get();
+              if (s.counterStart == null) return;
+              if (!r || s.counterAtPause == null || !sameBoot(r.bootAt, s.counterBootAt)) {
+                set({ counterStart: null, counterAtPause: null });
+                return;
+              }
+              set({ counterExcluded: s.counterExcluded + Math.max(0, r.counter - s.counterAtPause), counterAtPause: null });
+            });
+          }
         },
 
         resumeIfNeeded: async ({ sessionStartedAt, distanceKm, type, profile }) => {
@@ -158,6 +209,11 @@ export const usePedometerStore = create<PedometerState>()(
           if (pedometerService.canQueryHistory) {
             const exact = await queryActiveSteps(startedAt, pauses);
             if (exact != null) carried = exact;
+          } else if (sameSession && st.counterStart != null) {
+            await counterQueue;
+            const exact = counterSteps(get(), await pedometerService.readCounter());
+            if (exact != null) carried = exact;
+            else set({ counterStart: null });
           } else {
             const measuredDistanceKm = sameSession ? st.lastStepDistanceKm : 0;
             carried += gapSteps({ type, measuredSteps: carried, measuredDistanceKm, gapDistanceKm: distanceKm - measuredDistanceKm, profile });
@@ -174,6 +230,7 @@ export const usePedometerStore = create<PedometerState>()(
             sessionSteps: carried,
             lastStepDistanceKm: distanceKm,
             lastStepAt: Date.now(),
+            ...(sameSession ? {} : { counterStart: null, counterBootAt: null, counterExcluded: 0, counterAtPause: null }),
           });
           const started = await attach();
           if (!started && carried === 0) set({ isSessionActive: false, stepSource: 'none' });
@@ -193,6 +250,13 @@ export const usePedometerStore = create<PedometerState>()(
           if (st.isSessionActive && st.sessionStartedAt && pedometerService.canQueryHistory) {
             steps = await queryActiveSteps(st.sessionStartedAt, st.pauses);
             if (steps != null) source = 'native';
+          }
+          if (steps == null && st.isSessionActive && pedometerService.hasStepCounter) {
+            await counterQueue;
+            if (get().counterStart != null) {
+              steps = counterSteps(get(), await pedometerService.readCounter());
+              if (steps != null) source = 'native';
+            }
           }
           if (steps == null && st.isSessionActive && (st.stepSource === 'native' || st.stepSource === 'motion_estimate')) {
             steps = st.sessionSteps;
@@ -232,6 +296,10 @@ export const usePedometerStore = create<PedometerState>()(
         stepSource: s.stepSource,
         lastStepDistanceKm: s.lastStepDistanceKm,
         lastStepAt: s.lastStepAt,
+        counterStart: s.counterStart,
+        counterBootAt: s.counterBootAt,
+        counterExcluded: s.counterExcluded,
+        counterAtPause: s.counterAtPause,
       }),
       migrate: () => ({ ...EMPTY_SESSION }) as unknown as PedometerState,
     },
