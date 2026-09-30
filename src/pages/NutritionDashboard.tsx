@@ -1,417 +1,641 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Apple, Plus, ScanLine, Flame, SlidersHorizontal, Loader2, Coffee, Sun, Moon, Cookie, ChevronRight, Target, UtensilsCrossed } from 'lucide-react';
-import CameraScanner from '@/components/nutrition/CameraScanner';
-import NutritionResultCard from '@/components/nutrition/NutritionResultCard';
-import NutritionChat from '@/components/nutrition/NutritionChat';
-import NutritionProfileModal from '@/components/nutrition/NutritionProfileModal';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { analyzeFood, getTodayNutrition, getNutritionHistory, hasTrackableNutrition, logMeal, type FoodAnalyzeResponse, type TodayNutrition } from '@/services/nutrition-api';
-import MealDetailsModal from '@/components/nutrition/MealDetailsModal';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
+import {
+  Apple, Flame, Settings2, Plus, ScanLine, Search, Bookmark, Dumbbell, Sparkles, Beef, Wheat, Droplet,
+  Footprints, Minus, GlassWater, Heart, Leaf, RefreshCw, AlertCircle, Loader2,
+} from 'lucide-react';
+import { useAuthStore } from '@/stores/auth-store';
+import { useUIStore } from '@/stores/ui-store';
+import { analyzeFood, hasTrackableNutrition, logMeal, wakeUpServer } from '@/services/nutrition-api';
+import { getDailySteps, DEFAULT_STEP_GOAL } from '@/services/cardio';
+import {
+  dateKey, logFoodEntry, logQuickEntry, MAX_SAVED_FOODS, mealTypeForNow, useNutritionSetup, useTrainingBurned,
+  useUpdateNutritionSetup, type SavedFood,
+} from '@/services/nutrition-setup';
+import { shiftDate } from '@/lib/analysis-common';
+import { lookupBarcode, type FoodEntry } from '@/lib/food-db';
+import { streakFrom } from '@/lib/nutrition-plan';
+import NutritionOnboarding from '@/components/nutrition/NutritionOnboarding';
+import FoodCamera, { type CapturedPhoto, type ScanMode } from '@/components/nutrition/FoodCamera';
+import MealDetailSheet from '@/components/nutrition/MealDetailSheet';
+import { ExerciseSheet, FoodPortionSheet, FoodSearchSheet, QuickAddSheet } from '@/components/nutrition/FoodSheets';
+import { NutritionProgress, NutritionSettingsSheet } from '@/components/nutrition/NutritionProgress';
+import { Ring, useLockBody } from '@/components/nutrition/cal-ui';
+import {
+  mealDate, mealName, sumTotals, useMealHistory, useMealThumb, useRefreshNutrition, type LoggedMeal,
+} from '@/components/nutrition/use-nutrition-data';
 
-const container = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.1 } },
-};
-const item = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 24 } },
-};
-
-const MEAL_ICONS: Record<string, typeof Coffee> = { breakfast: Coffee, lunch: Sun, dinner: Moon, snack: Cookie };
-
-function gradeStyle(grade: string): React.CSSProperties {
-  if (['A+', 'A'].includes(grade)) return { background: 'var(--dx-success-soft)', color: 'var(--dx-success)' };
-  if (['B+', 'B'].includes(grade)) return { background: 'rgba(234, 179, 8, 0.14)', color: 'var(--dx-warning)' };
-  return { background: 'rgba(249, 115, 22, 0.14)', color: '#ea580c' };
+interface PendingScan {
+  id: string;
+  photo: CapturedPhoto;
+  startedAt: number;
+  status: 'analyzing' | 'error';
+  message?: string;
 }
 
-function MacroBar({ label, value, goal, color, loading }: { label: string; value: number; goal: number; color: string; loading: boolean }) {
-  const pct = Math.min((value / Math.max(goal, 1)) * 100, 100);
+const LABEL_NOTE = 'This photo shows a nutrition facts label. Read the per-serving values from the label and report one serving of this product.';
+
+// ─── Small pieces ────────────────────────────────────────────
+
+function WeekStrip({ selected, onSelect, byDay, goal }: { selected: string; onSelect: (k: string) => void; byDay: Map<string, LoggedMeal[]>; goal: number }) {
+  const today = dateKey();
+  const dow = new Date().getDay();
+  const days = Array.from({ length: 7 }, (_, i) => shiftDate(today, i - dow));
   return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2 text-[12px]">
-        <span className="font-medium inline-flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full" style={{ background: color }} />
-          {label}
-        </span>
-        <span className="dx-muted tabular">
-          <span className="font-semibold" style={{ color: 'var(--dx-text)' }}>{loading ? '–' : value.toFixed(0)}</span> / {goal}g
-        </span>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+      {days.map(k => {
+        const d = new Date(`${k}T12:00:00`);
+        const future = k > today;
+        const eaten = sumTotals(byDay.get(k) || []).calories;
+        const isSel = k === selected;
+        return (
+          <button
+            key={k}
+            type="button"
+            disabled={future}
+            onClick={() => onSelect(k)}
+            aria-pressed={isSel}
+            aria-label={format(d, 'EEEE, MMM d')}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '8px 0', borderRadius: 16, background: isSel ? 'var(--cal-card)' : 'transparent', boxShadow: isSel ? 'var(--cal-shadow)' : undefined, opacity: future ? 0.4 : 1 }}
+          >
+            <span className="cal-muted" style={{ fontSize: 12, fontWeight: 700 }}>{format(d, 'EEEEE')}</span>
+            {eaten > 0 ? (
+              <Ring size={34} stroke={2.6} pct={eaten / Math.max(goal, 1)} color={eaten > goal * 1.05 ? 'var(--cal-bad)' : 'var(--cal-good)'}>
+                <span className="cal-tabular" style={{ fontSize: 13, fontWeight: 800 }}>{d.getDate()}</span>
+              </Ring>
+            ) : (
+              <span className="cal-tabular" style={{ width: 34, height: 34, borderRadius: 34, border: '1.8px dashed var(--cal-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, opacity: 0.85 }}>{d.getDate()}</span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MacroCard({ label, left, goal, icon: Icon, color }: { label: string; left: number; goal: number; icon: typeof Beef; color: string }) {
+  const over = left < 0;
+  return (
+    <div className="cal-card" style={{ padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div>
+        <div className="cal-tabular" style={{ fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: over ? 'var(--cal-bad)' : undefined }}>{Math.abs(Math.round(left))}g</div>
+        <div className="cal-muted" style={{ fontSize: 12, fontWeight: 600 }}>{label} {over ? 'over' : 'left'}</div>
       </div>
-      <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--dx-card-2)' }}>
-        <motion.div
-          className="h-full rounded-full"
-          style={{ background: color }}
-          initial={{ width: 0 }}
-          animate={{ width: loading ? 0 : `${pct}%` }}
-          transition={{ duration: 0.9, delay: 0.2, ease: 'easeOut' }}
-        />
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
+        <Ring size={62} stroke={6} pct={1 - Math.max(0, left) / Math.max(goal, 1)} color={color}>
+          <Icon size={18} color={color} />
+        </Ring>
       </div>
     </div>
   );
 }
 
-function MealRow({ meal, subtitle, onClick }: { meal: any; subtitle: string; onClick: () => void }) {
-  const Icon = MEAL_ICONS[meal.meal_type] || Apple;
+function PagerDots({ count, index }: { count: number; index: number }) {
   return (
-    <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-[var(--dx-card-2)] active:bg-[var(--dx-card-2)]">
-      <span className="dx-badge-icon"><Icon size={17} /></span>
-      <span className="flex-1 min-w-0">
-        <span className="block text-[15px] font-semibold capitalize truncate">{meal.meal_type}</span>
-        <span className="block text-[12px] dx-muted truncate">{subtitle}</span>
-      </span>
-      {meal.health_grade && (
-        <span className="dx-pill shrink-0" style={gradeStyle(meal.health_grade)}>{meal.health_grade}</span>
-      )}
-      <ChevronRight size={17} className="dx-muted shrink-0" />
-    </button>
+    <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
+      {Array.from({ length: count }, (_, i) => (
+        <span key={i} style={{ width: i === index ? 16 : 6, height: 6, borderRadius: 6, background: i === index ? 'var(--cal-text)' : 'var(--cal-muted)', opacity: i === index ? 1 : 0.35, transition: 'width 0.2s' }} />
+      ))}
+    </div>
   );
 }
 
+function MacroChips({ meal }: { meal: Pick<LoggedMeal, 'protein' | 'carbs' | 'fat'> }) {
+  return (
+    <div className="cal-tabular" style={{ display: 'flex', gap: 12, fontSize: 12.5, fontWeight: 700 }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Beef size={13} color="var(--cal-protein)" />{Math.round(meal.protein || 0)}g</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Wheat size={13} color="var(--cal-carbs)" />{Math.round(meal.carbs || 0)}g</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Droplet size={13} color="var(--cal-fat)" />{Math.round(meal.fat || 0)}g</span>
+    </div>
+  );
+}
+
+function Thumb({ imageId }: { imageId: number | null }) {
+  const { data } = useMealThumb(imageId);
+  return (
+    <div style={{ width: 92, height: 92, borderRadius: 16, overflow: 'hidden', flexShrink: 0, background: 'var(--cal-card-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {data ? <img src={data} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Apple size={26} className="cal-muted" />}
+    </div>
+  );
+}
+
+function MealCard({ meal, onClick }: { meal: LoggedMeal; onClick: () => void }) {
+  return (
+    <motion.button layout type="button" onClick={onClick} className="cal-card" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: 10, textAlign: 'left' }}>
+      <Thumb imageId={meal.image_id} />
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mealName(meal)}</span>
+          <span className="cal-card-2" style={{ padding: '3px 8px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, flexShrink: 0 }}>{format(mealDate(meal), 'h:mm a')}</span>
+        </div>
+        <div className="cal-tabular" style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 15, fontWeight: 800 }}>
+          <Flame size={15} /> {Math.round(meal.calories || 0)} calories
+        </div>
+        <MacroChips meal={meal} />
+      </div>
+    </motion.button>
+  );
+}
+
+function PendingCard({ scan, onRetry, onDismiss }: { scan: PendingScan; onRetry: () => void; onDismiss: () => void }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (scan.status !== 'analyzing') return;
+    const t = window.setInterval(() => setNow(Date.now()), 120);
+    return () => window.clearInterval(t);
+  }, [scan.status]);
+  // Eases towards 95% over ~10 s; the real result snaps it to done.
+  const pct = Math.min(95, Math.round(95 * (1 - Math.exp(-(now - scan.startedAt) / 4200))));
+  const error = scan.status === 'error';
+  return (
+    <motion.div layout initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }} className="cal-card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 10 }}>
+      <div style={{ position: 'relative', width: 92, height: 92, borderRadius: 16, overflow: 'hidden', flexShrink: 0 }}>
+        <img src={scan.photo.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: error ? 'grayscale(0.6)' : undefined }} />
+        {!error && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Ring size={54} stroke={5} pct={pct / 100} color="#fff" track="rgba(255,255,255,0.25)">
+              <span className="cal-tabular" style={{ color: '#fff', fontSize: 13, fontWeight: 800 }}>{pct}%</span>
+            </Ring>
+          </div>
+        )}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {error ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: 'var(--cal-bad)' }}><AlertCircle size={15} /> Couldn&apos;t analyze</div>
+            <div className="cal-muted" style={{ fontSize: 12.5, marginTop: 3, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{scan.message}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button type="button" onClick={onRetry} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 30, padding: '0 12px', borderRadius: 999, background: 'var(--cal-primary)', color: 'var(--cal-on-primary)', fontSize: 12.5, fontWeight: 700 }}><RefreshCw size={13} /> Retry</button>
+              <button type="button" onClick={onDismiss} style={{ height: 30, padding: '0 12px', borderRadius: 999, background: 'var(--cal-card-2)', fontSize: 12.5, fontWeight: 700 }}>Dismiss</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>{scan.photo.mode === 'label' ? 'Reading label…' : 'Analyzing food…'}</div>
+            <div className="cal-skeleton" style={{ height: 9, width: '80%', marginTop: 10 }} />
+            <div className="cal-skeleton" style={{ height: 9, width: '55%', marginTop: 8 }} />
+            <div className="cal-muted" style={{ fontSize: 11.5, marginTop: 8 }}>You can keep using the app</div>
+          </>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function AddMenu({ onPick, onClose }: { onPick: (id: 'exercise' | 'saved' | 'database' | 'scan' | 'astra') => void; onClose: () => void }) {
+  useLockBody();
+  const tiles = [
+    { id: 'exercise' as const, label: 'Log exercise', icon: Dumbbell },
+    { id: 'saved' as const, label: 'Saved foods', icon: Bookmark },
+    { id: 'database' as const, label: 'Food database', icon: Search },
+    { id: 'scan' as const, label: 'Scan food', icon: ScanLine },
+  ];
+  return (
+    <div className="cal" style={{ position: 'fixed', inset: 0, zIndex: 10000 }}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)' }} />
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.97 }}
+        transition={{ type: 'spring', damping: 26, stiffness: 380 }}
+        style={{ position: 'absolute', left: 20, right: 20, bottom: 'calc(env(safe-area-inset-bottom) + 170px)', maxWidth: 420, margin: '0 auto' }}
+      >
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {tiles.map(t => (
+            <button key={t.id} type="button" onClick={() => onPick(t.id)} className="cal-card" style={{ height: 112, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, fontSize: 15, fontWeight: 700 }}>
+              <t.icon size={26} />
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <button type="button" onClick={() => onPick('astra')} className="cal-card" style={{ width: '100%', marginTop: 12, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 15, fontWeight: 700 }}>
+          <Sparkles size={18} /> Ask Astra
+        </button>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─── Page ────────────────────────────────────────────────────
+
 export default function NutritionDashboard() {
-  const [showScanner, setShowScanner] = useState(false);
-  const [showChat, setShowChat] = useState(false);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [scanResult, setScanResult] = useState<FoodAnalyzeResponse | null>(null);
-  const [scanTracked, setScanTracked] = useState(false);
-  const [trackingScan, setTrackingScan] = useState(false);
-  const [todayData, setTodayData] = useState<TodayNutrition | null>(null);
-  const [historyData, setHistoryData] = useState<any[]>([]);
-  const [loadingToday, setLoadingToday] = useState(true);
-  const [loadingHistory, setLoadingHistory] = useState(true);
-  const [error, setError] = useState('');
-  const [showProfile, setShowProfile] = useState(false);
-  const [selectedMeal, setSelectedMeal] = useState<any>(null);
+  const user = useAuthStore(s => s.user);
+  const navigate = useNavigate();
+  const profile = useAuthStore(s => s.profile);
+  const { showToast } = useUIStore();
+  const setupQ = useNutritionSetup();
+  const setup = setupQ.data;
+  const updateSetup = useUpdateNutritionSetup();
+  const history = useMealHistory();
+  const refresh = useRefreshNutrition();
 
+  const [tab, setTab] = useState<'home' | 'progress'>('home');
+  const [selected, setSelected] = useState(dateKey());
+  const [page, setPage] = useState(0);
+  const [pending, setPending] = useState<PendingScan[]>([]);
+  const [menu, setMenu] = useState(false);
+  const [camera, setCamera] = useState<ScanMode | null>(null);
+  const [search, setSearch] = useState<'all' | 'saved' | null>(null);
+  const [portionFood, setPortionFood] = useState<FoodEntry | null>(null);
+  const [quickAdd, setQuickAdd] = useState(false);
+  const [exercise, setExercise] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [redo, setRedo] = useState(false);
+  const [openMeal, setOpenMeal] = useState<LoggedMeal | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
+  const pagerRef = useRef<HTMLDivElement>(null);
 
-  // Goals from API or defaults
-  const goals = todayData?.goals || {
-    calories: 2200,
-    protein: 140,
-    carbs: 250,
-    fat: 65,
-    fiber: 30,
+  useEffect(() => { wakeUpServer(); }, []);
+  useEffect(() => {
+    const onRefresh = () => refresh();
+    window.addEventListener('refresh-nutrition', onRefresh);
+    return () => window.removeEventListener('refresh-nutrition', onRefresh);
+  }, [refresh]);
+
+  const today = dateKey();
+  const goals = setup?.goals ?? { calories: 2000, protein: 140, carbs: 220, fat: 65, fiber: 28 };
+  const byDay = history.byDay;
+  const dayMeals = byDay.get(selected) || [];
+  const totals = sumTotals(dayMeals);
+
+  const burnedQ = useTrainingBurned(selected);
+  const manualBurned = setup?.burned?.[selected] || 0;
+  const burned = { workouts: burnedQ.data?.workouts || 0, cardio: burnedQ.data?.cardio || 0, manual: manualBurned };
+  const burnedTotal = burned.workouts + burned.cardio + burned.manual;
+
+  const yesterday = shiftDate(selected, -1);
+  const yMeals = byDay.get(yesterday);
+  const rollover = setup?.prefs?.rollover && yMeals?.length ? Math.max(0, Math.min(200, Math.round(goals.calories - sumTotals(yMeals).calories))) : 0;
+  const bonus = (setup?.prefs?.addBurned ? burnedTotal : 0) + rollover;
+  const dayGoal = goals.calories + bonus;
+  const calLeft = Math.round(dayGoal - totals.calories);
+  const streak = streakFrom(new Set(byDay.keys()), today, shiftDate);
+
+  const stepsQ = useQuery({
+    queryKey: ['daily-steps', user?.uid, selected],
+    queryFn: () => getDailySteps(user!.uid, selected),
+    enabled: !!user?.uid,
+    staleTime: 60_000,
+  });
+  const stepGoal = profile?.stepGoal || DEFAULT_STEP_GOAL;
+  const waterGoal = setup ? Math.max(1500, Math.round((setup.answers.weightKg * 35) / 250) * 250) : 2500;
+  const water = setup?.water?.[selected] || 0;
+  const scored = dayMeals.filter(m => m.health_score != null);
+  const healthAvg = scored.length ? Math.round(scored.reduce((s, m) => s + (m.health_score || 0), 0) / scored.length / 10) : null;
+
+  // ─── Actions ───
+  const runScan = useCallback(async (scan: PendingScan) => {
+    setPending(list => list.map(p => (p.id === scan.id ? { ...p, status: 'analyzing', startedAt: Date.now(), message: undefined } : p)));
+    const mealType = mealTypeForNow();
+    try {
+      const res = await analyzeFood(scan.photo.base64, scan.photo.mime, mealType, undefined, undefined, scan.photo.mode === 'label' ? LABEL_NOTE : '');
+      if (!hasTrackableNutrition(res)) throw new Error(res.message || (res.status === 'not_food' ? "We couldn't find any food in that photo." : 'The food scanner is busy. Try again in a moment.'));
+      await logMeal(res, mealType, res.assistant_message_id, res.image_id);
+      await refresh();
+      setPending(list => list.filter(p => p.id !== scan.id));
+      setSelected(dateKey());
+    } catch (err: any) {
+      setPending(list => list.map(p => (p.id === scan.id ? { ...p, status: 'error', message: err?.message || 'Something went wrong.' } : p)));
+    }
+  }, [refresh]);
+
+  const onPhoto = (photo: CapturedPhoto) => {
+    setCamera(null);
+    setTab('home');
+    const scan: PendingScan = { id: `${Date.now()}`, photo, startedAt: Date.now(), status: 'analyzing' };
+    setPending(list => [scan, ...list]);
+    runScan(scan);
   };
 
-  const loadToday = useCallback(async () => {
+  const onBarcode = async (code: string) => {
+    setCamera(null);
+    setLookingUp(true);
     try {
-      const data = await getTodayNutrition();
-      setTodayData(data);
+      const food = await lookupBarcode(code);
+      if (food) setPortionFood(food);
+      else showToast(`No product found for ${code}. Try the food database or a photo.`, 'error');
     } catch {
-      // API might not be running yet - show placeholder
-      setTodayData(null);
+      showToast('Barcode lookup failed. Check your connection.', 'error');
     } finally {
-      setLoadingToday(false);
+      setLookingUp(false);
     }
-  }, []);
+  };
 
-  const loadHistory = useCallback(async () => {
+  const saved = setup?.saved || [];
+  const savedIds = new Set(saved.map(s => s.id));
+  const writeSaved = async (list: SavedFood[]) => {
     try {
-      const data = await getNutritionHistory(7);
-      if (data && data.history) {
-        // filter out today's meals from history if needed, or just show all
-        setHistoryData(data.history);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoadingHistory(false);
+      await updateSetup({ saved: list }, prev => ({ ...prev, saved: list }));
+    } catch {
+      showToast('Could not update saved foods', 'error');
     }
-  }, []);
-
-  useEffect(() => {
-    loadToday();
-    loadHistory();
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        loadToday();
-        loadHistory();
-      }
-    });
-    return () => unsubscribe();
-  }, [loadToday, loadHistory]);
-
-  // Listen for refresh event from chat
-  useEffect(() => {
-    const handleRefresh = () => {
-      loadToday();
-      loadHistory();
+  };
+  const toggleSavedFood = (food: FoodEntry) => {
+    if (savedIds.has(food.id)) return writeSaved(saved.filter(s => s.id !== food.id));
+    const entry: SavedFood = { id: food.id, name: food.name, per100: food.per100, serving: food.serving, ...(food.brand ? { brand: food.brand } : {}) };
+    writeSaved([entry, ...saved].slice(0, MAX_SAVED_FOODS));
+    showToast('Saved to your foods', 'success');
+  };
+  const toggleSavedMeal = (meal: LoggedMeal) => {
+    const id = `meal-${meal.id}`;
+    if (savedIds.has(id)) return writeSaved(saved.filter(s => s.id !== id));
+    const grams = (meal.items || []).reduce((s, i) => s + (i.weight_grams || 0), 0);
+    const base = grams > 0 ? grams : 100;
+    const k = 100 / base;
+    const r = (v: number) => Math.round((v || 0) * k * 10) / 10;
+    const entry: SavedFood = {
+      id,
+      name: mealName(meal),
+      per100: { calories: Math.round((meal.calories || 0) * k), protein: r(meal.protein), carbs: r(meal.carbs), fat: r(meal.fat), fiber: r(meal.fiber) },
+      serving: { label: grams > 0 ? `1 serving (${Math.round(grams)} g)` : '1 serving', grams: base },
     };
-    window.addEventListener('refresh-nutrition', handleRefresh);
-    return () => window.removeEventListener('refresh-nutrition', handleRefresh);
-  }, [loadToday, loadHistory]);
+    writeSaved([entry, ...saved].slice(0, MAX_SAVED_FOODS));
+    showToast('Meal saved to your foods', 'success');
+  };
 
-  const handleCapture = async (base64: string, mimeType: string) => {
-    setIsAnalyzing(true);
-    setError('');
+  const logPortion = async (grams: number, mealType: string) => {
+    if (!portionFood) return;
     try {
-      const result = await analyzeFood(base64, mimeType, 'snack');
-      setShowScanner(false);
-      if (hasTrackableNutrition(result)) {
-        setScanResult(result);
-        setScanTracked(false);
-      } else {
-        setError(result.message || "Couldn't find any food in that photo. Try again.");
-      }
+      await logFoodEntry(portionFood, grams, mealType);
+      await refresh();
+      setPortionFood(null);
+      setSearch(null);
+      setSelected(dateKey());
+      showToast(`Added to ${mealType}`, 'success');
     } catch (err: any) {
-      setError(err.message || 'Failed to analyze food. Please try again.');
-      setShowScanner(false);
-    } finally {
-      setIsAnalyzing(false);
+      showToast(err?.message || 'Could not log this food', 'error');
     }
   };
 
-  const handleTrackScan = async () => {
-    if (!scanResult || scanTracked) return;
-    setTrackingScan(true);
+  const setWater = async (ml: number) => {
+    const v = Math.max(0, Math.min(8000, ml));
     try {
-      const hour = new Date().getHours();
-      const mealType = hour >= 5 && hour < 11 ? 'breakfast' : hour < 16 ? 'lunch' : hour < 19 ? 'snack' : 'dinner';
-      await logMeal(scanResult, mealType, scanResult.assistant_message_id, scanResult.image_id);
-      setScanTracked(true);
-      loadToday();
-      loadHistory();
-    } catch (err: any) {
-      setError(err.message || 'Could not track this meal.');
-    } finally {
-      setTrackingScan(false);
+      await updateSetup({ water: { [selected]: v } }, prev => ({ ...prev, water: { ...(prev.water || {}), [selected]: v } }));
+    } catch {
+      showToast('Could not save water', 'error');
     }
   };
 
-  const handleMealTypeUpdate = useCallback((mealId: number, newType: string) => {
-    setSelectedMeal((prev: any) => (prev && prev.id === mealId ? { ...prev, meal_type: newType } : prev));
-    setTodayData((prev: any) => {
-      if (!prev || !prev.meals) return prev;
-      return {
-        ...prev,
-        meals: prev.meals.map((m: any) => (m.id === mealId ? { ...m, meal_type: newType } : m)),
-      };
-    });
-    setHistoryData((prev: any[]) => {
-      if (!prev) return prev;
-      return prev.map((m: any) => (m.id === mealId ? { ...m, meal_type: newType } : m));
-    });
-    loadToday();
-    loadHistory();
-  }, [loadToday, loadHistory]);
+  const addManualBurned = async (kcal: number) => {
+    const v = manualBurned + kcal;
+    try {
+      await updateSetup({ burned: { [selected]: v } }, prev => ({ ...prev, burned: { ...(prev.burned || {}), [selected]: v } }));
+      showToast(`+${kcal} calories burned`, 'success');
+    } catch {
+      showToast('Could not save exercise', 'error');
+    }
+  };
 
-  const caloriesConsumed = todayData?.total_calories || 0;
-  const proteinConsumed = todayData?.total_protein || 0;
-  const carbsConsumed = todayData?.total_carbs || 0;
-  const fatConsumed = todayData?.total_fat || 0;
-  const fiberConsumed = todayData?.total_fiber || 0;
-  const caloriesLeft = Math.max(0, goals.calories - caloriesConsumed);
-  const calPct = Math.min(caloriesConsumed / Math.max(goals.calories, 1), 1);
-  const RING = 2 * Math.PI * 52;
-  const todayLabel = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  const onMenu = (id: 'exercise' | 'saved' | 'database' | 'scan' | 'astra') => {
+    setMenu(false);
+    if (id === 'scan') setCamera('food');
+    else if (id === 'database') setSearch('all');
+    else if (id === 'saved') setSearch('saved');
+    else if (id === 'exercise') setExercise(true);
+    else window.dispatchEvent(new Event('open-ai-bot'));
+  };
 
-  const pastByDay = (historyData || [])
-    .filter(m => new Date(m.logged_at).toDateString() !== new Date().toDateString())
-    .reduce<{ key: string; label: string; total: number; meals: any[] }[]>((groups, meal) => {
-      const d = new Date(meal.logged_at);
-      const key = d.toDateString();
-      let group = groups.find(g => g.key === key);
-      if (!group) {
-        group = { key, label: d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }), total: 0, meals: [] };
-        groups.push(group);
-      }
-      group.meals.push(meal);
-      group.total += meal.calories || 0;
-      return groups;
-    }, []);
+  const onPagerScroll = () => {
+    const el = pagerRef.current;
+    if (el) setPage(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+  };
+
+  // ─── Gates ───
+  if (!user) return null;
+  if (setupQ.isLoading) {
+    return (
+      <div className="cal" style={{ maxWidth: 560, margin: '0 auto', paddingTop: 12 }}>
+        <div className="cal-skeleton" style={{ height: 28, width: 140, borderRadius: 10 }} />
+        <div className="cal-skeleton" style={{ height: 150, borderRadius: 22, marginTop: 20 }} />
+        <div className="cal-skeleton" style={{ height: 120, borderRadius: 22, marginTop: 12 }} />
+      </div>
+    );
+  }
+  if (setupQ.isError) {
+    return (
+      <div className="cal" style={{ maxWidth: 560, margin: '40px auto', textAlign: 'center' }}>
+        <AlertCircle size={28} style={{ margin: '0 auto' }} className="cal-muted" />
+        <p style={{ marginTop: 10, fontWeight: 700 }}>Couldn&apos;t load your nutrition plan</p>
+        <button type="button" className="cal-btn" style={{ marginTop: 16, height: 46 }} onClick={() => setupQ.refetch()}>Try again</button>
+      </div>
+    );
+  }
+  if (!setup || redo) {
+    return <NutritionOnboarding existing={setup} onDone={() => setRedo(false)} onClose={redo ? () => setRedo(false) : () => navigate('/')} />;
+  }
+
+  const isToday = selected === today;
+  const hasEntries = dayMeals.length > 0 || (isToday && pending.length > 0);
 
   return (
-    <>
-      <motion.div variants={container} initial="hidden" animate="show" className="dx pro-scope space-y-4 max-w-4xl mx-auto pt-1 sm:pt-4">
-        {/* Header */}
-        <motion.header variants={item} className="flex items-end justify-between gap-3">
-          <div className="min-w-0">
-            <div className="dx-eyebrow">{todayLabel}</div>
-            <h1 className="mt-1 text-[22px] sm:text-[27px] font-semibold tracking-tight leading-tight">Nutrition</h1>
-          </div>
-          <button onClick={() => setShowProfile(true)} className="dx-btn-secondary h-10 px-3.5 text-[13px] shrink-0" title="Body metrics & goals">
-            <SlidersHorizontal size={15} /> Goals
-          </button>
-        </motion.header>
+    <div className="cal" style={{ width: '100%', minWidth: 0, maxWidth: 560, margin: '0 auto', paddingTop: 4, paddingBottom: 110 }}>
+      {/* Header */}
+      <header style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <span style={{ width: 34, height: 34, borderRadius: 11, background: 'var(--cal-primary)', color: 'var(--cal-on-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Apple size={18} /></span>
+        <h1 style={{ flex: 1, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em' }}>Nutrition</h1>
+        <span className="cal-card" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 36, padding: '0 12px', borderRadius: 999, fontSize: 14, fontWeight: 800 }} title="Day streak">
+          <Flame size={16} color="var(--cal-carbs)" /> <span className="cal-tabular">{streak}</span>
+        </span>
+        <button type="button" onClick={() => setSettings(true)} className="cal-card" aria-label="Nutrition settings" style={{ width: 36, height: 36, borderRadius: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Settings2 size={17} /></button>
+      </header>
 
-        {/* Error */}
-        {error && (
-          <motion.div variants={item} className="dx-card p-4 text-[13px] font-medium" style={{ color: '#dc2626', background: 'rgba(220, 38, 38, 0.06)' }}>
-            {error}
-          </motion.div>
-        )}
+      <div className="cal-seg" role="tablist" style={{ marginBottom: 14 }}>
+        <button type="button" role="tab" aria-selected={tab === 'home'} onClick={() => setTab('home')}>Today</button>
+        <button type="button" role="tab" aria-selected={tab === 'progress'} onClick={() => setTab('progress')}>Progress</button>
+      </div>
 
-        {/* Scan Result */}
-        {scanResult && (
-          <div>
-            <div className="flex items-center justify-between mb-2.5">
-              <h2 className="dx-section-title">Scan result</h2>
-              <div className="flex items-center gap-3">
-                <button onClick={handleTrackScan} disabled={scanTracked || trackingScan} className="dx-btn h-9 text-[13px]">
-                  {scanTracked ? 'Tracked' : trackingScan ? 'Tracking…' : 'Track meal'}
-                </button>
-                <button onClick={() => setScanResult(null)} className="dx-link">Dismiss</button>
-              </div>
-            </div>
-            <NutritionResultCard result={scanResult} onClose={() => setScanResult(null)} />
-          </div>
-        )}
+      {tab === 'progress' ? (
+        <NutritionProgress setup={setup} byDay={byDay} goals={goals} />
+      ) : (
+        <>
+          <WeekStrip selected={selected} onSelect={setSelected} byDay={byDay} goal={goals.calories} />
 
-        {/* Daily summary */}
-        <motion.section variants={item} className="dx-card p-4 sm:p-5" aria-label="Daily progress">
-          <div className="flex items-center gap-5">
-            <div className="relative w-[124px] h-[124px] shrink-0">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 124 124">
-                <circle cx="62" cy="62" r="52" fill="none" strokeWidth="10" style={{ stroke: 'var(--dx-card-2)' }} />
-                <motion.circle
-                  cx="62" cy="62" r="52" fill="none"
-                  strokeWidth="10" strokeLinecap="round"
-                  strokeDasharray={RING}
-                  style={{ stroke: 'var(--dx-accent)' }}
-                  initial={{ strokeDashoffset: RING }}
-                  animate={{ strokeDashoffset: loadingToday ? RING : RING * (1 - calPct) }}
-                  transition={{ duration: 1.1, delay: 0.2, ease: 'easeOut' }}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                {loadingToday ? (
-                  <Loader2 size={22} className="animate-spin dx-muted" />
-                ) : (
-                  <>
-                    <span className="text-[26px] font-semibold tabular leading-none">{caloriesLeft.toFixed(0)}</span>
-                    <span className="mt-1 text-[11px] dx-muted">kcal left</span>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="flex-1 min-w-0 space-y-3">
-              {[
-                { icon: Target, label: 'Goal', value: goals.calories },
-                { icon: UtensilsCrossed, label: 'Eaten', value: caloriesConsumed },
-                { icon: Flame, label: 'Remaining', value: caloriesLeft },
-              ].map(({ icon: RowIcon, label, value }) => (
-                <div key={label} className="flex items-center gap-2.5">
-                  <RowIcon size={15} className="dx-muted shrink-0" />
-                  <span className="text-[13px] dx-muted flex-1">{label}</span>
-                  <span className="text-[15px] font-semibold tabular">{loadingToday ? '–' : Math.round(value).toLocaleString()}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-5 pt-4 grid grid-cols-2 gap-x-5 gap-y-4 border-t" style={{ borderColor: 'var(--dx-border)' }}>
-            <MacroBar label="Protein" value={proteinConsumed} goal={goals.protein} color="#c87941" loading={loadingToday} />
-            <MacroBar label="Carbs" value={carbsConsumed} goal={goals.carbs} color="#eab308" loading={loadingToday} />
-            <MacroBar label="Fat" value={fatConsumed} goal={goals.fat} color="#06b6d4" loading={loadingToday} />
-            <MacroBar label="Fiber" value={fiberConsumed} goal={goals.fiber} color="#10b981" loading={loadingToday} />
-          </div>
-        </motion.section>
-
-        {/* Astra shortcut */}
-        <motion.button
-          variants={item}
-          onClick={() => window.dispatchEvent(new Event('open-ai-bot'))}
-          className="dx-card w-full flex items-center gap-3 p-4 text-left transition-transform active:scale-[0.99]"
-        >
-          <span className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0" style={{ background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' }}>
-            <ScanLine size={20} />
-          </span>
-          <span className="flex-1 min-w-0">
-            <span className="block text-[15px] font-semibold">Log a meal with Astra</span>
-            <span className="block text-[12px] dx-muted truncate">Snap a photo or describe what you ate</span>
-          </span>
-          <ChevronRight size={18} className="dx-muted shrink-0" />
-        </motion.button>
-
-        {/* Today's Meals */}
-        <motion.section variants={item}>
-          <div className="flex items-baseline justify-between mb-2.5 px-0.5">
-            <h2 className="dx-section-title">Today's meals</h2>
-            {todayData?.meals && todayData.meals.length > 0 && (
-              <span className="text-[12px] dx-muted">{todayData.meals.length} logged</span>
-            )}
-          </div>
-
-          {loadingToday ? (
-            <div className="dx-card dx-list overflow-hidden animate-pulse">
-              {[0, 1].map(i => (
-                <div key={i} className="flex items-center gap-3 px-4 py-3">
-                  <div className="w-9 h-9 rounded-xl" style={{ background: 'var(--dx-card-2)' }} />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-3 w-24 rounded" style={{ background: 'var(--dx-card-2)' }} />
-                    <div className="h-2.5 w-40 rounded" style={{ background: 'var(--dx-card-2)' }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : todayData?.meals && todayData.meals.length > 0 ? (
-            <div className="dx-card dx-list overflow-hidden">
-              {todayData.meals.map((meal: any, i: number) => (
-                <MealRow
-                  key={meal.id || i}
-                  meal={meal}
-                  onClick={() => setSelectedMeal(meal)}
-                  subtitle={`${meal.calories?.toFixed(0)} kcal · ${meal.protein?.toFixed(0)}g protein`}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="dx-card text-center px-6 py-9">
-              <span className="dx-badge-icon mx-auto !w-12 !h-12 !rounded-2xl"><Apple size={22} /></span>
-              <p className="mt-3 text-[15px] font-semibold">No meals logged today</p>
-              <p className="mt-1 text-[13px] dx-muted">Scan your food with Astra to track calories and macros.</p>
-              <button onClick={() => window.dispatchEvent(new Event('open-ai-bot'))} className="dx-btn mt-4 h-10 text-[13px]">
-                <Plus size={15} /> Log first meal
-              </button>
+          {history.isError && (
+            <div className="cal-card" style={{ marginTop: 12, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 600 }}>
+              <AlertCircle size={16} color="var(--cal-bad)" />
+              <span style={{ flex: 1 }}>Couldn&apos;t reach the nutrition server.</span>
+              <button type="button" onClick={() => history.refetch()} style={{ fontWeight: 800 }}>Retry</button>
             </div>
           )}
-        </motion.section>
 
-        {/* History (Past 7 Days) */}
-        {pastByDay.length > 0 && (
-          <motion.section variants={item} className="space-y-4">
-            <h2 className="dx-section-title px-0.5">Past 7 days</h2>
-            {pastByDay.map(group => (
-              <div key={group.key}>
-                <div className="flex items-baseline justify-between mb-2 px-0.5">
-                  <span className="text-[12px] font-semibold dx-muted">{group.label}</span>
-                  <span className="text-[12px] dx-muted tabular">{Math.round(group.total).toLocaleString()} kcal</span>
+          {/* Summary pager */}
+          <div ref={pagerRef} onScroll={onPagerScroll} className="cal-pager" style={{ display: 'flex', overflowX: 'auto', marginTop: 12, marginLeft: -4, marginRight: -4 }}>
+            {/* Page 1: calories + macros */}
+            <div style={{ flex: '0 0 100%', padding: '4px 4px 6px' }}>
+              <div className="cal-card" style={{ padding: '20px 18px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="cal-tabular" style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1, color: calLeft < 0 ? 'var(--cal-bad)' : undefined }}>
+                    {history.isLoading ? '—' : Math.abs(calLeft).toLocaleString()}
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 14, fontWeight: 600 }} className="cal-muted">Calories {calLeft < 0 ? 'over' : 'left'}</div>
+                  {bonus > 0 && (
+                    <div className="cal-tabular" style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 11.5, fontWeight: 700 }}>
+                      {setup.prefs?.addBurned && burnedTotal > 0 && <span className="cal-card-2" style={{ padding: '3px 8px', borderRadius: 999 }}>+{burnedTotal} burned</span>}
+                      {rollover > 0 && <span className="cal-card-2" style={{ padding: '3px 8px', borderRadius: 999, color: 'var(--cal-fat)' }}>+{rollover} rollover</span>}
+                    </div>
+                  )}
                 </div>
-                <div className="dx-card dx-list overflow-hidden">
-                  {group.meals.map((meal: any, i: number) => (
-                    <MealRow
-                      key={meal.id || i}
-                      meal={meal}
-                      onClick={() => setSelectedMeal(meal)}
-                      subtitle={`${new Date(meal.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${meal.calories?.toFixed(0)} kcal`}
-                    />
-                  ))}
+                <Ring size={108} stroke={9} pct={totals.calories / Math.max(dayGoal, 1)} color={calLeft < 0 ? 'var(--cal-bad)' : 'var(--cal-text)'}>
+                  <Flame size={26} />
+                </Ring>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginTop: 10 }}>
+                <MacroCard label="Protein" left={goals.protein - totals.protein} goal={goals.protein} icon={Beef} color="var(--cal-protein)" />
+                <MacroCard label="Carbs" left={goals.carbs - totals.carbs} goal={goals.carbs} icon={Wheat} color="var(--cal-carbs)" />
+                <MacroCard label="Fats" left={goals.fat - totals.fat} goal={goals.fat} icon={Droplet} color="var(--cal-fat)" />
+              </div>
+            </div>
+
+            {/* Page 2: activity + water */}
+            <div style={{ flex: '0 0 100%', padding: '4px 4px 6px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div className="cal-card" style={{ padding: 16 }}>
+                  <div className="cal-tabular" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em' }}>{(stepsQ.data ?? 0).toLocaleString()}</div>
+                  <div className="cal-muted" style={{ fontSize: 12.5, fontWeight: 600 }}>/{stepGoal.toLocaleString()} steps</div>
+                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+                    <Ring size={70} stroke={6} pct={(stepsQ.data ?? 0) / stepGoal} color="var(--cal-good)"><Footprints size={20} /></Ring>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setExercise(true)} className="cal-card" style={{ padding: 16, textAlign: 'left' }}>
+                  <div className="cal-tabular" style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em' }}>{burnedTotal}</div>
+                  <div className="cal-muted" style={{ fontSize: 12.5, fontWeight: 600 }}>Calories burned</div>
+                  <div className="cal-muted cal-tabular" style={{ marginTop: 10, display: 'grid', gap: 4, fontSize: 12, fontWeight: 600 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Dumbbell size={13} /> Workouts <b style={{ marginLeft: 'auto', color: 'var(--cal-text)' }}>{burned.workouts}</b></span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Footprints size={13} /> Cardio <b style={{ marginLeft: 'auto', color: 'var(--cal-text)' }}>{burned.cardio}</b></span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Plus size={13} /> Manual <b style={{ marginLeft: 'auto', color: 'var(--cal-text)' }}>{burned.manual}</b></span>
+                  </div>
+                </button>
+              </div>
+              <div className="cal-card" style={{ padding: 16, marginTop: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span className="cal-option-icon" style={{ width: 44, height: 44, background: 'var(--cal-card-2)', color: 'var(--cal-water)' }}><GlassWater size={20} /></span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>Water</div>
+                  <div className="cal-muted cal-tabular" style={{ fontSize: 13, fontWeight: 600 }}>{water.toLocaleString()} / {waterGoal.toLocaleString()} ml</div>
+                  <div style={{ marginTop: 6, height: 5, borderRadius: 5, background: 'var(--cal-card-2)' }}>
+                    <div style={{ width: `${Math.min(100, (water / waterGoal) * 100)}%`, height: '100%', borderRadius: 5, background: 'var(--cal-water)', transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+                <button type="button" className="cal-icon-btn" aria-label="Remove a glass" onClick={() => setWater(water - 250)} disabled={water <= 0}><Minus size={17} /></button>
+                <button type="button" className="cal-icon-btn" aria-label="Add a glass" onClick={() => setWater(water + 250)} style={{ background: 'var(--cal-primary)', color: 'var(--cal-on-primary)' }}><Plus size={17} /></button>
+              </div>
+            </div>
+
+            {/* Page 3: fibre + health score */}
+            <div style={{ flex: '0 0 100%', padding: '4px 4px 6px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <MacroCard label="Fiber" left={goals.fiber - totals.fiber} goal={goals.fiber} icon={Leaf} color="var(--cal-fiber)" />
+                <div className="cal-card" style={{ padding: '14px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <div className="cal-tabular" style={{ fontSize: 20, fontWeight: 800 }}>{healthAvg != null ? `${healthAvg}/10` : '—'}</div>
+                    <div className="cal-muted" style={{ fontSize: 12, fontWeight: 600 }}>Health score</div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    <Ring size={62} stroke={6} pct={(healthAvg ?? 0) / 10} color={healthAvg == null ? 'var(--cal-muted)' : healthAvg >= 7 ? 'var(--cal-good)' : healthAvg >= 5 ? 'var(--cal-carbs)' : 'var(--cal-bad)'}>
+                      <Heart size={18} color="var(--cal-protein)" />
+                    </Ring>
+                  </div>
                 </div>
               </div>
-            ))}
-          </motion.section>
-        )}
+              <div className="cal-card" style={{ padding: '14px 16px', marginTop: 10, fontSize: 13, fontWeight: 600, lineHeight: 1.45 }}>
+                <span className="cal-muted">Daily targets · </span>
+                <span className="cal-tabular">{goals.calories.toLocaleString()} cal · {goals.protein}g protein · {goals.carbs}g carbs · {goals.fat}g fat</span>
+              </div>
+            </div>
+          </div>
+          <PagerDots count={3} index={page} />
 
-      </motion.div>
+          {/* Meals */}
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '22px 2px 10px' }}>
+            <h2 style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em' }}>{isToday ? 'Recently uploaded' : format(new Date(`${selected}T12:00:00`), 'EEEE, MMM d')}</h2>
+            {dayMeals.length > 0 && <span className="cal-muted cal-tabular" style={{ fontSize: 13, fontWeight: 600 }}>{Math.round(totals.calories).toLocaleString()} cal</span>}
+          </div>
+
+          {history.isLoading ? (
+            <div style={{ display: 'grid', gap: 10 }}>
+              {[0, 1].map(i => <div key={i} className="cal-skeleton" style={{ height: 112, borderRadius: 22 }} />)}
+            </div>
+          ) : hasEntries ? (
+            <div style={{ display: 'grid', gap: 10 }}>
+              <AnimatePresence initial={false}>
+                {isToday && pending.map(p => (
+                  <PendingCard key={p.id} scan={p} onRetry={() => runScan(p)} onDismiss={() => setPending(list => list.filter(x => x.id !== p.id))} />
+                ))}
+              </AnimatePresence>
+              {dayMeals.map(m => <MealCard key={m.id} meal={m} onClick={() => setOpenMeal(m)} />)}
+            </div>
+          ) : (
+            <div className="cal-card" style={{ padding: '26px 20px', textAlign: 'center' }}>
+              <div style={{ width: 54, height: 54, borderRadius: 18, margin: '0 auto', background: 'var(--cal-card-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ScanLine size={24} /></div>
+              <div style={{ marginTop: 12, fontSize: 16, fontWeight: 800 }}>{isToday ? "You haven't uploaded any food" : 'Nothing logged this day'}</div>
+              <div className="cal-muted" style={{ marginTop: 4, fontSize: 13.5, lineHeight: 1.45 }}>Start tracking {isToday ? "today's" : 'your'} meals by taking a quick picture.</div>
+              {isToday && <button type="button" className="cal-btn" style={{ marginTop: 16, height: 46, fontSize: 15 }} onClick={() => setCamera('food')}><ScanLine size={17} /> Scan food</button>}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Floating add button */}
+      <motion.button
+        type="button"
+        onClick={() => setMenu(m => !m)}
+        whileTap={{ scale: 0.92 }}
+        aria-label={menu ? 'Close menu' : 'Add'}
+        className="fixed right-5 lg:right-10 bottom-[calc(env(safe-area-inset-bottom)+92px)] lg:bottom-10"
+        style={{ zIndex: menu ? 10001 : 200, width: 60, height: 60, borderRadius: 60, background: 'var(--cal-primary)', color: 'var(--cal-on-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}
+      >
+        <motion.span animate={{ rotate: menu ? 45 : 0 }} style={{ display: 'flex' }}><Plus size={28} /></motion.span>
+      </motion.button>
+
+      {lookingUp && (
+        <div className="cal" style={{ position: 'fixed', inset: 0, zIndex: 10012, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="cal-card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 10, fontWeight: 700 }}><Loader2 size={18} className="animate-spin" /> Looking up product…</div>
+        </div>
+      )}
 
       <AnimatePresence>
-        {showProfile && (
-          <NutritionProfileModal 
-            onClose={() => setShowProfile(false)} 
-            onSaved={loadToday}
+        {menu && <AddMenu key="menu" onPick={onMenu} onClose={() => setMenu(false)} />}
+        {camera && <FoodCamera key="camera" initialMode={camera} onPhoto={onPhoto} onBarcode={onBarcode} onClose={() => setCamera(null)} />}
+        {search && !portionFood && !quickAdd && (
+          <FoodSearchSheet key="search" initialTab={search} saved={saved} onPick={setPortionFood} onQuickAdd={() => setQuickAdd(true)} onClose={() => setSearch(null)} />
+        )}
+        {portionFood && (
+          <FoodPortionSheet key="portion" food={portionFood} isSaved={savedIds.has(portionFood.id)} onToggleSave={() => toggleSavedFood(portionFood)} onLog={logPortion} onClose={() => setPortionFood(null)} />
+        )}
+        {quickAdd && (
+          <QuickAddSheet
+            key="quick"
+            onClose={() => setQuickAdd(false)}
+            onLog={async (name, m, mealType) => {
+              try {
+                await logQuickEntry(name, m, mealType);
+                await refresh();
+                setQuickAdd(false);
+                setSearch(null);
+                setSelected(dateKey());
+                showToast(`Added to ${mealType}`, 'success');
+              } catch (err: any) {
+                showToast(err?.message || 'Could not log this entry', 'error');
+              }
+            }}
           />
         )}
-        {selectedMeal && (
-          <MealDetailsModal
-            meal={selectedMeal}
-            onClose={() => setSelectedMeal(null)}
-            onUpdate={handleMealTypeUpdate}
+        {exercise && <ExerciseSheet key="exercise" burned={burned} onManual={addManualBurned} onClose={() => setExercise(false)} />}
+        {settings && <NutritionSettingsSheet key="settings" setup={setup} onEditPlan={() => { setSettings(false); setRedo(true); }} onClose={() => setSettings(false)} />}
+        {openMeal && (
+          <MealDetailSheet
+            key={`meal-${openMeal.id}`}
+            meal={openMeal}
+            isSaved={savedIds.has(`meal-${openMeal.id}`)}
+            onToggleSave={toggleSavedMeal}
+            onChanged={refresh}
+            onClose={() => setOpenMeal(null)}
           />
         )}
       </AnimatePresence>
-    </>
+
+    </div>
   );
 }

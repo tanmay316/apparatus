@@ -44,7 +44,7 @@ async function saveNow() {
   if (!uid) return;
   try {
     const state = dehydrate(queryClient, {
-      shouldDehydrateQuery: q => q.state.status === 'success' && q.state.data !== undefined && isPersistable(q.state.data),
+      shouldDehydrateQuery: q => q.queryKey[0] !== 'nutrition-image' && q.state.status === 'success' && q.state.data !== undefined && isPersistable(q.state.data),
     });
     const queries: string[] = [];
     for (const q of state.queries) {

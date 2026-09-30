@@ -68,7 +68,7 @@ pb "Add :NSMotionUsageDescription string 'Apparatus uses motion data to count yo
 
 # Camera / photo library — profile photos and community post images.
 pb "Delete :NSCameraUsageDescription"
-pb "Add :NSCameraUsageDescription string 'Apparatus uses the camera so you can take profile and progress photos.'"
+pb "Add :NSCameraUsageDescription string 'Apparatus uses the camera to scan meals and barcodes, and for profile and progress photos.'"
 pb "Delete :NSPhotoLibraryUsageDescription"
 pb "Add :NSPhotoLibraryUsageDescription string 'Apparatus needs photo access so you can pick profile and community post images.'"
 pb "Delete :NSPhotoLibraryAddUsageDescription"

@@ -256,3 +256,25 @@ export async function updateMealType(mealId: number, mealType: string) {
     body: JSON.stringify({ meal_type: mealType }),
   });
 }
+
+export interface MealItemInput {
+  food_name: string;
+  weight_grams: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  fiber: number;
+}
+
+/** Replace a logged meal's items (servings / portion fixes); totals are recomputed server-side. */
+export async function updateMealItems(mealId: number, items: MealItemInput[], mealType?: string) {
+  return apiRequest<any>(`/nutrition/meals/${mealId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ items, meal_type: mealType }),
+  });
+}
+
+export async function deleteMeal(mealId: number) {
+  return apiRequest<{ success: boolean }>(`/nutrition/meals/${mealId}`, { method: 'DELETE' });
+}

@@ -53,8 +53,9 @@ export default function FloatingAIBot() {
 
   if (!isAllowedRoute) return null;
 
-  // Show floating button only when chat is closed AND (scrolling up OR at top)
-  const isVisible = !isOpen && scrollDirection === 'up';
+  // Show floating button only when chat is closed AND (scrolling up OR at top).
+  // The nutrition page has its own + menu with an "Ask Astra" entry.
+  const isVisible = !isOpen && scrollDirection === 'up' && location.pathname !== '/nutrition';
 
   return (
     <>

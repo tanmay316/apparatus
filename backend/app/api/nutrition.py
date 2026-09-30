@@ -183,12 +183,22 @@ async def get_image(
 # ─── Profile ─────────────────────────────────────────────────────
 
 class NutritionProfileUpdate(BaseModel):
-    weight_kg: Optional[float] = None
-    height_cm: Optional[float] = None
-    age: Optional[int] = None
-    gender: Optional[str] = None
-    activity_level: Optional[str] = None
-    fitness_goal: Optional[str] = None
+    weight_kg: Optional[float] = Field(None, ge=20, le=400)
+    height_cm: Optional[float] = Field(None, ge=90, le=260)
+    age: Optional[int] = Field(None, ge=10, le=110)
+    gender: Optional[str] = Field(None, max_length=20)
+    activity_level: Optional[str] = Field(None, max_length=20)
+    fitness_goal: Optional[str] = Field(None, max_length=30)
+    # Targets chosen in the app's plan screen; when absent they are calculated.
+    calorie_goal: Optional[float] = Field(None, ge=800, le=8000)
+    protein_goal: Optional[float] = Field(None, ge=0, le=600)
+    carb_goal: Optional[float] = Field(None, ge=0, le=1200)
+    fat_goal: Optional[float] = Field(None, ge=0, le=400)
+    fiber_goal: Optional[float] = Field(None, ge=0, le=150)
+    diet: Optional[str] = Field(None, pattern="^(classic|pescatarian|vegetarian|vegan)$")
+
+
+DIET_WORDS = {"pescatarian", "vegetarian", "vegan"}
 
 
 @router.get("/profile")
@@ -224,10 +234,17 @@ async def update_nutrition_profile(
     payload = {
         "weight_kg": req.weight_kg, "height_cm": req.height_cm, "age": req.age, "gender": req.gender,
         "activity_level": req.activity_level, "fitness_goal": req.fitness_goal,
-        "calorie_goal": macros["calories"], "protein_goal": macros["protein"], "carb_goal": macros["carbs"],
-        "fat_goal": macros["fat"], "fiber_goal": macros["fiber"],
+        "calorie_goal": req.calorie_goal or macros["calories"],
+        "protein_goal": req.protein_goal if req.protein_goal is not None else macros["protein"],
+        "carb_goal": req.carb_goal if req.carb_goal is not None else macros["carbs"],
+        "fat_goal": req.fat_goal if req.fat_goal is not None else macros["fat"],
+        "fiber_goal": req.fiber_goal if req.fiber_goal is not None else macros["fiber"],
     }
     user_repo.upsert_goals(uid, payload)
+    if req.diet:
+        prefs = user_repo.get_preferences(uid)
+        kept = [d for d in (prefs.dietary_restrictions or [] if prefs else []) if str(d).lower() not in DIET_WORDS]
+        user_repo.upsert_preferences(uid, {"dietary_restrictions": kept + ([req.diet] if req.diet != "classic" else [])})
     db.commit()
     return payload
 
@@ -480,4 +497,74 @@ async def update_meal_type(
         raise HTTPException(status_code=400, detail="Invalid meal type")
     if not MealRepository(db).update_meal_type(meal_id, current_user["uid"], req.meal_type.lower()):
         raise HTTPException(status_code=404, detail="Meal not found or unauthorized")
+    return {"success": True}
+
+
+class MealItemIn(BaseModel):
+    food_name: str = Field(..., min_length=1, max_length=120)
+    weight_grams: float = Field(0, ge=0, le=5000)
+    calories: float = Field(..., ge=0, le=10000)
+    protein: float = Field(0, ge=0, le=1000)
+    carbs: float = Field(0, ge=0, le=1000)
+    fat: float = Field(0, ge=0, le=1000)
+    fiber: float = Field(0, ge=0, le=500)
+
+
+class UpdateMealRequest(BaseModel):
+    items: list[MealItemIn] = Field(..., min_length=1, max_length=50)
+    meal_type: Optional[str] = Field(None, max_length=20)
+
+
+def _owned_meal(db: Session, meal_id: int, uid: str):
+    from app.database.models import MealLog
+    meal = db.query(MealLog).filter(MealLog.id == meal_id, MealLog.user_id == uid).first()
+    if not meal:
+        raise HTTPException(status_code=404, detail="Meal not found")
+    return meal
+
+
+@router.patch("/meals/{meal_id}")
+async def update_meal(
+    meal_id: int,
+    req: UpdateMealRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Replace a meal's items (portion / servings fixes) and recompute its totals."""
+    from app.database.models import MealItem
+    from app.repositories.meal_repository import MealRepository
+    uid = current_user["uid"]
+    meal = _owned_meal(db, meal_id, uid)
+    if req.meal_type and req.meal_type.lower() in MEAL_TYPES:
+        meal.meal_type = req.meal_type.lower()
+    repo = MealRepository(db)
+    db.query(MealItem).filter(MealItem.meal_id == meal.id).delete()
+    repo.add_meal_items(meal.id, [it.model_dump() for it in req.items])
+    total = lambda key: round(sum(getattr(it, key) for it in req.items), 1)
+    meal.total_calories = total("calories")
+    meal.total_protein = total("protein")
+    meal.total_carbs = total("carbs")
+    meal.total_fat = total("fat")
+    meal.total_fiber = total("fiber")
+    if meal.logged_at:
+        repo.upsert_daily_summary(uid, meal.logged_at.date().isoformat())
+    db.commit()
+    return {"success": True}
+
+
+@router.delete("/meals/{meal_id}")
+async def delete_meal(
+    meal_id: int,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from app.repositories.meal_repository import MealRepository
+    uid = current_user["uid"]
+    meal = _owned_meal(db, meal_id, uid)
+    day = meal.logged_at.date().isoformat() if meal.logged_at else None
+    repo = MealRepository(db)
+    repo.delete_meal(meal.id)
+    if day:
+        repo.upsert_daily_summary(uid, day)
+    db.commit()
     return {"success": True}

@@ -16,6 +16,7 @@
 @import './styles/themes.css';
 @import './styles/community.css';
 @import './styles/surfaces.css';
+@import './styles/cal.css';
 
 /* ─── Tailwind Directives (must be after imports) ───────────── */
 @tailwind base;
