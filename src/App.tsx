@@ -33,6 +33,8 @@ import { OtaKit } from '@otakit/capacitor-updater';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { MedalCelebrationModal } from '@/components/community/MedalCelebrationModal';
+import { SubscriptionSync } from '@/components/subscription/SubscriptionSync';
+import { PaywallSheet } from '@/components/subscription/PaywallSheet';
 import type { AppNotificationItem } from '@/types';
 
 const loadDashboard = () => import('@/pages/Dashboard');
@@ -418,6 +420,8 @@ export function App() {
         <ConfirmModal />
         <UpdatePopup />
         <MedalCelebrationModal />
+        <SubscriptionSync />
+        <PaywallSheet />
       </BrowserRouter>
     </QueryClientProvider>
   );

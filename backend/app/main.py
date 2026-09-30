@@ -98,6 +98,9 @@ def on_startup():
 
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified.")
+
+        from app.db.harden import harden_postgres
+        harden_postgres(engine)
     except Exception as exc:
         logger.error(
             "Database unavailable at startup — nutrition endpoints will fail until it "

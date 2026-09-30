@@ -42,6 +42,8 @@ export interface UserProfile {
   privacySettings?: PrivacySettings;
   communityBadges?: EarnedCommunityBadge[];
   unseenMedalAward?: EarnedCommunityBadge | null;
+  /** Set by the backend while the user has Apparatus Pro (clients cannot write it). */
+  proBadge?: boolean;
   athleteRank?: {
     tier: string;
     division?: number;

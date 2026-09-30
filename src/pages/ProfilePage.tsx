@@ -4,7 +4,7 @@ import { useParams, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { doc, getDoc, query, collection, where, limit, getDocs } from 'firebase/firestore';
-import { ChevronLeft, ChevronRight, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus, Clock, Loader2, ImagePlus, Trophy } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus, Clock, Loader2, ImagePlus, Trophy, Crown } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -667,6 +667,11 @@ export function ProfilePage() {
                   <span>{athleteRank?.label || p.athleteRank?.label || 'Beginner'}</span>
                   <ChevronRight size={11} className="opacity-70 group-hover:translate-x-0.5 transition-transform" />
                 </Link>
+                {p.proBadge && (
+                  <span className="dx-pill" style={{ background: 'rgba(245, 179, 1, 0.14)', color: '#c98a1f' }} title="Apparatus Pro member">
+                    <Crown size={11} /> Pro
+                  </span>
+                )}
               </div>
               <div className="text-[13.5px] dx-muted mt-0.5">@{p.username}</div>
 

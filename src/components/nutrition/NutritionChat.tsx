@@ -4,6 +4,7 @@ import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2,
 import { sendChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionMessages, deleteChatSession, wakeUpServer, getNutritionImage, hasTrackableNutrition, ApiError, type FoodAnalyzeResponse, type ChatSessionItem } from '@/services/nutrition-api';
 import { compressImageFile } from '@/utils/image-compression';
 import { useUIStore } from '@/stores/ui-store';
+import { useHasPro, useSubscriptionStore } from '@/stores/subscription-store';
 import NutritionResultCard from './NutritionResultCard';
 import CameraScanner from './CameraScanner';
 import ReactMarkdown from 'react-markdown';
@@ -76,6 +77,22 @@ const WELCOME = "Hey! I'm **Astra**, your nutrition and training coach.\n\nI can
 /** Cold starts and gateway hiccups are worth retrying; real server errors are not. */
 const isRetryable = (err: any) =>
   err instanceof ApiError ? [502, 503, 504].includes(err.status) : /failed to fetch|network|load failed/i.test(err?.message || '');
+
+/** "2 of 3 free AI requests left today · Go Pro" for free users once billing is live. */
+function FreeAllowanceHint({ kind }: { kind: 'ai_call' | 'food_scan' }) {
+  const usage = useSubscriptionStore(s => s.usage[kind]);
+  const hasPro = useHasPro();
+  const openPaywall = useSubscriptionStore(s => s.openPaywall);
+  if (hasPro || !usage) return null;
+  const left = Math.max(0, usage.limit - usage.used);
+  const noun = kind === 'food_scan' ? (left === 1 ? 'scan' : 'scans') : (left === 1 ? 'AI request' : 'AI requests');
+  return (
+    <div className="mb-1.5 px-2 flex items-center justify-between gap-2 text-[11.5px] dx-muted">
+      <span className="tabular">{left} of {usage.limit} free {noun} left{usage.period === 'day' ? ' today' : usage.period === 'month' ? ' this month' : ''}</span>
+      <button type="button" onClick={() => openPaywall()} className="font-semibold" style={{ color: 'var(--dx-accent)' }}>Go Pro</button>
+    </div>
+  );
+}
 
 export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   const showToast = useUIStore(s => s.showToast);
@@ -340,6 +357,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         if (currentPreview) {
           // Image Scan Flow
           const res = await analyzeFood(currentPreview.base64, currentPreview.mime, getMealType(), sessionId, controller.signal, text);
+          if (res.status === 'ok') useSubscriptionStore.getState().bumpUsage('food_scan');
           
           if (res.session_id && res.session_id !== sessionId) {
             setSessionId(res.session_id);
@@ -368,6 +386,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
         } else {
           // Text Chat Flow
           const res = await sendChatMessage(userMsg.content, sessionId, controller.signal);
+          useSubscriptionStore.getState().bumpUsage('ai_call');
           if (res.session_id) {
             setSessionId(res.session_id);
             localStorage.setItem('apparatus_active_session_id', String(res.session_id));
@@ -858,6 +877,8 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <FreeAllowanceHint kind={previewImage ? 'food_scan' : 'ai_call'} />
 
         <form
           onSubmit={e => { e.preventDefault(); handleSend(); }}

@@ -294,7 +294,7 @@ service cloud.firestore {
 
       allow create: if isOwner(uid) && request.resource.data.uid == uid
         && (request.resource.data.get('isAdmin', false) == false || isAdmin())
-        && !request.resource.data.keys().hasAny(['communityBadges', 'badgeUpdate', 'unseenMedalAward', 'athleteRank'])
+        && !request.resource.data.keys().hasAny(['communityBadges', 'badgeUpdate', 'unseenMedalAward', 'athleteRank', 'proBadge'])
         && request.resource.data.displayName is string
         && request.resource.data.displayName.size() <= 50
         && request.resource.data.bio.size() <= 500
@@ -312,7 +312,7 @@ service cloud.firestore {
           && request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false)
           && request.resource.data.get('displayName', '').size() <= 50
           && request.resource.data.get('bio', '').size() <= 500
-          && !changedKeys().hasAny(['communityBadges', 'badgeUpdate', 'uid', 'username', 'usernameLower', 'createdAt']))
+          && !changedKeys().hasAny(['communityBadges', 'badgeUpdate', 'uid', 'username', 'usernameLower', 'createdAt', 'proBadge']))
         || (isAuthenticated()
           && onlyChanged(['communityBadges', 'unseenMedalAward', 'badgeUpdate'])
           && request.resource.data.badgeUpdate.sourceType in ['challenge', 'event']
@@ -324,8 +324,10 @@ service cloud.firestore {
       allow delete: if isOwner(uid) || isAdmin();
 
       // Owner-only data: device push tokens, personal AI keys.
+      // Subscription entitlement + AI usage counters are written only by the backend (Admin SDK).
       match /private/{docId} {
-        allow read, write: if isOwner(uid);
+        allow read: if isOwner(uid);
+        allow write: if isOwner(uid) && !(docId in ['entitlement', 'usage', 'billing']);
       }
 
       match /stats/{statId} {
@@ -551,6 +553,20 @@ service cloud.firestore {
     }
 
     // ─── Bans ───────────────────────────────────────────────────
+    // Pro coupons: managed by admins in the console, redeemed only through the backend.
+    match /coupons/{code} {
+      allow read, delete: if isAdmin();
+      allow create, update: if isAdmin()
+        && code.matches('[A-Z0-9][A-Z0-9_-]{2,31}')
+        && request.resource.data.type in ['free', 'discount']
+        && request.resource.data.get('label', '') is string
+        && request.resource.data.get('label', '').size() <= 120;
+      match /redemptions/{uid} {
+        allow read: if isAdmin();
+        allow write: if false;
+      }
+    }
+
     match /bans/{uid} {
       allow read: if isAdmin() || isOwner(uid);
       allow write: if isAdmin();

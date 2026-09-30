@@ -144,6 +144,8 @@ async def generate_workout_plan(
     rate = check_rate_limit(f"{current_user['uid']}:workout", limit=5, window_seconds=600)
     if not rate.allowed:
         raise HTTPException(status_code=429, detail=rate.message)
+    from app.services.subscription import enforce_quota, refund_quota
+    await enforce_quota(current_user, "workout_plan")
     keys = await resolve_api_keys(current_user)
     providers = get_llm_providers(
         groq_key=keys.get("groq_key", ""),
@@ -153,6 +155,7 @@ async def generate_workout_plan(
     )
 
     if not providers:
+        refund_quota(current_user["uid"], "workout_plan")
         raise HTTPException(
             status_code=500,
             detail="No AI providers configured. Please configure an API key."

@@ -3,7 +3,7 @@ import { Navigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  Activity, Bike, Bot, CalendarClock, Database, Flag, Gauge, HardDrive, History, Megaphone, ShieldAlert, Terminal, UserPlus, Users, UsersRound,
+  Activity, Bike, Bot, CalendarClock, Database, Flag, Gauge, HardDrive, History, Megaphone, ShieldAlert, Terminal, Ticket, UserPlus, Users, UsersRound,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
@@ -17,10 +17,11 @@ import { AdminStorageTab } from '@/components/admin/AdminStorageTab';
 import { AdminLogsTab } from '@/components/admin/AdminLogsTab';
 import { AdminAnnouncementsTab } from '@/components/admin/AdminAnnouncementsTab';
 import { AdminAuditTab } from '@/components/admin/AdminAuditTab';
+import { AdminCouponsTab } from '@/components/admin/AdminCouponsTab';
 import AdminNutritionSettings from '@/components/admin/AdminNutritionSettings';
 import { AdminBell } from '@/components/admin/AdminBell';
 
-const TABS = ['overview', 'users', 'reports', 'communities', 'events', 'content', 'updates', 'ai', 'logs', 'storage', 'audit'] as const;
+const TABS = ['overview', 'users', 'reports', 'communities', 'events', 'content', 'updates', 'coupons', 'ai', 'logs', 'storage', 'audit'] as const;
 type AdminTab = typeof TABS[number];
 
 function OverviewTab({ go }: { go: (tab: AdminTab) => void }) {
@@ -97,6 +98,7 @@ export function AdminPage() {
     { id: 'events', label: 'Events', icon: CalendarClock, badge: overview.data?.pendingEvents },
     { id: 'content', label: 'Content', icon: Database },
     { id: 'updates', label: 'Announcements', icon: Megaphone },
+    { id: 'coupons', label: 'Coupons', icon: Ticket },
     { id: 'ai', label: 'AI keys', icon: Bot },
     { id: 'logs', label: 'Logs', icon: Terminal, badge: overview.data?.logs24h },
     { id: 'storage', label: 'Storage', icon: HardDrive },
@@ -137,6 +139,7 @@ export function AdminPage() {
       {tab === 'events' && <AdminModerationTab key="events" kind="events" />}
       {tab === 'content' && <AdminContentTab />}
       {tab === 'updates' && <AdminAnnouncementsTab />}
+      {tab === 'coupons' && <AdminCouponsTab />}
       {tab === 'ai' && <AdminNutritionSettings />}
       {tab === 'logs' && <AdminLogsTab />}
       {tab === 'storage' && <AdminStorageTab />}

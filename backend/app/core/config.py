@@ -58,6 +58,19 @@ class Settings(BaseSettings):
     AGENT_TOTAL_BUDGET: float = 55.0
     AGENT_MAX_STEPS: int = 4
 
+    # Subscriptions (Razorpay). Billing and free-tier AI limits stay off until the keys are set.
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
+    RAZORPAY_PLAN_MONTHLY: str = ""
+    RAZORPAY_PLAN_YEARLY: str = ""
+    # Comma-separated emails that always get Pro (you, testers, giveaways).
+    PRO_EMAILS: str = "tanmay.sharma4334@gmail.com,sharmamoni913@gmail.com"
+
+    @property
+    def billing_enabled(self) -> bool:
+        return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET and (self.RAZORPAY_PLAN_MONTHLY or self.RAZORPAY_PLAN_YEARLY))
+
     @staticmethod
     def csv(value: str) -> List[str]:
         return [s.strip() for s in (value or "").split(",") if s.strip()]

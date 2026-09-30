@@ -3,7 +3,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell, ChevronRight, Download, Footprints, Globe2, KeyRound, Lock, LogOut, Palette, Scale, Trash2, Upload, User, UserCheck, Users,
-  Trophy, BarChart3, AlarmClock,
+  Trophy, BarChart3, AlarmClock, Crown,
 } from 'lucide-react';
 import { deleteUser } from 'firebase/auth';
 import { CustomSelect } from '@/components/ui/CustomSelect';
@@ -11,6 +11,8 @@ import { Toggle } from '@/components/ui/Toggle';
 import { NotificationSettings } from '@/components/settings/NotificationSettings';
 import { Segmented, SettingRow, SettingsSection } from '@/components/settings/SettingsLayout';
 import PersonalAISettings from '@/components/settings/PersonalAISettings';
+import { ProSettings } from '@/components/settings/ProSettings';
+import { useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
@@ -24,6 +26,7 @@ import { computeAthleteRank } from '@/lib/rank';
 import type { UserProfile } from '@/types';
 
 const SECTIONS = [
+  { id: 'pro', label: 'Apparatus Pro', icon: Crown },
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'body', label: 'Body and training', icon: Scale },
   { id: 'goals', label: 'Daily goals', icon: Footprints },
@@ -92,7 +95,11 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { hash } = useLocation();
-  const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
+  const billingEnabled = useSubscriptionStore(s => s.enabled);
+  const isPro = useIsPro();
+  const showPro = billingEnabled || isPro;
+  const sections = showPro ? SECTIONS : SECTIONS.filter(s => s.id !== 'pro');
+  const [activeSection, setActiveSection] = useState(sections[0].id);
 
   const [displayName, setDisplayName] = useState(profile.displayName || '');
   const [photoURL, setPhotoURL] = useState(profile.photoURL || '');
@@ -166,7 +173,7 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
       if (el) observer.observe(el);
     });
     return () => observer.disconnect();
-  }, []);
+  }, [showPro]);
 
   const handleSaveField = async (updates: Partial<UserProfile>) => {
     try {
@@ -393,13 +400,13 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
       </header>
 
       <nav aria-label="Settings sections" className="lg:hidden -mx-1 px-1 mb-5 flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-        {SECTIONS.map(s => navButton(s, true))}
+        {sections.map(s => navButton(s, true))}
       </nav>
 
       <div className="lg:grid lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-10">
         <aside className="hidden lg:block">
           <nav aria-label="Settings sections" className="sticky top-20 space-y-0.5">
-            {SECTIONS.map(s => navButton(s))}
+            {sections.map(s => navButton(s))}
           </nav>
         </aside>
 
@@ -425,6 +432,8 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
               View profile
             </Link>
           </div>
+
+          <ProSettings />
 
           <SettingsSection id="profile" title="Profile" description="How other athletes see you.">
             <SettingRow label="Photo" description="JPG, PNG or WebP up to 5 MB.">

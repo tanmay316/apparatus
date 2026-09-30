@@ -33,6 +33,7 @@ from app.schemas.nutrition import (
 )
 from app.services.food_scan import scan_food, user_goals
 from app.services.meal_service import MealService
+from app.services.subscription import enforce_quota, refund_quota
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
@@ -68,12 +69,15 @@ async def analyze_food(
     if not verdict.allowed:
         raise HTTPException(status_code=400, detail=verdict.message)
     meal_type = req.meal_type.lower() if req.meal_type.lower() in MEAL_TYPES else "snack"
+    await enforce_quota(current_user, "food_scan")
 
     keys = await resolve_api_keys(current_user)
     UserRepository(db).get_or_create_user(uid, current_user.get("email", ""))
     background_tasks.add_task(cleanup_old_images_job, 7)
 
     result = await scan_food(db, uid, keys, req.image_base64, req.mime_type, meal_type, req.note, req.session_id)
+    if result.get("status") != "ok":
+        refund_quota(uid, "food_scan")
     return FoodAnalyzeResponse(**result)
 
 
@@ -275,6 +279,7 @@ async def chat(
             return ChatResponse(response=verdict.message, session_id=req.session_id or 0)
         raise HTTPException(status_code=400, detail=verdict.message)
 
+    await enforce_quota(current_user, "ai_call")
     keys = await resolve_api_keys(current_user)
     user_repo = UserRepository(db)
     user_repo.get_or_create_user(uid, current_user.get("email", ""))
@@ -305,6 +310,7 @@ async def chat(
         from app.agents.coach.agent import CoachResult
         from app.core.guardrails import FALLBACK_REPLY
         result = CoachResult(answer=FALLBACK_REPLY)
+        refund_quota(uid, "ai_call")
 
     card = result.nutrition_card
     metadata = {"tools": result.tools_used}
@@ -390,6 +396,7 @@ async def generate_recipe(
     rate = check_rate_limit(f"{uid}:recipe", limit=8, window_seconds=60)
     if not rate.allowed:
         raise HTTPException(status_code=429, detail=rate.message)
+    await enforce_quota(current_user, "ai_call")
     keys = await resolve_api_keys(current_user)
     UserRepository(db).get_or_create_user(uid)
     goals = user_goals(db, uid)
@@ -401,6 +408,7 @@ async def generate_recipe(
     )
     if result:
         return {"success": True, "recipe": result.model_dump()}
+    refund_quota(uid, "ai_call")
     return {"success": False, "error": "Could not generate recipe"}
 
 
@@ -416,11 +424,13 @@ async def generate_meal_plan(
         raise HTTPException(status_code=429, detail=rate.message)
     if req.plan_type not in ("daily", "weekly"):
         raise HTTPException(status_code=400, detail="Invalid plan type")
+    await enforce_quota(current_user, "ai_call")
     keys = await resolve_api_keys(current_user)
     UserRepository(db).get_or_create_user(uid)
     plan = await build_meal_plan(_llm(keys), user_goals(db, uid), _prefs(db, uid), f"{req.plan_type} plan")
     if plan:
         return {"success": True, "meal_plan": plan}
+    refund_quota(uid, "ai_call")
     return {"success": False, "error": "Could not generate meal plan"}
 
 

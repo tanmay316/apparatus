@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Download, Check, Share2, ChevronLeft, ChevronRight, Loader2, Smartphone, Square as SquareIcon,
-  LayoutTemplate, PersonStanding, Palette, ImagePlus, Trash2,
+  LayoutTemplate, PersonStanding, Palette, ImagePlus, Trash2, Crown,
 } from 'lucide-react';
 import { toCanvas } from 'html-to-image';
 import html2canvas from 'html2canvas';
@@ -12,6 +12,7 @@ import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import { useUIStore } from '@/stores/ui-store';
 import { useAuthStore } from '@/stores/auth-store';
+import { requirePro, useHasPro } from '@/stores/subscription-store';
 import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
 import {
   calculateShareVolume, getActiveMuscleScores, getActiveMusclesFromLogs, isWarmupOrCooldown, muscleFocus,
@@ -54,6 +55,9 @@ const LAYOUT_OPTIONS: { id: ShareLayout; label: string; short: string }[] = [
   { id: 'photo', label: 'Photo', short: 'Photo' },
   { id: 'sticker', label: 'Sticker', short: 'Sticker' },
 ];
+
+/** Free users can preview these, but saving/sharing them needs Pro. */
+const PRO_LAYOUTS = new Set<ShareLayout>(['overview', 'poster', 'photo', 'sticker']);
 
 const ACCENTS = [
   { id: 'ember', label: 'Ember', hex: '#FF5A1F' },
@@ -383,6 +387,9 @@ export function ShareCardModal({ data, onClose }: Props) {
   const [stageSize, setStageSize] = useState({ w: 0, h: 0 });
 
   const accent = ACCENTS.find(a => a.id === accentId)?.hex || ACCENTS[0].hex;
+  const hasPro = useHasPro();
+  const layoutLocked = !hasPro && PRO_LAYOUTS.has(layout);
+  const unlockTemplate = () => requirePro(`The ${LAYOUT_OPTIONS.find(l => l.id === layout)?.label} template is part of Apparatus Pro.`);
   const isSquare = aspectRatio === '1/1';
   const designH = isSquare ? DESIGN_W : Math.round((DESIGN_W * 16) / 9);
   const imperial = units === 'imperial';
@@ -546,6 +553,7 @@ export function ShareCardModal({ data, onClose }: Props) {
   };
 
   const handleSave = async () => {
+    if (layoutLocked && !unlockTemplate()) return;
     setBusy(true);
     try {
       await new Promise(r => setTimeout(r, 60));
@@ -578,6 +586,7 @@ export function ShareCardModal({ data, onClose }: Props) {
   const shareText = `${data.dayTitle}: ${summary.totalSets} sets in ${durationText(data.durationMin)}. Logged with Apparatus.`;
 
   const handleShare = async () => {
+    if (layoutLocked && !unlockTemplate()) return;
     setBusy(true);
     try {
       await new Promise(r => setTimeout(r, 60));
@@ -1021,8 +1030,13 @@ export function ShareCardModal({ data, onClose }: Props) {
                     const selected = layout === opt.id;
                     return (
                       <button key={opt.id} type="button" onClick={() => setLayout(opt.id)} aria-pressed={selected} className="shrink-0 w-[62px] md:w-auto flex flex-col items-center gap-1.5 group">
-                        <span className={`block w-full aspect-[60/88] rounded-xl overflow-hidden transition-all ${selected ? 'ring-2 ring-bone ring-offset-2 ring-offset-[rgb(var(--color-ink))]' : 'ring-1 ring-line group-hover:ring-bone-dim/50'}`}>
+                        <span className={`relative block w-full aspect-[60/88] rounded-xl overflow-hidden transition-all ${selected ? 'ring-2 ring-bone ring-offset-2 ring-offset-[rgb(var(--color-ink))]' : 'ring-1 ring-line group-hover:ring-bone-dim/50'}`}>
                           <LayoutThumb id={opt.id} accent={accent} />
+                          {!hasPro && PRO_LAYOUTS.has(opt.id) && (
+                            <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-black/70 text-[#f5b301] flex items-center justify-center" aria-label="Pro">
+                              <Crown size={9} />
+                            </span>
+                          )}
                         </span>
                         <span className={`text-[11px] font-medium ${selected ? 'text-bone' : 'text-bone-dim'}`}>{opt.short}</span>
                       </button>
@@ -1128,7 +1142,7 @@ export function ShareCardModal({ data, onClose }: Props) {
                 disabled={busy || (layout === 'photo' && !photo)}
                 className="flex-1 h-12 rounded-full bg-bone text-ink text-sm font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform disabled:opacity-60"
               >
-                {busy ? <><Loader2 size={18} className="animate-spin" /> Preparing…</> : <><Share2 size={18} /> Share</>}
+                {busy ? <><Loader2 size={18} className="animate-spin" /> Preparing…</> : layoutLocked ? <><Crown size={17} /> Unlock with Pro</> : <><Share2 size={18} /> Share</>}
               </button>
             </div>
           </div>

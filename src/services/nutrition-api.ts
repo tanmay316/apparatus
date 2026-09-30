@@ -3,6 +3,8 @@
  * Handles all communication with the Python FastAPI backend.
  */
 import { auth } from '@/lib/firebase';
+import { isProRequired } from '@/services/billing';
+import { useSubscriptionStore } from '@/stores/subscription-store';
 
 const API_BASE = import.meta.env.VITE_NUTRITION_API_URL || 'http://localhost:8000/api/v1';
 
@@ -31,6 +33,10 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
+    if (res.status === 402 && isProRequired(err.detail)) {
+      useSubscriptionStore.getState().openPaywall(err.detail.message);
+      throw new ApiError(err.detail.message, 402);
+    }
     throw new ApiError(typeof err.detail === 'string' ? err.detail : `API Error ${res.status}`, res.status);
   }
   return res.json();

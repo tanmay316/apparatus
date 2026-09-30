@@ -4,12 +4,14 @@ from app.db.session import get_db
 from app.core.security import get_current_user
 from app.api.nutrition import router as nutrition_router
 from app.api.workout import router as workout_router
+from app.api.billing import router as billing_router
 
 api_router = APIRouter()
 
 # Include sub-routers
 api_router.include_router(nutrition_router)
 api_router.include_router(workout_router)
+api_router.include_router(billing_router)
 
 
 @api_router.get("/health")
