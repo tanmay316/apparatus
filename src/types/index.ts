@@ -38,6 +38,7 @@ export interface UserProfile {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   stepGoal?: number;
+  autoStepTracking?: boolean;
   privacySettings?: PrivacySettings;
   communityBadges?: EarnedCommunityBadge[];
   unseenMedalAward?: EarnedCommunityBadge | null;

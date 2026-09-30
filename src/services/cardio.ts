@@ -186,11 +186,14 @@ export const getStepsForDate = async (userId: string, dateKey: string): Promise<
 };
 
 /**
- * Daily total for display. On phones the device counts every step all day (CoreMotion on
- * iOS, the hardware step counter on Android), so that count is used with tracked sessions
- * as a floor; elsewhere only tracked sessions are known.
+ * Daily total for display. When automatic step counter is on, both cardio sessions and
+ * phone background movement are counted. When off, only cardio sessions steps are counted.
  */
 export const getDailySteps = async (userId: string, dateKey: string): Promise<number> => {
+  const autoEnabled = pedometerService.isAutoTrackingEnabled();
+  if (!autoEnabled) {
+    return getStepsForDate(userId, dateKey);
+  }
   const [tracked, device] = await Promise.all([
     getStepsForDate(userId, dateKey),
     pedometerService.getDeviceStepsForDay(dateKey),

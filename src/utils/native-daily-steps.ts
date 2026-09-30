@@ -21,6 +21,8 @@ interface DailyStepsPlugin {
   readCounter(): Promise<StepCounterReading>;
   checkPermissions(): Promise<{ activityRecognition: PermissionState }>;
   requestPermissions(): Promise<{ activityRecognition: PermissionState }>;
+  setAutoTrackingEnabled(options: { enabled: boolean }): Promise<{ enabled: boolean }>;
+  isAutoTrackingEnabled(): Promise<{ enabled: boolean }>;
 }
 
 /** Android app-module plugin (DailyStepsPlugin.java): all-day steps from the hardware step counter. */

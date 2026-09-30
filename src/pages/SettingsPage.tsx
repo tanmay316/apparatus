@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, useRef, type ReactNode } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell, ChevronRight, Download, Footprints, Globe2, KeyRound, Lock, LogOut, Palette, Scale, Trash2, Upload, User, UserCheck, Users,
   Trophy, BarChart3, AlarmClock,
@@ -16,6 +16,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { deleteAccountData, deleteAvatar, downloadJson, exportAccountData, resetUserData, uploadAvatar } from '@/services/account';
 import { DEFAULT_STEP_GOAL, getDailySteps } from '@/services/cardio';
+import { pedometerService } from '@/services/pedometer';
 import { getAvatarUrl } from '@/lib/avatar';
 import { localDateKey } from '@/lib/stats';
 import { acceptAllFollowRequests, restrictPublicContent } from '@/services/social';
@@ -88,6 +89,7 @@ export function SettingsPage() {
 function SettingsForm({ profile }: { profile: UserProfile }) {
   const { user, stats, updateProfile, signOut } = useAuthStore();
   const { showToast, confirm, theme, setTheme, units, setUnits, language, setLanguage } = useUIStore();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { hash } = useLocation();
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
@@ -102,6 +104,17 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
   const [fitnessGoal, setFitnessGoal] = useState(profile.fitnessGoal || '');
   const [preferredWorkoutType, setPreferredWorkoutType] = useState(profile.preferredWorkoutType || '');
   const [stepGoal, setLocalStepGoal] = useState((profile.stepGoal || DEFAULT_STEP_GOAL).toString());
+  const [autoStepTracking, setAutoStepTracking] = useState(() => pedometerService.isAutoTrackingEnabled());
+
+  useEffect(() => {
+    return pedometerService.subscribeAutoTracking(setAutoStepTracking);
+  }, []);
+
+  const handleToggleAutoSteps = useCallback(async (enabled: boolean) => {
+    setAutoStepTracking(enabled);
+    await pedometerService.setAutoTrackingEnabled(enabled);
+    queryClient.invalidateQueries({ queryKey: ['stepsToday'] });
+  }, [queryClient]);
 
   const defaultVisibility = profile.privacySettings?.profileVisibility || (profile.isPublic === false ? 'private' : 'public');
   const [profileVisibility, setProfileVisibility] = useState<'public' | 'followers' | 'private'>(defaultVisibility);
@@ -570,6 +583,15 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
                   : `${Math.max(0, stepGoalValue - stepsToday).toLocaleString()} steps to go. You get a notification when you hit it.`}
               </p>
             </div>
+            <Toggle
+              checked={autoStepTracking}
+              onChange={handleToggleAutoSteps}
+              label="Background step counting"
+              description={autoStepTracking
+                ? 'Counts every step throughout the day, including outside of cardio sessions.'
+                : 'Steps are only counted during tracked cardio sessions (walk / run).'}
+              icon={<Footprints size={16} />}
+            />
           </SettingsSection>
 
           <SettingsSection id="privacy" title="Privacy" description="Control who sees your profile and training.">

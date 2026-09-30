@@ -35,6 +35,7 @@ public final class DailyStepCounter {
     private static final String KEY_ELAPSED = "lastElapsed";
     private static final String KEY_DAYS = "days";
     private static final String KEY_SINCE = "trackingSince";
+    private static final String KEY_AUTO_TRACKING = "autoTrackingEnabled";
     private static final long SAMPLE_TIMEOUT_MS = 4000;
     private static final int KEEP_DAYS = 35;
     private static final float MAX_PLAUSIBLE_DELTA = 150_000f;
@@ -50,6 +51,17 @@ public final class DailyStepCounter {
     }
 
     private DailyStepCounter() {}
+
+    public static boolean isAutoTrackingEnabled(Context ctx) {
+        return ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_AUTO_TRACKING, true);
+    }
+
+    public static void setAutoTrackingEnabled(Context ctx, boolean enabled) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_AUTO_TRACKING, enabled)
+            .apply();
+    }
 
     public static boolean isAvailable(Context ctx) {
         SensorManager sm = (SensorManager) ctx.getSystemService(Context.SENSOR_SERVICE);
@@ -71,6 +83,7 @@ public final class DailyStepCounter {
 
     /** Follows the counter while the app is visible, recording at most once a minute. */
     public static synchronized void startForegroundListener(Context context) {
+        if (!isAutoTrackingEnabled(context)) return;
         if (foregroundListener != null) return;
         Context ctx = context.getApplicationContext();
         SensorManager sm = (SensorManager) ctx.getSystemService(Context.SENSOR_SERVICE);
@@ -114,6 +127,10 @@ public final class DailyStepCounter {
 
     /** Reads the counter once and records it. Callback runs on a background thread. */
     public static void sample(Context context, Callback callback) {
+        if (!isAutoTrackingEnabled(context)) {
+            callback.onDone(-1f);
+            return;
+        }
         Context ctx = context.getApplicationContext();
         SensorManager sm = (SensorManager) ctx.getSystemService(Context.SENSOR_SERVICE);
         Sensor sensor = sm == null ? null : sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);

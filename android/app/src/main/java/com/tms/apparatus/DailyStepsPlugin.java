@@ -22,7 +22,7 @@ public class DailyStepsPlugin extends Plugin {
     @Override
     public void load() {
         super.load();
-        if (hasPermission()) {
+        if (hasPermission() && DailyStepCounter.isAutoTrackingEnabled(getContext())) {
             start();
             DailyStepCounter.startForegroundListener(getContext());
         }
@@ -31,7 +31,7 @@ public class DailyStepsPlugin extends Plugin {
     @Override
     protected void handleOnResume() {
         super.handleOnResume();
-        if (!hasPermission()) return;
+        if (!hasPermission() || !DailyStepCounter.isAutoTrackingEnabled(getContext())) return;
         DailyStepCounter.sample(getContext(), counter -> {});
         DailyStepCounter.startForegroundListener(getContext());
     }
@@ -75,6 +75,15 @@ public class DailyStepsPlugin extends Plugin {
     @PluginMethod
     public void getSteps(PluginCall call) {
         String date = call.getString("date", DailyStepCounter.dateKey(System.currentTimeMillis()));
+        if (!DailyStepCounter.isAutoTrackingEnabled(getContext())) {
+            JSObject res = new JSObject();
+            res.put("available", false);
+            res.put("permission", permissionName());
+            res.put("steps", 0);
+            res.put("trackingSince", DailyStepCounter.trackingSince(getContext()));
+            call.resolve(res);
+            return;
+        }
         if (!DailyStepCounter.isAvailable(getContext())) {
             JSObject res = new JSObject();
             res.put("available", false);
@@ -92,7 +101,34 @@ public class DailyStepsPlugin extends Plugin {
         DailyStepCounter.sample(getContext(), counter -> call.resolve(result(date)));
     }
 
+    @PluginMethod
+    public void setAutoTrackingEnabled(PluginCall call) {
+        boolean enabled = call.getBoolean("enabled", true);
+        Context ctx = getContext();
+        DailyStepCounter.setAutoTrackingEnabled(ctx, enabled);
+        if (!enabled) {
+            DailyStepCounter.stopForegroundListener(ctx);
+            try {
+                StepSampleWorker.cancel(ctx);
+            } catch (Exception ignored) {}
+        } else if (hasPermission()) {
+            start();
+            DailyStepCounter.startForegroundListener(ctx);
+        }
+        JSObject res = new JSObject();
+        res.put("enabled", enabled);
+        call.resolve(res);
+    }
+
+    @PluginMethod
+    public void isAutoTrackingEnabled(PluginCall call) {
+        JSObject res = new JSObject();
+        res.put("enabled", DailyStepCounter.isAutoTrackingEnabled(getContext()));
+        call.resolve(res);
+    }
+
     private void start() {
+        if (!DailyStepCounter.isAutoTrackingEnabled(getContext())) return;
         try {
             StepSampleWorker.schedule(getContext());
         } catch (Exception ignored) {

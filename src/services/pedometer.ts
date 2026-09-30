@@ -16,6 +16,8 @@ function toStepsPermission(state?: string): StepsPermission {
   return 'prompt';
 }
 
+const AUTO_TRACKING_KEY = 'apparatus_auto_step_counter';
+
 class PedometerService {
   private isNative: boolean;
   private isTracking: boolean = false;
@@ -23,9 +25,58 @@ class PedometerService {
   private callback: StepUpdateCallback | null = null;
   private motionListener: ((e: DeviceMotionEvent) => void) | null = null;
   private nativeListener: PluginListenerHandle | null = null;
+  private autoTrackingEnabled: boolean = true;
+  private autoTrackingListeners: Set<(enabled: boolean) => void> = new Set();
 
   constructor() {
     this.isNative = Capacitor.isNativePlatform();
+    try {
+      const saved = localStorage.getItem(AUTO_TRACKING_KEY);
+      this.autoTrackingEnabled = saved === null ? true : saved !== 'false';
+    } catch {
+      this.autoTrackingEnabled = true;
+    }
+    if (this.hasStepCounter) {
+      DailySteps.setAutoTrackingEnabled({ enabled: this.autoTrackingEnabled }).catch(() => {});
+    }
+  }
+
+  /** Whether the automatic all-day step counter is active (vs counting cardio sessions only). */
+  isAutoTrackingEnabled(): boolean {
+    return this.autoTrackingEnabled;
+  }
+
+  /** Turn automatic step counter on/off (saving battery and tracking only cardio when off). */
+  async setAutoTrackingEnabled(enabled: boolean): Promise<void> {
+    this.autoTrackingEnabled = enabled;
+    try {
+      localStorage.setItem(AUTO_TRACKING_KEY, String(enabled));
+    } catch {}
+
+    if (this.hasStepCounter) {
+      try {
+        await DailySteps.setAutoTrackingEnabled({ enabled });
+      } catch (e) {
+        console.error('Failed to sync auto-tracking to native DailySteps:', e);
+      }
+    }
+
+    this.autoTrackingListeners.forEach(cb => {
+      try {
+        cb(enabled);
+      } catch {}
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('apparatus_auto_steps_changed', { detail: { enabled } }));
+    }
+  }
+
+  subscribeAutoTracking(callback: (enabled: boolean) => void): () => void {
+    this.autoTrackingListeners.add(callback);
+    return () => {
+      this.autoTrackingListeners.delete(callback);
+    };
   }
 
   /**
@@ -57,6 +108,7 @@ class PedometerService {
    * hardware step counter (sampled by DailyStepsPlugin) on Android. Null when unknown.
    */
   async getDeviceStepsForDay(dateKey: string): Promise<number | null> {
+    if (!this.isAutoTrackingEnabled()) return 0;
     if (this.canQueryHistory) {
       const [y, m, d] = dateKey.split('-').map(Number);
       const start = new Date(y, m - 1, d).getTime();

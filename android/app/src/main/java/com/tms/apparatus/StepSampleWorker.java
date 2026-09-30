@@ -30,9 +30,16 @@ public class StepSampleWorker extends Worker {
             .enqueueUniquePeriodicWork(UNIQUE_NAME, ExistingPeriodicWorkPolicy.KEEP, request);
     }
 
+    public static void cancel(Context context) {
+        WorkManager.getInstance(context.getApplicationContext()).cancelUniqueWork(UNIQUE_NAME);
+    }
+
     @NonNull
     @Override
     public Result doWork() {
+        if (!DailyStepCounter.isAutoTrackingEnabled(getApplicationContext())) {
+            return Result.success();
+        }
         CountDownLatch done = new CountDownLatch(1);
         DailyStepCounter.sample(getApplicationContext(), counter -> done.countDown());
         try {
