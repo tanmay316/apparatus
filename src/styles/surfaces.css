@@ -37,28 +37,36 @@
 }
 
 [data-theme='dark'] .dx {
-  --dx-canvas: #090605;
-  --dx-card: #140b08;
-  --dx-card-2: #1e120e;
-  --dx-border: rgba(255, 228, 210, 0.08);
-  --dx-border-strong: rgba(255, 228, 210, 0.2);
-  --dx-text: #f7f2ee;
-  --dx-muted: #b9a397;
-  --dx-accent: #efad80;
-  --dx-accent-soft: rgba(239, 173, 128, 0.12);
-  --dx-on-accent: #21130f;
-  --dx-ink: #f7f2ee;
-  --dx-on-ink: #17191c;
+  --dx-canvas: #050505;
+  --dx-card: #0e0e10;
+  --dx-card-2: #151518;
+  --dx-border: rgba(255, 255, 255, 0.05);
+  --dx-border-strong: rgba(255, 255, 255, 0.14);
+  --dx-text: #f4f4f6;
+  --dx-muted: #9a9aa5;
+  --dx-accent: #b07458;
+  --dx-accent-soft: rgba(122, 58, 36, 0.3);
+  --dx-on-accent: #fbe1d1;
+  --dx-ink: #f4f4f6;
+  --dx-on-ink: #050505;
   --dx-success: #34d399;
   --dx-success-soft: rgba(52, 211, 153, 0.12);
   --dx-warning: #fbbf24;
-  --dx-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset;
-  --dx-hero-from: #2a140e;
-  --dx-hero-to: #4d2518;
+  --dx-shadow: var(--dk-neo-raised);
+  --dx-hero-from: #1a0c07;
+  --dx-hero-to: #3a1a10;
   --dx-hero-text: #fdf3ec;
-  --dx-hero-btn: #efad80;
-  --dx-hero-btn-text: #21130f;
+  --dx-hero-btn: #fbe1d1;
+  --dx-hero-btn-text: #3a1a10;
 }
+
+[data-theme='dark'] .dx-card { background: var(--dk-card); }
+[data-theme='dark'] .dx-inset { box-shadow: var(--dk-neo-inset-sm); }
+[data-theme='dark'] .dx-btn { background: var(--dk-brown-fill); box-shadow: var(--clay-shadow-btn); }
+[data-theme='dark'] .dx-btn-secondary,
+[data-theme='dark'] .dx-icon-btn { box-shadow: var(--dk-neo-raised-sm); }
+[data-theme='dark'] .dx-segment,
+[data-theme='dark'] .dx-progress { box-shadow: var(--dk-neo-inset-sm); }
 
 .dx h1, .dx h2, .dx h3, .dx h4 {
   font-family: var(--font-sans);
@@ -91,7 +99,10 @@
 }
 
 [data-theme='dark'] .dx-hero {
-  box-shadow: 0 0 0 1px rgba(239, 173, 128, 0.12) inset;
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(176, 116, 88, 0.18) 0%, transparent 55%),
+    linear-gradient(150deg, var(--dx-hero-from) 0%, var(--dx-hero-to) 100%);
+  box-shadow: 0 0 0 1px rgba(227, 189, 166, 0.08) inset, var(--dk-neo-raised);
 }
 
 /* ─── Type ─────────────────────────────────────────────────── */
@@ -228,8 +239,8 @@
 }
 
 [data-theme='dark'] .dx-segment > button[aria-selected='true'] {
-  background: #2a1a14;
-  box-shadow: none;
+  background: var(--dk-hover);
+  box-shadow: var(--dk-neo-raised-sm);
 }
 
 /* Hero (today's focus) controls. */
@@ -284,7 +295,7 @@
   --amber: #c98a1f;
 }
 
-[data-theme='dark'] .dx-profile { --amber: #d9a441; }
+[data-theme='dark'] .dx-profile { --amber: #fbbf24; }
 
 /* Horizontal rail that becomes a grid on wide screens. */
 .dx-rail {

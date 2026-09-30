@@ -58,17 +58,17 @@ export function CardioTracker() {
   const processingRef = useRef(false); // Guard against double-clicks during recovery
 
   const themeStyles = theme === 'dark' ? {
-    '--bg': 'var(--dx-canvas, #090605)',
-    '--card': 'var(--dx-card, #140b08)',
-    '--card-2': 'var(--dx-card-2, #1e120e)',
-    '--border': 'var(--dx-border, rgba(255, 228, 210, 0.08))',
-    '--border-strong': 'var(--dx-border-strong, rgba(255, 228, 210, 0.2))',
-    '--text': 'var(--dx-text, #f7f2ee)',
-    '--muted': 'var(--dx-muted, #b9a397)',
+    '--bg': 'var(--dx-canvas, #050505)',
+    '--card': 'var(--dx-card, #0e0e10)',
+    '--card-2': 'var(--dx-card-2, #151518)',
+    '--border': 'var(--dx-border, rgba(255, 255, 255, 0.05))',
+    '--border-strong': 'var(--dx-border-strong, rgba(255, 255, 255, 0.14))',
+    '--text': 'var(--dx-text, #f4f4f6)',
+    '--muted': 'var(--dx-muted, #9a9aa5)',
     '--teal': '#34d399',
     '--amber': '#fbbf24',
-    '--sienna': '#efad80',
-    '--accent': '#efad80',
+    '--sienna': '#b07458',
+    '--accent': '#b07458',
   } as React.CSSProperties : {
     '--bg': 'var(--dx-canvas, #fafafb)',
     '--card': 'var(--dx-card, #ffffff)',
@@ -748,7 +748,7 @@ export function CardioTracker() {
     const typeLabel = activityType === 'walk' ? 'Walk' : activityType === 'run' ? 'Run' : 'Cycle';
 
     return createPortal(
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-[#090605] flex flex-col h-[100dvh] overflow-hidden" style={themeStyles}>
+      <motion.div initial={false} animate={{ opacity: 1 }} className="fixed inset-0 z-[9999] bg-[#090605] flex flex-col h-[100dvh] overflow-hidden" style={themeStyles}>
         
         {/* Full Screen Map Background */}
         <div className="absolute inset-0 z-0">

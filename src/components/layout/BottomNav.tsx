@@ -123,9 +123,9 @@ export function BottomNav() {
         .bn-tab[aria-current='page'] { color: rgb(var(--color-sienna)); }
         .bn-tab[aria-current='page'] .bn-pill { background: rgb(var(--color-sienna) / 0.1); }
         .bn-tab:active .bn-pill { transform: scale(0.92); }
-        [data-theme='dark'] .bn-tab { color: #b99a8a; }
-        [data-theme='dark'] .bn-tab[aria-current='page'] { color: #ffd1b5; }
-        [data-theme='dark'] .bn-tab[aria-current='page'] .bn-pill { background: rgba(239, 173, 128, 0.16); }
+        [data-theme='dark'] .bn-tab { color: #8b8b96; }
+        [data-theme='dark'] .bn-tab[aria-current='page'] { color: #e3bda6; }
+        [data-theme='dark'] .bn-tab[aria-current='page'] .bn-pill { background: rgba(122, 58, 36, 0.35); box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.7), inset -1px -1px 3px rgba(255, 255, 255, 0.04); }
         @keyframes bnLiveGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(4, 120, 87, 0.5); } 50% { box-shadow: 0 0 0 6px rgba(4, 120, 87, 0); } }
         .bn-live-glow { animation: bnLiveGlow 2s infinite ease-in-out; }
       `}</style>

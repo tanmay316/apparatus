@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Footprints, Play } from 'lucide-react';
 import { DEFAULT_STEP_GOAL, getDailySteps } from '@/services/cardio';
 import { pedometerService } from '@/services/pedometer';
 import { localDateKey } from '@/lib/stats';
-import { Switch } from '@/components/ui/Toggle';
 
 const RING = 2 * Math.PI * 26;
 
@@ -14,21 +12,6 @@ export function StepGoalCard({ userId, goal }: { userId: string; goal?: number }
   const queryClient = useQueryClient();
   const target = goal && goal > 0 ? goal : DEFAULT_STEP_GOAL;
   const today = localDateKey();
-
-  // ─── Auto-tracking toggle state ──────────────────────────
-  const [autoTracking, setAutoTracking] = useState(() => pedometerService.isAutoTrackingEnabled());
-
-  useEffect(() => {
-    return pedometerService.subscribeAutoTracking(setAutoTracking);
-  }, []);
-
-  const handleToggleAutoTracking = useCallback(async (enabled: boolean) => {
-    setAutoTracking(enabled);
-    await pedometerService.setAutoTrackingEnabled(enabled);
-    // Refresh step counts so the card reflects the new mode immediately
-    queryClient.invalidateQueries({ queryKey: ['stepsToday'] });
-  }, [queryClient]);
-
   const { data: steps = 0 } = useQuery({
     queryKey: ['stepsToday', userId, today],
     queryFn: () => getDailySteps(userId, today),
@@ -94,30 +77,7 @@ export function StepGoalCard({ userId, goal }: { userId: string; goal?: number }
         <Play size={15} />
       </div>
     </Link>
-
-    {/* Auto step-counting toggle */}
-    <div
-      className="dx-card px-4 py-2.5 flex items-center gap-3"
-      onClick={e => e.stopPropagation()}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="text-[13px] font-medium" style={{ color: 'var(--dx-text)' }}>
-          Background step counting
-        </div>
-        <div className="text-[11.5px] dx-muted leading-snug mt-0.5">
-          {autoTracking
-            ? 'Counting all steps throughout the day'
-            : 'Only counting steps during cardio sessions'}
-        </div>
-      </div>
-      <Switch
-        checked={autoTracking}
-        onChange={handleToggleAutoTracking}
-        label="Toggle automatic background step counting"
-      />
-    </div>
-
-    {permission === 'prompt' && autoTracking && (
+    {permission === 'prompt' && (
       <button
         type="button"
         onClick={enableAllDay}
@@ -128,7 +88,7 @@ export function StepGoalCard({ userId, goal }: { userId: string; goal?: number }
         <span className="text-emerald-500 font-semibold">Allow</span>
       </button>
     )}
-    {permission === 'denied' && autoTracking && (
+    {permission === 'denied' && (
       <p className="text-[11.5px] dx-muted px-1">
         Step access is off, so only tracked walks and runs count. Turn on Physical activity / Motion &amp; Fitness for Apparatus in your phone settings.
       </p>

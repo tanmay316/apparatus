@@ -695,7 +695,9 @@ export function subscribeToNotifications(
     const now = Date.now() / 1000;
     const ONE_WEEK = 7 * 24 * 60 * 60;
     
-    if (onNew && !isInitial) {
+    // The first server-confirmed snapshot is the baseline; cached snapshots never count as new.
+    const fromCache = snap.metadata.fromCache;
+    if (onNew && !isInitial && !fromCache) {
       snap.docChanges().forEach(change => {
         if (change.type === 'added') {
           const data = change.doc.data();
@@ -704,7 +706,7 @@ export function subscribeToNotifications(
       });
     }
 
-    isInitial = false;
+    if (!fromCache) isInitial = false;
 
     snap.docs.forEach(d => {
       const data = d.data();

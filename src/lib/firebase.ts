@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, initializeAuth, indexedDBLocalPersistence, browserLocalPersistence, GoogleAuthProvider } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, setLogLevel, type Firestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 // ─── Environment Variable Validation ──────────────────────────
@@ -42,7 +42,19 @@ const app = initializeApp(firebaseConfig);
 export const auth = Capacitor.isNativePlatform()
   ? initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] })
   : getAuth(app);
-export const db = getFirestore(app);
+// IndexedDB cache: listeners answer from disk instantly on resume/cold start, then sync.
+function createFirestore(): Firestore {
+  try {
+    return initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+  } catch (err) {
+    console.warn('Firestore persistent cache unavailable, using memory cache:', err);
+    return getFirestore(app);
+  }
+}
+export const db = createFirestore();
+// The SDK warns on every dropped listen stream (backgrounding, network switch) even though
+// it reconnects on its own; real failures still reach callers as rejected promises/errors.
+setLogLevel('error');
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -20,6 +20,25 @@ import { RouteMap } from '@/components/cardio/RouteMap';
 import { CelebrationPodiumCard } from '@/components/community/CelebrationPodiumCard';
 import { getAppShareUrl, shareContent } from '@/lib/share';
 import { useLiveDisplayName } from '@/hooks/useLiveDisplayName';
+
+/** Defers heavy children (Leaflet maps) until the card scrolls near the viewport, then keeps them. */
+function MountWhenNear({ className, children }: { className?: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    const el = ref.current;
+    if (near || !el) return;
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) {
+        setNear(true);
+        io.disconnect();
+      }
+    }, { rootMargin: '400px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [near]);
+  return <div ref={ref} className={className}>{near ? children : null}</div>;
+}
 
 function timeAgo(seconds?: number): string {
   if (!seconds) return 'just now';
@@ -54,6 +73,7 @@ interface CardioPostHeroProps {
 
 /** Feed layout for a completed cardio session: title, map + primary stats, then every other KPI. */
 function CardioPostHero({ details, activityType, createdAtSec, theme }: CardioPostHeroProps) {
+  const [showMore, setShowMore] = useState(false);
   const kind = (['walk', 'run', 'cycle'].includes(details.activityType) ? details.activityType : activityType) as 'walk' | 'run' | 'cycle' | string;
   const isCycle = kind === 'cycle';
   const kindLabel = kind === 'run' ? 'Run' : isCycle ? 'Ride' : 'Walk';
@@ -69,8 +89,6 @@ function CardioPostHero({ details, activityType, createdAtSec, theme }: CardioPo
 
   const distanceKm = num(details.distanceKm);
   const durationSec = num(details.movingDurationSec) ?? num(details.durationSec);
-  const elapsedSec = num(details.elapsedDurationSec);
-  const pausedSec = num(details.pausedDurationSec);
   const pace = typeof details.avgPace === 'string' ? details.avgPace.replace(/\s*\/\s*km\s*$/i, '').trim() : null;
   const avgSpeed = num(details.avgSpeedKmh) ?? (distanceKm && durationSec ? distanceKm / (durationSec / 3600) : null);
   const maxSpeed = num(details.maxSpeedKmh);
@@ -93,10 +111,8 @@ function CardioPostHero({ details, activityType, createdAtSec, theme }: CardioPo
   if (!isCycle && avgSpeed !== null) secondary.push({ label: 'Avg Speed', value: avgSpeed.toFixed(1), unit: 'km/h', icon: Gauge });
   if (maxSpeed !== null && maxSpeed > 0) secondary.push({ label: 'Max Speed', value: maxSpeed.toFixed(1), unit: 'km/h', icon: TrendingUp });
   if (steps !== null && steps > 0) secondary.push({ label: 'Steps', value: Math.round(steps).toLocaleString(), icon: Footprints });
-  if (elapsedSec !== null && pausedSec !== null && pausedSec > 0) {
-    secondary.push({ label: 'Elapsed', value: formatClock(elapsedSec), icon: Clock3 });
-    secondary.push({ label: 'Paused', value: formatClock(pausedSec), icon: Clock3 });
-  }
+
+  const allSecondary = [{ label: 'Elevation', value: elevation !== null ? `+${Math.round(elevation)}` : '+0', unit: 'm', icon: Mountain }, ...secondary];
 
   return (
     <div className="mb-4">
@@ -109,7 +125,7 @@ function CardioPostHero({ details, activityType, createdAtSec, theme }: CardioPo
       <div className="grid grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] gap-3 items-stretch">
         <div className="cardio-post-map relative w-full min-h-[184px] overflow-hidden rounded-[18px]">
           {hasRoute ? (
-            <div className="absolute inset-0 pointer-events-none">
+            <MountWhenNear className="absolute inset-0 pointer-events-none">
               <RouteMap
                 route={details.route}
                 theme={theme === 'dark' ? 'dark' : 'light'}
@@ -119,12 +135,12 @@ function CardioPostHero({ details, activityType, createdAtSec, theme }: CardioPo
                 variant="card"
                 hideMarkers
                 noGlow
-                highlightColor={theme === 'dark' ? '#efad80' : '#d9532f'}
+                highlightColor={theme === 'dark' ? '#b07458' : '#d9532f'}
                 cardioType={kind as any}
                 mapPaddingTopLeft={[20, 34]}
                 mapPaddingBottomRight={[20, 20]}
               />
-            </div>
+            </MountWhenNear>
           ) : (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="cardio-post-badge w-14 h-14 rounded-full flex items-center justify-center">
@@ -150,22 +166,46 @@ function CardioPostHero({ details, activityType, createdAtSec, theme }: CardioPo
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-3">
-        {[{ label: 'Elevation', value: elevation !== null ? `+${Math.round(elevation)}` : '+0', unit: 'm', icon: Mountain }, ...secondary].map((s) => (
-          <div key={s.label} className="cardio-post-stat flex items-center gap-2.5 px-2.5 py-2.5 min-w-0 min-h-[52px]">
-            <span className="cardio-post-badge w-7 h-7 rounded-full inline-flex items-center justify-center shrink-0">
-              <s.icon size={13} />
-            </span>
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-0.5 min-w-0">
-                <span className="font-mono font-bold text-[#17191c] text-[13px] leading-none tabular-nums truncate">{s.value}</span>
-                {s.unit && <span className="text-[9px] font-mono text-[#777b86] leading-none shrink-0">{s.unit}</span>}
-              </div>
-              <div className="text-[10px] font-mono uppercase tracking-normal text-[#777b86] leading-tight mt-1 whitespace-nowrap">{s.label}</div>
-            </div>
-          </div>
-        ))}
-      </div>
+      {/* Secondary KPIs — collapsed behind "Show more" */}
+      {allSecondary.length > 0 && (
+        <>
+          <AnimatePresence initial={false}>
+            {showMore && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                className="overflow-hidden"
+              >
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mt-3">
+                  {allSecondary.map((s) => (
+                    <div key={s.label} className="cardio-post-stat flex items-center gap-2.5 px-2.5 py-2.5 min-w-0 min-h-[52px]">
+                      <span className="cardio-post-badge w-7 h-7 rounded-full inline-flex items-center justify-center shrink-0">
+                        <s.icon size={13} />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex items-baseline gap-0.5 min-w-0">
+                          <span className="font-mono font-bold text-[#17191c] text-[13px] leading-none tabular-nums truncate">{s.value}</span>
+                          {s.unit && <span className="text-[9px] font-mono text-[#777b86] leading-none shrink-0">{s.unit}</span>}
+                        </div>
+                        <div className="text-[10px] font-mono uppercase tracking-normal text-[#777b86] leading-tight mt-1 whitespace-nowrap">{s.label}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <button
+            type="button"
+            onClick={() => setShowMore(v => !v)}
+            className="w-full mt-2 py-1.5 text-center text-[12px] font-semibold text-[#777b86] hover:text-[#17191c] flex items-center justify-center gap-1 transition-colors"
+          >
+            {showMore ? <>Show less <ChevronUp size={14} /></> : <>Show more <ChevronDown size={14} /></>}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -192,7 +232,7 @@ interface StrengthPostHeroProps {
 function StrengthPostHero({ details, title, createdAtSec, activeMuscles, calories, volumeKg, bodyweightReps, gender, theme, imperial }: StrengthPostHeroProps) {
   const [showAll, setShowAll] = useState(false);
   const dark = theme === 'dark';
-  const accent = dark ? '#efad80' : '#c24e2c';
+  const accent = dark ? '#c0785a' : '#c24e2c';
   const weightUnit = imperial ? 'lb' : 'kg';
   const toUnit = (kg: number) => (imperial ? kg * 2.20462 : kg);
 
@@ -238,7 +278,7 @@ function StrengthPostHero({ details, title, createdAtSec, activeMuscles, calorie
   };
 
   const visible = showAll ? exercises : exercises.slice(0, 1);
-  const inactive = dark ? { fill: '#241613', stroke: '#3a2620' } : { fill: '#e2dbd3', stroke: '#b9aea3' };
+  const inactive = dark ? { fill: '#18181b', stroke: '#26262b' } : { fill: '#e2dbd3', stroke: '#b9aea3' };
 
   return (
     <div className="mb-4">

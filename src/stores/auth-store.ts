@@ -10,6 +10,8 @@ import { sanitizeUsername, validateDisplayName } from '@/lib/validation';
 import { STATS_VERSION, emptyStats } from '@/lib/stats';
 import { getProfileVisibility } from '@/lib/privacy';
 import { useUIStore } from '@/stores/ui-store';
+import { clearSessionCache, readSessionCache, writeSessionCache } from '@/lib/session-cache';
+import { setQueryPersistenceUser } from '@/lib/query-client';
 import type { UserProfile, UserStats } from '@/types';
 
 interface AuthState {
@@ -75,12 +77,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       stopBanWatch = null;
       const appleName = pendingAppleName;
       pendingAppleName = null;
+      // Paint the last-known session immediately; Firestore refreshes it below.
+      const cached = firebaseUser ? readSessionCache(firebaseUser.uid) : null;
+      if (firebaseUser && cached) {
+        setQueryPersistenceUser(firebaseUser.uid);
+        set({
+          user: firebaseUser,
+          profile: { ...cached.profile, isAdmin: isAdminUser(firebaseUser) },
+          stats: cached.stats,
+          loading: false,
+          initialized: true,
+        });
+      }
       try {
         if (firebaseUser) {
-          // Fetch or create profile asynchronously
           const profileRef = doc(db, 'users', firebaseUser.uid);
-          const profileSnap = await withTimeout(
-            getDoc(profileRef),
+          const statsRef = doc(db, 'users', firebaseUser.uid, 'stats', 'current');
+          const [profileSnap, banSnap, statsSnap] = await withTimeout(
+            Promise.all([getDoc(profileRef), getDoc(doc(db, 'bans', firebaseUser.uid)), getDoc(statsRef)]),
             8000,
             'Firestore connection timed out. Please check if Cloud Firestore is enabled in your Firebase Console.'
           );
@@ -163,25 +177,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             import('@/services/admin-alerts').then(m => m.registerAdmin(firebaseUser.uid)).catch(() => {});
           }
 
-          const banSnap = await withTimeout(
-            getDoc(doc(db, 'bans', firebaseUser.uid)),
-            8000,
-            'Failed to verify account status.'
-          );
           if (banSnap.exists() && isBanActive(banSnap.data())) {
             useUIStore.getState().showToast(SUSPENDED_MESSAGE, 'error');
+            clearSessionCache();
+            setQueryPersistenceUser(null);
             await firebaseSignOut(auth);
             set({ user: null, profile: null, stats: null, loading: false, initialized: true });
             return;
           }
 
-          // Fetch stats
-          const statsRef = doc(db, 'users', firebaseUser.uid, 'stats', 'current');
-          const statsSnap = await withTimeout(
-            getDoc(statsRef),
-            8000,
-            'Failed to retrieve user stats.'
-          );
           const stats = statsSnap.exists() ? (statsSnap.data() as UserStats) : DEFAULT_STATS;
           if (!statsSnap.exists()) {
             await withTimeout(
@@ -192,6 +196,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           }
 
           set({ user: firebaseUser, profile, stats, loading: false, initialized: true });
+          setQueryPersistenceUser(firebaseUser.uid);
           // A ban issued while the user is signed in takes effect immediately.
           stopBanWatch = onSnapshot(doc(db, 'bans', firebaseUser.uid), snap => {
             if (snap.exists() && isBanActive(snap.data()) && auth.currentUser?.uid === firebaseUser.uid) {
@@ -203,10 +208,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           syncAuthIdentity(profile.displayName || undefined, profile.photoURL || undefined);
           runAccountMaintenance(firebaseUser.uid, profile, stats);
         } else {
+          clearSessionCache();
+          setQueryPersistenceUser(null);
           set({ user: null, profile: null, stats: null, loading: false, initialized: true });
         }
       } catch (error: any) {
         console.error('Failed to initialize user session:', error);
+        // Offline/slow network with a cached session: keep the user in the app.
+        if (cached) return;
         useUIStore.getState().showToast('Network timeout. Please check your connection and refresh.', 'error');
         // Do NOT forcefully sign out of Firebase here. The user is still authenticated, 
         // they just had a bad connection. Forcing signOut deletes their session!
@@ -382,6 +391,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       }
       await firebaseSignOut(auth);
+      clearSessionCache();
+      setQueryPersistenceUser(null);
       set({ user: null, profile: null, stats: null });
     } catch (error) {
       console.error('Sign-out failed:', error);
@@ -434,6 +445,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 }));
+
+// Keep the cold-start snapshot in step with every profile/stats change.
+let sessionCacheTimer: ReturnType<typeof setTimeout> | null = null;
+useAuthStore.subscribe((state, prev) => {
+  if (!state.user || !state.profile || !state.stats) return;
+  if (state.profile === prev.profile && state.stats === prev.stats) return;
+  if (sessionCacheTimer) clearTimeout(sessionCacheTimer);
+  sessionCacheTimer = setTimeout(() => {
+    const { user, profile, stats } = useAuthStore.getState();
+    if (user && profile && stats) writeSessionCache(user.uid, profile, stats);
+  }, 500);
+});
 
 /** One-off background repairs: rebuild stale stats and hide public content of private profiles. */
 function runAccountMaintenance(uid: string, profile: UserProfile, stats: UserStats) {

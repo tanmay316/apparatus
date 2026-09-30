@@ -35,7 +35,7 @@ function AnimatedCounter({ value, formatter }: { value: number; formatter?: (v: 
 
 export function StatsPills({ totalWorkouts, totalCalories, totalHours }: StatsPillsProps) {
   const cards = [
-    { key: 'workouts', label: 'Workouts', value: totalWorkouts, icon: Dumbbell, tint: '#5d2a1a', tintDark: '#efad80' },
+    { key: 'workouts', label: 'Workouts', value: totalWorkouts, icon: Dumbbell, tint: '#5d2a1a', tintDark: '#b07458' },
     {
       key: 'calories', label: 'Calories', value: totalCalories, icon: Flame, tint: '#c2410c', tintDark: '#fb923c',
       formatter: (v: number) => {

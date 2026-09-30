@@ -10,7 +10,7 @@ export interface PlanCategory {
 }
 
 const CATEGORIES: { match: RegExp; category: PlanCategory }[] = [
-  { match: /\b(calisthenics|skills?|street workout)\b/, category: { label: 'Calisthenics', icon: PersonStanding, tint: '#b6552f', tintDark: '#efad80' } },
+  { match: /\b(calisthenics|skills?|street workout)\b/, category: { label: 'Calisthenics', icon: PersonStanding, tint: '#b6552f', tintDark: '#ffa37a' } },
   { match: /\b(home|no.?equipment)\b/, category: { label: 'Home', icon: Home, tint: '#2f7a6d', tintDark: '#7fd1c2' } },
   { match: /\b(hyrox|marathon|running|cardio|endurance|conditioning|fat.?loss)\b/, category: { label: 'Conditioning', icon: HeartPulse, tint: '#be3455', tintDark: '#f59aae' } },
   { match: /\b(powerlifting|strength|powerbuilding)\b/, category: { label: 'Strength', icon: Trophy, tint: '#a86b12', tintDark: '#f1c46b' } },
@@ -18,7 +18,7 @@ const CATEGORIES: { match: RegExp; category: PlanCategory }[] = [
   { match: /\b(gym|hypertrophy|barbell|bodybuilding|split|push pull legs|ppl)\b/, category: { label: 'Gym', icon: Dumbbell, tint: '#3d5a80', tintDark: '#9cc0ea' } },
 ];
 
-const DEFAULT_CATEGORY: PlanCategory = { label: 'Program', icon: Dumbbell, tint: '#6b5a52', tintDark: '#d7b9a8' };
+const DEFAULT_CATEGORY: PlanCategory = { label: 'Program', icon: Dumbbell, tint: '#6b5a52', tintDark: '#b4b4bf' };
 
 export function planCategory(plan: Pick<Plan, 'tags' | 'title' | 'description'>): PlanCategory {
   // Tags and title are the strongest signal; only fall back to the description when they say nothing.

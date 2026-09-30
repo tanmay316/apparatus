@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, lazy, Suspense } from 'react';
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { queryClient } from '@/lib/query-client';
 import { useAuthStore } from '@/stores/auth-store';
 import { Layout } from '@/components/layout/Layout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -34,19 +35,27 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 import { MedalCelebrationModal } from '@/components/community/MedalCelebrationModal';
 import type { AppNotificationItem } from '@/types';
 
+const loadDashboard = () => import('@/pages/Dashboard');
+const loadProfile = () => import('@/pages/ProfilePage');
+const loadPlanList = () => import('@/pages/PlanList');
+const loadProgress = () => import('@/pages/ProgressPage');
+const loadFeed = () => import('@/pages/FeedPage');
+const loadCardio = () => import('@/pages/CardioTracker');
+const loadWorkout = () => import('@/pages/WorkoutSession');
+
 const AuthPage = lazy(() => import('@/pages/AuthPage').then(m => ({ default: m.AuthPage })));
-const Dashboard = lazy(() => import('@/pages/Dashboard').then(m => ({ default: m.Dashboard })));
-const ProfilePage = lazy(() => import('@/pages/ProfilePage').then(m => ({ default: m.ProfilePage })));
-const PlanList = lazy(() => import('@/pages/PlanList').then(m => ({ default: m.PlanList })));
+const Dashboard = lazy(() => loadDashboard().then(m => ({ default: m.Dashboard })));
+const ProfilePage = lazy(() => loadProfile().then(m => ({ default: m.ProfilePage })));
+const PlanList = lazy(() => loadPlanList().then(m => ({ default: m.PlanList })));
 const PlanDetail = lazy(() => import('@/pages/PlanDetail').then(m => ({ default: m.PlanDetail })));
 const DayView = lazy(() => import('@/pages/DayView').then(m => ({ default: m.DayView })));
 const ExplorePage = lazy(() => import('@/pages/ExplorePage').then(m => ({ default: m.ExplorePage })));
 const NutritionDashboard = lazy(() => import('./pages/NutritionDashboard'));
 const AdminPage = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m.AdminPage })));
-const WorkoutSession = lazy(() => import('@/pages/WorkoutSession').then(m => ({ default: m.WorkoutSession })));
-const ProgressPage = lazy(() => import('@/pages/ProgressPage').then(m => ({ default: m.ProgressPage })));
+const WorkoutSession = lazy(() => loadWorkout().then(m => ({ default: m.WorkoutSession })));
+const ProgressPage = lazy(() => loadProgress().then(m => ({ default: m.ProgressPage })));
 
-const FeedPage = lazy(() => import('@/pages/FeedPage').then(m => ({ default: m.FeedPage })));
+const FeedPage = lazy(() => loadFeed().then(m => ({ default: m.FeedPage })));
 const CommunityPage = lazy(() => import('@/pages/CommunityPage').then(m => ({ default: m.CommunityPage })));
 const ClanPage = lazy(() => import('@/pages/ClanPage').then(m => ({ default: m.ClanPage })));
 const ClanChatPage = lazy(() => import('@/pages/ClanChatPage').then(m => ({ default: m.ClanChatPage })));
@@ -55,33 +64,61 @@ const SkillsPage = lazy(() => import('@/pages/SkillsPage').then(m => ({ default:
 const MeasurementsPage = lazy(() => import('@/pages/MeasurementsPage').then(m => ({ default: m.MeasurementsPage })));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const GuidePage = lazy(() => import('@/pages/GuidePage').then(m => ({ default: m.GuidePage })));
-const CardioTracker = lazy(() => import('@/pages/CardioTracker').then(m => ({ default: m.CardioTracker })));
+const CardioTracker = lazy(() => loadCardio().then(m => ({ default: m.CardioTracker })));
 const SinglePostPage = lazy(() => import('@/pages/SinglePostPage').then(m => ({ default: m.SinglePostPage })));
 const SearchPage = lazy(() => import('@/pages/SearchPage').then(m => ({ default: m.SearchPage })));
 const AthleteRanksPage = lazy(() => import('@/pages/AthleteRanksPage').then(m => ({ default: m.AthleteRanksPage })));
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 5,
-      retry: 1,
-    },
-  },
-});
+// A live session reopens straight into the tracker, so fetch it before anything else.
+if (useCardioStore.getState().isTracking) void loadCardio();
+if (useWorkoutStore.getState().planId) void loadWorkout();
+
+/** Warms the main tab chunks once the first screen is up, so tab switches never show a spinner. */
+function prefetchMainRoutes() {
+  const run = () => {
+    for (const load of [loadDashboard, loadFeed, loadProgress, loadProfile, loadPlanList, loadCardio]) {
+      load().catch(() => {});
+    }
+  };
+  const idle = (window as any).requestIdleCallback as ((cb: () => void, opts?: { timeout: number }) => void) | undefined;
+  if (idle) idle(run, { timeout: 2500 });
+  else setTimeout(run, 1200);
+}
 
 function LoadingScreen() {
+  const dark = useUIStore(s => s.theme) === 'dark';
   return (
-    <div className="fixed inset-0 bg-[#f4a080] flex flex-col items-center justify-center z-[9999]">
+    <div className={`fixed inset-0 flex flex-col items-center justify-center z-[9999] ${dark ? 'bg-[#050505]' : 'bg-[#f4a080]'}`}>
       <div className="relative flex flex-col items-center">
         <img 
           src="/logo.png" 
           alt="Apparatus" 
-          className="w-32 h-auto mb-8 animate-[pulse_3s_ease-in-out_infinite] mix-blend-multiply opacity-90"
-          style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
+          className={`w-32 h-auto mb-8 animate-[pulse_3s_ease-in-out_infinite] opacity-90 ${dark ? 'mix-blend-screen' : 'mix-blend-multiply'}`}
+          style={{ filter: dark ? 'invert(1) brightness(1.1)' : 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
         />
       </div>
     </div>
   );
+}
+
+// In-app banners are only for things arriving right now while the app is on screen.
+// In the background FCM shows the push, and Firestore catching up after a resume or
+// reconnect must not replay messages the user already got.
+const BANNER_FRESH_MS = 2 * 60 * 1000;
+const SHOWN_BANNERS_KEY = 'apparatus.shown-banners';
+
+function claimBanner(id: string | undefined, createdAtMillis: number): boolean {
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return false;
+  // A pending local write has no server time yet: it was created just now.
+  const created = createdAtMillis || Date.now();
+  if (Date.now() - created > BANNER_FRESH_MS) return false;
+  if (!id) return true;
+  try {
+    const shown: string[] = JSON.parse(localStorage.getItem(SHOWN_BANNERS_KEY) || '[]');
+    if (shown.includes(id)) return false;
+    localStorage.setItem(SHOWN_BANNERS_KEY, JSON.stringify([...shown.slice(-199), id]));
+  } catch { /* storage unavailable: freshness check still applies */ }
+  return true;
 }
 
 function PageLoader() {
@@ -109,7 +146,19 @@ function PublicOnly({ children }: { children: React.ReactNode }) {
 function PreferencesSync() {
   const { theme, setTheme, language } = useUIStore();
   const { user } = useAuthStore();
+  const initialized = useAuthStore(s => s.initialized);
   const queryClient = useQueryClient();
+
+  // Keep the native splash up until the first real screen can paint (no loader flash in between).
+  useEffect(() => {
+    if (initialized) {
+      SplashScreen.hide({ fadeOutDuration: 150 }).catch(() => {});
+      prefetchMainRoutes();
+      return;
+    }
+    const fallback = setTimeout(() => SplashScreen.hide().catch(() => {}), 4000);
+    return () => clearTimeout(fallback);
+  }, [initialized]);
 
   useEffect(() => {
     // One-time migration to ensure light theme is the default for new build/installs.
@@ -131,7 +180,7 @@ function PreferencesSync() {
         // status bar sits over the webview and is spaced via safe-area insets.
         if (Capacitor.getPlatform() === 'android') {
           StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
-          StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#090605' : '#FFFFFF' }).catch(() => {});
+          StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#050505' : '#FFFFFF' }).catch(() => {});
         }
         StatusBar.setStyle({ style: theme === 'dark' ? Style.Dark : Style.Light }).catch(() => {});
       }).catch(() => {});
@@ -140,7 +189,7 @@ function PreferencesSync() {
     // Keep the browser/PWA chrome colour in sync with the active theme.
     const themeMeta = document.querySelector('meta[name="theme-color"]');
     if (themeMeta) {
-      themeMeta.setAttribute('content', theme === 'dark' ? '#14151A' : '#FFFFFF');
+      themeMeta.setAttribute('content', theme === 'dark' ? '#050505' : '#FFFFFF');
     }
   }, [theme, language]);
 
@@ -149,9 +198,6 @@ function PreferencesSync() {
     const apiBase = import.meta.env.VITE_NUTRITION_API_URL || 'http://localhost:8000/api/v1';
     fetch(`${apiBase}/health`)
       .catch(e => console.debug('Backend wakeup ping failed', e));
-
-    // Hide Splash Screen immediately once React mounts to prevent double-loading screens
-    SplashScreen.hide().catch(() => {});
 
     requestNotificationPermission();
 
@@ -227,7 +273,6 @@ function PreferencesSync() {
   // Global real-time notification listener (Always active for mobile local & in-app delivery)
   useEffect(() => {
     if (!user?.uid) return;
-    const mountedAt = Date.now();
 
     // Register push notification token on mobile
     initPushNotifications(user.uid);
@@ -254,11 +299,10 @@ function PreferencesSync() {
             ? (newNote.createdAt as any).toMillis()
             : ((newNote.createdAt as any)?.seconds ? (newNote.createdAt as any).seconds * 1000 : 0);
 
-          if (createdAtMillis >= mountedAt - 30000 || !createdAtMillis) {
-            const sender = newNote.senderName || 'Apparatus';
+          if (claimBanner(newNote.id, createdAtMillis)) {
             notifyDevice(
               categoryOf(newNote.type),
-              sender,
+              newNote.senderName || 'Apparatus',
               newNote.message,
               {
                 ...newNote.extra,
@@ -282,6 +326,8 @@ function PreferencesSync() {
     );
 
     const unsubAppNotifs = onSnapshot(qAppNotifs, (snap) => {
+      // Cached replays are not new arrivals.
+      if (snap.metadata.fromCache) return;
       snap.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const notif = change.doc.data() as AppNotificationItem;
@@ -289,7 +335,7 @@ function PreferencesSync() {
             ? (notif.createdAt as any).toMillis()
             : ((notif.createdAt as any)?.seconds ? (notif.createdAt as any).seconds * 1000 : 0);
 
-          if (createdAtMillis >= mountedAt - 30000 || !createdAtMillis) {
+          if (claimBanner(change.doc.id, createdAtMillis)) {
             notifyDevice(categoryOf(notif.type), notif.title || 'Apparatus', notif.body || 'New notification', {
               ...notif,
               id: change.doc.id,

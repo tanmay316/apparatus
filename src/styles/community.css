@@ -49,7 +49,7 @@
   color: #fbe1d1;
 }
 [data-theme='dark'] .cx .text-bg {
-  color: #21130f;
+  color: #fbe1d1;
 }
 .cx .text-foreground {
   color: rgb(var(--color-bone));
@@ -94,7 +94,9 @@
 }
 
 [data-theme='dark'] .cx-card {
-  background: rgb(var(--color-ink-2));
+  background: var(--dk-card);
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: var(--dk-neo-raised-sm);
 }
 
 [data-theme='dark'] .cx-card-interactive:hover {
@@ -148,6 +150,7 @@
 
 [data-theme='dark'] .cx-segment-thumb {
   background: rgb(var(--color-ink-3));
+  box-shadow: var(--dk-neo-raised-sm);
 }
 
 /* ─── Chips ────────────────────────────────────────────────────── */
@@ -280,7 +283,8 @@
 
 [data-theme='dark'] .cx-icon-btn.cx-icon-btn-primary,
 [data-theme='dark'] .cx-icon-btn.cx-icon-btn-primary:hover:not(:disabled) {
-  color: #21130f;
+  background: #5d2a1a;
+  color: #fbe1d1;
 }
 
 /* ─── Chat ─────────────────────────────────────────────────────── */
@@ -309,8 +313,8 @@
 }
 
 [data-theme='dark'] .cx-bubble-out {
-  background: #6b3a26;
-  color: #fff3eb;
+  background: #5d2a1a;
+  color: #fbe1d1;
 }
 
 .cx-bubble-out .cx-bubble-meta { color: rgb(255 243 235 / 0.72); }

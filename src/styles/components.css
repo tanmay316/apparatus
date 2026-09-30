@@ -297,8 +297,10 @@
     @apply card px-5 py-4;
   }
 
-  /* ─── Dark Theme Editorial Overrides ────────────────────── */
-  /* Keep structural edges in dark mode: they make adjacent surfaces legible. */
+  /* ─── Dark Theme ────────────────────────────────────────────
+     Deep black neumorphic surfaces + dark-brown accent. Colours come
+     from the --dk-* tokens in variables.css.
+     ──────────────────────────────────────────────────────── */
   [data-theme='dark'] nav,
   [data-theme='dark'] header,
   [data-theme='dark'] aside,
@@ -311,11 +313,11 @@
   [data-theme='dark'] .border-line,
   [data-theme='dark'] .border-solid,
   [data-theme='dark'] .border-\[\#ececec\],
-  [data-theme='dark'] .border-\[\#ececec\]\/50 {
-    border-color: rgba(239, 202, 177, 0.13) !important;
+  [data-theme='dark'] .border-\[\#ececec\]\/50,
+  [data-theme='dark'] .border {
+    border-color: var(--dk-border) !important;
   }
 
-  /* Layered surfaces retain depth without the harsh black slabs. */
   [data-theme='dark'] .card,
   [data-theme='dark'] .floating-artifact,
   [data-theme='dark'] .card-mist,
@@ -324,43 +326,22 @@
   [data-theme='dark'] div.card-mist,
   [data-theme='dark'] a.card,
   [data-theme='dark'] button.card {
-    background: linear-gradient(145deg, #301b14 0%, #1a0e0b 100%) !important;
-    border: 1px solid rgba(239, 202, 177, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
     border-radius: 24px !important;
-    box-shadow: var(--shadow-artifact) !important;
-  }
-
-  /* Translate hard-coded light utility surfaces into dark-compatible layers. */
-  [data-theme='dark'] .bg-white,
-  [data-theme='dark'] .bg-white\/80,
-  [data-theme='dark'] .bg-white\/90,
-  [data-theme='dark'] .bg-white\/95,
-  [data-theme='dark'] .bg-\[\#fafafb\],
-  [data-theme='dark'] .bg-ink-2 {
-    background-color: #1f110d !important;
-  }
-
-  [data-theme='dark'] .bg-\[\#f2f2f3\] {
-    background-color: #301b14 !important;
-  }
-
-  [data-theme='dark'] .border-\[\#ececec\],
-  [data-theme='dark'] .border {
-    border-color: rgba(239, 202, 177, 0.13) !important;
   }
 
   /* Skills Page Card & Progress styling overrides */
   [data-theme='dark'] .skills-page-container .bg-ink-2,
   [data-theme='dark'] .skills-page-container .bg-sienna\/5 {
-    background-color: #1f110d !important;
-    border: 1px solid rgba(239, 202, 177, 0.13) !important;
-    box-shadow: var(--clay-shadow-sm) !important;
+    background-color: var(--dk-surface) !important;
+    border: 1px solid var(--dk-border) !important;
+    box-shadow: var(--dk-neo-raised-sm) !important;
   }
 
   [data-theme='dark'] .skills-page-container .bg-ink-2:hover,
   [data-theme='dark'] .skills-page-container .bg-ink-3:hover {
-    background-color: #3a2119 !important;
-    border-color: rgba(239, 173, 128, 0.3) !important;
+    background-color: var(--dk-raised) !important;
+    border-color: rgba(176, 116, 88, 0.35) !important;
   }
 
   [data-theme='dark'] .card-hover:hover {
@@ -373,16 +354,12 @@
     min-height: 220px !important;
   }
 
-  /* ─── Hero Section Override (Dark Brown) ────────────────── */
+  /* ─── Dashboard hero ─────────────────────────────────────── */
   [data-theme='dark'] .dashboard-hero-card.bg-white {
-    background: linear-gradient(135deg, rgba(93, 42, 26, 0.26) 0%, rgba(31, 21, 12, 0.4) 50%, rgba(0, 0, 0, 0.55) 100%) !important;
-    backdrop-filter: blur(24px) !important;
-    -webkit-backdrop-filter: blur(24px) !important;
-    border: 1px solid rgba(215, 178, 157, 0.15) !important;
-    /* Elegant glass outline */
-    box-shadow: 0 16px 40px 0 rgba(0, 0, 0, 0.4) !important;
-    color: #f7f5f2 !important;
-    /* Creamy bone */
+    background: var(--dk-hero) !important;
+    border: 1px solid rgba(227, 189, 166, 0.1) !important;
+    box-shadow: var(--dk-neo-raised) !important;
+    color: #F4F4F6 !important;
   }
 
   [data-theme='dark'] .dashboard-hero-card h1,
@@ -392,183 +369,132 @@
 
   [data-theme='dark'] .dashboard-hero-card p,
   [data-theme='dark'] .dashboard-hero-card span.text-\[\#979799\] {
-    color: #bfaea5 !important;
-    /* Muted creamy brown */
+    color: #A1A1AC !important;
   }
 
   [data-theme='dark'] .dashboard-hero-card span.bg-\[\#f2f2f3\] {
-    background-color: #382921 !important;
-    color: #f7f5f2 !important;
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: #F4F4F6 !important;
   }
 
   [data-theme='dark'] .dashboard-hero-card span.bg-\[\#fbe1d1\] {
-    background-color: #4f3325 !important;
-    color: #e5bfa7 !important;
+    background-color: var(--dk-brown-soft) !important;
+    color: var(--dk-brown-chip-text) !important;
   }
 
-  /* Progress Ring inside Hero Dashboard */
   [data-theme='dark'] .hero-ring-container {
-    background-color: #33231c !important;
-    /* Light brown inner background */
+    background-color: var(--dk-raised) !important;
+    box-shadow: var(--dk-neo-inset-sm) !important;
   }
 
   [data-theme='dark'] .hero-ring-bg {
-    stroke: #523b30 !important;
-    /* Light brown outer circle stroke */
+    stroke: #232327 !important;
   }
 
   [data-theme='dark'] .hero-ring-progress {
-    stroke: #ffffff !important;
-    /* White progress stroke */
+    stroke: var(--dk-brown-text) !important;
   }
 
-  [data-theme='dark'] .hero-ring-container .text-\[\#17191c\] {
-    color: #ffffff !important;
-  }
-
-  [data-theme='dark'] .hero-ring-container .text-\[\#777b86\] {
-    color: #bfaea5 !important;
-  }
-
+  [data-theme='dark'] .hero-ring-container .text-\[\#17191c\],
   [data-theme='dark'] .hero-ring-container .text-\[\#5d2a1a\] {
     color: #ffffff !important;
   }
 
-  /* ─── XP Panel Card Override (Full Black) ────────────────── */
-  [data-theme='dark'] .xp-panel-card {
-    background-color: #000000 !important;
-    border-color: transparent !important;
-    box-shadow: none !important;
-    color: #f7f5f2 !important;
+  [data-theme='dark'] .hero-ring-container .text-\[\#777b86\] {
+    color: #9A9AA5 !important;
   }
 
-  [data-theme='dark'] .xp-panel-card .text-\[\#17191c\] {
+  /* ─── XP panel ───────────────────────────────────────────── */
+  [data-theme='dark'] .xp-panel-card {
+    color: #F4F4F6 !important;
+  }
+
+  [data-theme='dark'] .xp-panel-card .text-\[\#17191c\],
+  [data-theme='dark'] .xp-panel-card a {
     color: #ffffff !important;
   }
 
   [data-theme='dark'] .xp-panel-card .text-\[\#777b86\],
   [data-theme='dark'] .xp-panel-card .text-\[\#979799\] {
-    color: #c9a997 !important;
+    color: #9A9AA5 !important;
   }
 
   [data-theme='dark'] .xp-panel-card .bg-\[\#17191c\] {
-    background-color: #d7b29d !important;
-    /* Light brown */
-    color: #1F150C !important;
+    background: var(--dk-brown-fill) !important;
+    color: var(--dk-on-brown) !important;
   }
 
   [data-theme='dark'] .xp-panel-card .text-white {
-    color: #1F150C !important;
-    /* Dark brown on light brown background */
+    color: var(--dk-on-brown) !important;
   }
 
   [data-theme='dark'] .xp-panel-card .bg-\[\#f2f2f3\] {
-    background-color: #301b14 !important;
-    color: #c9a997 !important;
+    background-color: var(--dk-raised) !important;
+    color: #A1A1AC !important;
+    box-shadow: var(--dk-neo-inset-sm) !important;
   }
 
   [data-theme='dark'] .xp-panel-card .bg-\[\#fbe1d1\] {
-    background-color: #2d1a12 !important;
-    color: #e5bfa7 !important;
-  }
-
-  [data-theme='dark'] .xp-panel-card a {
-    color: #ffffff !important;
+    background-color: var(--dk-brown-soft) !important;
+    color: var(--dk-brown-chip-text) !important;
   }
 
   [data-theme='dark'] .xp-panel-card .border-white {
-    border-color: #000000 !important;
+    border-color: var(--dk-surface) !important;
   }
 
-  /* ─── KPI Card Override (Full Black) ─────────────────────── */
-  [data-theme='dark'] .kpi-stat-card {
-    background-color: #000000 !important;
-    border-color: #1a1a1a !important;
-    box-shadow: none !important;
+  /* ─── Weekly plan card ───────────────────────────────────── */
+  [data-theme='dark'] .weekly-plan-card .text-gray-900,
+  [data-theme='dark'] .weekly-plan-card .text-gray-800,
+  [data-theme='dark'] .weekly-plan-card .text-gray-600 {
+    color: #F4F4F6 !important;
   }
 
-  [data-theme='dark'] .kpi-stat-card .bg-\[\#edf4ff\],
-  [data-theme='dark'] .kpi-stat-card .bg-\[\#fff4ed\],
-  [data-theme='dark'] .kpi-stat-card .bg-\[\#f5f3ff\] {
-    background-color: #301b14 !important;
+  [data-theme='dark'] .weekly-plan-card .bg-gray-100,
+  [data-theme='dark'] .weekly-plan-card .bg-gray-300 {
+    background-color: var(--dk-raised) !important;
   }
 
-  /* ─── Weekly Plan Card Override (Full Black) ─────────────── */
-  [data-theme='dark'] .weekly-plan-card {
-    background-color: #000000 !important;
-    border-color: #1a1a1a !important;
-    box-shadow: none !important;
+  [data-theme='dark'] .weekly-plan-card .border-gray-100 {
+    border-color: var(--dk-border) !important;
   }
 
-  [data-theme='dark'] .weekly-plan-card .bg-\[\#f2f2f3\],
-  [data-theme='dark'] .weekly-plan-card .bg-ink,
-  [data-theme='dark'] .weekly-plan-card .bg-ink-2 {
-    background-color: #000000 !important;
-  }
-
-  [data-theme='dark'] .weekly-plan-card .border-line,
-  [data-theme='dark'] .weekly-plan-card .border {
-    border-color: #1a1a1a !important;
-  }
-
-  [data-theme='dark'] .weekly-plan-card .bg-white\/40 {
-    background-color: #301b14 !important;
-  }
-
-  [data-theme='dark'] .weekly-plan-card .bg-ink {
-    background-color: #301b14 !important;
-  }
-
-  /* ─── Activity Post Card Override (Full Black) ──────────── */
+  /* ─── Activity post card ─────────────────────────────────── */
   [data-theme='dark'] .activity-post-card {
-    background-color: #000000 !important;
-    border-color: #1a1a1a !important;
-    /* Extremely dark border or transparent */
-    box-shadow: none !important;
-    color: #f7f5f2 !important;
+    color: #F4F4F6 !important;
   }
 
   [data-theme='dark'] .activity-post-card a,
   [data-theme='dark'] .activity-post-card span.font-serif,
-  [data-theme='dark'] .activity-post-card h3 {
-    color: #ffffff !important;
-  }
-
-  [data-theme='dark'] .activity-post-card .text-\[\#17191c\] {
-    color: #f7f5f2 !important;
-  }
-
-  [data-theme='dark'] .activity-post-card .text-\[\#777b86\],
-  [data-theme='dark'] .activity-post-card .text-\[\#979799\] {
-    color: #8b9098 !important;
-  }
-
-  /* Inner elements of Activity Card */
-  [data-theme='dark'] .activity-post-card .bg-\[\#fafafb\] {
-    background-color: #26150f !important;
-    border-color: rgba(239, 202, 177, 0.12) !important;
-  }
-
-  [data-theme='dark'] .activity-post-card .bg-white {
-    background-color: #26150f !important;
-    border-color: rgba(239, 202, 177, 0.12) !important;
-  }
-
-  [data-theme='dark'] .activity-post-card .border-\[\#ececec\],
-  [data-theme='dark'] .activity-post-card .border-2 {
-    border-color: #1a1a1a !important;
-  }
-
-  [data-theme='dark'] .activity-post-card .bg-\[\#f2f2f3\] {
-    background-color: #301b14 !important;
-  }
-
+  [data-theme='dark'] .activity-post-card h3,
   [data-theme='dark'] .activity-post-card button:hover {
     color: #ffffff !important;
   }
 
+  [data-theme='dark'] .activity-post-card [class*='text-[#17191c]'],
+  [data-theme='dark'] .activity-post-card [class*='font-serif'] {
+    color: #F4F4F6 !important;
+  }
+
+  [data-theme='dark'] .activity-post-card [class*='text-[#777b86]'],
+  [data-theme='dark'] .activity-post-card .text-\[\#979799\] {
+    color: #9A9AA5 !important;
+  }
+
+  [data-theme='dark'] .activity-post-card .border-\[\#ececec\],
+  [data-theme='dark'] .activity-post-card .border-2 {
+    border-color: var(--dk-border) !important;
+  }
+
+  [data-theme='dark'] .activity-post-card [class*='bg-[#fdfbfb]'],
+  [data-theme='dark'] .activity-post-card [class*='rounded-[16px]'] {
+    background: var(--dk-raised) !important;
+    border-color: rgba(255, 255, 255, 0.04) !important;
+    box-shadow: var(--dk-neo-inset-sm) !important;
+  }
+
   [data-theme='dark'] .activity-post-card .bg-\[\#e8f5e9\] {
-    background-color: #162418 !important;
+    background-color: rgba(52, 211, 153, 0.12) !important;
     color: #4ade80 !important;
   }
 
@@ -580,114 +506,83 @@
     background: none !important;
     -webkit-background-clip: unset !important;
     background-clip: unset !important;
-    color: #8c5a49 !important;
-    -webkit-text-fill-color: #8c5a49 !important;
+    color: #F4F4F6 !important;
+    -webkit-text-fill-color: #F4F4F6 !important;
   }
 
-  [data-theme='dark'] header,
-  [data-theme='dark'] .bg-ink\/90 {
-    background-color: #000000 !important;
+  /* Hard-coded light-palette browns used directly in components. */
+  [data-theme='dark'] .text-\[\#5d2a1a\],
+  [data-theme='dark'] .hover\:text-\[\#5d2a1a\]:hover {
+    color: var(--dk-brown-text) !important;
   }
 
-  /* Dark Theme Ambient Background Mesh Glow Overrides (Sienna Brown / Dark Peach) */
-  [data-theme='dark'] .ambient-glow-1 {
-    background: radial-gradient(circle at center, rgba(93, 42, 26, 0.16) 0%, transparent 68%) !important;
-    opacity: 0.95 !important;
+  [data-theme='dark'] .bg-\[\#fbe1d1\]\/30 {
+    background-color: var(--dk-brown-soft) !important;
   }
 
-  [data-theme='dark'] .ambient-glow-2 {
-    background: radial-gradient(circle at center, rgba(122, 67, 48, 0.14) 0%, transparent 72%) !important;
-    opacity: 0.95 !important;
+  [data-theme='dark'] .border-\[\#42241b\],
+  [data-theme='dark'] .border-\[\#5d2a1a\]\/15 {
+    border-color: rgba(255, 255, 255, 0.1) !important;
   }
 
-  [data-theme='dark'] .ambient-glow-3 {
-    background: radial-gradient(circle at center, rgba(31, 21, 12, 0.3) 0%, transparent 70%) !important;
-    opacity: 0.9 !important;
-  }
-
-  /* Final dark-mode material pass. These rules intentionally follow the
-     page-specific legacy overrides above, so no light-theme declaration changes. */
-  [data-theme='dark'] .card,
-  [data-theme='dark'] .floating-artifact,
-  [data-theme='dark'] .card-mist,
-  [data-theme='dark'] .xp-panel-card,
-  [data-theme='dark'] .kpi-stat-card,
-  [data-theme='dark'] .weekly-plan-card,
-  [data-theme='dark'] .activity-post-card {
-    background: linear-gradient(145deg, rgba(48, 27, 20, 0.98), rgba(26, 14, 11, 0.98)) !important;
-    border-color: rgba(239, 202, 177, 0.14) !important;
-    box-shadow: var(--shadow-artifact) !important;
-  }
-
-  [data-theme='dark'] .activity-post-card .bg-\[\#fafafb\],
-  [data-theme='dark'] .activity-post-card .bg-white,
-  [data-theme='dark'] .activity-post-card .bg-\[\#f2f2f3\],
-  [data-theme='dark'] .weekly-plan-card .bg-\[\#f2f2f3\],
-  [data-theme='dark'] .weekly-plan-card .bg-ink,
-  [data-theme='dark'] .weekly-plan-card .bg-ink-2,
-  [data-theme='dark'] .kpi-stat-card .bg-\[\#edf4ff\],
-  [data-theme='dark'] .kpi-stat-card .bg-\[\#fff4ed\],
-  [data-theme='dark'] .kpi-stat-card .bg-\[\#f5f3ff\] {
-    background-color: #301b14 !important;
-    border-color: rgba(239, 202, 177, 0.1) !important;
-  }
-
-  [data-theme='dark'] .text-\[\#17191c\],
-  [data-theme='dark'] .text-\[\#1f150c\] {
-    color: #f7f5f2 !important;
-  }
-
-  [data-theme='dark'] .text-\[\#777b86\],
-  [data-theme='dark'] .text-\[\#979799\],
-  [data-theme='dark'] .text-gray-400,
-  [data-theme='dark'] .text-gray-500,
-  [data-theme='dark'] .text-gray-600 {
-    color: #d7b9a8 !important;
-  }
-
-  /* Tactile controls: restrained outer elevation plus a subtle top highlight. */
+  /* ─── Controls ───────────────────────────────────────────── */
   [data-theme='dark'] button:not(.bg-sienna):not(.btn-primary):not(.btn-danger),
   [data-theme='dark'] [role='button']:not(.bg-sienna),
   [data-theme='dark'] .neo-btn,
   [data-theme='dark'] .btn-pill-filled,
   [data-theme='dark'] .btn-pill-ghost {
-    border-color: rgba(239, 202, 177, 0.15);
+    border-color: var(--dk-border);
   }
 
   [data-theme='dark'] .btn-primary,
   [data-theme='dark'] .neo-btn,
   [data-theme='dark'] .btn-pill-filled,
   [data-theme='dark'] .bg-sienna {
-    background: linear-gradient(135deg, #efad80 0%, #b85f3b 100%) !important;
-    color: #21130f !important;
-    border-color: rgba(255, 230, 211, 0.28) !important;
+    background: var(--dk-brown-fill) !important;
+    color: var(--dk-on-brown) !important;
+    border-color: rgba(227, 189, 166, 0.14) !important;
     box-shadow: var(--clay-shadow-btn) !important;
   }
 
   [data-theme='dark'] .btn-secondary,
   [data-theme='dark'] .btn-pill-ghost {
-    background: linear-gradient(145deg, #301b14, #1f110d) !important;
-    color: #f7f5f2 !important;
-    box-shadow: var(--clay-shadow-sm) !important;
+    background: var(--dk-card) !important;
+    color: #F4F4F6 !important;
+    box-shadow: var(--dk-neo-raised-sm) !important;
   }
 
   [data-theme='dark'] .input-field,
   [data-theme='dark'] .neo-inset,
-  [data-theme='dark'] [class*='shadow-[inset'] {
-    background-color: #160b08 !important;
-    border-color: rgba(239, 202, 177, 0.12) !important;
-    box-shadow: var(--neo-shadow-inset-sm) !important;
-    color: #f7f5f2 !important;
+  [data-theme='dark'] input:not([type='checkbox']):not([type='radio']):not(.search-input-override),
+  [data-theme='dark'] textarea,
+  [data-theme='dark'] select {
+    background-color: var(--dk-input) !important;
+    color: #F4F4F6 !important;
+    border-color: var(--dk-border) !important;
+    box-shadow: var(--dk-neo-inset-sm) !important;
   }
 
-  [data-theme='dark'] button[class*='shadow-']:not([class*='shadow-[inset']),
-  [data-theme='dark'] .card[class*='shadow-']:not([class*='shadow-[inset']) {
-    box-shadow: var(--clay-shadow-sm) !important;
+  [data-theme='dark'] input:focus:not([type='checkbox']):not([type='radio']):not(.search-input-override),
+  [data-theme='dark'] textarea:focus,
+  [data-theme='dark'] select:focus {
+    border-color: rgba(176, 116, 88, 0.55) !important;
+  }
+
+  [data-theme='dark'] input.search-input-override {
+    background-color: transparent !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+  }
+
+  [data-theme='dark'] input::placeholder,
+  [data-theme='dark'] textarea::placeholder {
+    color: #6B6B76 !important;
+    opacity: 1;
   }
 
   [data-theme='dark'] button:hover:not(:disabled),
   [data-theme='dark'] [role='button']:hover {
-    border-color: rgba(239, 173, 128, 0.4) !important;
+    border-color: rgba(176, 116, 88, 0.35) !important;
     box-shadow: var(--shadow-soft) !important;
   }
 
@@ -695,121 +590,63 @@
   [data-theme='dark'] .neo-btn:hover:not(:disabled),
   [data-theme='dark'] .btn-pill-filled:hover:not(:disabled),
   [data-theme='dark'] .bg-sienna:hover {
-    box-shadow: 0 1px 0 rgba(255, 239, 226, 0.28) inset, 0 12px 28px rgba(184, 95, 59, 0.38) !important;
+    box-shadow: 0 1px 0 rgba(255, 225, 205, 0.2) inset, -2px -2px 7px rgba(255, 255, 255, 0.035), 6px 6px 16px rgba(0, 0, 0, 0.95), 0 0 18px rgba(122, 58, 36, 0.35) !important;
   }
 
-  [data-theme='dark'] header,
-  [data-theme='dark'] .bg-ink\/90 {
-    background-color: rgba(28, 18, 16, 0.88) !important;
-    backdrop-filter: blur(18px);
-    -webkit-backdrop-filter: blur(18px);
-  }
-
-  /* Brown material palette for the dashboard and profile/feed cards. */
-  [data-theme='dark'] .card,
-  [data-theme='dark'] .floating-artifact,
-  [data-theme='dark'] .card-mist,
-  [data-theme='dark'] .xp-panel-card,
-  [data-theme='dark'] .kpi-stat-card,
-  [data-theme='dark'] .weekly-plan-card,
-  [data-theme='dark'] .activity-post-card {
-    background: linear-gradient(145deg, #422b24 0%, #2b1b18 100%) !important;
-    border-color: rgba(239, 202, 177, 0.16) !important;
-    box-shadow: 0 1px 0 rgba(255, 232, 214, 0.08) inset, 0 14px 30px rgba(11, 5, 4, 0.34) !important;
-  }
-
-  [data-theme='dark'] .weekly-plan-card {
-    background: linear-gradient(155deg, #4a2e25 0%, #2d1c18 100%) !important;
-  }
-
-  [data-theme='dark'] .weekly-plan-card .text-gray-900,
-  [data-theme='dark'] .weekly-plan-card .text-gray-800,
-  [data-theme='dark'] .weekly-plan-card .text-gray-600 {
-    color: #f7e9e1 !important;
-  }
-
-  [data-theme='dark'] .weekly-plan-card .bg-gray-100,
-  [data-theme='dark'] .weekly-plan-card .bg-gray-300 {
-    background-color: #38231e !important;
-  }
-
-  [data-theme='dark'] .weekly-plan-card .border-gray-100 {
-    border-color: rgba(239, 202, 177, 0.12) !important;
-  }
-
+  /* ─── Today focus, bottom nav, live cardio ───────────────── */
   [data-theme='dark'] .today-focus-card {
-    background: linear-gradient(135deg, #5a3025 0%, #3b211b 100%) !important;
-    border-color: rgba(255, 208, 177, 0.23) !important;
-    color: #fff3eb !important;
-    box-shadow: 0 1px 0 rgba(255, 237, 223, 0.14) inset, 0 16px 32px rgba(12, 5, 4, 0.33) !important;
+    background: var(--dk-hero) !important;
+    border-color: rgba(227, 189, 166, 0.12) !important;
+    color: #F4F4F6 !important;
+    box-shadow: var(--dk-neo-raised) !important;
   }
 
   [data-theme='dark'] .today-focus-card .text-\[\#5d2a1a\] {
-    color: #ffe1cf !important;
+    color: var(--dk-brown-chip-text) !important;
   }
 
   [data-theme='dark'] .today-focus-card .bg-white\/40,
   [data-theme='dark'] .today-focus-card .bg-white\/60 {
-    background-color: rgba(255, 229, 211, 0.12) !important;
-    color: #ffe1cf !important;
-    border: 1px solid rgba(255, 225, 203, 0.13);
-    box-shadow: var(--neo-shadow-inset-sm) !important;
+    background-color: rgba(0, 0, 0, 0.3) !important;
+    color: var(--dk-brown-chip-text) !important;
+    border: 1px solid rgba(227, 189, 166, 0.1);
+    box-shadow: var(--dk-neo-inset-sm) !important;
   }
 
   [data-theme='dark'] .bottom-app-nav {
-    background: linear-gradient(135deg, rgba(65, 40, 31, 0.96), rgba(37, 22, 19, 0.96)) !important;
-    border-color: rgba(239, 185, 148, 0.24) !important;
-    box-shadow: 0 1px 0 rgba(255, 229, 207, 0.1) inset, 0 16px 35px rgba(10, 4, 3, 0.48) !important;
+    background: linear-gradient(145deg, rgba(20, 20, 22, 0.96), rgba(8, 8, 9, 0.97)) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-color: var(--dk-border) !important;
+    box-shadow: -3px -3px 10px rgba(255, 255, 255, 0.025), 8px 8px 24px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
   }
 
   [data-theme='dark'] .bottom-app-nav .nav-tab-icon-active {
-    color: #ffd1b5 !important;
-    background-color: rgba(239, 173, 128, 0.17) !important;
-    border-color: rgba(239, 173, 128, 0.34) !important;
-    box-shadow: 0 0 18px rgba(197, 93, 54, 0.25) !important;
+    color: var(--dk-on-brown) !important;
+    background-color: var(--dk-brown-soft) !important;
+    border-color: rgba(176, 116, 88, 0.35) !important;
+    box-shadow: var(--dk-neo-inset-sm) !important;
   }
 
   [data-theme='dark'] .bottom-app-nav .nav-tab-icon-inactive {
-    color: #d8a78d !important;
+    color: #8B8B96 !important;
   }
 
-  [data-theme='dark'] .activity-post-card [class*='bg-[#fdfbfb]'],
-  [data-theme='dark'] .activity-post-card [class*='rounded-[16px]'] {
-    background: #35211c !important;
-    border-color: rgba(239, 202, 177, 0.1) !important;
-    box-shadow: var(--neo-shadow-inset-sm) !important;
-  }
-
-  [data-theme='dark'] .activity-post-card [class*='text-[#17191c]'],
-  [data-theme='dark'] .activity-post-card [class*='font-serif'] {
-    color: #fff3eb !important;
-  }
-
-  [data-theme='dark'] .activity-post-card [class*='text-[#777b86]'] {
-    color: #d7b9a8 !important;
-  }
-
-  /* The live tracker can show a light map, but its control sheet stays brown
-     and readable whenever the app itself is in dark mode. */
+  /* The live tracker can show a light map, but its control sheet stays dark. */
   [data-theme='dark'] .cardio-live-panel {
-    background: linear-gradient(180deg, rgba(64, 37, 29, 0.96), rgba(35, 20, 17, 0.98)) !important;
-    color: #fff4ed !important;
-    border-color: rgba(255, 217, 194, 0.2) !important;
-    box-shadow: 0 -12px 36px rgba(10, 4, 3, 0.48), 0 1px 0 rgba(255, 232, 214, 0.12) inset !important;
+    background: linear-gradient(180deg, rgba(16, 16, 18, 0.97), rgba(5, 5, 5, 0.99)) !important;
+    color: #F4F4F6 !important;
+    border-color: var(--dk-border) !important;
+    box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.05) inset !important;
   }
 
   [data-theme='dark'] .cardio-live-panel [class*='text-black'],
   [data-theme='dark'] .cardio-live-panel [class*='text-black\/'] {
-    color: #fff4ed !important;
+    color: #F4F4F6 !important;
   }
 
   [data-theme='dark'] .cardio-live-panel [class*='bg-white\/'] {
-    background-color: rgba(255, 231, 214, 0.12) !important;
-  }
-
-  [data-theme='dark'] .cardio-steps-card {
-    background: rgba(69, 39, 30, 0.9) !important;
-    border-color: rgba(255, 215, 188, 0.16) !important;
+    background-color: rgba(255, 255, 255, 0.07) !important;
   }
 
   /* Fix the garbled A glyphs in exported cardio images without changing the
@@ -825,15 +662,19 @@
     letter-spacing: 0.24em;
   }
 
-  /* App-wide dark hierarchy: black is reserved for the canvas/navigation;
-     every raised surface steps through closely-related, dark brown tones. */
-  [data-theme='dark'] header,
+  /* ─── Surface hierarchy ──────────────────────────────────── */
   [data-theme='dark'] nav,
   [data-theme='dark'] .navbar,
   [data-theme='dark'] .sidebar,
-  [data-theme='dark'] .bg-ink,
+  [data-theme='dark'] .bg-ink {
+    background-color: var(--dk-canvas) !important;
+  }
+
+  [data-theme='dark'] header,
   [data-theme='dark'] .bg-ink\/90 {
-    background-color: #090605 !important;
+    background-color: rgba(5, 5, 5, 0.85) !important;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
   }
 
   [data-theme='dark'] .bg-ink-2,
@@ -847,14 +688,14 @@
   [data-theme='dark'] [class*='bg-zinc-'],
   [data-theme='dark'] [class*='bg-neutral-'],
   [data-theme='dark'] [class*='bg-stone-'] {
-    background-color: #1f110d !important;
+    background-color: var(--dk-surface) !important;
   }
 
   [data-theme='dark'] .bg-ink-3,
   [data-theme='dark'] .bg-\[\#f2f2f3\],
   [data-theme='dark'] .bg-\[\#fafafb\],
   [data-theme='dark'] .bg-\[\#fdfbfb\] {
-    background-color: #301b14 !important;
+    background-color: var(--dk-raised) !important;
   }
 
   [data-theme='dark'] .card,
@@ -864,27 +705,43 @@
   [data-theme='dark'] .kpi-stat-card,
   [data-theme='dark'] .weekly-plan-card,
   [data-theme='dark'] .activity-post-card {
-    background: linear-gradient(145deg, #301b14 0%, #1a0e0b 100%) !important;
-    border-color: rgba(239, 202, 177, 0.13) !important;
-    box-shadow: 0 1px 0 rgba(255, 232, 214, 0.06) inset, 0 14px 30px rgba(0, 0, 0, 0.5) !important;
+    background: var(--dk-card) !important;
+    border-color: rgba(255, 255, 255, 0.05) !important;
+    box-shadow: var(--dk-neo-raised) !important;
   }
 
-  [data-theme='dark'] .bottom-app-nav {
-    background: linear-gradient(135deg, rgba(42, 22, 15, 0.98), rgba(14, 7, 5, 0.98)) !important;
-    border-color: rgba(239, 185, 148, 0.2) !important;
+  /* Nested surfaces inside cards step up one level. */
+  [data-theme='dark'] .activity-post-card .bg-\[\#fafafb\],
+  [data-theme='dark'] .activity-post-card .bg-white,
+  [data-theme='dark'] .activity-post-card .bg-\[\#f2f2f3\],
+  [data-theme='dark'] .weekly-plan-card .bg-\[\#f2f2f3\],
+  [data-theme='dark'] .weekly-plan-card .bg-ink,
+  [data-theme='dark'] .weekly-plan-card .bg-ink-2,
+  [data-theme='dark'] .weekly-plan-card .bg-white\/40,
+  [data-theme='dark'] .kpi-stat-card .bg-\[\#edf4ff\],
+  [data-theme='dark'] .kpi-stat-card .bg-\[\#fff4ed\],
+  [data-theme='dark'] .kpi-stat-card .bg-\[\#f5f3ff\] {
+    background-color: var(--dk-nested) !important;
+    border-color: rgba(255, 255, 255, 0.04) !important;
+    box-shadow: var(--dk-neo-inset-sm) !important;
   }
 
-  [data-theme='dark'] .today-focus-card {
-    background: linear-gradient(135deg, #48241a 0%, #27120e 100%) !important;
+  [data-theme='dark'] .text-\[\#17191c\],
+  [data-theme='dark'] .text-\[\#1f150c\] {
+    color: #F4F4F6 !important;
   }
 
-  [data-theme='dark'] .cardio-live-panel {
-    background: linear-gradient(180deg, rgba(48, 24, 17, 0.98), rgba(15, 7, 5, 0.99)) !important;
+  [data-theme='dark'] .text-\[\#777b86\],
+  [data-theme='dark'] .text-\[\#979799\],
+  [data-theme='dark'] .text-gray-400,
+  [data-theme='dark'] .text-gray-500,
+  [data-theme='dark'] .text-gray-600 {
+    color: #9A9AA5 !important;
   }
 
   [data-theme='dark'] .app-shell,
   [data-theme='dark'] .app-shell > main {
-    background: #090605 !important;
+    background: var(--dk-canvas) !important;
   }
 
   [data-theme='dark'] .ambient-glow-1,
@@ -893,51 +750,29 @@
     display: none !important;
   }
 
-  [data-theme='dark'] .input-field,
-  [data-theme='dark'] input:not([type='checkbox']):not([type='radio']):not(.search-input-override),
-  [data-theme='dark'] textarea,
-  [data-theme='dark'] select {
-    background-color: #160b08 !important;
-    color: #fff3eb !important;
-    border-color: rgba(239, 188, 153, 0.19) !important;
-    box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.5), inset -1px -1px 2px rgba(255, 224, 204, 0.035) !important;
-  }
-
-  [data-theme='dark'] input.search-input-override {
-    background-color: transparent !important;
-    box-shadow: none !important;
-    border-color: transparent !important;
-  }
-
-  [data-theme='dark'] input::placeholder,
-  [data-theme='dark'] textarea::placeholder {
-    color: #a97e69 !important;
-    opacity: 1;
-  }
-
   [data-theme='dark'] .cardio-ready-screen {
-    background: #090605 !important;
+    background: var(--dk-canvas) !important;
   }
 
   [data-theme='dark'] .cardio-ready-screen::after {
     content: '';
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgba(9, 6, 5, 0.22), rgba(9, 6, 5, 0.86));
+    background: linear-gradient(180deg, rgba(5, 5, 5, 0.2), rgba(5, 5, 5, 0.88));
     pointer-events: none;
     z-index: 1;
   }
 
   [data-theme='dark'] .cardio-ready-title {
-    color: #fff3eb !important;
+    color: #F4F4F6 !important;
     text-shadow: 0 2px 16px rgba(0, 0, 0, 0.8) !important;
     box-shadow: none !important;
   }
 
   [data-theme='dark'] .cardio-ready-start {
-    background: linear-gradient(145deg, #efad80, #b85f3b) !important;
-    color: #24110b !important;
-    box-shadow: 0 10px 28px rgba(118, 49, 27, 0.5) !important;
+    background: var(--dk-brown-fill) !important;
+    color: var(--dk-on-brown) !important;
+    box-shadow: var(--clay-shadow-btn) !important;
   }
 
   body.community-create-open .bottom-nav-shell {
@@ -952,13 +787,14 @@
     min-height: 76px;
     padding: 14px 18px !important;
     border-radius: 18px 18px 0 0 !important;
-    background: linear-gradient(135deg, #2e1811, #170b08) !important;
-    box-shadow: 0 -8px 22px rgba(0, 0, 0, 0.34), 0 1px 0 rgba(255, 222, 198, 0.07) inset !important;
+    background: linear-gradient(145deg, #141416, #080809) !important;
+    border-color: var(--dk-border) !important;
+    box-shadow: 0 -8px 22px rgba(0, 0, 0, 0.8), 0 1px 0 rgba(255, 255, 255, 0.04) inset !important;
   }
 
   [data-theme='dark'] .cardio-live-panel [class*='shadow-[inset'] {
-    background-color: rgba(48, 24, 17, 0.88) !important;
-    box-shadow: inset 2px 2px 5px rgba(0, 0, 0, 0.42), inset -1px -1px 2px rgba(255, 226, 204, 0.04) !important;
+    background-color: rgba(0, 0, 0, 0.35) !important;
+    box-shadow: var(--dk-neo-inset-sm) !important;
   }
 
   /* Final surface normalization. This catches component-local Tailwind classes
@@ -972,19 +808,19 @@
   [data-theme='dark'] [class*='bg-[#141414'],
   [data-theme='dark'] [class*='bg-[#1a1a1a'],
   [data-theme='dark'] [class*='bg-black'] {
-    background-color: #1f110d !important;
+    background-color: var(--dk-surface) !important;
   }
 
   [data-theme='dark'] [class*='bg-black\/'],
   [data-theme='dark'] [class*='dark:bg-black\/'] {
-    background-color: rgba(31, 17, 13, 0.74) !important;
+    background-color: rgba(5, 5, 5, 0.75) !important;
   }
 
   [data-theme='dark'] [class*='hover:bg-gray-']:hover,
   [data-theme='dark'] [class*='hover:bg-slate-']:hover,
   [data-theme='dark'] [class*='dark:hover:bg-white\/']:hover,
   [data-theme='dark'] [class*='hover:bg-black\/']:hover {
-    background-color: #301b14 !important;
+    background-color: var(--dk-hover) !important;
   }
 
   [data-theme='dark'] [class*='bg-gradient-to-'][class*='from-ink'],
@@ -992,15 +828,17 @@
   [data-theme='dark'] [class*='bg-gradient-to-'][class*='from-gray'],
   [data-theme='dark'] [class*='bg-gradient-to-'][class*='from-zinc'],
   [data-theme='dark'] [class*='bg-gradient-to-'][class*='from-neutral'] {
-    background-image: linear-gradient(145deg, #301b14 0%, #1a0e0b 100%) !important;
+    background-image: var(--dk-card) !important;
   }
 
   [data-theme='dark'] [class*='shadow-[']:not([class*='shadow-[inset']) {
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.48), 0 1px 0 rgba(255, 225, 204, 0.045) inset !important;
+    box-shadow: var(--dk-neo-raised-sm) !important;
   }
 
   [data-theme='dark'] [class*='shadow-[inset'] {
-    box-shadow: inset 3px 3px 7px rgba(0, 0, 0, 0.5), inset -1px -1px 2px rgba(255, 224, 204, 0.035) !important;
+    background-color: var(--dk-input) !important;
+    border-color: var(--dk-border) !important;
+    box-shadow: var(--dk-neo-inset) !important;
   }
 
   [data-theme='dark'] .cardio-ready-title,
@@ -1048,18 +886,19 @@
 }
 
 [data-theme='dark'] .pro-panel {
-  background: linear-gradient(160deg, #26150f 0%, #170c09 100%);
-  border-color: rgba(239, 202, 177, 0.12);
-  box-shadow: 0 1px 0 rgba(255, 232, 214, 0.05) inset, 0 12px 28px rgba(0, 0, 0, 0.35);
+  background: var(--dk-card);
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: var(--dk-neo-raised);
 }
 
 [data-theme='dark'] .pro-tile {
-  background: rgba(255, 232, 214, 0.045);
+  background: var(--dk-raised);
+  box-shadow: var(--dk-neo-inset-sm);
 }
 
 [data-theme='dark'] .pro-thumb {
-  background: rgba(255, 232, 214, 0.14);
-  box-shadow: none;
+  background: var(--dk-hover);
+  box-shadow: var(--dk-neo-raised-sm);
 }
 
 /* Opt pro-scoped controls out of the global dark-mode button glow. */
@@ -1097,29 +936,38 @@
 }
 
 [data-theme='dark'] .cardio-post-map {
-  background: #1a0f0c;
-  box-shadow: 0 0 0 1px rgba(239, 202, 177, 0.1), 0 8px 18px rgba(0, 0, 0, 0.35);
+  background: var(--dk-input);
+  box-shadow: var(--dk-neo-inset);
+}
+
+/* Feed previews sit on near-black cards, so dim the dark basemap to match. */
+[data-theme='dark'] .cardio-post-map .leaflet-container {
+  background: #050505 !important;
+}
+
+[data-theme='dark'] .cardio-post-map .leaflet-tile-pane {
+  filter: brightness(0.42) contrast(1.15) saturate(0.6);
 }
 
 [data-theme='dark'] .cardio-post-stat {
-  background: #35211c;
-  box-shadow: var(--neo-shadow-inset-sm);
+  background: var(--dk-raised);
+  box-shadow: var(--dk-neo-raised-sm);
 }
 
 [data-theme='dark'] .cardio-post-chip {
-  background: rgba(23, 12, 9, 0.85);
-  color: #f7e9e1;
-  box-shadow: 0 0 0 1px rgba(239, 202, 177, 0.18);
+  background: rgba(5, 5, 5, 0.85);
+  color: #F4F4F6;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 2px 2px 6px rgba(0, 0, 0, 0.7);
 }
 
 [data-theme='dark'] .cardio-post-badge {
-  background: rgba(239, 173, 128, 0.12);
-  color: #efad80;
-  box-shadow: none;
+  background: var(--dk-brown-soft);
+  color: var(--dk-brown-chip-text);
+  box-shadow: var(--dk-neo-inset-sm);
 }
 
 [data-theme='dark'] .cardio-post-divider {
-  background: rgba(239, 202, 177, 0.14);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* ─── Strength feed post (shares the cardio post neumorphic surfaces) ─── */
@@ -1140,22 +988,22 @@
 
 .strength-post-row + .strength-post-row { border-top: 1px solid rgba(23, 25, 28, 0.06); }
 
-[data-theme='dark'] .strength-post-eyebrow { color: #efad80; }
+[data-theme='dark'] .strength-post-eyebrow { color: var(--dk-brown-text); }
 
 [data-theme='dark'] .strength-post-pr {
-  color: #ffd9c2;
-  background: rgba(239, 173, 128, 0.16);
-  box-shadow: 0 0 0 1px rgba(239, 173, 128, 0.3);
+  color: var(--dk-on-brown);
+  background: var(--dk-brown-fill);
+  box-shadow: var(--dk-neo-raised-sm);
 }
 
 [data-theme='dark'] .strength-post-track {
-  background: #24150f;
-  box-shadow: inset 2px 2px 4px rgba(0, 0, 0, 0.45), inset -1px -1px 3px rgba(255, 220, 200, 0.05);
+  background: var(--dk-input);
+  box-shadow: var(--dk-neo-inset-sm);
 }
 
-[data-theme='dark'] .strength-post-fill { background: linear-gradient(90deg, #b8664a, #efad80); }
+[data-theme='dark'] .strength-post-fill { background: linear-gradient(90deg, #5d2a1a, #b07458); }
 
-[data-theme='dark'] .strength-post-row + .strength-post-row { border-top-color: rgba(239, 202, 177, 0.1); }
+[data-theme='dark'] .strength-post-row + .strength-post-row { border-top-color: rgba(255, 255, 255, 0.05); }
 
 /* ─── Cardio tracker: swipe-to-start + live KPI sheet ─────────────── */
 .swipe-start-track {

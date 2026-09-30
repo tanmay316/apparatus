@@ -679,6 +679,15 @@ export function RouteMap({
   const manualRotationRef = useRef(0);
   const tileErrorCountRef = useRef(0);
   const [useStreetFallback, setUseStreetFallback] = useState(false);
+  const isFullScreen = height === '100%' && !fitToContainer;
+  const [viewport, setViewport] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+
+  useEffect(() => {
+    if (!isFullScreen) return;
+    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [isFullScreen]);
 
   useEffect(() => {
     tileErrorCountRef.current = 0;
@@ -842,16 +851,16 @@ export function RouteMap({
 
   const liveIcon = useMemo(() => getCurrentIcon(cardioType), [cardioType]);
 
-  const isFullScreen = height === '100%' && !fitToContainer;
-  
-  // To cover the screen at any angle, the container must be large enough to contain the screen's diagonal.
-  // 150vmax is sufficient.
-  // We offset it so its absolute center is exactly at the midpoint of the visible area above the bottom sheet.
-  // The bottom sheet is ~180px tall. So the midpoint is at Y = (100vh - 180px) / 2 = 50vh - 90px.
-  const mapWidth = isFullScreen ? '150vmax' : '100%';
-  const mapHeight = isFullScreen ? '150vmax' : '100%';
-  const mapLeft = isFullScreen ? 'calc(50vw - 75vmax)' : '0';
-  const mapTop = isFullScreen ? 'calc(50vh - 90px - 75vmax)' : '0';
+  // The live map rotates, so its canvas is the smallest square that still covers the
+  // screen at any angle around the rotation centre (midpoint above the ~180px sheet).
+  // Anything bigger only means more tiles to download before the map appears.
+  const rotCx = viewport.w / 2;
+  const rotCy = viewport.h / 2 - 90;
+  const rotR = Math.ceil(Math.hypot(Math.max(rotCx, viewport.w - rotCx), Math.max(rotCy, viewport.h - rotCy))) + 8;
+  const mapWidth = isFullScreen ? `${rotR * 2}px` : '100%';
+  const mapHeight = isFullScreen ? `${rotR * 2}px` : '100%';
+  const mapLeft = isFullScreen ? `${rotCx - rotR}px` : '0';
+  const mapTop = isFullScreen ? `${rotCy - rotR}px` : '0';
 
   return (
     <div ref={wrapperRef} className={`w-full ${height !== '100%' ? 'rounded-2xl' : ''} overflow-hidden ${variant === 'card' ? '' : 'shadow-sm'} relative ${isLive ? 'ring-2 ring-[var(--border)]' : ''} ${hideMap ? '[&_.leaflet-container]:!bg-transparent [&_.leaflet-map-pane]:!bg-transparent [&_.leaflet-pane]:!bg-transparent' : ''}`} style={{ height, background: hideMap ? 'transparent' : themeData.bg, touchAction: interactive ? 'none' : undefined }}>
@@ -906,7 +915,8 @@ export function RouteMap({
               crossOrigin={fitToContainer || isCapturing ? 'anonymous' : undefined}
               maxNativeZoom={themeData.maxNativeZoom}
               maxZoom={19}
-              keepBuffer={4}
+              keepBuffer={isFullScreen ? 1 : 2}
+              updateWhenZooming={false}
               eventHandlers={{
                 tileerror: () => {
                   tileErrorCountRef.current += 1;

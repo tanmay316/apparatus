@@ -7,6 +7,8 @@ import { defineCustomElements } from '@ionic/pwa-elements/loader';
 import './index.css';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import { Capacitor } from '@capacitor/core';
+import { readSessionCache } from '@/lib/session-cache';
+import { restoreQueryCache, startQueryPersistence } from '@/lib/query-client';
 
 // Initialize Firebase auth listener
 useAuthStore.getState().init();
@@ -54,8 +56,18 @@ if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator && import.meta
   });
 }
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-);
+// Seed React Query with the last session's data so the first screen paints with content.
+// Capped so a slow IndexedDB never delays startup noticeably.
+const restored = Promise.race([
+  restoreQueryCache(readSessionCache()?.uid),
+  new Promise(resolve => setTimeout(resolve, 350)),
+]);
+startQueryPersistence();
+
+restored.finally(() => {
+  ReactDOM.createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>,
+  );
+});

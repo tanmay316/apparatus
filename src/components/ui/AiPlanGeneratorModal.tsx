@@ -37,13 +37,13 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
   const queryClient = useQueryClient();
 
   const themeStyles = theme === 'dark' ? {
-    '--bg': '#090605',
-    '--card': '#1f110d',
-    '--border': '#4e2b20',
-    '--text': '#fff3eb',
-    '--muted': '#d1b2a1',
-    '--teal': '#d7b29d',
-    '--amber': '#d9a441',
+    '--bg': '#050505',
+    '--card': '#0e0e10',
+    '--border': '#222226',
+    '--text': '#f4f4f6',
+    '--muted': '#9a9aa5',
+    '--teal': '#b07458',
+    '--amber': '#fbbf24',
   } as React.CSSProperties : {
     '--bg': '#f7f8fb',
     '--card': '#ffffff',

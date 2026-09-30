@@ -1,11 +1,38 @@
 import re
 import time
 import threading
-from datetime import datetime
+from datetime import datetime, timezone
 from app.core.firebase import get_firestore_client, get_messaging_client
 
 # Keep track of when the server started to avoid sending notifications for old messages
 server_start_time = time.time()
+
+# A push is only useful while the event is fresh. Listener reconnects / catch-up after a
+# cold start or network stall re-deliver older docs as ADDED; those must not be pushed.
+MAX_PUSH_AGE_SEC = 10 * 60
+
+
+def _claim_push(doc_id: str, is_app_notification: bool) -> bool:
+    """Atomically records that this doc was pushed, so every backend instance / restart sends it once."""
+    db = get_firestore_client()
+    if not db:
+        return False
+    try:
+        from google.api_core.exceptions import AlreadyExists
+        from firebase_admin import firestore
+        prefix = "a" if is_app_notification else "n"
+        db.collection("push_receipts").document(f"{prefix}_{doc_id}").create({
+            "at": firestore.SERVER_TIMESTAMP,
+            # Firestore TTL policy on push_receipts.expireAt can clean these up.
+            "expireAt": datetime.fromtimestamp(time.time() + 7 * 24 * 3600, tz=timezone.utc),
+        })
+        return True
+    except AlreadyExists:
+        return False
+    except Exception as e:
+        # Receipt store unavailable: still deliver, the age check prevents stale replays.
+        print(f"push receipt failed for {doc_id}: {e}")
+        return True
 
 # Notification docs are written by other users, so only in-app paths may be forwarded.
 _SAFE_LINK = re.compile(r"^/(?![/\\])[^\s\\]{0,299}$")
@@ -82,12 +109,18 @@ def process_notification(doc_data, doc_id, is_app_notification=False, is_initial
         # If the notification was created before the server booted (minus a 30s buffer), ignore it
         if created_time < (server_start_time - 30):
             return
+        if time.time() - created_time > MAX_PUSH_AGE_SEC:
+            return
     elif is_initial_load:
         # On initial snapshot replay, if we cannot verify it is recent, do not send push
         return
 
     receiver_id = doc_data.get("userId") if is_app_notification else doc_data.get("receiverId")
     if not receiver_id:
+        return
+    if doc_data.get("read") is True:
+        return
+    if not _claim_push(doc_id, is_app_notification):
         return
 
     if is_app_notification:

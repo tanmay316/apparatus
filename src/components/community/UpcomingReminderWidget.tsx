@@ -9,7 +9,7 @@ import { ChallengeV2, SimpleEvent } from '@/types';
 import { notifyDevice } from '@/utils/notifications';
 import { ChallengeDetailSheet } from './ChallengeDetailSheet';
 import { EventDetailSheet } from './EventDetailSheet';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 interface UpcomingItem {
@@ -136,9 +136,10 @@ export function UpcomingReminderWidget() {
           `Your joined ${item.type} starts soon. Get ready to participate!`
         );
 
-        // 2. In-App Bell Notification in Firestore
+        // 2. In-App Bell Notification in Firestore. A fixed id means only the first of the
+        // user's devices creates it (rules reject the overwrite), so it is pushed once.
         try {
-          await addDoc(collection(db, 'notifications'), {
+          await setDoc(doc(db, 'notifications', `reminder_${item.id}_${user.uid}`), {
             receiverId: user.uid,
             senderId: user.uid,
             senderName: 'Apparatus Community',

@@ -40,12 +40,13 @@ interface Props {
   onClose: () => void;
 }
 
-type ShareLayout = 'hero' | 'split' | 'logbook' | 'poster' | 'clean' | 'photo' | 'sticker';
+type ShareLayout = 'hero' | 'overview' | 'split' | 'logbook' | 'poster' | 'clean' | 'photo' | 'sticker';
 type Views = 'both' | 'front' | 'back';
 type Gender = 'male' | 'female';
 
 const LAYOUT_OPTIONS: { id: ShareLayout; label: string; short: string }[] = [
   { id: 'hero', label: 'Pro', short: 'Pro' },
+  { id: 'overview', label: 'Overview', short: 'Overview' },
   { id: 'split', label: 'Muscle Map', short: 'Muscles' },
   { id: 'logbook', label: 'Logbook', short: 'Logbook' },
   { id: 'poster', label: 'Poster', short: 'Poster' },
@@ -72,6 +73,7 @@ const FONT = "Inter, 'SF Pro Display', system-ui, -apple-system, 'Segoe UI', Rob
 
 const CARD_BG: Record<ShareLayout, string> = {
   hero: '#07070A',
+  overview: '#09090C',
   split: '#0B0B0E',
   logbook: '#0D0D10',
   poster: '#0A0A0A',
@@ -191,6 +193,21 @@ function LayoutThumb({ id, accent }: { id: ShareLayout; accent: string }) {
           <ThumbFigure x={31} y={22} s={1.05} lit={accent} base={dim} />
           <rect x={5} y={66} width={50} height={16} rx={4} fill="rgba(255,255,255,0.1)" />
           {[0, 1, 2, 3].map(i => line(8 + i * 12, 72, 8, i === 3 ? accent : '#fff', 3))}
+        </>
+      );
+      break;
+    case 'overview':
+      body = (
+        <>
+          <rect width={W} height={H} fill="#09090C" />
+          {line(6, 6, 20, '#fff', 2)}
+          <ThumbFigure x={17} y={11} s={0.95} lit={accent} base={dim} />
+          <ThumbFigure x={31} y={11} s={0.95} lit={accent} base={dim} />
+          <rect x={5} y={42} width={50} height={9} rx={3} fill="rgba(255,255,255,0.1)" />
+          {[0, 1, 2, 3].map(i => line(8 + i * 12, 45, 8, i === 0 ? accent : '#fff', 3))}
+          {[0, 1, 2].map(r => [0, 1, 2].map(c => (
+            <rect key={`${r}-${c}`} x={5 + c * 17} y={55 + r * 10} width={15} height={8} rx={2} fill="rgba(255,255,255,0.12)" />
+          )))}
         </>
       );
       break;
@@ -479,12 +496,22 @@ export function ShareCardModal({ data, onClose }: Props) {
     if (!cardRef.current) return null;
     const solidBg = isTransparent ? undefined : CARD_BG[layout];
     try {
+      // Lay the card out at 3x inside the snapshot (instead of upscaling a 1x raster)
+      // so the SVG figures and their glow stay sharp on every WebView.
       return await toCanvas(cardRef.current, {
-        pixelRatio: PIXEL_RATIO,
+        pixelRatio: 1,
+        width: DESIGN_W * PIXEL_RATIO,
+        height: designH * PIXEL_RATIO,
         cacheBust: false,
         skipFonts: true,
         backgroundColor: solidBg,
-        style: { borderRadius: '0' },
+        style: {
+          borderRadius: '0',
+          width: `${DESIGN_W}px`,
+          height: `${designH}px`,
+          transform: `scale(${PIXEL_RATIO})`,
+          transformOrigin: 'top left',
+        },
       });
     } catch (err) {
       console.warn('html-to-image failed, falling back to html2canvas:', err);
@@ -644,6 +671,56 @@ export function ShareCardModal({ data, onClose }: Props) {
         </div>
       );
       break;
+
+    case 'overview': {
+      const maxLift = summary.topLift > 0 ? String(Math.round(toUnit(summary.topLift) * 10) / 10) : 'BW';
+      const kpis = [
+        { label: 'Kcal', value: String(summary.calories), accent: true },
+        { label: 'Time', value: duration.value, unit: duration.unit },
+        { label: 'Sets', value: String(summary.totalSets) },
+        { label: 'Max', value: maxLift, unit: summary.topLift > 0 ? weightUnit : undefined },
+      ];
+      const cells = summary.exercises.length > 9
+        ? [...summary.exercises.slice(0, 8).map(e => e.name), `+${summary.exercises.length - 8} more`]
+        : summary.exercises.map(e => e.name);
+      const nameSize = isSquare ? 9.5 : 11;
+      content = (
+        <div style={{ position: 'absolute', inset: 0, padding: pad, display: 'flex', flexDirection: 'column', background: `radial-gradient(80% 40% at 50% 28%, ${hexToRgba(accent, 0.18)} 0%, transparent 70%), #09090C` }}>
+          {headerRow()}
+          {!isSquare && (
+            <div style={{ marginTop: 10, fontSize: 18, fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.01em', color: '#fff', textTransform: 'uppercase', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          )}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0 }}>
+            <Figures {...figureArgs} views="both" height={isSquare ? 118 : 285} gap={isSquare ? 12 : 20} />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, padding: isSquare ? '8px 10px' : '12px 12px 10px', borderRadius: 16, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}>
+            {kpis.map(k => (
+              <Stat key={k.label} label={k.label} value={k.value} unit={k.unit} align="center" size={isSquare ? 15 : 19} accent={k.accent ? accent : undefined} />
+            ))}
+          </div>
+          <div style={{ marginTop: isSquare ? 8 : 12, height: isSquare ? 98 : 168, flexShrink: 0, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gridTemplateRows: 'repeat(3, minmax(0, 1fr))', gap: isSquare ? 4 : 6 }}>
+            {cells.map((name, i) => {
+              const more = summary.exercises.length > 9 && i === 8;
+              // Number and name share one line height so the number sits on the name's first line.
+              const lineH = Math.round(nameSize * 1.25);
+              return (
+                <div key={`${name}-${i}`} style={{ minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: more ? 'center' : 'flex-start', padding: isSquare ? '0 7px' : '0 9px', borderRadius: 10, background: more ? hexToRgba(accent, 0.14) : 'rgba(255,255,255,0.05)', border: `1px solid ${more ? hexToRgba(accent, 0.4) : 'rgba(255,255,255,0.08)'}` }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, minWidth: 0, width: more ? 'auto' : '100%' }}>
+                    {!more && (
+                      <span style={{ width: isSquare ? 11 : 13, flexShrink: 0, fontSize: isSquare ? 8.5 : 10, lineHeight: `${lineH}px`, fontWeight: 800, color: accent, fontVariantNumeric: 'tabular-nums' }}>
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                    )}
+                    <span style={{ minWidth: 0, flex: more ? 'none' : 1, fontSize: nameSize, fontWeight: 700, lineHeight: `${lineH}px`, color: '#fff', overflow: 'hidden', maxHeight: isSquare ? lineH : lineH * 3, whiteSpace: isSquare ? 'nowrap' : 'normal', textOverflow: 'ellipsis', wordBreak: 'break-word' }}>{name}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+      break;
+    }
 
     case 'split': {
       const bars = focus.slice(0, 4);
