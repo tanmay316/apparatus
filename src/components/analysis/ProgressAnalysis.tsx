@@ -44,7 +44,7 @@ export function InlineSessionAnalysis({ kind, session, workouts, cardio, imperia
       </button>
       {open && (
         <div className="mt-3">
-          {workoutAnalysis && <WorkoutAnalysisView analysis={workoutAnalysis} imperial={imperial} />}
+          {workoutAnalysis && <WorkoutAnalysisView analysis={workoutAnalysis} imperial={imperial} workout={session as Workout} />}
           {cardioAnalysis && <CardioAnalysisView analysis={cardioAnalysis} activity={session as CardioActivity} history={cardio} />}
         </div>
       )}
@@ -78,7 +78,7 @@ export function StrengthAnalysisPanel({ workouts, imperial }: { workouts: Workou
           options={recent.map(w => ({ value: w.id!, label: `${w.date} · ${w.dayTitle || w.planTitle || 'Workout'}` }))}
         />
       </div>
-      <WorkoutAnalysisView analysis={analysis} imperial={imperial} />
+      <WorkoutAnalysisView analysis={analysis} imperial={imperial} workout={workout} />
     </section>
   );
 }

@@ -5,6 +5,9 @@ import type { CardioAnalysis } from '@/lib/cardio-analysis';
 import { formatClock, formatPaceSec } from '@/lib/cardio-analysis';
 import { sessionEffort } from '@/lib/cardio-trends';
 import { ProBadge, ProLock } from '@/components/insights/ProLock';
+import { AISummaryCard } from '@/components/insights/AICoach';
+import { cardioFacts } from '@/lib/ai-facts';
+import { sessionKey } from '@/services/ai-insights';
 import { Compare, GatedInsights, Headline, SectionTitle, StatGrid, trendOf, type Trend } from './AnalysisParts';
 
 const NOUN = { run: 'run', walk: 'walk', cycle: 'ride' } as const;
@@ -52,6 +55,17 @@ export function CardioAnalysisView({ analysis: a, activity, history }: { analysi
         title={p ? `${rate(c)} · ${headline!.text} vs last ${noun}` : `First ${noun} logged`}
         subtitle={p ? `Last ${noun} on ${p.date}: ${p.km} km at ${rate(p)}` : 'Future sessions will be compared with this one.'}
       />
+
+      {activity && (
+        <div className="mt-3">
+          <AISummaryCard
+            kind="cardio"
+            summaryKey={sessionKey('c', activity)}
+            facts={() => cardioFacts(a, effort)}
+            askPrompt={`About my ${noun} on ${c.date}: ${c.km.toFixed(2)} km in ${formatClock(c.sec)} at ${rate(c)}.`}
+          />
+        </div>
+      )}
 
       <SectionTitle>This {noun}</SectionTitle>
       <StatGrid items={stats} />

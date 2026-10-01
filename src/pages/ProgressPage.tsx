@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useId, type ReactNode } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useId, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -17,6 +17,7 @@ import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioSh
 import { CardioAnalysisPanel, InlineSessionAnalysis, StrengthAnalysisPanel } from '@/components/analysis/ProgressAnalysis';
 import { CardioInsightsPanel } from '@/components/insights/CardioInsights';
 import { StrengthInsightsPanel } from '@/components/insights/StrengthInsights';
+import { WeeklyReportCard } from '@/components/insights/AICoach';
 import { getUserWorkouts } from '@/services/workouts';
 import { getUserCardioActivities } from '@/services/cardio';
 import { getUserPlans, getPlan, getPlanDays, getPublicPlansForUser, clonePlan } from '@/services/plans';
@@ -287,23 +288,53 @@ function useLabelStep(count: number, plotW: number) {
   return Math.max(1, Math.ceil(count / maxLabels));
 }
 
+// Minimum horizontal room per data point; more points than fit make the chart swipeable.
+const LINE_SLOT = 52;
+const BAR_SLOT = 46;
+const SCROLL_X = 'absolute top-0 bottom-0 right-0 overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden';
+
+/** Scroller that opens at the newest (right-most) data and hides its scrollbar. */
+function useScrollToLatest(contentW: number, count: number, ready: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [contentW, count, ready]);
+  return ref;
+}
+
+function YAxisLabels({ ticks, yOf, height }: { ticks: number[]; yOf: (i: number) => number; height: number }) {
+  return (
+    <svg width={CHART_PAD.l} height={height} className="absolute left-0 top-0 block pointer-events-none">
+      {ticks.map((t, i) => (
+        <text key={i} x={CHART_PAD.l - 8} y={yOf(i) + 3.5} textAnchor="end" className="fill-bone-dim" fontSize={10}>{shortTick(t)}</text>
+      ))}
+    </svg>
+  );
+}
+
 function LineChart({ data, tone, unit, height = 188, yMin = 0, fmt = v => v.toFixed(1) }: {
   data: ChartPoint[]; tone: VizTone; unit: string; height?: number; yMin?: number; fmt?: (v: number) => string;
 }) {
   const [ref, width] = useElementWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const [scrollX, setScrollX] = useState(0);
   const gradId = `lg${useId().replace(/:/g, '')}`;
   const color = `rgb(var(--viz-${tone}))`;
 
-  const w = Math.max(width, 200);
-  const plotW = w - CHART_PAD.l - CHART_PAD.r;
+  const n = data.length;
+  const viewW = Math.max(width, 200) - CHART_PAD.l;
+  const padL = 14;
+  const padR = 22;
+  const contentW = Math.max(viewW, n * LINE_SLOT + padL + padR);
+  const scrollRef = useScrollToLatest(contentW, n, width > 0);
+  const plotW = contentW - padL - padR;
   const plotH = height - CHART_PAD.t - CHART_PAD.b;
   const maxV = Math.max(...data.map(d => d.value), yMin + 0.1);
   const yMax = yMin + niceCeil(maxV - yMin);
-  const n = data.length;
 
   const pts = data.map((d, i) => ({
-    x: CHART_PAD.l + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW),
+    x: padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW),
     y: CHART_PAD.t + plotH - ((d.value - yMin) / (yMax - yMin)) * plotH,
   }));
 
@@ -318,77 +349,78 @@ function LineChart({ data, tone, unit, height = 188, yMin = 0, fmt = v => v.toFi
   const area = n > 0 ? `${line} L${pts[n - 1].x},${baseY} L${pts[0].x},${baseY} Z` : '';
   const step = useLabelStep(n, plotW);
   const ticks = [0, 1, 2, 3].map(i => yMin + ((yMax - yMin) * i) / 3);
+  const tickY = (i: number) => CHART_PAD.t + plotH - (i / 3) * plotH;
   const active = hover ?? n - 1;
+  const pick = (i: number) => { setScrollX(scrollRef.current?.scrollLeft || 0); setHover(i); };
 
   return (
     <div ref={ref} className="relative w-full select-none" style={{ height }} onMouseLeave={() => setHover(null)}>
       {width > 0 && n > 0 && (
-        <svg width={w} height={height} className="block overflow-visible">
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" style={{ stopColor: color, stopOpacity: 0.22 }} />
-              <stop offset="100%" style={{ stopColor: color, stopOpacity: 0 }} />
-            </linearGradient>
-          </defs>
+        <>
+          <YAxisLabels ticks={ticks} yOf={tickY} height={height} />
+          <div ref={scrollRef} className={SCROLL_X} style={{ left: CHART_PAD.l }} onScroll={() => hover !== null && setHover(null)}>
+            <svg width={contentW} height={height} className="block">
+              <defs>
+                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" style={{ stopColor: color, stopOpacity: 0.22 }} />
+                  <stop offset="100%" style={{ stopColor: color, stopOpacity: 0 }} />
+                </linearGradient>
+              </defs>
 
-          {ticks.map((t, i) => {
-            const y = CHART_PAD.t + plotH - (i / 3) * plotH;
-            return (
-              <g key={i}>
-                <line x1={CHART_PAD.l} x2={w - CHART_PAD.r} y1={y} y2={y} className="stroke-line" strokeDasharray={i === 0 ? undefined : '3 4'} />
-                <text x={CHART_PAD.l - 8} y={y + 3.5} textAnchor="end" className="fill-bone-dim" fontSize={10}>{shortTick(t)}</text>
-              </g>
-            );
-          })}
+              {ticks.map((_, i) => (
+                <line key={i} x1={0} x2={contentW} y1={tickY(i)} y2={tickY(i)} className="stroke-line" strokeDasharray={i === 0 ? undefined : '3 4'} />
+              ))}
 
-          <path d={area} fill={`url(#${gradId})`} />
-          <path d={line} fill="none" style={{ stroke: color }} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" />
+              <path d={area} fill={`url(#${gradId})`} />
+              <path d={line} fill="none" style={{ stroke: color }} strokeWidth={2.25} strokeLinecap="round" strokeLinejoin="round" />
 
-          {hover !== null && (
-            <line x1={pts[hover].x} x2={pts[hover].x} y1={CHART_PAD.t} y2={baseY} className="stroke-bone-dim" strokeOpacity={0.35} strokeDasharray="3 3" />
-          )}
+              {hover !== null && (
+                <line x1={pts[hover].x} x2={pts[hover].x} y1={CHART_PAD.t} y2={baseY} className="stroke-bone-dim" strokeOpacity={0.35} strokeDasharray="3 3" />
+              )}
 
-          {pts.map((p, i) => (
-            <circle
-              key={i}
-              cx={p.x}
-              cy={p.y}
-              r={i === active ? 4.5 : n <= 16 ? 2.5 : 0}
-              style={{ fill: i === active ? color : 'rgb(var(--color-ink))', stroke: color }}
-              strokeWidth={i === active ? 2.5 : 1.5}
-            />
-          ))}
+              {pts.map((p, i) => (
+                <circle
+                  key={i}
+                  cx={p.x}
+                  cy={p.y}
+                  r={i === active ? 4.5 : 2.5}
+                  style={{ fill: i === active ? color : 'rgb(var(--color-ink))', stroke: color }}
+                  strokeWidth={i === active ? 2.5 : 1.5}
+                />
+              ))}
 
-          {data.map((d, i) => {
-            const show = i % step === 0 || (i === n - 1 && (n - 1) % step >= step / 2);
-            if (!show) return null;
-            return (
-              <text key={d.key} x={pts[i].x} y={height - 6} textAnchor="middle" className="fill-bone-dim" fontSize={10}>
-                {d.label}
-              </text>
-            );
-          })}
+              {data.map((d, i) => {
+                const show = (n - 1 - i) % step === 0;
+                if (!show) return null;
+                return (
+                  <text key={d.key} x={pts[i].x} y={height - 6} textAnchor="middle" className={i === n - 1 ? 'fill-bone' : 'fill-bone-dim'} fontWeight={i === n - 1 ? 600 : 400} fontSize={10}>
+                    {d.label}
+                  </text>
+                );
+              })}
 
-          {pts.map((p, i) => {
-            const left = i === 0 ? CHART_PAD.l : (pts[i - 1].x + p.x) / 2;
-            const right = i === n - 1 ? w - CHART_PAD.r : (p.x + pts[i + 1].x) / 2;
-            return (
-              <rect
-                key={`hit-${i}`}
-                x={left}
-                y={CHART_PAD.t}
-                width={Math.max(right - left, 1)}
-                height={plotH}
-                fill="transparent"
-                onMouseEnter={() => setHover(i)}
-                onTouchStart={() => setHover(i)}
-              />
-            );
-          })}
-        </svg>
+              {pts.map((p, i) => {
+                const left = i === 0 ? 0 : (pts[i - 1].x + p.x) / 2;
+                const right = i === n - 1 ? contentW : (p.x + pts[i + 1].x) / 2;
+                return (
+                  <rect
+                    key={`hit-${i}`}
+                    x={left}
+                    y={CHART_PAD.t}
+                    width={Math.max(right - left, 1)}
+                    height={plotH}
+                    fill="transparent"
+                    onMouseEnter={() => pick(i)}
+                    onClick={() => pick(i)}
+                  />
+                );
+              })}
+            </svg>
+          </div>
+        </>
       )}
       {width > 0 && hover !== null && (
-        <ChartTooltip x={pts[hover].x} y={pts[hover].y} width={w} point={data[hover]} unit={unit} fmt={fmt} />
+        <ChartTooltip x={CHART_PAD.l + pts[hover].x - scrollX} y={pts[hover].y} width={Math.max(width, 200)} point={data[hover]} unit={unit} fmt={fmt} />
       )}
     </div>
   );
@@ -405,77 +437,81 @@ function BarChart({ data, tone, unit, height = 188, fmt = formatNumber }: {
 }) {
   const [ref, width] = useElementWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
+  const [scrollX, setScrollX] = useState(0);
   const color = `rgb(var(--viz-${tone}))`;
 
-  const w = Math.max(width, 200);
-  const plotW = w - CHART_PAD.l - CHART_PAD.r;
+  const n = data.length;
+  const viewW = Math.max(width, 200) - CHART_PAD.l;
+  const padR = CHART_PAD.r;
+  const contentW = Math.max(viewW, n * BAR_SLOT + padR);
+  const scrollRef = useScrollToLatest(contentW, n, width > 0);
+  const plotW = contentW - padR;
   const plotH = height - CHART_PAD.t - CHART_PAD.b;
   const yMax = niceCeil(Math.max(...data.map(d => d.value), 1));
-  const n = data.length;
   const slot = plotW / Math.max(n, 1);
   const barW = Math.min(slot * 0.56, 30);
   const baseY = CHART_PAD.t + plotH;
   const step = useLabelStep(n, plotW);
   const ticks = [0, 1, 2, 3].map(i => (yMax * i) / 3);
+  const tickY = (i: number) => baseY - (i / 3) * plotH;
+  const pick = (i: number) => { setScrollX(scrollRef.current?.scrollLeft || 0); setHover(i); };
 
   return (
     <div ref={ref} className="relative w-full select-none" style={{ height }} onMouseLeave={() => setHover(null)}>
       {width > 0 && (
-        <svg width={w} height={height} className="block overflow-visible">
-          {ticks.map((t, i) => {
-            const y = baseY - (i / 3) * plotH;
-            return (
-              <g key={i}>
-                <line x1={CHART_PAD.l} x2={w - CHART_PAD.r} y1={y} y2={y} className="stroke-line" strokeDasharray={i === 0 ? undefined : '3 4'} />
-                <text x={CHART_PAD.l - 8} y={y + 3.5} textAnchor="end" className="fill-bone-dim" fontSize={10}>{shortTick(t)}</text>
-              </g>
-            );
-          })}
+        <>
+          <YAxisLabels ticks={ticks} yOf={tickY} height={height} />
+          <div ref={scrollRef} className={SCROLL_X} style={{ left: CHART_PAD.l }} onScroll={() => hover !== null && setHover(null)}>
+            <svg width={contentW} height={height} className="block">
+              {ticks.map((_, i) => (
+                <line key={i} x1={0} x2={contentW} y1={tickY(i)} y2={tickY(i)} className="stroke-line" strokeDasharray={i === 0 ? undefined : '3 4'} />
+              ))}
 
-          {data.map((d, i) => {
-            const cx = CHART_PAD.l + slot * i + slot / 2;
-            const h = (d.value / yMax) * plotH;
-            const isLast = i === n - 1;
-            const isActive = hover === i || (hover === null && isLast);
-            const tooCloseToLast = !isLast && (n - 1 - i) * slot < 54;
-            const show = isLast || (i % step === 0 && !tooCloseToLast);
-            return (
-              <g key={d.key}>
-                <path
-                  d={roundedTopRect(cx - barW / 2, baseY - h, barW, h, 6)}
-                  style={{ fill: color, opacity: isActive ? 1 : 0.45, transition: 'opacity 150ms' }}
-                />
-                {show && (
-                  <text
-                    x={cx}
-                    y={height - 6}
-                    textAnchor="middle"
-                    className={isLast ? 'fill-bone' : 'fill-bone-dim'}
-                    fontWeight={isLast ? 600 : 400}
-                    fontSize={10}
-                  >
-                    {isLast ? 'This wk' : d.label}
-                  </text>
-                )}
-                <rect
-                  x={cx - slot / 2}
-                  y={CHART_PAD.t}
-                  width={slot}
-                  height={plotH}
-                  fill="transparent"
-                  onMouseEnter={() => setHover(i)}
-                  onTouchStart={() => setHover(i)}
-                />
-              </g>
-            );
-          })}
-        </svg>
+              {data.map((d, i) => {
+                const cx = slot * i + slot / 2;
+                const h = (d.value / yMax) * plotH;
+                const isLast = i === n - 1;
+                const isActive = hover === i || (hover === null && isLast);
+                const show = (n - 1 - i) % step === 0;
+                return (
+                  <g key={d.key}>
+                    <path
+                      d={roundedTopRect(cx - barW / 2, baseY - h, barW, h, 6)}
+                      style={{ fill: color, opacity: isActive ? 1 : 0.45, transition: 'opacity 150ms' }}
+                    />
+                    {show && (
+                      <text
+                        x={cx}
+                        y={height - 6}
+                        textAnchor="middle"
+                        className={isLast ? 'fill-bone' : 'fill-bone-dim'}
+                        fontWeight={isLast ? 600 : 400}
+                        fontSize={10}
+                      >
+                        {isLast ? 'This wk' : d.label}
+                      </text>
+                    )}
+                    <rect
+                      x={cx - slot / 2}
+                      y={CHART_PAD.t}
+                      width={slot}
+                      height={plotH}
+                      fill="transparent"
+                      onMouseEnter={() => pick(i)}
+                      onClick={() => pick(i)}
+                    />
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        </>
       )}
       {width > 0 && hover !== null && (
         <ChartTooltip
-          x={CHART_PAD.l + slot * hover + slot / 2}
+          x={CHART_PAD.l + slot * hover + slot / 2 - scrollX}
           y={baseY - (data[hover].value / yMax) * plotH}
-          width={w}
+          width={Math.max(width, 200)}
           point={data[hover]}
           unit={unit}
           fmt={fmt}
@@ -494,7 +530,7 @@ function CardioDistanceChart({ activities }: { activities: CardioActivity[] }) {
       byDay[d].dist += c.distanceKm || 0;
       byDay[d].count += 1;
     }
-    return Object.keys(byDay).sort().slice(-14).map(k => ({
+    return Object.keys(byDay).sort().slice(-120).map(k => ({
       key: k,
       label: format(parseDateKey(k), 'MMM d'),
       value: +byDay[k].dist.toFixed(2),
@@ -512,7 +548,7 @@ function CardioSpeedChart({ activities }: { activities: CardioActivity[] }) {
   const data = useMemo<ChartPoint[]>(() => {
     return [...activities]
       .sort((a, b) => getCardioDateStr(a).localeCompare(getCardioDateStr(b)))
-      .slice(-12)
+      .slice(-120)
       .map((c, i) => {
         const dur = c.movingDurationSec || c.durationSec || 0;
         const spd = c.avgSpeedKmh || (dur > 0 ? (c.distanceKm || 0) / (dur / 3600) : 0);
@@ -540,7 +576,7 @@ function WeeklyVolumeChart({
   const data = useMemo<ChartPoint[]>(() => {
     const thisMonday = mondayOf(new Date());
     const buckets: { key: string; label: string; value: number; sessions: number }[] = [];
-    for (let i = 7; i >= 0; i--) {
+    for (let i = 25; i >= 0; i--) {
       const m = new Date(thisMonday);
       m.setDate(m.getDate() - i * 7);
       buckets.push({ key: toDateKey(m), label: format(m, 'MMM d'), value: 0, sessions: 0 });
@@ -1797,6 +1833,8 @@ export function ProgressPage({
             </div>
           )}
 
+          {isOverview && <WeeklyReportCard workouts={allWorkouts} cardio={allCardio} />}
+
           {/* ─── Cardio ─── */}
           {showCardio && (
             <div className="space-y-3">
@@ -2159,8 +2197,8 @@ export function ProgressPage({
                     <div className="text-sm font-semibold text-bone">Weekly volume</div>
                     <div className="text-xs text-bone-dim">
                       {strengthMetric === 'volume'
-                        ? 'Total load lifted · last 8 weeks'
-                        : 'Total reps completed · last 8 weeks'}
+                        ? 'Total load lifted · last 26 weeks'
+                        : 'Total reps completed · last 26 weeks'}
                     </div>
                   </div>
 

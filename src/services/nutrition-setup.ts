@@ -25,12 +25,19 @@ export interface NutritionSetup {
   completedAt?: number;
   /** date key → ml */
   water?: Record<string, number>;
+  /** Daily water goal in ml; derived from body weight when unset. */
+  waterGoal?: number;
   /** date key → manually logged exercise kcal */
   burned?: Record<string, number>;
   saved?: SavedFood[];
 }
 
 export const MAX_SAVED_FOODS = 60;
+
+export function waterGoalFor(setup?: NutritionSetup | null): number {
+  if (setup?.waterGoal) return setup.waterGoal;
+  return setup ? Math.max(1500, Math.round((setup.answers.weightKg * 35) / 250) * 250) : 2500;
+}
 
 export const dateKey = (d: Date = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -112,19 +119,28 @@ function grade(score10: number): string {
 }
 
 export async function logFoodEntry(food: Pick<FoodEntry, 'name' | 'brand' | 'per100'>, grams: number, mealType = mealTypeForNow()) {
-  const m = portion(food.per100, grams);
-  const score = foodHealthScore(m);
-  const item = {
-    name: food.brand ? `${food.name} (${food.brand})` : food.name,
-    weight_grams: Math.round(grams),
-    calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat, fiber: m.fiber,
-    confidence: 1,
-  };
+  return logFoodEntries([{ food, grams }], mealType);
+}
+
+/** Log several foods as one meal (e.g. everything you had for lunch). */
+export async function logFoodEntries(entries: { food: Pick<FoodEntry, 'name' | 'brand' | 'per100'>; grams: number }[], mealType = mealTypeForNow()) {
+  const items = entries.map(({ food, grams }) => {
+    const m = portion(food.per100, grams);
+    return {
+      name: food.brand ? `${food.name} (${food.brand})` : food.name,
+      weight_grams: Math.round(grams),
+      calories: m.calories, protein: m.protein, carbs: m.carbs, fat: m.fat, fiber: m.fiber,
+      confidence: 1,
+    };
+  });
+  const sum = (k: 'calories' | 'protein' | 'carbs' | 'fat' | 'fiber') => Math.round(items.reduce((s, i) => s + (i[k] || 0), 0) * 10) / 10;
+  const totals = { calories: Math.round(sum('calories')), protein: sum('protein'), carbs: sum('carbs'), fat: sum('fat'), fiber: sum('fiber') };
+  const score = foodHealthScore(totals);
   return logMeal({
     nutrition: {
       nutrition: {
-        items: [item],
-        total_calories: m.calories, total_protein: m.protein, total_carbs: m.carbs, total_fat: m.fat, total_fiber: m.fiber,
+        items,
+        total_calories: totals.calories, total_protein: totals.protein, total_carbs: totals.carbs, total_fat: totals.fat, total_fiber: totals.fiber,
       },
       health_score: { score: score * 10, grade: grade(score), suggestions: [] },
     },

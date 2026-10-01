@@ -2,6 +2,10 @@ import { Trophy } from 'lucide-react';
 import type { WorkoutAnalysis } from '@/lib/workout-analysis';
 import { Compare, GatedInsights, Headline, SectionTitle, StatGrid, TrendChip, trendOf } from './AnalysisParts';
 import { ProBadge, ProLock } from '@/components/insights/ProLock';
+import { AISummaryCard } from '@/components/insights/AICoach';
+import { workoutFacts } from '@/lib/ai-facts';
+import { sessionKey } from '@/services/ai-insights';
+import type { Workout } from '@/types';
 
 const ZONES = [
   { key: 'strength', label: 'Strength 1–5', color: '#7c3aed' },
@@ -11,7 +15,7 @@ const ZONES = [
 
 const signed = (n: number, suffix = '') => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n)}${suffix}`;
 
-export function WorkoutAnalysisView({ analysis: a, imperial }: { analysis: WorkoutAnalysis; imperial: boolean }) {
+export function WorkoutAnalysisView({ analysis: a, imperial, workout }: { analysis: WorkoutAnalysis; imperial: boolean; workout?: Workout }) {
   const toUnit = (kg: number) => Math.round(imperial ? kg * 2.20462 : kg);
   const wu = imperial ? 'lb' : 'kg';
   const change = a.volumeChangePercent;
@@ -46,6 +50,17 @@ export function WorkoutAnalysisView({ analysis: a, imperial }: { analysis: Worko
         title={change === undefined ? 'Baseline session' : change === 0 ? 'Volume matched' : `Volume ${change > 0 ? 'up' : 'down'} ${Math.abs(change)}%`}
         subtitle="Each exercise vs its best previous session"
       />
+
+      {workout && (
+        <div className="mt-3">
+          <AISummaryCard
+            kind="workout"
+            summaryKey={sessionKey('w', workout)}
+            facts={() => workoutFacts(a)}
+            askPrompt={`About my workout on ${a.date}: ${a.totals.sets} working sets, ${a.totals.exercises} exercises${weighted ? `, ${toUnit(a.totals.volumeKg)} ${wu} volume` : ''}.`}
+          />
+        </div>
+      )}
 
       <SectionTitle>Session totals</SectionTitle>
       <StatGrid items={totals} />

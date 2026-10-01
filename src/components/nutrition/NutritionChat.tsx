@@ -29,6 +29,9 @@ interface ChatMessage {
 interface NutritionChatProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Question from an "Ask AI" button; sent once in a new chat. */
+  initialPrompt?: string | null;
+  onPromptSent?: () => void;
 }
 
 function ReasoningCard({ reasoning }: { reasoning: string }) {
@@ -94,7 +97,7 @@ function FreeAllowanceHint({ kind }: { kind: 'ai_call' | 'food_scan' }) {
   );
 }
 
-export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
+export default function NutritionChat({ isOpen, onClose, initialPrompt, onPromptSent }: NutritionChatProps) {
   const showToast = useUIStore(s => s.showToast);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -124,6 +127,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const askStarted = useRef(false);
 
   // Helper to safely get/set cache
   const getCachedData = (key: string) => {
@@ -170,6 +174,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
       const data = await getChatSessions();
       setSessions(data);
       setCachedData('apparatus_cached_sessions', data);
+      if (askStarted.current) return;
 
       if (!targetSid && data.length > 0) {
         targetSid = data[0].id;
@@ -288,6 +293,15 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     if (isOpen && !previewImage) inputRef.current?.focus();
   }, [isOpen, previewImage]);
 
+  useEffect(() => {
+    if (!isOpen || !initialPrompt || loading) return;
+    askStarted.current = true;
+    handleNewChat();
+    handleSend(initialPrompt, { fresh: true });
+    onPromptSent?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, initialPrompt, loading]);
+
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -328,9 +342,10 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
     }
   };
 
-  const handleSend = async (overrideText?: string) => {
+  const handleSend = async (overrideText?: string, opts: { fresh?: boolean } = {}) => {
     const text = (overrideText ?? input).trim();
     if ((!text && !previewImage) || loading) return;
+    const activeSessionId = opts.fresh ? undefined : sessionId;
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -385,7 +400,7 @@ export default function NutritionChat({ isOpen, onClose }: NutritionChatProps) {
           });
         } else {
           // Text Chat Flow
-          const res = await sendChatMessage(userMsg.content, sessionId, controller.signal);
+          const res = await sendChatMessage(userMsg.content, activeSessionId, controller.signal);
           useSubscriptionStore.getState().bumpUsage('ai_call');
           if (res.session_id) {
             setSessionId(res.session_id);

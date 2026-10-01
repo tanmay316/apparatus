@@ -1,8 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
-import { X, Upload, Trophy, Calendar, MapPin, Sparkles, Clock, AlertCircle } from 'lucide-react';
-import { CustomSelect } from '@/components/ui/CustomSelect';
+import { useState } from 'react';
+import { Bike, CalendarPlus, Dumbbell, Footprints, Globe, Shield, Sparkles, Users, Zap } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -11,17 +8,26 @@ import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
 import { PriceField, parsePriceInput } from '@/components/market/PriceField';
 import { useMarketConfig } from '@/components/market/CheckoutButton';
+import { ChoiceGroup, CoverPicker, Field, FormSection, FormSheet, spanLabel, STATUS_LABEL, StatusPill, type Choice } from '@/components/ui/FormSheet';
+
+const ACTIVITY_TYPES: Choice<string>[] = [
+  { value: 'Run', label: 'Run', icon: Footprints },
+  { value: 'Calisthenics', label: 'Calisthenics', icon: Zap },
+  { value: 'Workout', label: 'Workout', icon: Dumbbell },
+  { value: 'Cycling', label: 'Ride', icon: Bike },
+  { value: 'Meetup', label: 'Meetup', icon: Users },
+  { value: 'Other', label: 'Other', icon: Sparkles },
+];
+
+const VISIBILITY: Choice<'public' | 'clan_only'>[] = [
+  { value: 'public', label: 'Public', description: 'Anyone can RSVP.', icon: Globe },
+  { value: 'clan_only', label: 'Clan only', description: 'Only your clan members.', icon: Shield },
+];
 
 export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => void, prefilledClanId?: string }) {
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    document.body.classList.add('community-create-open');
-    return () => document.body.classList.remove('community-create-open');
-  }, []);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -52,7 +58,7 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
       setIsCompressing(true);
       const compressed = await compressImageFile(file, 700, 700, 0.55);
       setCoverUrl(compressed);
-      showToast('Image compressed and attached!', 'success');
+      showToast('Cover photo added', 'success');
     } catch {
       showToast('Failed to compress image', 'error');
     } finally {
@@ -66,18 +72,9 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
   const currentNow = Date.now();
 
   let dynamicStatus: 'upcoming' | 'active' | 'completed' = 'upcoming';
-  let dynamicStatusLabel = '🟢 Upcoming';
-  let dynamicStatusColor = 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-
-  if (currentNow >= startMs && currentNow <= endMs) {
-    dynamicStatus = 'active';
-    dynamicStatusLabel = '🔥 Active (Ongoing)';
-    dynamicStatusColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-  } else if (endMs && currentNow > endMs) {
-    dynamicStatus = 'completed';
-    dynamicStatusLabel = '🏁 Completed';
-    dynamicStatusColor = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-  }
+  if (currentNow >= startMs && currentNow <= endMs) dynamicStatus = 'active';
+  else if (endMs && currentNow > endMs) dynamicStatus = 'completed';
+  const datesInvalid = !(endMs > startMs);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -129,229 +126,60 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
 
     if (!title.trim()) return;
     if (!description.trim()) return;
-    if (!startDateTime || !endDateTime) return;
+    if (!startDateTime || !endDateTime || datesInvalid) return;
 
     createMutation.mutate();
   };
 
-  return createPortal(
-    <div className="cx pro-scope fixed inset-0 z-[600] flex flex-col justify-end">
-      <motion.div 
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-      />
-      <motion.div 
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-        className="relative bg-ink border-t border-line rounded-t-[32px] overflow-hidden max-h-[92dvh] flex flex-col shadow-2xl text-bone"
-      >
-        <div className="flex items-center justify-between p-6 border-b border-line">
-          <div>
-            <h2 className="font-display text-2xl text-bone">Create Event</h2>
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`inline-flex text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold border ${dynamicStatusColor}`}>
-                {dynamicStatusLabel}
-              </span>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 bg-ink-2 hover:bg-ink-3 rounded-full text-bone transition-colors">
-            <X size={20} />
-          </button>
+  return (
+    <FormSheet
+      icon={CalendarPlus}
+      title="New event"
+      subtitle="Bring people together to train."
+      aside={<StatusPill tone={dynamicStatus}>{STATUS_LABEL[dynamicStatus]}</StatusPill>}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      submitLabel="Publish event"
+      busy={createMutation.isPending}
+      busyLabel="Publishing…"
+      disabled={isCompressing}
+    >
+      <FormSection title="Basics">
+        <CoverPicker value={coverUrl} onPick={handleImageFile} onClear={() => setCoverUrl('')} busy={isCompressing} />
+        <Field id="event-title" label="Event name" count={title.length} max={80} error={submitted && !title.trim() && 'Add a name for your event'}>
+          <input id="event-title" value={title} maxLength={80} onChange={e => setTitle(e.target.value)} placeholder="e.g. Sunday 10K community run" className="dx-input" aria-invalid={submitted && !title.trim()} />
+        </Field>
+        <Field id="event-desc" label="Details" count={description.length} max={1000} error={submitted && !description.trim() && 'Describe the plan, meeting point and pace'}>
+          <textarea id="event-desc" value={description} maxLength={1000} onChange={e => setDescription(e.target.value)} rows={4} placeholder="Schedule, meeting point, pace groups, what to bring…" className="dx-input" aria-invalid={submitted && !description.trim()} />
+        </Field>
+        <Field label="Activity">
+          <ChoiceGroup label="Activity" columns={3} value={activityType} onChange={setActivityType} options={ACTIVITY_TYPES} />
+        </Field>
+      </FormSection>
+
+      <FormSection title="When & where">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field id="event-start" label="Starts">
+            <input id="event-start" type="datetime-local" value={startDateTime} onChange={e => setStartDateTime(e.target.value)} className="dx-input" />
+          </Field>
+          <Field id="event-end" label="Ends" error={datesInvalid && 'Must be after the start'} hint={!datesInvalid ? `Lasts ${spanLabel(startMs, endMs)}` : undefined}>
+            <input id="event-end" type="datetime-local" value={endDateTime} onChange={e => setEndDateTime(e.target.value)} className="dx-input" aria-invalid={datesInvalid} />
+          </Field>
         </div>
+        <Field id="event-location" label="Location" optional>
+          <input id="event-location" value={locationName} maxLength={120} onChange={e => setLocationName(e.target.value)} placeholder="e.g. Central Park, Gate 4" className="dx-input" />
+        </Field>
+      </FormSection>
 
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5">
-          {/* Cover Photo Upload with Live Preview */}
-          <div className="space-y-2">
-            <label className="block text-xs font-mono text-bone-dim uppercase">Cover Photo / Banner</label>
-            {coverUrl ? (
-              <div className="relative max-h-56 w-full rounded-2xl overflow-hidden border border-line/40 group bg-ink-2/80 flex items-center justify-center p-2">
-                <img src={coverUrl} alt="Preview" className="w-full max-h-52 object-contain rounded-xl" />
-                <button
-                  type="button"
-                  onClick={() => setCoverUrl('')}
-                  className="absolute top-3 right-3 p-1.5 rounded-full bg-black/80 hover:bg-black text-red-400 transition-colors shadow-lg"
-                  title="Remove Image"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isCompressing}
-                  className="btn-secondary flex-1 py-3 text-xs font-mono flex items-center justify-center gap-2"
-                >
-                  <Upload size={14} /> {isCompressing ? 'Compressing...' : 'Upload Image'}
-                </button>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleImageFile}
-                  accept="image/*"
-                  className="hidden"
-                />
-              </div>
-            )}
-            {!coverUrl && (
-              <input
-                type="url"
-                value={coverUrl}
-                onChange={e => setCoverUrl(e.target.value)}
-                placeholder="Or paste image URL (https://...)"
-                className="input-field w-full text-xs font-mono text-bone py-2"
-              />
-            )}
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="block text-xs font-mono text-bone-dim uppercase mb-1">Event Title *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Sunday Morning 10K Community Run"
-              className={`input-field w-full text-sm font-sans text-bone ${
-                submitted && !title.trim() ? 'border-red-500 bg-red-500/10 focus:border-red-500' : ''
-              }`}
-            />
-            {submitted && !title.trim() && (
-              <span className="text-red-400 text-[11px] font-mono mt-1 flex items-center gap-1">
-                <AlertCircle size={11} /> This field is required
-              </span>
-            )}
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-mono text-bone-dim uppercase mb-1">Description & Details *</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={3}
-              placeholder="Provide event schedule, meeting point, and rules..."
-              className={`input-field w-full text-sm font-sans text-bone ${
-                submitted && !description.trim() ? 'border-red-500 bg-red-500/10 focus:border-red-500' : ''
-              }`}
-            />
-            {submitted && !description.trim() && (
-              <span className="text-red-400 text-[11px] font-mono mt-1 flex items-center gap-1">
-                <AlertCircle size={11} /> This field is required
-              </span>
-            )}
-          </div>
-
-          {/* Activity Type */}
-          <div>
-            <label className="block text-xs font-mono text-bone-dim uppercase mb-1">Activity Type</label>
-            <CustomSelect
-              value={activityType}
-              onChange={setActivityType}
-              options={[
-                { value: 'Run', label: '🏃 Community Run' },
-                { value: 'Calisthenics', label: '🤸 Calisthenics Jam' },
-                { value: 'Workout', label: '🏋️ Group Workout' },
-                { value: 'Cycling', label: '🚴 Cycling Tour' },
-                { value: 'Meetup', label: '🤝 Fitness Meetup' },
-                { value: 'Other', label: '✨ Other' },
-              ]}
-            />
-          </div>
-
-          {/* Start & End Date / Time with Dynamic Status */}
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-mono text-bone-dim uppercase mb-1 flex items-center gap-1">
-                  <Calendar size={13} className="text-blue-400" /> Start Date & Time *
-                </label>
-                <input
-                  type="datetime-local"
-                  value={startDateTime}
-                  onChange={e => setStartDateTime(e.target.value)}
-                  className="input-field w-full text-xs font-mono text-bone"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono text-bone-dim uppercase mb-1 flex items-center gap-1">
-                  <Calendar size={13} className="text-amber-400" /> End Date & Time *
-                </label>
-                <input
-                  type="datetime-local"
-                  value={endDateTime}
-                  onChange={e => setEndDateTime(e.target.value)}
-                  className={`input-field w-full text-xs font-mono text-bone ${
-                    endMs <= startMs ? 'border-red-500 bg-red-500/10' : ''
-                  }`}
-                />
-                {endMs <= startMs && (
-                  <span className="text-red-400 text-[11px] font-mono mt-1 block">* End date must be after start date</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Location */}
-          <div>
-            <label className="block text-xs font-mono text-bone-dim uppercase mb-1 flex items-center gap-1">
-              <MapPin size={13} className="text-blue-400" /> Location / Venue Name
-            </label>
-            <input
-              type="text"
-              value={locationName}
-              onChange={e => setLocationName(e.target.value)}
-              placeholder="e.g. Central Park Track, Gate 4"
-              className="input-field w-full text-sm font-sans text-bone"
-            />
-          </div>
-
-          {/* Prize / Reward */}
-          <div>
-            <label className="block text-xs font-mono text-bone-dim uppercase mb-1 flex items-center gap-1">
-              <Trophy size={13} className="text-amber-400" /> Prizes & Rewards (Optional)
-            </label>
-            <input
-              type="text"
-              value={prize}
-              onChange={e => setPrize(e.target.value)}
-              placeholder="e.g. Energy Drinks + Top 3 Medals"
-              className="input-field w-full text-sm font-sans text-bone"
-            />
-          </div>
-
-          <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" label="Ticket price (Optional)" unit="ticket" />
-
-          {/* Visibility */}
-          {!prefilledClanId && (
-            <div>
-              <label className="block text-xs font-mono text-bone-dim uppercase mb-1">Visibility</label>
-              <CustomSelect
-                value={visibility}
-                onChange={(val) => setVisibility(val as any)}
-                options={[
-                  { value: 'public', label: '🌍 Public (Anyone can RSVP)' },
-                  { value: 'clan_only', label: '🛡️ Clan Only' },
-                ]}
-              />
-            </div>
-          )}
-
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={createMutation.isPending || isCompressing}
-              className="btn-primary w-full py-4 text-sm font-bold uppercase tracking-wider shadow-[0_0_20px_rgba(59,130,246,0.3)] flex items-center justify-center gap-2"
-            >
-              <Sparkles size={16} />
-              {createMutation.isPending ? 'Publishing Event...' : 'Publish Event'}
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>,
-    document.body
+      <FormSection title="Access & rewards">
+        {!prefilledClanId && (
+          <ChoiceGroup label="Who can join" value={visibility} onChange={setVisibility} options={VISIBILITY} />
+        )}
+        <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" label="Ticket price" unit="ticket" />
+        <Field id="event-prize" label="Prizes" optional>
+          <input id="event-prize" value={prize} maxLength={120} onChange={e => setPrize(e.target.value)} placeholder="e.g. Medals for the top 3" className="dx-input" />
+        </Field>
+      </FormSection>
+    </FormSheet>
   );
 }

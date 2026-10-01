@@ -416,6 +416,13 @@ textarea.dx-input { min-height: 84px; line-height: 1.45; resize: vertical; }
 
 .dx-input:disabled { opacity: 0.6; }
 
+.dx-input[aria-invalid='true'] {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+[data-theme='dark'] .dx-input { color-scheme: dark; }
+
 /* ─── Overlays (bottom sheet on mobile, dialog on desktop) ─── */
 .dx-overlay {
   position: fixed;

@@ -87,7 +87,7 @@ export function WorkoutAnalysisSheet({ uid, workoutId, onClose }: { uid: string;
       onClose={onClose}
       footer={w && <OpenInProgress date={w.date} tab="strength" id={workoutId} onClose={onClose} />}
     >
-      {isLoading ? <Loading /> : analysis ? <WorkoutAnalysisView analysis={analysis} imperial={imperial} /> : <Missing />}
+      {isLoading ? <Loading /> : analysis ? <WorkoutAnalysisView analysis={analysis} imperial={imperial} workout={w} /> : <Missing />}
     </AnalysisSheet>
   );
 }

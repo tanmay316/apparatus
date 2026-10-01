@@ -1,19 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
   Apple, Flame, Settings2, Plus, ScanLine, Search, Bookmark, Dumbbell, Sparkles, Beef, Wheat, Droplet,
-  Footprints, Minus, GlassWater, Heart, Leaf, RefreshCw, AlertCircle, Loader2,
+  Footprints, Minus, GlassWater, Heart, Leaf, RefreshCw, AlertCircle, Loader2, Coffee, Sun, Cookie, Moon, Pencil,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { analyzeFood, hasTrackableNutrition, logMeal, wakeUpServer } from '@/services/nutrition-api';
 import { getDailySteps, DEFAULT_STEP_GOAL } from '@/services/cardio';
 import {
-  dateKey, logFoodEntry, logQuickEntry, MAX_SAVED_FOODS, mealTypeForNow, stepsCalories, useNutritionSetup, useTrainingBurned,
-  useUpdateNutritionSetup, type SavedFood,
+  dateKey, logFoodEntries, logFoodEntry, logQuickEntry, MAX_SAVED_FOODS, mealTypeForNow, stepsCalories, useNutritionSetup, useTrainingBurned,
+  useUpdateNutritionSetup, waterGoalFor, type SavedFood,
 } from '@/services/nutrition-setup';
 import { shiftDate } from '@/lib/analysis-common';
 import { lookupBarcode, type FoodEntry } from '@/lib/food-db';
@@ -21,9 +21,9 @@ import { streakFrom } from '@/lib/nutrition-plan';
 import NutritionOnboarding from '@/components/nutrition/NutritionOnboarding';
 import FoodCamera, { type CapturedPhoto, type ScanMode } from '@/components/nutrition/FoodCamera';
 import MealDetailSheet from '@/components/nutrition/MealDetailSheet';
-import { ExerciseSheet, FoodPortionSheet, FoodSearchSheet, QuickAddSheet } from '@/components/nutrition/FoodSheets';
+import { ExerciseSheet, FoodPortionSheet, FoodSearchSheet, MultiLogSheet, QuickAddSheet, type BasketItem } from '@/components/nutrition/FoodSheets';
 import { NutritionProgress, NutritionSettingsSheet } from '@/components/nutrition/NutritionProgress';
-import { Ring, useLockBody } from '@/components/nutrition/cal-ui';
+import { NumberSheet, Ring, useLockBody } from '@/components/nutrition/cal-ui';
 import { GearPicks } from '@/components/market/GearPicks';
 import {
   mealDate, mealName, sumTotals, useMealHistory, useMealThumb, useRefreshNutrition, type LoggedMeal,
@@ -35,7 +35,21 @@ interface PendingScan {
   startedAt: number;
   status: 'analyzing' | 'error';
   message?: string;
+  mealType: string;
 }
+
+const MEAL_GROUPS = [
+  { id: 'breakfast', label: 'Breakfast', icon: Coffee },
+  { id: 'lunch', label: 'Lunch', icon: Sun },
+  { id: 'snack', label: 'Snacks', icon: Cookie },
+  { id: 'dinner', label: 'Dinner', icon: Moon },
+] as const;
+type MealGroup = typeof MEAL_GROUPS[number]['id'];
+
+const groupOf = (t?: string): MealGroup => {
+  const k = (t || '').toLowerCase();
+  return k === 'breakfast' || k === 'lunch' || k === 'dinner' ? k : 'snack';
+};
 
 const LABEL_NOTE = 'This photo shows a nutrition facts label. Read the per-serving values from the label and report one serving of this product.';
 
@@ -247,6 +261,12 @@ export default function NutritionDashboard() {
   const [redo, setRedo] = useState(false);
   const [openMeal, setOpenMeal] = useState<LoggedMeal | null>(null);
   const [lookingUp, setLookingUp] = useState(false);
+  const [basket, setBasket] = useState<BasketItem[]>([]);
+  const [review, setReview] = useState(false);
+  // Meal chosen from a section's "+" (otherwise the time of day decides).
+  const [addMealType, setAddMealType] = useState<string | undefined>();
+  const [portionGrams, setPortionGrams] = useState<number | undefined>();
+  const [editWater, setEditWater] = useState(false);
   const pagerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { wakeUpServer(); }, []);
@@ -291,15 +311,21 @@ export default function NutritionDashboard() {
   const streak = streakFrom(new Set(byDay.keys()), today, shiftDate);
 
   const stepGoal = profile?.stepGoal || DEFAULT_STEP_GOAL;
-  const waterGoal = setup ? Math.max(1500, Math.round((setup.answers.weightKg * 35) / 250) * 250) : 2500;
+  const waterGoal = waterGoalFor(setup);
   const water = setup?.water?.[selected] || 0;
   const scored = dayMeals.filter(m => m.health_score != null);
   const healthAvg = scored.length ? Math.round(scored.reduce((s, m) => s + (m.health_score || 0), 0) / scored.length / 10) : null;
+  const grouped = useMemo(() => {
+    const g: Record<MealGroup, LoggedMeal[]> = { breakfast: [], lunch: [], snack: [], dinner: [] };
+    for (const m of dayMeals) g[groupOf(m.meal_type)].push(m);
+    for (const k of Object.keys(g) as MealGroup[]) g[k].sort((a, b) => mealDate(a).getTime() - mealDate(b).getTime());
+    return g;
+  }, [dayMeals]);
 
   // ─── Actions ───
   const runScan = useCallback(async (scan: PendingScan) => {
     setPending(list => list.map(p => (p.id === scan.id ? { ...p, status: 'analyzing', startedAt: Date.now(), message: undefined } : p)));
-    const mealType = mealTypeForNow();
+    const mealType = scan.mealType;
     try {
       const res = await analyzeFood(scan.photo.base64, scan.photo.mime, mealType, undefined, undefined, scan.photo.mode === 'label' ? LABEL_NOTE : '');
       if (!hasTrackableNutrition(res)) throw new Error(res.message || (res.status === 'not_food' ? "We couldn't find any food in that photo." : 'The food scanner is busy. Try again in a moment.'));
@@ -315,7 +341,8 @@ export default function NutritionDashboard() {
   const onPhoto = (photo: CapturedPhoto) => {
     setCamera(null);
     setTab('home');
-    const scan: PendingScan = { id: `${Date.now()}`, photo, startedAt: Date.now(), status: 'analyzing' };
+    const scan: PendingScan = { id: `${Date.now()}`, photo, startedAt: Date.now(), status: 'analyzing', mealType: addMealType || mealTypeForNow() };
+    setAddMealType(undefined);
     setPending(list => [scan, ...list]);
     runScan(scan);
   };
@@ -366,17 +393,62 @@ export default function NutritionDashboard() {
     showToast('Meal saved to your foods', 'success');
   };
 
+  const closePortion = () => { setPortionFood(null); setPortionGrams(undefined); };
+  const closeSearch = () => { setSearch(null); setAddMealType(undefined); };
+  const openSearch = (tab: 'all' | 'saved', mealType?: string) => { setAddMealType(mealType); setSearch(tab); };
+
   const logPortion = async (grams: number, mealType: string) => {
     if (!portionFood) return;
     try {
       await logFoodEntry(portionFood, grams, mealType);
       await refresh();
-      setPortionFood(null);
-      setSearch(null);
+      const id = portionFood.id;
+      setBasket(list => list.filter(b => b.food.id !== id));
+      closePortion();
+      if (!review) closeSearch();
       setSelected(dateKey());
       showToast(`Added to ${mealType}`, 'success');
     } catch (err: any) {
       showToast(err?.message || 'Could not log this food', 'error');
+    }
+  };
+
+  const MAX_BASKET = 30;
+  const putInBasket = (food: FoodEntry, grams: number) => setBasket(list => (
+    list.some(b => b.food.id === food.id)
+      ? list.map(b => (b.food.id === food.id ? { food, grams } : b))
+      : [...list, { food, grams }].slice(0, MAX_BASKET)
+  ));
+  const toggleBasket = (food: FoodEntry) => setBasket(list => (
+    list.some(b => b.food.id === food.id)
+      ? list.filter(b => b.food.id !== food.id)
+      : [...list, { food, grams: food.serving.grams }].slice(0, MAX_BASKET)
+  ));
+  const removeFromBasket = (id: string) => {
+    const next = basket.filter(b => b.food.id !== id);
+    setBasket(next);
+    if (!next.length) setReview(false);
+  };
+  const logBasket = async (mealType: string) => {
+    const n = basket.length;
+    try {
+      await logFoodEntries(basket, mealType);
+      await refresh();
+      setBasket([]);
+      setReview(false);
+      closeSearch();
+      setSelected(dateKey());
+      showToast(`Logged ${n} ${n === 1 ? 'food' : 'foods'} to ${mealType}`, 'success');
+    } catch (err: any) {
+      showToast(err?.message || 'Could not log these foods', 'error');
+    }
+  };
+
+  const saveWaterGoal = async (ml: number) => {
+    try {
+      await updateSetup({ waterGoal: ml }, prev => ({ ...prev, waterGoal: ml }));
+    } catch {
+      showToast('Could not save water goal', 'error');
     }
   };
 
@@ -411,8 +483,8 @@ export default function NutritionDashboard() {
   const onMenu = (id: 'exercise' | 'saved' | 'database' | 'scan' | 'astra') => {
     setMenu(false);
     if (id === 'scan') setCamera('food');
-    else if (id === 'database') setSearch('all');
-    else if (id === 'saved') setSearch('saved');
+    else if (id === 'database') openSearch('all');
+    else if (id === 'saved') openSearch('saved');
     else if (id === 'exercise') setExercise(true);
     else window.dispatchEvent(new Event('open-ai-bot'));
   };
@@ -538,13 +610,13 @@ export default function NutritionDashboard() {
               </div>
               <div className="cal-card" style={{ padding: 16, marginTop: 10, display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span className="cal-option-icon" style={{ width: 44, height: 44, background: 'var(--cal-card-2)', color: 'var(--cal-water)' }}><GlassWater size={20} /></span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700 }}>Water</div>
+                <button type="button" onClick={() => setEditWater(true)} aria-label="Edit water goal" style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700 }}>Water <Pencil size={12} className="cal-muted" /></div>
                   <div className="cal-muted cal-tabular" style={{ fontSize: 13, fontWeight: 600 }}>{water.toLocaleString()} / {waterGoal.toLocaleString()} ml</div>
                   <div style={{ marginTop: 6, height: 5, borderRadius: 5, background: 'var(--cal-card-2)' }}>
                     <div style={{ width: `${Math.min(100, (water / waterGoal) * 100)}%`, height: '100%', borderRadius: 5, background: 'var(--cal-water)', transition: 'width 0.3s' }} />
                   </div>
-                </div>
+                </button>
                 <button type="button" className="cal-icon-btn" aria-label="Remove a glass" onClick={() => setWater(water - 250)} disabled={water <= 0}><Minus size={17} /></button>
                 <button type="button" className="cal-icon-btn" aria-label="Add a glass" onClick={() => setWater(water + 250)} style={{ background: 'var(--cal-primary)', color: 'var(--cal-on-primary)' }}><Plus size={17} /></button>
               </div>
@@ -576,7 +648,7 @@ export default function NutritionDashboard() {
 
           {/* Meals */}
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '22px 2px 10px' }}>
-            <h2 style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em' }}>{isToday ? 'Recently uploaded' : format(new Date(`${selected}T12:00:00`), 'EEEE, MMM d')}</h2>
+            <h2 style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em' }}>{isToday ? 'Today\'s meals' : format(new Date(`${selected}T12:00:00`), 'EEEE, MMM d')}</h2>
             {dayMeals.length > 0 && <span className="cal-muted cal-tabular" style={{ fontSize: 13, fontWeight: 600 }}>{Math.round(totals.calories).toLocaleString()} cal</span>}
           </div>
 
@@ -584,14 +656,52 @@ export default function NutritionDashboard() {
             <div style={{ display: 'grid', gap: 10 }}>
               {[0, 1].map(i => <div key={i} className="cal-skeleton" style={{ height: 112, borderRadius: 22 }} />)}
             </div>
-          ) : hasEntries ? (
-            <div style={{ display: 'grid', gap: 10 }}>
-              <AnimatePresence initial={false}>
-                {isToday && pending.map(p => (
-                  <PendingCard key={p.id} scan={p} onRetry={() => runScan(p)} onDismiss={() => setPending(list => list.filter(x => x.id !== p.id))} />
-                ))}
-              </AnimatePresence>
-              {dayMeals.map(m => <MealCard key={m.id} meal={m} onClick={() => setOpenMeal(m)} />)}
+          ) : hasEntries || isToday ? (
+            <div style={{ display: 'grid', gap: 18 }}>
+              {isToday && pending.length > 0 && (
+                <div style={{ display: 'grid', gap: 10 }}>
+                  <AnimatePresence initial={false}>
+                    {pending.map(p => (
+                      <PendingCard key={p.id} scan={p} onRetry={() => runScan(p)} onDismiss={() => setPending(list => list.filter(x => x.id !== p.id))} />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+              {MEAL_GROUPS.map(g => {
+                const list = grouped[g.id];
+                if (!list.length && !isToday) return null;
+                const t = sumTotals(list);
+                return (
+                  <section key={g.id} aria-label={g.label}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 2px 8px' }}>
+                      <span className="cal-option-icon" style={{ width: 32, height: 32, borderRadius: 10, background: 'var(--cal-card)' }}><g.icon size={16} /></span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 16, fontWeight: 800 }}>{g.label}</div>
+                        {list.length > 0 && (
+                          <div className="cal-muted cal-tabular" style={{ fontSize: 12, fontWeight: 600 }}>
+                            {Math.round(t.calories).toLocaleString()} cal · P {Math.round(t.protein)}g · C {Math.round(t.carbs)}g · F {Math.round(t.fat)}g
+                          </div>
+                        )}
+                      </div>
+                      {isToday && (
+                        <button type="button" onClick={() => openSearch('all', g.id)} className="cal-icon-btn" aria-label={`Add to ${g.label.toLowerCase()}`} style={{ width: 34, height: 34, background: 'var(--cal-card)' }}><Plus size={17} /></button>
+                      )}
+                    </div>
+                    {list.length > 0 ? (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        {list.map(m => <MealCard key={m.id} meal={m} onClick={() => setOpenMeal(m)} />)}
+                      </div>
+                    ) : (
+                      <div className="cal-card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, borderStyle: 'dashed' }}>
+                        <button type="button" onClick={() => openSearch('all', g.id)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 8px', fontSize: 14, fontWeight: 700, textAlign: 'left' }}>
+                          <Search size={16} className="cal-muted" /> Add {g.label.toLowerCase()}
+                        </button>
+                        <button type="button" onClick={() => { setAddMealType(g.id); setCamera('food'); }} className="cal-icon-btn" aria-label={`Scan ${g.label.toLowerCase()}`} style={{ width: 40, height: 40, background: 'var(--cal-card-2)' }}><ScanLine size={17} /></button>
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
             </div>
           ) : (
             <div className="cal-card" style={{ padding: '26px 20px', textAlign: 'center' }}>
@@ -634,29 +744,79 @@ export default function NutritionDashboard() {
 
       <AnimatePresence>
         {menu && <AddMenu key="menu" onPick={onMenu} onClose={() => setMenu(false)} />}
-        {camera && <FoodCamera key="camera" initialMode={camera} onPhoto={onPhoto} onBarcode={onBarcode} onClose={() => setCamera(null)} />}
-        {search && !portionFood && !quickAdd && (
-          <FoodSearchSheet key="search" initialTab={search} saved={saved} onPick={setPortionFood} onQuickAdd={() => setQuickAdd(true)} onClose={() => setSearch(null)} />
+        {camera && <FoodCamera key="camera" initialMode={camera} onPhoto={onPhoto} onBarcode={onBarcode} onClose={() => { setCamera(null); setAddMealType(undefined); }} />}
+        {search && !portionFood && !quickAdd && !review && (
+          <FoodSearchSheet
+            key="search"
+            initialTab={search}
+            saved={saved}
+            basket={basket}
+            onPick={setPortionFood}
+            onToggle={toggleBasket}
+            onReview={() => setReview(true)}
+            onQuickAdd={() => setQuickAdd(true)}
+            onClose={closeSearch}
+          />
         )}
         {portionFood && (
-          <FoodPortionSheet key="portion" food={portionFood} isSaved={savedIds.has(portionFood.id)} onToggleSave={() => toggleSavedFood(portionFood)} onLog={logPortion} onClose={() => setPortionFood(null)} />
+          <FoodPortionSheet
+            key={`portion-${portionFood.id}`}
+            food={portionFood}
+            initialGrams={portionGrams ?? basket.find(b => b.food.id === portionFood.id)?.grams}
+            initialMealType={addMealType}
+            isSaved={savedIds.has(portionFood.id)}
+            onToggleSave={() => toggleSavedFood(portionFood)}
+            onLog={logPortion}
+            onAddToList={grams => {
+              putInBasket(portionFood, grams);
+              closePortion();
+              if (!search) setReview(true);
+            }}
+            onClose={closePortion}
+          />
+        )}
+        {review && !portionFood && basket.length > 0 && (
+          <MultiLogSheet
+            key="review"
+            items={basket}
+            initialMealType={addMealType}
+            onChange={(id, grams) => setBasket(list => list.map(b => (b.food.id === id ? { ...b, grams } : b)))}
+            onRemove={removeFromBasket}
+            onEdit={b => { setPortionGrams(b.grams); setPortionFood(b.food); }}
+            onAddMore={() => { setReview(false); if (!search) setSearch('all'); }}
+            onLog={logBasket}
+            onClose={() => setReview(false)}
+          />
         )}
         {quickAdd && (
           <QuickAddSheet
             key="quick"
+            initialMealType={addMealType}
             onClose={() => setQuickAdd(false)}
             onLog={async (name, m, mealType) => {
               try {
                 await logQuickEntry(name, m, mealType);
                 await refresh();
                 setQuickAdd(false);
-                setSearch(null);
+                closeSearch();
                 setSelected(dateKey());
                 showToast(`Added to ${mealType}`, 'success');
               } catch (err: any) {
                 showToast(err?.message || 'Could not log this entry', 'error');
               }
             }}
+          />
+        )}
+        {editWater && (
+          <NumberSheet
+            key="water-goal"
+            title="Daily water goal"
+            value={waterGoal}
+            unit="ml"
+            min={500}
+            max={8000}
+            onSave={saveWaterGoal}
+            onClose={() => setEditWater(false)}
           />
         )}
         {exercise && <ExerciseSheet key="exercise" burned={burned} onManual={addManualBurned} onClose={() => setExercise(false)} />}

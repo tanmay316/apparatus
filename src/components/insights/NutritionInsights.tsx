@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { Bar, BarChart, Cell, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, BarChart, Cell, Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts';
 import { format } from 'date-fns';
 import { AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { analyzeNutritionTrends, type NutritionMeal } from '@/lib/nutrition-trends';
@@ -8,17 +8,24 @@ import type { NutritionSetup } from '@/services/nutrition-setup';
 import { dateKey } from '@/services/nutrition-setup';
 import { Ring } from '@/components/nutrition/cal-ui';
 import { ProBadge, ProLock } from './ProLock';
+import { AskAIButton } from './AICoach';
+import { niceTicks, ScrollChart } from '@/components/ui/ScrollChart';
 
 const tooltipStyle = { borderRadius: 12, border: 'none', background: 'var(--cal-card)', color: 'var(--cal-text)', fontSize: 12 };
 const tick = { fontSize: 10.5, fill: 'var(--cal-muted)' };
 const ICON = { good: { Icon: CheckCircle2, color: 'var(--cal-good)' }, warn: { Icon: AlertTriangle, color: 'var(--cal-carbs)' }, info: { Icon: Info, color: 'var(--cal-fat)' } };
 
-function Card({ title, sub, right, children }: { title: string; sub?: string; right?: ReactNode; children: ReactNode }) {
+function Card({ title, sub, right, ask, children }: { title: string; sub?: string; right?: ReactNode; ask?: () => string; children: ReactNode }) {
   return (
     <div className="cal-card" style={{ padding: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ fontSize: 16, fontWeight: 800 }}>{title}</div>
-        {right}
+        {(right || ask) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {right}
+            {ask && <AskAIButton variant="cal" prompt={ask} />}
+          </div>
+        )}
       </div>
       {sub && <div className="cal-muted" style={{ fontSize: 12.5, fontWeight: 600, marginTop: 2 }}>{sub}</div>}
       <div style={{ marginTop: 12 }}>{children}</div>
@@ -33,10 +40,19 @@ function Body({ setup, byDay, goals, weights }: { setup: NutritionSetup; byDay: 
   const unit = imperial ? 'lb' : 'kg';
   const t = useMemo(() => analyzeNutritionTrends(byDay, goals, a, weights, dateKey()), [byDay, goals, a, weights]);
   const days = t.days.map(d => ({ ...d, label: format(new Date(`${d.date}T12:00:00`), 'd') }));
+  const weightData = t.weight.series.map(p => ({ d: p.date, w: show(p.weight), tr: show(p.trend) }));
+  const weightVals = weightData.flatMap(p => [p.w, p.tr]).concat(a.goal !== 'maintain' ? [show(a.targetWeightKg)] : []);
+  const weightTicks = niceTicks(Math.floor(Math.min(...weightVals) - 1), Math.ceil(Math.max(...weightVals) + 1));
+  const intakeTicks = niceTicks(0, Math.max(goals.calories * 1.1, ...t.days.map(d => d.calories)));
+  const calTick = { color: 'var(--cal-muted)' };
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
-      <Card title="Your real expenditure" sub={t.expenditure.source === 'adaptive' ? `Measured from ${t.expenditure.days} days of food and weight · ${t.expenditure.confidence} confidence` : 'Estimated from your profile until we have 10+ logged days and 3+ weigh-ins'}>
+      <Card
+        title="Your real expenditure"
+        sub={t.expenditure.source === 'adaptive' ? `Measured from ${t.expenditure.days} days of food and weight · ${t.expenditure.confidence} confidence` : 'Estimated from your profile until we have 10+ logged days and 3+ weigh-ins'}
+        ask={() => `My ${t.expenditure.source === 'adaptive' ? `measured (${t.expenditure.days} days, ${t.expenditure.confidence} confidence)` : 'estimated'} daily expenditure is ${t.expenditure.tdee} calories. My current target is ${goals.calories} calories and the suggested target is ${t.suggestedCalories ?? t.expenditure.tdee}. My goal is to ${a.goal} weight. Should I change my calorie target?`}
+      >
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10 }}>
           <span className="cal-tabular" style={{ fontSize: 38, fontWeight: 800, letterSpacing: '-0.04em', lineHeight: 1 }}>{t.expenditure.tdee.toLocaleString()}</span>
           <span className="cal-muted" style={{ fontSize: 13, fontWeight: 700, paddingBottom: 4 }}>cal / day</span>
@@ -57,20 +73,21 @@ function Body({ setup, byDay, goals, weights }: { setup: NutritionSetup; byDay: 
         title="Trend weight"
         sub={t.weight.ratePerWeek !== undefined ? `${t.weight.ratePerWeek > 0 ? '+' : ''}${show(t.weight.ratePerWeek)} ${unit} / week` : 'Weigh in a few times a week to see your trend'}
         right={t.weight.trendKg ? <span className="cal-tabular" style={{ fontSize: 18, fontWeight: 800 }}>{show(t.weight.trendKg)} {unit}</span> : undefined}
+        ask={t.weight.trendKg ? () => `My trend weight is ${show(t.weight.trendKg!)} ${unit}${t.weight.ratePerWeek !== undefined ? `, changing ${show(t.weight.ratePerWeek)} ${unit} per week` : ''}. My target is ${show(a.targetWeightKg)} ${unit}${t.projection?.onTrack ? `, projected for ${t.projection.date}` : ''}. Am I on a healthy pace and what should I adjust?` : undefined}
       >
-        {t.weight.series.length >= 2 ? (
-          <div style={{ height: 160 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={t.weight.series.map(p => ({ d: p.date, w: show(p.weight), tr: show(p.trend) }))} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
-                <XAxis dataKey="d" tickFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d')} tick={tick} axisLine={false} tickLine={false} minTickGap={28} />
-                <YAxis domain={['dataMin - 1', 'dataMax + 1']} tick={tick} axisLine={false} tickLine={false} width={38} allowDecimals={false} />
+        {weightData.length >= 2 ? (
+          <ScrollChart count={weightData.length} slot={22} height={160} ticks={weightTicks} top={6} bottom={24} tickStyle={calTick}>
+            {w => (
+              <LineChart width={w} height={160} data={weightData} margin={{ top: 6, right: 10, bottom: 0, left: 4 }}>
+                <XAxis dataKey="d" height={24} tickFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d')} tick={tick} axisLine={false} tickLine={false} minTickGap={28} />
+                <YAxis hide domain={[weightTicks[0], weightTicks[weightTicks.length - 1]]} allowDataOverflow />
                 <Tooltip contentStyle={tooltipStyle} labelFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d')} formatter={(v: number, k: string) => [`${v} ${unit}`, k === 'tr' ? 'Trend' : 'Scale']} />
                 {a.goal !== 'maintain' && <ReferenceLine y={show(a.targetWeightKg)} stroke="var(--cal-good)" strokeDasharray="4 4" />}
                 <Line isAnimationActive={false} type="monotone" dataKey="w" stroke="var(--cal-muted)" strokeWidth={0} dot={{ r: 2.5, fill: 'var(--cal-muted)' }} />
                 <Line isAnimationActive={false} type="monotone" dataKey="tr" stroke="var(--cal-text)" strokeWidth={2.5} dot={false} />
               </LineChart>
-            </ResponsiveContainer>
-          </div>
+            )}
+          </ScrollChart>
         ) : null}
         {t.projection?.onTrack && (
           <div className="cal-card-2" style={{ padding: '10px 12px', borderRadius: 14, marginTop: 10, fontSize: 13, fontWeight: 700 }}>
@@ -79,7 +96,11 @@ function Body({ setup, byDay, goals, weights }: { setup: NutritionSetup; byDay: 
         )}
       </Card>
 
-      <Card title="Consistency" sub="Last 30 days">
+      <Card
+        title="Consistency"
+        sub="Last 30 days"
+        ask={() => `In the last 30 days I was on my calorie target ${t.adherence.calories}% of days, hit my protein goal ${t.adherence.protein}% of days and logged food on ${t.adherence.logging}% of days. How can I be more consistent?`}
+      >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, textAlign: 'center' }}>
           {[
             { label: 'On calorie target', v: t.adherence.calories, color: 'var(--cal-text)' },
@@ -94,23 +115,31 @@ function Body({ setup, byDay, goals, weights }: { setup: NutritionSetup; byDay: 
         </div>
       </Card>
 
-      <Card title="30-day intake" right={<span className="cal-muted cal-tabular" style={{ fontSize: 12.5, fontWeight: 700 }}>Avg {t.avg30.calories.toLocaleString()} cal</span>}>
-        <div style={{ height: 150 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={days} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
-              <XAxis dataKey="label" tick={tick} axisLine={false} tickLine={false} interval={4} />
-              <YAxis tick={tick} axisLine={false} tickLine={false} width={38} />
+      <Card
+        title="30-day intake"
+        right={<span className="cal-muted cal-tabular" style={{ fontSize: 12.5, fontWeight: 700 }}>Avg {t.avg30.calories.toLocaleString()} cal</span>}
+        ask={() => `My daily calories over the last 30 days (logged days only): ${t.days.filter(d => d.logged).map(d => `${d.date.slice(5)} ${d.calories}`).join(', ')}. Average ${t.avg30.calories}, target ${goals.calories}. What patterns do you see?`}
+      >
+        <ScrollChart count={days.length} slot={18} height={150} ticks={intakeTicks} top={6} bottom={24} tickStyle={calTick}>
+          {w => (
+            <BarChart width={w} height={150} data={days} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
+              <XAxis dataKey="label" height={24} tick={tick} axisLine={false} tickLine={false} interval={2} />
+              <YAxis hide domain={[intakeTicks[0], intakeTicks[intakeTicks.length - 1]]} allowDataOverflow />
               <Tooltip contentStyle={tooltipStyle} labelFormatter={(_, p) => (p?.[0] ? format(new Date(`${(p[0].payload as { date: string }).date}T12:00:00`), 'EEE, MMM d') : '')} formatter={(v: number) => [`${v} cal`, 'Eaten']} />
               <ReferenceLine y={goals.calories} stroke="var(--cal-muted)" strokeDasharray="4 4" />
               <Bar isAnimationActive={false} dataKey="calories" radius={[4, 4, 4, 4]} maxBarSize={10}>
                 {days.map(d => <Cell key={d.date} fill={!d.logged ? 'transparent' : Math.abs(d.calories - goals.calories) <= goals.calories * 0.1 ? 'var(--cal-good)' : d.calories > goals.calories ? 'var(--cal-bad)' : 'var(--cal-text)'} />)}
               </Bar>
             </BarChart>
-          </ResponsiveContainer>
-        </div>
+          )}
+        </ScrollChart>
       </Card>
 
-      <Card title="Macros" sub={`Average per logged day · ${t.proteinPerKg} g protein per kg`}>
+      <Card
+        title="Macros"
+        sub={`Average per logged day · ${t.proteinPerKg} g protein per kg`}
+        ask={() => `My average macros per logged day over 30 days: protein ${t.avg30.protein}g (goal ${goals.protein}g, ${t.proteinPerKg} g/kg), carbs ${t.avg30.carbs}g (goal ${goals.carbs}g), fat ${t.avg30.fat}g (goal ${goals.fat}g). Split ${t.split.protein}% protein / ${t.split.carbs}% carbs / ${t.split.fat}% fat. How should I adjust my diet?`}
+      >
         <div style={{ display: 'flex', height: 10, borderRadius: 10, overflow: 'hidden', gap: 2 }}>
           <div style={{ width: `${t.split.protein}%`, background: 'var(--cal-protein)' }} />
           <div style={{ width: `${t.split.carbs}%`, background: 'var(--cal-carbs)' }} />

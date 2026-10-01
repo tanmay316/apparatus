@@ -35,7 +35,7 @@ export function PriceField({ value, onChange, bucket, sellerUid, label, unit }: 
   const account = usePayoutAccount(isSeller ? user?.uid : undefined);
   if (!isSeller || account === undefined) return null;
 
-  const labelCls = 'block text-xs font-mono text-bone-dim uppercase mb-1 flex items-center gap-1';
+  const labelCls = 'text-[13px] font-medium text-bone mb-1.5 flex items-center gap-1.5';
   if (account?.status !== 'active') {
     return (
       <div>
@@ -78,7 +78,7 @@ export function PriceField({ value, onChange, bucket, sellerUid, label, unit }: 
           className={`input-field w-full text-sm text-bone pl-7 ${parsed.error ? 'border-red-500' : ''}`}
         />
       </div>
-      <p className={`text-[11px] font-mono mt-1 ${parsed.error ? 'text-red-400' : 'text-bone-dim'}`}>
+      <p className={`text-[12px] mt-1.5 ${parsed.error ? 'text-red-500' : 'text-bone-dim'}`}>
         {parsed.error || (parsed.value > 0
           ? `You get ${formatInr(sellerShare(parsed.value, pct))} per ${unit} (${pct}% platform fee).`
           : 'Leave empty to keep it free.')}

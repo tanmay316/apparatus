@@ -1,8 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
-import { X, Upload, Trophy, Sparkles, Image as ImageIcon, Calendar, Clock, AlertCircle } from 'lucide-react';
-import { CustomSelect } from '@/components/ui/CustomSelect';
+import { useState } from 'react';
+import { CalendarCheck, Dumbbell, Flame, Footprints, Globe, Shield, Sparkles, Trophy, Weight } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -12,17 +9,27 @@ import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
 import { PriceField, parsePriceInput } from '@/components/market/PriceField';
 import { useMarketConfig } from '@/components/market/CheckoutButton';
+import { ChoiceGroup, CoverPicker, Field, FormSection, FormSheet, spanLabel, STATUS_LABEL, StatusPill, type Choice } from '@/components/ui/FormSheet';
+
+const METRICS: Choice<string>[] = [
+  { value: 'distance', label: 'Distance', icon: Footprints },
+  { value: 'workouts', label: 'Workouts', icon: Dumbbell },
+  { value: 'volume', label: 'Volume', icon: Weight },
+  { value: 'calories', label: 'Calories', icon: Flame },
+  { value: 'streak', label: 'Streak', icon: CalendarCheck },
+  { value: 'other', label: 'Custom', icon: Sparkles },
+];
+const METRIC_UNIT: Record<string, string> = { distance: 'km', calories: 'kcal', workouts: 'days', streak: 'days', volume: 'kg', other: 'reps' };
+
+const VISIBILITY: Choice<'public' | 'clan_only'>[] = [
+  { value: 'public', label: 'Public', description: 'Anyone can join.', icon: Globe },
+  { value: 'clan_only', label: 'Clan only', description: 'Only your clan members.', icon: Shield },
+];
 
 export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: () => void, prefilledClanId?: string }) {
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    document.body.classList.add('community-create-open');
-    return () => document.body.classList.remove('community-create-open');
-  }, []);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -55,7 +62,7 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
       setIsCompressing(true);
       const compressedDataUrl = await compressImageFile(file, 700, 700, 0.55);
       setCoverUrl(compressedDataUrl);
-      showToast('Image attached and compressed!', 'success');
+      showToast('Cover photo added', 'success');
     } catch {
       showToast('Failed to compress image', 'error');
     } finally {
@@ -69,18 +76,9 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
   const currentNow = Date.now();
 
   let dynamicStatus: 'upcoming' | 'active' | 'completed' = 'active';
-  let dynamicStatusLabel = '🔥 Active (Ongoing)';
-  let dynamicStatusColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-
-  if (currentNow < startMs) {
-    dynamicStatus = 'upcoming';
-    dynamicStatusLabel = '🟢 Upcoming';
-    dynamicStatusColor = 'bg-blue-500/20 text-blue-400 border-blue-500/30';
-  } else if (endMs && currentNow > endMs) {
-    dynamicStatus = 'completed';
-    dynamicStatusLabel = '🏁 Completed';
-    dynamicStatusColor = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-  }
+  if (currentNow < startMs) dynamicStatus = 'upcoming';
+  else if (endMs && currentNow > endMs) dynamicStatus = 'completed';
+  const datesInvalid = !(endMs > startMs);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -141,289 +139,86 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
     if (!description.trim()) return;
     if (isCustom && !customMetric.trim()) return;
     if (!isCustom && (!target || parseFloat(target) <= 0)) return;
-    if (!startDateTime || !endDateTime) return;
+    if (!startDateTime || !endDateTime || datesInvalid) return;
 
     createMutation.mutate();
   };
 
   const isCustomMetric = metric === 'other';
+  const targetInvalid = submitted && !isCustomMetric && (!target || parseFloat(target) <= 0);
 
-  return createPortal(
-    <div className="cx pro-scope fixed inset-0 z-[600] flex flex-col justify-end">
-      <motion.div 
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-      />
-      <motion.div 
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-        className="relative bg-ink border-t border-line rounded-t-[32px] overflow-hidden max-h-[92dvh] flex flex-col shadow-2xl text-bone"
-      >
-        <div className="flex items-center justify-between p-6 border-b border-line">
-          <div>
-            <h2 className="font-display text-2xl text-bone">Create Challenge</h2>
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`inline-flex text-[10px] font-mono uppercase px-2 py-0.5 rounded font-bold border ${dynamicStatusColor}`}>
-                {dynamicStatusLabel}
-              </span>
-            </div>
+  return (
+    <FormSheet
+      icon={Trophy}
+      title="New challenge"
+      subtitle="Set a goal and compete on a live leaderboard."
+      aside={<StatusPill tone={dynamicStatus}>{STATUS_LABEL[dynamicStatus]}</StatusPill>}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      submitLabel="Publish challenge"
+      busy={createMutation.isPending}
+      busyLabel="Publishing…"
+      disabled={isCompressing}
+    >
+      <FormSection title="Basics">
+        <CoverPicker value={coverUrl} onPick={handleImageFile} onClear={() => setCoverUrl('')} busy={isCompressing} />
+        <Field id="ch-title" label="Challenge name" count={title.length} max={80} error={submitted && !title.trim() && 'Add a name for your challenge'}>
+          <input id="ch-title" value={title} maxLength={80} onChange={e => setTitle(e.target.value)} placeholder="e.g. 100 km in October" className="dx-input" aria-invalid={submitted && !title.trim()} />
+        </Field>
+        <Field id="ch-desc" label="Rules" count={description.length} max={1000} error={submitted && !description.trim() && 'Explain how to take part and win'}>
+          <textarea id="ch-desc" value={description} maxLength={1000} onChange={e => setDescription(e.target.value)} rows={4} placeholder="What counts, how progress is measured, how winners are picked…" className="dx-input" aria-invalid={submitted && !description.trim()} />
+        </Field>
+      </FormSection>
+
+      <FormSection title="Goal" description="What participants are measured on.">
+        <ChoiceGroup
+          label="Metric"
+          columns={3}
+          value={metric}
+          onChange={val => { setMetric(val); setUnit(METRIC_UNIT[val] || ''); }}
+          options={METRICS}
+        />
+        {isCustomMetric ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Field id="ch-custom" label="What to track" error={submitted && !customMetric.trim() && 'Required'}>
+              <input id="ch-custom" value={customMetric} maxLength={40} onChange={e => setCustomMetric(e.target.value)} placeholder="e.g. Pull-ups" className="dx-input" aria-invalid={submitted && !customMetric.trim()} />
+            </Field>
+            <Field id="ch-unit" label="Unit">
+              <input id="ch-unit" value={unit} maxLength={16} onChange={e => setUnit(e.target.value)} placeholder="reps" className="dx-input" />
+            </Field>
           </div>
-          <button onClick={onClose} className="p-2 bg-ink-2 hover:bg-ink-3 rounded-full text-bone transition-colors">
-            <X size={20} />
-          </button>
+        ) : (
+          <div className="grid grid-cols-[1fr_110px] gap-3">
+            <Field id="ch-target" label="Target" error={targetInvalid && 'Enter a target above 0'}>
+              <input id="ch-target" type="number" inputMode="decimal" step="any" min={0} value={target} onChange={e => setTarget(e.target.value)} placeholder="e.g. 100" className="dx-input tabular-nums" aria-invalid={targetInvalid} />
+            </Field>
+            <Field id="ch-unit" label="Unit">
+              <input id="ch-unit" value={unit} maxLength={16} onChange={e => setUnit(e.target.value)} className="dx-input" />
+            </Field>
+          </div>
+        )}
+      </FormSection>
+
+      <FormSection title="Schedule">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field id="ch-start" label="Starts">
+            <input id="ch-start" type="datetime-local" value={startDateTime} onChange={e => setStartDateTime(e.target.value)} className="dx-input" />
+          </Field>
+          <Field id="ch-end" label="Ends" error={datesInvalid && 'Must be after the start'} hint={!datesInvalid ? `Runs for ${spanLabel(startMs, endMs)}` : undefined}>
+            <input id="ch-end" type="datetime-local" value={endDateTime} onChange={e => setEndDateTime(e.target.value)} className="dx-input" aria-invalid={datesInvalid} />
+          </Field>
         </div>
+      </FormSection>
 
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-5">
-          {/* Cover Photo Upload with Live Preview */}
-          <div className="space-y-2">
-            <label className="block text-xs font-mono text-bone-dim uppercase">Cover Photo / Banner</label>
-            <div 
-              className="relative max-h-56 w-full rounded-2xl overflow-hidden border border-line/40 group bg-ink-2/80 flex items-center justify-center cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <img 
-                src={coverUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1000&auto=format&fit=crop'} 
-                alt="Preview" 
-                className={`w-full h-full object-cover rounded-xl transition-all ${!coverUrl ? 'opacity-70 grayscale-[30%]' : ''}`} 
-              />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-                <span className="text-white text-xs font-mono font-bold flex items-center gap-2">
-                  <Upload size={14} /> {isCompressing ? 'Compressing...' : (coverUrl ? 'Change Cover' : 'Upload Cover Image')}
-                </span>
-              </div>
-              {coverUrl && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setCoverUrl(''); }}
-                  className="absolute top-3 right-3 p-1.5 rounded-full bg-black/80 hover:bg-black text-red-400 transition-colors shadow-lg z-10"
-                  title="Remove Image"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleImageFile}
-              accept="image/*"
-              className="hidden"
-            />
-            {!coverUrl && (
-              <input
-                type="url"
-                value={coverUrl}
-                onChange={e => setCoverUrl(e.target.value)}
-                placeholder="Or paste image URL (https://...)"
-                className="input-field w-full text-xs font-mono text-bone py-2 mt-2"
-              />
-            )}
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="block text-xs font-mono text-bone-dim uppercase mb-1">Challenge Title *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Double Pahadi Climb Challenge"
-              className={`input-field w-full text-sm font-sans text-bone ${
-                submitted && !title.trim() ? 'border-red-500 bg-red-500/10 focus:border-red-500' : ''
-              }`}
-            />
-            {submitted && !title.trim() && (
-              <span className="text-red-400 text-[11px] font-mono mt-1 flex items-center gap-1">
-                <AlertCircle size={11} /> This field is required
-              </span>
-            )}
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-xs font-mono text-bone-dim uppercase mb-1">Description & Rules *</label>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              rows={3}
-              placeholder="Describe the challenge rules, goal, and evaluation criteria..."
-              className={`input-field w-full text-sm font-sans text-bone ${
-                submitted && !description.trim() ? 'border-red-500 bg-red-500/10 focus:border-red-500' : ''
-              }`}
-            />
-            {submitted && !description.trim() && (
-              <span className="text-red-400 text-[11px] font-mono mt-1 flex items-center gap-1">
-                <AlertCircle size={11} /> This field is required
-              </span>
-            )}
-          </div>
-
-          {/* Metric Selector */}
-          <div className="space-y-3">
-            <label className="block text-xs font-mono text-bone-dim uppercase">Challenge Type / Metric</label>
-            <CustomSelect
-              value={metric}
-              onChange={(val) => {
-                setMetric(val);
-                if (val === 'distance') setUnit('km');
-                else if (val === 'calories') setUnit('kcal');
-                else if (val === 'workouts' || val === 'streak') setUnit('days');
-                else if (val === 'volume') setUnit('kg');
-                else if (val === 'other') setUnit('reps');
-              }}
-              options={[
-                { value: 'distance', label: '🏃 Distance (Cardio)' },
-                { value: 'workouts', label: '🏋️ Workout Count' },
-                { value: 'volume', label: '💪 Total Volume (kg)' },
-                { value: 'calories', label: '🔥 Calories Burned' },
-                { value: 'streak', label: '⚡ Daily Streak' },
-                { value: 'other', label: '✨ Other (Custom Metric)' },
-              ]}
-            />
-
-            {/* Custom Metric Name and Unit (when 'other' is selected) */}
-            {isCustomMetric && (
-              <div className="grid grid-cols-2 gap-3 p-3.5 rounded-2xl bg-ink-2 border border-line/40">
-                <div>
-                  <label className="block text-[10px] font-mono text-bone-dim uppercase mb-1">Custom Metric / Goal *</label>
-                  <input
-                    type="text"
-                    value={customMetric}
-                    onChange={e => setCustomMetric(e.target.value)}
-                    placeholder="e.g. 250 Pahadi Steps"
-                    className={`input-field w-full text-xs font-sans text-bone ${
-                      submitted && !customMetric.trim() ? 'border-red-500 bg-red-500/10' : ''
-                    }`}
-                  />
-                  {submitted && !customMetric.trim() && (
-                    <span className="text-red-400 text-[10px] font-mono mt-1 block">* Required</span>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono text-bone-dim uppercase mb-1">Unit of Measurement</label>
-                  <input
-                    type="text"
-                    value={unit}
-                    onChange={e => setUnit(e.target.value)}
-                    placeholder="e.g. steps, reps, min"
-                    className="input-field w-full text-xs font-mono text-bone"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Target & Unit (Hidden when metric === 'other' to eliminate redundancy) */}
-          {!isCustomMetric && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-mono text-bone-dim uppercase mb-1">Target Value *</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={target}
-                  onChange={e => setTarget(e.target.value)}
-                  placeholder="e.g. 50"
-                  className={`input-field w-full text-sm font-mono text-bone ${
-                    submitted && (!target || parseFloat(target) <= 0) ? 'border-red-500 bg-red-500/10' : ''
-                  }`}
-                />
-                {submitted && (!target || parseFloat(target) <= 0) && (
-                  <span className="text-red-400 text-[11px] font-mono mt-1 block">* Required</span>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono text-bone-dim uppercase mb-1">Unit</label>
-                <input
-                  type="text"
-                  value={unit}
-                  onChange={e => setUnit(e.target.value)}
-                  className="input-field w-full text-sm font-mono text-bone"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Start & End Date / Time with Dynamic Status */}
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-mono text-bone-dim uppercase mb-1 flex items-center gap-1">
-                  <Calendar size={13} className="text-emerald-400" /> Start Date & Time *
-                </label>
-                <input
-                  type="datetime-local"
-                  value={startDateTime}
-                  onChange={e => setStartDateTime(e.target.value)}
-                  className="input-field w-full text-xs font-mono text-bone"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono text-bone-dim uppercase mb-1 flex items-center gap-1">
-                  <Calendar size={13} className="text-amber-400" /> End Date & Time *
-                </label>
-                <input
-                  type="datetime-local"
-                  value={endDateTime}
-                  onChange={e => setEndDateTime(e.target.value)}
-                  className={`input-field w-full text-xs font-mono text-bone ${
-                    endMs <= startMs ? 'border-red-500 bg-red-500/10' : ''
-                  }`}
-                />
-                {endMs <= startMs && (
-                  <span className="text-red-400 text-[11px] font-mono mt-1 block">* End date must be after start date</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Prize / Reward */}
-          <div>
-            <label className="block text-xs font-mono text-bone-dim uppercase mb-1 flex items-center gap-1">
-              <Trophy size={13} className="text-amber-400" /> Prize / Rewards (Optional)
-            </label>
-            <input
-              type="text"
-              value={prize}
-              onChange={e => setPrize(e.target.value)}
-              placeholder="e.g. ₹5,000 Cash Prize + Gold Badge"
-              className="input-field w-full text-sm font-sans text-bone"
-            />
-          </div>
-
-          <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" label="Entry fee (Optional)" unit="entry" />
-
-          {/* Visibility */}
-          {!prefilledClanId && (
-            <div>
-              <label className="block text-xs font-mono text-bone-dim uppercase mb-1">Visibility</label>
-              <CustomSelect
-                value={visibility}
-                onChange={(val) => setVisibility(val as any)}
-                options={[
-                  { value: 'public', label: '🌍 Public (Anyone can join)' },
-                  { value: 'clan_only', label: '🛡️ Clan Only' },
-                ]}
-              />
-            </div>
-          )}
-
-          <div className="pt-2">
-            <button
-              type="submit"
-              disabled={createMutation.isPending || isCompressing}
-              className="btn-primary w-full py-4 text-sm font-bold uppercase tracking-wider shadow-[0_0_20px_rgba(205,111,72,0.3)] flex items-center justify-center gap-2"
-            >
-              <Sparkles size={16} />
-              {createMutation.isPending ? 'Publishing Challenge...' : 'Publish Challenge'}
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>,
-    document.body
+      <FormSection title="Access & rewards">
+        {!prefilledClanId && (
+          <ChoiceGroup label="Who can join" value={visibility} onChange={setVisibility} options={VISIBILITY} />
+        )}
+        <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" label="Entry fee" unit="entry" />
+        <Field id="ch-prize" label="Prizes" optional>
+          <input id="ch-prize" value={prize} maxLength={120} onChange={e => setPrize(e.target.value)} placeholder="e.g. Gold badge for the winner" className="dx-input" />
+        </Field>
+      </FormSection>
+    </FormSheet>
   );
 }

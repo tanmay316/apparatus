@@ -1,25 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
-import { X, Camera, Shield, Upload } from 'lucide-react';
-import { CustomSelect } from '@/components/ui/CustomSelect';
+import { useState } from 'react';
+import { Ban, Bike, Dumbbell, Flame, Flower2, Footprints, Globe, Lock, Shield, Swords, Users, Waves, Zap } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createClan } from '@/services/community';
 import { ClanCategory, ClanVisibility } from '@/types';
 import { compressImageFile } from '@/utils/image-compression';
+import { ChoiceGroup, CoverPicker, Field, FormSection, FormSheet, type Choice } from '@/components/ui/FormSheet';
 
 export function CreateClanSheet({ onClose }: { onClose: () => void }) {
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    document.body.classList.add('community-create-open');
-    return () => document.body.classList.remove('community-create-open');
-  }, []);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -36,7 +28,7 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
       setIsCompressing(true);
       const compressed = await compressImageFile(file, 700, 700, 0.55);
       setCoverUrl(compressed);
-      showToast('Clan cover photo compressed & attached!', 'success');
+      showToast('Cover photo added', 'success');
     } catch {
       showToast('Failed to compress image', 'error');
     } finally {
@@ -69,139 +61,72 @@ export function CreateClanSheet({ onClose }: { onClose: () => void }) {
     onError: (err: any) => showToast(err?.message || 'Failed to create clan', 'error')
   });
 
+  const [submitted, setSubmitted] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
     if (!name.trim() || !description.trim()) return;
     createMutation.mutate();
   };
 
-  return createPortal(
-    <div className="cx pro-scope fixed inset-0 z-[600] flex flex-col justify-end">
-      <motion.div 
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-ink/80 backdrop-blur-sm"
-      />
-      <motion.div 
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-        className="relative bg-ink border-t border-line rounded-t-[32px] p-6 pb-safe overflow-y-auto max-h-[90dvh]"
-      >
-        <div className="flex justify-between items-start mb-6">
-          <div>
-            <h2 className="font-display text-2xl text-bone">Create Clan</h2>
-            <p className="text-sm text-bone-dim">Start your own fitness community and lead.</p>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-ink-2 text-bone-dim"><X size={20} /></button>
-        </div>
+  const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Cover Image Preview */}
-          <div className="relative h-36 bg-ink-3 rounded-2xl overflow-hidden border border-line group">
-            {coverUrl ? (
-              <img src={coverUrl} alt="Cover" className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-bone-dim"><Shield size={32} /></div>
-            )}
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <Upload size={24} className="text-bone mb-1" />
-              <span className="text-xs font-mono text-bone">{isCompressing ? 'Compressing...' : 'Upload Cover'}</span>
-            </button>
-          </div>
+  return (
+    <FormSheet
+      icon={Shield}
+      title="Create a clan"
+      subtitle="Build a community around how you train."
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      submitLabel="Create clan"
+      busy={createMutation.isPending}
+      busyLabel="Creating…"
+      disabled={isCompressing}
+    >
+      <FormSection title="Identity">
+        <CoverPicker value={coverUrl} onPick={handleImageFile} onClear={() => setCoverUrl('')} busy={isCompressing} />
+        <Field id="create-clan-name" label="Clan name" count={name.length} max={40} error={submitted && !name.trim() && 'Give your clan a name'}>
+          <input id="create-clan-name" value={name} maxLength={40} onChange={e => setName(e.target.value)} placeholder="e.g. Iron Lifters" className="dx-input" aria-invalid={submitted && !name.trim()} />
+        </Field>
+        <Field id="create-clan-desc" label="About" count={description.length} max={300} error={submitted && !description.trim() && 'Tell people what your clan is about'}>
+          <textarea id="create-clan-desc" value={description} maxLength={300} onChange={e => setDescription(e.target.value)} placeholder="Mission, training style, who should join…" className="dx-input" rows={3} aria-invalid={submitted && !description.trim()} />
+        </Field>
+      </FormSection>
 
-          <div>
-            <label htmlFor="create-clan-cover" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Cover Image</label>
-            <div className="flex gap-2">
-              <input 
-                id="create-clan-cover"
-                name="clanCoverUrl"
-                value={coverUrl.startsWith('data:') ? 'Image uploaded & compressed' : coverUrl} 
-                onChange={e => setCoverUrl(e.target.value)} 
-                disabled={coverUrl.startsWith('data:')}
-                placeholder="https://..." 
-                className="input-field flex-1 text-xs font-mono truncate" 
-              />
-              <input 
-                id="create-clan-file-upload"
-                name="clanFileUpload"
-                aria-label="Upload clan cover image"
-                ref={fileInputRef} 
-                type="file" 
-                accept="image/*" 
-                onChange={handleImageFile} 
-                className="hidden" 
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isCompressing}
-                className="px-4 py-2 rounded-xl bg-ink-2 hover:bg-ink-3 border border-line text-xs font-mono text-bone flex items-center gap-1.5 transition-colors shrink-0"
-              >
-                <Upload size={14} /> {isCompressing ? 'Compressing...' : 'Upload'}
-              </button>
+      <FormSection title="Focus" description="Helps the right people find you.">
+        <ChoiceGroup label="Category" columns={3} value={category} onChange={setCategory} options={CATEGORIES} />
+        <Field id="create-clan-tags" label="Tags" optional hint={tagList.length ? undefined : 'Separate with commas.'}>
+          <input id="create-clan-tags" value={tags} onChange={e => setTags(e.target.value)} placeholder="hypertrophy, mornings, beginners" className="dx-input" />
+          {tagList.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {tagList.slice(0, 8).map(t => <span key={t} className="dx-tag">#{t}</span>)}
             </div>
-          </div>
+          )}
+        </Field>
+      </FormSection>
 
-          <div>
-            <label htmlFor="create-clan-name" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Clan Name</label>
-            <input id="create-clan-name" name="clanName" required value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Iron Lifters" className="input-field w-full text-lg" />
-          </div>
-          
-          <div>
-            <label htmlFor="create-clan-desc" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Description</label>
-            <textarea id="create-clan-desc" name="clanDescription" required value={description} onChange={e => setDescription(e.target.value)} placeholder="What is the mission and vision of your clan?" className="input-field w-full min-h-[80px] py-3" />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label htmlFor="create-clan-category" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Category</label>
-              <CustomSelect
-                id="create-clan-category"
-                name="clanCategory"
-                className="w-full"
-                value={category}
-                onChange={(val) => setCategory(val as ClanCategory)}
-                options={[
-                  { value: 'General', label: 'General' },
-                  { value: 'Calisthenics', label: 'Calisthenics' },
-                  { value: 'Bodybuilding', label: 'Bodybuilding' },
-                  { value: 'Running', label: 'Running' },
-                  { value: 'CrossFit', label: 'CrossFit' },
-                  { value: 'Powerlifting', label: 'Powerlifting' },
-                ]}
-              />
-            </div>
-            <div>
-              <label htmlFor="create-clan-visibility" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Visibility</label>
-              <CustomSelect
-                id="create-clan-visibility"
-                name="clanVisibility"
-                className="w-full"
-                value={visibility}
-                onChange={(val) => setVisibility(val as ClanVisibility)}
-                options={[
-                  { value: 'public', label: 'Public (Anyone can join directly)' },
-                  { value: 'private', label: 'Private (Request to join)' },
-                  { value: 'closed', label: 'Closed (Not accepting new members)' },
-                ]}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="create-clan-tags" className="block text-xs font-mono text-bone-dim mb-1 uppercase">Tags (comma separated)</label>
-            <input id="create-clan-tags" name="clanTags" value={tags} onChange={e => setTags(e.target.value)} placeholder="fitness, hypertrophy, running" className="input-field w-full" />
-          </div>
-
-          <button type="submit" disabled={createMutation.isPending || !name.trim() || !description.trim()} className="btn-primary w-full py-4 text-lg mt-4 font-bold">
-            {createMutation.isPending ? 'Creating...' : 'Create Clan'}
-          </button>
-        </form>
-      </motion.div>
-    </div>,
-    document.body
+      <FormSection title="Membership">
+        <ChoiceGroup label="Visibility" columns={1} value={visibility} onChange={setVisibility} options={VISIBILITY} />
+      </FormSection>
+    </FormSheet>
   );
 }
+
+const CATEGORIES: Choice<ClanCategory>[] = [
+  { value: 'General', label: 'General', icon: Users },
+  { value: 'Gym', label: 'Gym', icon: Dumbbell },
+  { value: 'Calisthenics', label: 'Calisthenics', icon: Zap },
+  { value: 'Running', label: 'Running', icon: Footprints },
+  { value: 'Cycling', label: 'Cycling', icon: Bike },
+  { value: 'CrossFit', label: 'CrossFit', icon: Flame },
+  { value: 'Yoga', label: 'Yoga', icon: Flower2 },
+  { value: 'MMA', label: 'MMA', icon: Swords },
+  { value: 'Swimming', label: 'Swimming', icon: Waves },
+];
+
+const VISIBILITY: Choice<ClanVisibility>[] = [
+  { value: 'public', label: 'Public', description: 'Anyone can find and join instantly.', icon: Globe },
+  { value: 'private', label: 'Private', description: 'People request to join; you approve them.', icon: Lock },
+  { value: 'closed', label: 'Closed', description: 'Visible, but not accepting new members.', icon: Ban },
+];

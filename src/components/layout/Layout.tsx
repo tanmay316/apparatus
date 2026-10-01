@@ -43,7 +43,8 @@ export function Layout() {
       {!isChat && <Sidebar />}
       <ReminderManager />
       <AdminAlertsSync />
-      {!isChat && !isCardio && <FloatingAIBot />}
+      {/* On cardio the bot only appears when opened from an "Ask AI" button. */}
+      {!isChat && <FloatingAIBot />}
       {!isChat && !isCardio && <LiveChatOverlay />}
       {!isChat && <BottomNav />}
 

@@ -95,6 +95,7 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>):
   notifyUnlockedBadges(userId, result.unlocked).catch(() => {});
   syncAthleteRank(userId, result.stats).catch(() => {});
   import('@/lib/query-client').then(({ queryClient }) => queryClient.invalidateQueries({ queryKey: ['training-burned'] })).catch(() => {});
+  import('@/services/ai-insights').then(m => m.autoSessionSummary('workout', userId, newWorkoutId)).catch(() => {});
 
   // Auto-track challenge progress (fire-and-forget)
   try {

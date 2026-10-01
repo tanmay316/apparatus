@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Area, Bar, BarChart, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, BarChart, ComposedChart, Line, Tooltip, XAxis, YAxis } from 'recharts';
 import { format } from 'date-fns';
 import { Activity, Gauge, Medal, Route, Timer, TrendingUp } from 'lucide-react';
 import type { CardioActivity, CardioActivityType, Workout } from '@/types';
@@ -8,6 +8,8 @@ import { fitnessFreshness } from '@/lib/training-load';
 import { formatClock, formatPaceSec } from '@/lib/cardio-analysis';
 import { InsightList } from '@/components/analysis/AnalysisParts';
 import { ProBadge, ProLock } from './ProLock';
+import { AskAIButton } from './AICoach';
+import { niceTicks, ScrollChart } from '@/components/ui/ScrollChart';
 
 const TYPES: { value: CardioActivityType; label: string }[] = [
   { value: 'run', label: 'Run' }, { value: 'walk', label: 'Walk' }, { value: 'cycle', label: 'Ride' },
@@ -44,28 +46,39 @@ function Big({ label, value, sub, color }: { label: string; value: string | numb
 
 /** Fitness (42-day load), Fatigue (7-day) and Form across all cardio and strength training. */
 export function FitnessFreshnessCard({ cardio, workouts }: { cardio: CardioActivity[]; workouts: Workout[] }) {
-  const f = useMemo(() => fitnessFreshness(cardio, workouts, today(), 90), [cardio, workouts]);
+  const f = useMemo(() => fitnessFreshness(cardio, workouts, today(), 180), [cardio, workouts]);
   const data = f.series.map(p => ({ ...p, label: p.date }));
+  const ticks = useMemo(() => {
+    const vals = f.series.flatMap(p => [p.load, p.fitness, p.fatigue, p.form]);
+    return niceTicks(Math.min(0, ...vals), Math.max(1, ...vals));
+  }, [f.series]);
   const tone = f.state.tone === 'warn' ? '#d97706' : f.state.tone === 'good' ? '#059669' : '#0284c7';
   return (
-    <Card icon={TrendingUp} title="Fitness & freshness" subtitle="Training load from every run, ride, walk and workout">
+    <Card
+      icon={TrendingUp}
+      title="Fitness & freshness"
+      subtitle="Training load from every run, ride, walk and workout"
+      right={<AskAIButton prompt={() => `My fitness & freshness chart: Fitness ${f.fitness} (${f.ramp >= 0 ? '+' : ''}${f.ramp} this week), Fatigue ${f.fatigue} (${f.weekLoad} training load in the last 7 days), Form ${f.form} (${f.state.label}). What does this mean and how should I train this week?`} />}
+    >
       <div className="grid grid-cols-3 gap-3">
         <Big label="Fitness" value={f.fitness} sub={`${f.ramp >= 0 ? '+' : ''}${f.ramp} this week`} color="rgb(var(--viz-cardio))" />
         <Big label="Fatigue" value={f.fatigue} sub={`${f.weekLoad} load / 7d`} color="#a855f7" />
         <Big label="Form" value={f.form > 0 ? `+${f.form}` : f.form} sub={f.state.label} color={tone} />
       </div>
-      <div className="h-44 mt-3 -mx-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={data} margin={{ top: 6, right: 6, bottom: 0, left: -18 }}>
-            <XAxis dataKey="label" tickFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d')} tick={tick} axisLine={false} tickLine={false} minTickGap={36} />
-            <YAxis tick={tick} axisLine={false} tickLine={false} width={40} />
-            <Tooltip contentStyle={tooltipStyle} labelFormatter={d => format(new Date(`${d}T12:00:00`), 'EEE, MMM d')} />
-            <Area isAnimationActive={false} type="monotone" dataKey="form" name="Form" stroke="none" fill={tone} fillOpacity={0.14} />
-            <Bar isAnimationActive={false} dataKey="load" name="Load" fill="rgb(var(--color-bone-dim) / 0.35)" maxBarSize={4} />
-            <Line isAnimationActive={false} type="monotone" dataKey="fitness" name="Fitness" stroke="rgb(var(--viz-cardio))" strokeWidth={2.4} dot={false} />
-            <Line isAnimationActive={false} type="monotone" dataKey="fatigue" name="Fatigue" stroke="#a855f7" strokeWidth={1.6} strokeDasharray="4 3" dot={false} />
-          </ComposedChart>
-        </ResponsiveContainer>
+      <div className="mt-3">
+        <ScrollChart count={data.length} slot={6} height={176} ticks={ticks} top={6} bottom={24} tickStyle={{ color: 'rgb(var(--color-bone-dim))' }}>
+          {w => (
+            <ComposedChart width={w} height={176} data={data} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+              <XAxis dataKey="label" height={24} tickFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d')} tick={tick} axisLine={false} tickLine={false} minTickGap={36} />
+              <YAxis hide domain={[ticks[0], ticks[ticks.length - 1]]} allowDataOverflow />
+              <Tooltip contentStyle={tooltipStyle} labelFormatter={d => format(new Date(`${d}T12:00:00`), 'EEE, MMM d')} />
+              <Area isAnimationActive={false} type="monotone" dataKey="form" name="Form" stroke="none" fill={tone} fillOpacity={0.14} />
+              <Bar isAnimationActive={false} dataKey="load" name="Load" fill="rgb(var(--color-bone-dim) / 0.35)" maxBarSize={4} />
+              <Line isAnimationActive={false} type="monotone" dataKey="fitness" name="Fitness" stroke="rgb(var(--viz-cardio))" strokeWidth={2.4} dot={false} />
+              <Line isAnimationActive={false} type="monotone" dataKey="fatigue" name="Fatigue" stroke="#a855f7" strokeWidth={1.6} strokeDasharray="4 3" dot={false} />
+            </ComposedChart>
+          )}
+        </ScrollChart>
       </div>
       <p className="mt-2 text-[12px] leading-relaxed" style={{ color: tone }}><b>{f.state.label}.</b> <span className="text-bone-dim">{f.state.text}</span></p>
     </Card>
@@ -79,6 +92,7 @@ function CardioInsightsBody({ activities, workouts }: { activities: CardioActivi
   const isRide = type === 'cycle';
   const rate = (sec: number, km: number) => (isRide ? `${Math.round((km / (sec / 3600)) * 10) / 10} km/h` : `${formatPaceSec(sec / km)} /km`);
   const weeks = t.weeks.map(w => ({ ...w, label: format(new Date(`${w.start}T12:00:00`), 'MMM d') }));
+  const weekTicks = niceTicks(0, Math.max(1, ...t.weeks.map(w => w.km)));
 
   return (
     <div className="space-y-3">
@@ -94,7 +108,12 @@ function CardioInsightsBody({ activities, workouts }: { activities: CardioActivi
       <FitnessFreshnessCard cardio={activities} workouts={workouts} />
 
       {t.bestEfforts.length > 0 && (
-        <Card icon={Medal} title="Best efforts" subtitle="Fastest time over each distance, from your GPS routes">
+        <Card
+          icon={Medal}
+          title="Best efforts"
+          subtitle="Fastest time over each distance, from your GPS routes"
+          right={<AskAIButton prompt={() => `My ${TYPES.find(o => o.value === type)?.label.toLowerCase()} best efforts: ${t.bestEfforts.map(e => `${e.label} ${formatClock(e.sec)} (${e.date}${e.recentSec ? `, best in last 90 days ${formatClock(e.recentSec)}` : ''})`).join('; ')}. Which distance is my strength and which one should I target next?`} />}
+        >
           <div className="divide-y divide-line/60">
             {t.bestEfforts.map(e => (
               <div key={e.label} className="flex items-center gap-3 py-2 text-[12.5px]">
@@ -115,7 +134,12 @@ function CardioInsightsBody({ activities, workouts }: { activities: CardioActivi
       )}
 
       {(t.vo2max || t.predictions.length > 0) && (
-        <Card icon={Gauge} title={t.vo2max ? 'VO2 max & race predictor' : 'Ride predictor'} subtitle={t.vo2max ? `From your best ${t.vo2max.from} in the last 90 days` : 'From your best recent effort'}>
+        <Card
+          icon={Gauge}
+          title={t.vo2max ? 'VO2 max & race predictor' : 'Ride predictor'}
+          subtitle={t.vo2max ? `From your best ${t.vo2max.from} in the last 90 days` : 'From your best recent effort'}
+          right={<AskAIButton prompt={() => `${t.vo2max ? `My estimated VO2 max is ${t.vo2max.value} (${t.vo2max.level}), from my best ${t.vo2max.from}. ` : ''}Predicted times: ${t.predictions.map(p => `${p.label} ${formatClock(p.sec)}`).join(', ')}. How can I improve these, and is a realistic race goal within reach?`} />}
+        >
           {t.vo2max && (
             <div className="flex items-end gap-3 mb-3">
               <span className="text-[34px] font-semibold leading-none tabular-nums text-bone">{t.vo2max.value}</span>
@@ -135,7 +159,12 @@ function CardioInsightsBody({ activities, workouts }: { activities: CardioActivi
       )}
 
       {t.zones.length > 0 && (
-        <Card icon={Timer} title="Intensity zones" subtitle={`Last 28 days · threshold ≈ ${isRide ? `${t.thresholdKmh} km/h` : `${formatPaceSec(3600 / t.thresholdKmh)} /km`}`}>
+        <Card
+          icon={Timer}
+          title="Intensity zones"
+          subtitle={`Last 28 days · threshold ≈ ${isRide ? `${t.thresholdKmh} km/h` : `${formatPaceSec(3600 / t.thresholdKmh)} /km`}`}
+          right={<AskAIButton prompt={() => `My intensity zones over the last 28 days: ${t.zones.map((z, i) => `Z${z.zone} ${ZONE_LABELS[i]} ${Math.round(z.sec / 60)} min (${z.pct}%)`).join(', ')}. Is this a good balance of easy and hard training for me?`} />}
+        >
           <div className="flex h-3 rounded-full overflow-hidden bg-bone/[0.06]">
             {t.zones.map((z, i) => z.pct > 0 && <div key={z.zone} style={{ width: `${z.pct}%`, background: ZONE_COLORS[i] }} title={`${z.label} ${z.pct}%`} />)}
           </div>
@@ -150,16 +179,23 @@ function CardioInsightsBody({ activities, workouts }: { activities: CardioActivi
         </Card>
       )}
 
-      <Card icon={Activity} title="12-week trend" subtitle={`${t.totals.last4wKm} km in the last 4 weeks · ${t.totals.yearKm} km this year`}>
-        <div className="h-36 -mx-1">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={weeks} margin={{ top: 6, right: 6, bottom: 0, left: -18 }}>
-              <XAxis dataKey="label" tick={tick} axisLine={false} tickLine={false} minTickGap={20} />
-              <YAxis tick={tick} axisLine={false} tickLine={false} width={40} />
-              <Tooltip contentStyle={tooltipStyle} formatter={(v: number, k: string) => [k === 'km' ? `${v} km` : v, k === 'km' ? 'Distance' : k]} />
-              <Bar isAnimationActive={false} dataKey="km" fill="rgb(var(--viz-cardio))" radius={[5, 5, 0, 0]} maxBarSize={22} />
-            </BarChart>
-          </ResponsiveContainer>
+      <Card
+        icon={Activity}
+        title="12-week trend"
+        subtitle={`${t.totals.last4wKm} km in the last 4 weeks · ${t.totals.yearKm} km this year`}
+        right={<AskAIButton prompt={() => `My weekly ${TYPES.find(o => o.value === type)?.label.toLowerCase()} distance for the last 12 weeks (km): ${t.weeks.map(w => w.km).join(', ')}. ${t.totals.last4wKm} km in the last 4 weeks, longest ${t.totals.longestKm} km. Am I building volume safely, and what should next week look like?`} />}
+      >
+        <div>
+          <ScrollChart count={weeks.length} slot={40} height={144} ticks={weekTicks} top={6} bottom={24} tickStyle={{ color: 'rgb(var(--color-bone-dim))' }}>
+            {w => (
+              <BarChart width={w} height={144} data={weeks} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
+                <XAxis dataKey="label" height={24} tick={tick} axisLine={false} tickLine={false} minTickGap={20} />
+                <YAxis hide domain={[weekTicks[0], weekTicks[weekTicks.length - 1]]} allowDataOverflow />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: number, k: string) => [k === 'km' ? `${v} km` : v, k === 'km' ? 'Distance' : k]} />
+                <Bar isAnimationActive={false} dataKey="km" fill="rgb(var(--viz-cardio))" radius={[5, 5, 0, 0]} maxBarSize={22} />
+              </BarChart>
+            )}
+          </ScrollChart>
         </div>
         <div className="mt-2 grid grid-cols-3 gap-2 text-[11.5px]">
           <div><div className="text-bone-dim">Longest</div><div className="font-semibold text-bone tabular-nums">{t.totals.longestKm} km</div></div>

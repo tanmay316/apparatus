@@ -134,6 +134,7 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
   scheduleInactivityReminders().catch(() => {});
   notifyStepGoal(userId, activity).catch(() => {});
   notifyCardioAnalysis(userId, id, activity.type).catch(() => {});
+  import('@/services/ai-insights').then(m => m.autoSessionSummary('cardio', userId, id)).catch(() => {});
   import('@/lib/query-client').then(({ queryClient }) => {
     queryClient.invalidateQueries({ queryKey: ['training-burned'] });
     queryClient.invalidateQueries({ queryKey: ['daily-steps'] });

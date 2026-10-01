@@ -379,6 +379,12 @@ service cloud.firestore {
         allow read: if isAuthenticated();
         allow write: if isOwner(uid);
       }
+
+      // AI coach summaries are generated and cached by the backend only.
+      match /ai_insights/{insightId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
     }
 
     // ─── Username Reservation ───────────────────────────────────

@@ -9,9 +9,10 @@ const USAGE_LABELS: Record<string, string> = {
   ai_call: 'AI requests (coach, recipes, meal plans)',
   food_scan: 'Food scans',
   workout_plan: 'AI workout plans',
+  ai_summary: 'AI coach summaries',
 };
 
-const PERIOD_LABEL = { day: 'per day', month: 'per month', lifetime: 'total' } as const;
+const PERIOD_LABEL = { day: 'per day', week: 'this week', month: 'per month', lifetime: 'total' } as const;
 
 export function ProSettings() {
   const { enabled, entitlement, comped, usage, openPaywall } = useSubscriptionStore();
@@ -71,7 +72,7 @@ export function ProSettings() {
       </SettingRow>
 
       {!isPro && Object.keys(usage).length > 0 && (
-        <SettingRow label="Free AI allowance" description="Daily limits reset every day. Pro removes all limits.">
+        <SettingRow label="Free AI allowance" description="Allowances reset each day, week or month. Pro removes all limits.">
           <div className="w-full sm:w-72 space-y-2">
             {Object.entries(usage).map(([kind, u]) => {
               const pct = u.limit > 0 ? Math.min(100, Math.round((u.used / u.limit) * 100)) : 0;

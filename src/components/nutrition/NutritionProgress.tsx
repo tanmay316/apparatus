@@ -9,10 +9,11 @@ import { useUIStore } from '@/stores/ui-store';
 import { addMeasurement, getMeasurements } from '@/services/measurements';
 import { shiftDate } from '@/lib/analysis-common';
 import { bmiCategory, bmiOf, buildPlan, kgToLb, lbToKg, streakFrom, type MacroGoals } from '@/lib/nutrition-plan';
-import { dateKey, syncPlanToBackend, useUpdateNutritionSetup, type NutritionSetup } from '@/services/nutrition-setup';
+import { dateKey, syncPlanToBackend, useUpdateNutritionSetup, waterGoalFor, type NutritionSetup } from '@/services/nutrition-setup';
 import { CalSheet, MACRO_META, NumberSheet, Ruler, type MacroKey } from './cal-ui';
 import { sumTotals, type LoggedMeal } from './use-nutrition-data';
 import { NutritionInsights } from '@/components/insights/NutritionInsights';
+import { niceTicks, ScrollChart } from '@/components/ui/ScrollChart';
 
 export function useMeasurements() {
   const uid = useAuthStore(s => s.user?.uid);
@@ -75,6 +76,8 @@ export function NutritionProgress({ setup, byDay, goals }: { setup: NutritionSet
 
   const since = shiftDate(dateKey(), -range);
   const chart = weights.filter(w => w.date >= since).map(w => ({ d: w.date, v: show(w.weight!) }));
+  const chartVals = chart.map(p => p.v).concat(a.goal !== 'maintain' ? [show(goal)] : []);
+  const chartTicks = niceTicks(Math.floor(Math.min(...chartVals) - 1), Math.ceil(Math.max(...chartVals) + 1));
   const today = dateKey();
   const week = Array.from({ length: 7 }, (_, i) => {
     const k = shiftDate(today, i - 6);
@@ -130,15 +133,17 @@ export function NutritionProgress({ setup, byDay, goals }: { setup: NutritionSet
           {isLoading ? (
             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin cal-muted" size={20} /></div>
           ) : chart.length >= 2 ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chart} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                <XAxis dataKey="d" tickFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d')} tick={{ fontSize: 11, fill: 'var(--cal-muted)' }} axisLine={false} tickLine={false} minTickGap={24} />
-                <YAxis domain={[(lo: number) => Math.floor(Math.min(lo, a.goal === 'maintain' ? lo : show(goal)) - 1), (hi: number) => Math.ceil(Math.max(hi, a.goal === 'maintain' ? hi : show(goal)) + 1)]} tick={{ fontSize: 11, fill: 'var(--cal-muted)' }} axisLine={false} tickLine={false} width={40} allowDecimals={false} />
-                <Tooltip formatter={(v: number) => [`${v} ${unit}`, 'Weight']} labelFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d, yyyy')} contentStyle={{ borderRadius: 12, border: 'none', background: 'var(--cal-card)', color: 'var(--cal-text)' }} />
-                {a.goal !== 'maintain' && <ReferenceLine y={show(goal)} stroke="var(--cal-good)" strokeDasharray="4 4" />}
-                <Line isAnimationActive={false} type="monotone" dataKey="v" stroke="var(--cal-text)" strokeWidth={2.5} dot={{ r: 3, fill: 'var(--cal-card)', strokeWidth: 2 }} />
-              </LineChart>
-            </ResponsiveContainer>
+            <ScrollChart count={chart.length} slot={26} height={180} ticks={chartTicks} top={8} bottom={24} tickStyle={{ color: 'var(--cal-muted)' }}>
+              {cw => (
+                <LineChart width={cw} height={180} data={chart} margin={{ top: 8, right: 12, bottom: 0, left: 6 }}>
+                  <XAxis dataKey="d" height={24} tickFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d')} tick={{ fontSize: 11, fill: 'var(--cal-muted)' }} axisLine={false} tickLine={false} minTickGap={24} />
+                  <YAxis hide domain={[chartTicks[0], chartTicks[chartTicks.length - 1]]} allowDataOverflow />
+                  <Tooltip formatter={(v: number) => [`${v} ${unit}`, 'Weight']} labelFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d, yyyy')} contentStyle={{ borderRadius: 12, border: 'none', background: 'var(--cal-card)', color: 'var(--cal-text)' }} />
+                  {a.goal !== 'maintain' && <ReferenceLine y={show(goal)} stroke="var(--cal-good)" strokeDasharray="4 4" />}
+                  <Line isAnimationActive={false} type="monotone" dataKey="v" stroke="var(--cal-text)" strokeWidth={2.5} dot={{ r: 3, fill: 'var(--cal-card)', strokeWidth: 2 }} />
+                </LineChart>
+              )}
+            </ScrollChart>
           ) : (
             <div className="cal-card-2" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 16 }}>
               <Scale size={24} className="cal-muted" />
@@ -201,6 +206,7 @@ export function NutritionSettingsSheet({ setup, onEditPlan, onClose }: { setup: 
   const update = useUpdateNutritionSetup();
   const { showToast } = useUIStore();
   const [editing, setEditing] = useState<MacroKey | null>(null);
+  const [editWater, setEditWater] = useState(false);
   const a = setup.answers;
   const imperial = a.units === 'imperial';
   const w = (kg: number) => (imperial ? `${Math.round(kgToLb(kg))} lb` : `${Math.round(kg * 10) / 10} kg`);
@@ -249,6 +255,7 @@ export function NutritionSettingsSheet({ setup, onEditPlan, onClose }: { setup: 
         {(Object.keys(MACRO_META) as MacroKey[]).map(k => (
           <Row key={k} label={MACRO_META[k].label} value={`${setup.goals[k]}${k === 'calories' ? ' cal' : ' g'}`} onClick={() => setEditing(k)} />
         ))}
+        <Row label="Water" value={`${waterGoalFor(setup).toLocaleString()} ml`} onClick={() => setEditWater(true)} />
         <button type="button" onClick={() => saveGoals((({ calories, protein, carbs, fat, fiber }) => ({ calories, protein, carbs, fat, fiber }))(buildPlan(a)))} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '13px 2px', fontSize: 14, fontWeight: 700 }}>
           <RotateCcw size={15} /> Auto-generate targets
         </button>
@@ -281,6 +288,18 @@ export function NutritionSettingsSheet({ setup, onEditPlan, onClose }: { setup: 
             max={editing === 'calories' ? 8000 : editing === 'carbs' ? 1200 : editing === 'protein' ? 600 : editing === 'fat' ? 400 : 150}
             onSave={v => saveGoals({ ...setup.goals, [editing]: v })}
             onClose={() => setEditing(null)}
+            z={10030}
+          />
+        )}
+        {editWater && (
+          <NumberSheet
+            title="Daily water goal"
+            value={waterGoalFor(setup)}
+            unit="ml"
+            min={500}
+            max={8000}
+            onSave={v => update({ waterGoal: v }, prev => ({ ...prev, waterGoal: v })).catch(() => showToast('Could not save water goal', 'error'))}
+            onClose={() => setEditWater(false)}
             z={10030}
           />
         )}

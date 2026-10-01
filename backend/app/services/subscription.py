@@ -35,6 +35,8 @@ FREE_LIMITS: dict[str, tuple[int, str]] = {
     "ai_call": (3, "day"),
     "food_scan": (2, "day"),
     "workout_plan": (1, "lifetime"),
+    # AI coach summary of a run/ride/walk/workout; the weekly report is Pro-only.
+    "ai_summary": (1, "week"),
 }
 
 PLANS = {
@@ -126,9 +128,9 @@ class QuotaResult:
     period: str = "day"
 
     def detail(self) -> dict:
-        noun = {"ai_call": "AI requests", "food_scan": "food scans",
+        noun = {"ai_call": "AI requests", "food_scan": "food scans", "ai_summary": "AI coach summary" if self.limit == 1 else "AI coach summaries",
                 "workout_plan": "AI workout plan" if self.limit == 1 else "AI workout plans"}.get(self.kind, "AI requests")
-        when = {"day": " today", "month": " this month"}.get(self.period, "")
+        when = {"day": " today", "week": " this week", "month": " this month"}.get(self.period, "")
         return {
             "code": "pro_required",
             "kind": self.kind,
@@ -138,9 +140,17 @@ class QuotaResult:
         }
 
 
-def _period_keys() -> tuple[str, str]:
+def _period_keys() -> tuple[str, str, str]:
     now = datetime.now(timezone.utc)
-    return now.strftime("%Y-%m-%d"), now.strftime("%Y-%m")
+    year, week, _ = now.isocalendar()
+    return now.strftime("%Y-%m-%d"), now.strftime("%Y-%m"), f"{year}-W{week:02d}"
+
+
+def _fresh_counts(data: dict, day: str, month: str, week: str) -> dict:
+    """Counts with every allowance whose period rolled over reset to zero."""
+    current = {"day": day, "month": month, "week": week}
+    return {k: v for k, v in dict(data.get("counts") or {}).items()
+            if (p := FREE_LIMITS.get(k, (0, "day"))[1]) == "lifetime" or data.get(p) == current.get(p)}
 
 
 def consume_quota(uid: str, email: Optional[str], kind: str) -> QuotaResult:
@@ -156,22 +166,18 @@ def consume_quota(uid: str, email: Optional[str], kind: str) -> QuotaResult:
 
     from google.cloud import firestore as gcf
 
-    day, month = _period_keys()
+    day, month, week = _period_keys()
 
     @gcf.transactional
     def _txn(transaction):
         snap = ref.get(transaction=transaction)
         data = (snap.to_dict() or {}) if snap.exists else {}
-        counts = dict(data.get("counts") or {})
-        if data.get("day") != day:
-            counts = {k: v for k, v in counts.items() if FREE_LIMITS.get(k, (0, "day"))[1] != "day"}
-        if data.get("month") != month:
-            counts = {k: v for k, v in counts.items() if FREE_LIMITS.get(k, (0, "day"))[1] != "month"}
+        counts = _fresh_counts(data, day, month, week)
         used = int(counts.get(kind, 0))
         if used >= limit:
             return QuotaResult(False, kind, limit, used, period)
         counts[kind] = used + 1
-        transaction.set(ref, {"day": day, "month": month, "counts": counts})
+        transaction.set(ref, {"day": day, "month": month, "week": week, "counts": counts})
         return QuotaResult(True, kind, limit, used + 1, period)
 
     try:
@@ -212,11 +218,10 @@ def usage_summary(uid: str) -> dict:
         try:
             snap = ref.get()
             data = (snap.to_dict() or {}) if snap.exists else {}
-            day, month = _period_keys()
-            for kind, (_, period) in FREE_LIMITS.items():
-                fresh = (data.get("day") == day if period == "day"
-                         else data.get("month") == month if period == "month" else True)
-                counts[kind] = int((data.get("counts") or {}).get(kind, 0)) if fresh else 0
+            day, month, week = _period_keys()
+            fresh = _fresh_counts(data, day, month, week)
+            for kind in FREE_LIMITS:
+                counts[kind] = int(fresh.get(kind, 0))
         except Exception:
             pass
     return {kind: {"used": counts.get(kind, 0), "limit": limit, "period": period} for kind, (limit, period) in FREE_LIMITS.items()}

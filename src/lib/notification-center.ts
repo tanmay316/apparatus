@@ -97,6 +97,9 @@ export function fromSocial(n: SocialNotification, username?: string): UnifiedNot
     }
   } else if (extra.kind === 'steps') {
     icon = 'steps';
+  } else if (extra.kind === 'ai_summary') {
+    icon = 'progress_up';
+    badge = { text: 'AI coach', tone: 'up' };
   }
   return {
     key: `s:${n.id}`,
@@ -116,6 +119,7 @@ export function fromSocial(n: SocialNotification, username?: string): UnifiedNot
     badge,
     ...(extra.kind === 'progress' && n.targetId ? { analysis: { kind: 'workout' as const, id: n.targetId } } : {}),
     ...(extra.kind === 'cardio_progress' && n.targetId ? { analysis: { kind: 'cardio' as const, id: n.targetId } } : {}),
+    ...(extra.kind === 'ai_summary' && n.targetId && (extra.session === 'cardio' || extra.session === 'workout') ? { analysis: { kind: extra.session as 'cardio' | 'workout', id: n.targetId } } : {}),
   };
 }
 

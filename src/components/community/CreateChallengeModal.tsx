@@ -1,19 +1,15 @@
-import { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { motion } from 'framer-motion';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, Trophy, Target, Calendar } from 'lucide-react';
+import { Trophy } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
 import { createCommunityChallenge } from '@/services/events';
+import { ChipGroup, Field, FormSection, FormSheet } from '@/components/ui/FormSheet';
+
+const DURATIONS = [7, 14, 21, 30, 60, 90].map(d => ({ value: d, label: `${d} days` }));
 
 export function CreateChallengeModal({ communityId, onClose }: { communityId: string; onClose: () => void }) {
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
-
-  useEffect(() => {
-    document.body.classList.add('community-create-open');
-    return () => document.body.classList.remove('community-create-open');
-  }, []);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -42,72 +38,57 @@ export function CreateChallengeModal({ communityId, onClose }: { communityId: st
     onError: (err: any) => showToast(err?.message || 'Failed to create challenge', 'error')
   });
 
+  const [submitted, setSubmitted] = useState(false);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitted(true);
     if (!title.trim() || !description.trim()) return;
     createMutation.mutate();
   };
 
-  return createPortal(
-    <div className="cx pro-scope fixed inset-0 z-[600] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/80 backdrop-blur-sm sm:overflow-y-auto">
-      <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} className="bg-ink rounded-t-[32px] sm:rounded-[32px] p-5 sm:p-8 max-w-lg w-full sm:border border-t border-line shadow-2xl max-h-[90dvh] sm:max-h-[90vh] flex flex-col">
-        <div className="flex justify-between items-start mb-4 shrink-0">
-          <div>
-            <div className="flex items-center gap-2 text-sienna text-xs font-mono uppercase tracking-widest mb-1">
-              <Trophy size={14} /> New Challenge
-            </div>
-            <h2 className="font-display text-xl sm:text-2xl text-bone">Create Community Challenge</h2>
-            <p className="text-xs sm:text-sm text-bone-dim mt-0.5">Motivate your community with a competitive fitness challenge.</p>
-          </div>
-          <button onClick={onClose} className="p-2 rounded-full hover:bg-ink-2 text-bone-dim transition-colors"><X size={20} /></button>
+  return (
+    <FormSheet
+      icon={Trophy}
+      title="Community challenge"
+      subtitle="Motivate your community with a shared goal."
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      submitLabel="Launch challenge"
+      busy={createMutation.isPending}
+      busyLabel="Launching…"
+    >
+      <FormSection title="Basics">
+        <Field id="cc-title" label="Challenge name" count={title.length} max={80} error={submitted && !title.trim() && 'Add a name for your challenge'}>
+          <input id="cc-title" value={title} maxLength={80} onChange={e => setTitle(e.target.value)} placeholder="e.g. 30-day handstand challenge" className="dx-input" aria-invalid={submitted && !title.trim()} />
+        </Field>
+        <Field id="cc-desc" label="Description" count={description.length} max={600} error={submitted && !description.trim() && 'Describe the goal'}>
+          <textarea id="cc-desc" value={description} maxLength={600} onChange={e => setDescription(e.target.value)} rows={3} placeholder="What participants will do and why…" className="dx-input" aria-invalid={submitted && !description.trim()} />
+        </Field>
+      </FormSection>
+
+      <FormSection title="Goal">
+        <Field label="Duration">
+          <ChipGroup label="Duration" value={durationDays} onChange={setDurationDays} options={DURATIONS} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field id="cc-target" label="Total target">
+            <input id="cc-target" type="number" inputMode="numeric" min={1} value={targetCount} onChange={e => setTargetCount(Number(e.target.value))} className="dx-input tabular-nums" />
+          </Field>
+          <Field id="cc-daily" label="Daily target">
+            <input id="cc-daily" value={dailyTarget} maxLength={60} onChange={e => setDailyTarget(e.target.value)} placeholder="e.g. 10 reps a day" className="dx-input" />
+          </Field>
         </div>
+      </FormSection>
 
-        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-1">
-          <div>
-            <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Title (e.g. 100 Push-ups in 30 Days)</label>
-            <input required value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. 30-Day Handstand Challenge" className="input-field w-full" />
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Description</label>
-            <textarea required value={description} onChange={e => setDescription(e.target.value)} placeholder="Challenge guidelines and goals..." className="input-field w-full min-h-[80px] py-2.5" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Duration (Days)</label>
-              <input type="number" min={1} max={365} value={durationDays} onChange={e => setDurationDays(Number(e.target.value))} className="input-field w-full" />
-            </div>
-            <div>
-              <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Target Target Count</label>
-              <input type="number" min={1} value={targetCount} onChange={e => setTargetCount(Number(e.target.value))} className="input-field w-full" />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Daily Target</label>
-            <input value={dailyTarget} onChange={e => setDailyTarget(e.target.value)} placeholder="e.g. 10 reps / 15 mins daily" className="input-field w-full" />
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Rewards</label>
-            <input value={rewards} onChange={e => setRewards(e.target.value)} placeholder="e.g. Level 18 Badge, Champion Title" className="input-field w-full" />
-          </div>
-
-          <div>
-            <label className="block text-xs font-mono text-bone-dim mb-1 uppercase">Rules</label>
-            <textarea value={rules} onChange={e => setRules(e.target.value)} placeholder="Rules for participants..." className="input-field w-full min-h-[60px] py-2" />
-          </div>
-
-          <div className="pt-4 border-t border-line/30 flex gap-3 justify-end shrink-0">
-            <button type="button" onClick={onClose} className="btn-secondary px-6 py-2">Cancel</button>
-            <button type="submit" disabled={createMutation.isPending || !title.trim()} className="btn-primary px-6 py-2">
-              {createMutation.isPending ? 'Creating...' : 'Launch Challenge'}
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>,
-    document.body
+      <FormSection title="Rules & rewards">
+        <Field id="cc-rules" label="Rules">
+          <textarea id="cc-rules" value={rules} maxLength={600} onChange={e => setRules(e.target.value)} rows={2} placeholder="How progress is logged and checked…" className="dx-input" />
+        </Field>
+        <Field id="cc-rewards" label="Rewards" optional>
+          <input id="cc-rewards" value={rewards} maxLength={120} onChange={e => setRewards(e.target.value)} placeholder="e.g. Community badge" className="dx-input" />
+        </Field>
+      </FormSection>
+    </FormSheet>
   );
 }

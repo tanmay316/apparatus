@@ -21,6 +21,7 @@ import {
 } from '@/utils/notifications';
 import { categoryOf } from '@/lib/notification-center';
 import { localDateKey } from '@/lib/stats';
+import { useSubscriptionStore } from '@/stores/subscription-store';
 import { useNotificationPrefs } from '@/stores/notification-prefs-store';
 import { UpdatePopup } from '@/components/ui/UpdatePopup';
 import { useUIStore } from '@/stores/ui-store';
@@ -355,6 +356,19 @@ function PreferencesSync() {
       unsubAppNotifs();
     };
   }, [user?.uid, queryClient]);
+
+  // Weekly AI coach report (Pro): once per week, shortly after launch.
+  const subLoaded = useSubscriptionStore(s => s.loaded);
+  useEffect(() => {
+    if (!user?.uid || !subLoaded) return;
+    const uid = user.uid;
+    const t = setTimeout(() => {
+      import('@/services/ai-insights')
+        .then(m => m.autoWeeklyReport(uid, localDateKey()))
+        .catch(err => console.warn('Weekly AI report failed:', err));
+    }, 20000);
+    return () => clearTimeout(t);
+  }, [user?.uid, subLoaded]);
 
   return null;
 }

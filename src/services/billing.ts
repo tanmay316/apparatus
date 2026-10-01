@@ -10,7 +10,7 @@ export const PRO_PRICES: Record<ProPlan, { amount: string; per: string; note?: s
   yearly: { amount: '₹999', per: 'year', note: 'Save 44%' },
 };
 
-export interface QuotaUsage { used: number; limit: number; period: 'day' | 'month' | 'lifetime' }
+export interface QuotaUsage { used: number; limit: number; period: 'day' | 'week' | 'month' | 'lifetime' }
 
 export interface BillingStatus {
   enabled: boolean;

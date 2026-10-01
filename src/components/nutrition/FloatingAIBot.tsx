@@ -10,11 +10,14 @@ const ALLOWED_ROUTES = ['/', '/nutrition', '/progress', '/plans'];
 
 export default function FloatingAIBot() {
   const [isOpen, setIsOpen] = useState(false);
+  // Opened from "Ask AI" on a screen where the floating button isn't shown.
+  const [forced, setForced] = useState(false);
+  const [prompt, setPrompt] = useState<string | null>(null);
   const location = useLocation();
   const scrollDirection = useScrollDirection();
   
   // Close chat if navigating away from allowed routes (optional, but good UX)
-  const isAllowedRoute = ALLOWED_ROUTES.includes(location.pathname);
+  const isAllowedRoute = ALLOWED_ROUTES.includes(location.pathname) || forced;
 
   // Auto-close if navigating away from an allowed route
   useEffect(() => {
@@ -22,6 +25,10 @@ export default function FloatingAIBot() {
       setIsOpen(false);
     }
   }, [isAllowedRoute]);
+
+  useEffect(() => {
+    if (!isOpen) setForced(false);
+  }, [isOpen]);
 
   // Sync modal state with URL hash for Android back button support
   useEffect(() => {
@@ -44,8 +51,13 @@ export default function FloatingAIBot() {
 
   // Listen for custom event to open the bot from anywhere
   useEffect(() => {
-    const handleOpenBot = () => {
-      if (isAllowedRoute) setIsOpen(true);
+    const handleOpenBot = (e: Event) => {
+      const text = (e as CustomEvent<{ prompt?: string }>).detail?.prompt;
+      if (text) {
+        setForced(true);
+        setPrompt(text);
+        setIsOpen(true);
+      } else if (isAllowedRoute) setIsOpen(true);
     };
     window.addEventListener('open-ai-bot', handleOpenBot);
     return () => window.removeEventListener('open-ai-bot', handleOpenBot);
@@ -55,7 +67,7 @@ export default function FloatingAIBot() {
 
   // Show floating button only when chat is closed AND (scrolling up OR at top).
   // The nutrition page has its own + menu with an "Ask Astra" entry.
-  const isVisible = !isOpen && scrollDirection === 'up' && location.pathname !== '/nutrition';
+  const isVisible = !isOpen && !forced && scrollDirection === 'up' && location.pathname !== '/nutrition';
 
   return (
     <>
@@ -90,7 +102,7 @@ export default function FloatingAIBot() {
         )}
       </AnimatePresence>
 
-      <NutritionChat isOpen={isOpen} onClose={() => setIsOpen(false)} />
+      <NutritionChat isOpen={isOpen} onClose={() => setIsOpen(false)} initialPrompt={prompt} onPromptSent={() => setPrompt(null)} />
     </>
   );
 }

@@ -1,12 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  X, Upload, Trophy, Sparkles, Calendar, AlertCircle, Zap, Target,
-  Dumbbell, Shield, Eye,
-  ChevronDown, Check, Activity
+import { useState, useEffect } from 'react';
+import {
+  Sparkles, Zap, Target, Dumbbell, Shield, Eye, Check, Activity, Route, Flame, Timer, Footprints,
 } from 'lucide-react';
-import { CustomSelect } from '@/components/ui/CustomSelect';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,42 +9,53 @@ import { createChallenge, getUserClans } from '@/services/community';
 import { ChallengeMetric, ChallengeActivityFilter } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
+import { Toggle } from '@/components/ui/Toggle';
+import { ChipGroup, ChoiceGroup, CoverPicker, Field, FormSection, FormSheet, spanLabel, type Choice } from '@/components/ui/FormSheet';
 
-const CATEGORY_OPTIONS = [
-  { id: 'cardio', label: 'Cardio', icon: Activity, color: 'text-emerald-400', bg: 'bg-emerald-500/15 border-emerald-500/30' },
-  { id: 'gym', label: 'Gym', icon: Dumbbell, color: 'text-blue-400', bg: 'bg-blue-500/15 border-blue-500/30' },
-  { id: 'calisthenics', label: 'Calisthenics', icon: Zap, color: 'text-violet-400', bg: 'bg-violet-500/15 border-violet-500/30' },
-  { id: 'mixed', label: 'Mixed', icon: Target, color: 'text-amber-400', bg: 'bg-amber-500/15 border-amber-500/30' },
-  { id: 'other', label: 'Custom', icon: Sparkles, color: 'text-rose-400', bg: 'bg-rose-500/15 border-rose-500/30' },
+const CATEGORY_OPTIONS: Choice<string>[] = [
+  { value: 'cardio', label: 'Cardio', icon: Activity },
+  { value: 'gym', label: 'Gym', icon: Dumbbell },
+  { value: 'calisthenics', label: 'Calisthenics', icon: Zap },
+  { value: 'mixed', label: 'Mixed', icon: Target },
+  { value: 'other', label: 'Custom', icon: Sparkles },
 ];
 
+const METRIC_OPTIONS: Choice<string>[] = [
+  { value: 'distance', label: 'Distance', icon: Route },
+  { value: 'workouts', label: 'Workouts', icon: Dumbbell },
+  { value: 'calories', label: 'Calories', icon: Flame },
+  { value: 'duration', label: 'Duration', icon: Timer },
+  { value: 'steps', label: 'Steps', icon: Footprints },
+  { value: 'other', label: 'Custom', icon: Sparkles },
+];
+const METRIC_UNIT: Record<string, string> = { distance: 'km', calories: 'kcal', workouts: 'sessions', duration: 'min', steps: 'steps', other: 'reps' };
+
 const DURATION_PRESETS = [
-  { label: '7 days', days: 7 },
-  { label: '10 days', days: 10 },
-  { label: '14 days', days: 14 },
-  { label: '30 days', days: 30 },
-  { label: 'Custom', days: 0 },
+  { label: '7 days', value: 7 },
+  { label: '10 days', value: 10 },
+  { label: '14 days', value: 14 },
+  { label: '30 days', value: 30 },
+  { label: 'Custom', value: 0 },
 ];
 
 const ACTIVITY_FILTER_OPTIONS: { value: ChallengeActivityFilter; label: string }[] = [
-  { value: 'run', label: '🏃 Running Only' },
-  { value: 'walk', label: '🚶 Walking Only' },
-  { value: 'cycle', label: '🚴 Cycling Only' },
-  { value: 'any_cardio', label: '❤️ Any Cardio (Run/Walk/Cycle)' },
-  { value: 'workout', label: '🏋️ Gym Workouts Only' },
-  { value: 'all', label: '🌐 All Activities' },
+  { value: 'run', label: 'Runs' },
+  { value: 'walk', label: 'Walks' },
+  { value: 'cycle', label: 'Rides' },
+  { value: 'any_cardio', label: 'Any cardio' },
+  { value: 'workout', label: 'Gym workouts' },
+  { value: 'all', label: 'Everything' },
+];
+
+const SCOPE_OPTIONS: Choice<'personal' | 'clans'>[] = [
+  { value: 'personal', label: 'Public', description: 'Anyone can join.', icon: Eye },
+  { value: 'clans', label: 'My clans', description: 'Only members of clans you pick.', icon: Shield },
 ];
 
 export function CreatePersonalChallengeSheet({ onClose }: { onClose: () => void }) {
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    document.body.classList.add('community-create-open');
-    return () => document.body.classList.remove('community-create-open');
-  }, []);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -71,7 +77,6 @@ export function CreatePersonalChallengeSheet({ onClose }: { onClose: () => void 
   // Scope
   const [scope, setScope] = useState<'personal' | 'clans'>('personal');
   const [selectedClanIds, setSelectedClanIds] = useState<string[]>([]);
-  const [clanDropdownOpen, setClanDropdownOpen] = useState(false);
 
   // Dates
   const nowStr = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -111,7 +116,7 @@ export function CreatePersonalChallengeSheet({ onClose }: { onClose: () => void 
       setIsCompressing(true);
       const compressedDataUrl = await compressImageFile(file, 700, 700, 0.55);
       setCoverUrl(compressedDataUrl);
-      showToast('Image attached!', 'success');
+      showToast('Cover photo added', 'success');
     } catch {
       showToast('Failed to compress image', 'error');
     } finally {
@@ -216,364 +221,128 @@ export function CreatePersonalChallengeSheet({ onClose }: { onClose: () => void 
   };
 
   const isCustomMetric = metric === 'other';
+  const targetInvalid = submitted && !isCustomMetric && (!target || parseFloat(target) <= 0);
+  const datesInvalid = !(endMs > startMs);
 
-  return createPortal(
-    <div className="cx pro-scope fixed inset-0 z-[600] flex flex-col justify-end">
-      <motion.div 
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose}
-        className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-      />
-      <motion.div 
-        initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} 
-        transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-        className="relative bg-ink border-t border-line rounded-t-[28px] overflow-hidden max-h-[94dvh] flex flex-col shadow-2xl text-bone"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-line shrink-0">
-          <div className="min-w-0">
-            <h2 className="font-display text-xl text-bone truncate">Personal Challenge</h2>
-            <p className="text-[11px] text-bone-dim font-mono mt-0.5">Create your own fitness goal</p>
+  return (
+    <FormSheet
+      icon={Target}
+      title="Personal challenge"
+      subtitle="Set your own goal; we track it from your activities."
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      submitLabel="Start challenge"
+      busy={createMutation.isPending}
+      busyLabel="Creating…"
+      disabled={isCompressing}
+    >
+      <FormSection title="Basics">
+        <ChoiceGroup label="Category" columns={3} value={category} onChange={setCategory} options={CATEGORY_OPTIONS} />
+        {category === 'other' && (
+          <Field id="input-category" label="Category name">
+            <input id="input-category" value={customCategory} maxLength={30} onChange={e => setCustomCategory(e.target.value)} placeholder="e.g. Mobility" className="dx-input" />
+          </Field>
+        )}
+        <CoverPicker value={coverUrl} onPick={handleImageFile} onClear={() => setCoverUrl('')} busy={isCompressing} />
+        <Field id="input-title" label="Challenge name" count={title.length} max={80} error={submitted && !title.trim() && 'Add a name for your challenge'}>
+          <input id="input-title" value={title} maxLength={80} onChange={e => setTitle(e.target.value)} placeholder="e.g. 15 km in 10 days" className="dx-input" aria-invalid={submitted && !title.trim()} />
+        </Field>
+        <Field id="input-description" label="Rules" count={description.length} max={600} error={submitted && !description.trim() && 'Describe the goal and the rules'}>
+          <textarea id="input-description" value={description} maxLength={600} onChange={e => setDescription(e.target.value)} rows={3} placeholder="What counts and how you'll measure it…" className="dx-input" aria-invalid={submitted && !description.trim()} />
+        </Field>
+      </FormSection>
+
+      <FormSection title="Goal">
+        <ChoiceGroup
+          label="Metric"
+          columns={3}
+          value={metric}
+          onChange={val => { setMetric(val); setUnit(METRIC_UNIT[val] || ''); }}
+          options={METRIC_OPTIONS}
+        />
+        {isCustomMetric ? (
+          <div className="grid grid-cols-2 gap-3">
+            <Field id="input-customMetric" label="What to track" error={submitted && !customMetric.trim() && 'Required'}>
+              <input id="input-customMetric" value={customMetric} maxLength={40} onChange={e => setCustomMetric(e.target.value)} placeholder="e.g. Pull-ups" className="dx-input" aria-invalid={submitted && !customMetric.trim()} />
+            </Field>
+            <Field id="input-unit" label="Unit">
+              <input id="input-unit" value={unit} maxLength={16} onChange={e => setUnit(e.target.value)} placeholder="reps" className="dx-input" />
+            </Field>
           </div>
-          <button onClick={onClose} className="p-2 bg-ink-2 hover:bg-ink-3 rounded-full text-bone transition-colors shrink-0 ml-3">
-            <X size={18} />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="px-5 py-4 overflow-y-auto space-y-4 flex-1">
-          {/* Category Selector - Horizontal Scroll */}
-          <div className="space-y-2">
-            <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider">Category</label>
-            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {CATEGORY_OPTIONS.map(cat => {
-                const Icon = cat.icon;
-                const active = category === cat.id;
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() => setCategory(cat.id)}
-                    className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all ${
-                      active 
-                        ? `${cat.bg} ${cat.color} scale-[1.02] shadow-sm` 
-                        : 'bg-ink-2 border-line/30 text-bone-dim hover:border-line/50'
-                    }`}
-                  >
-                    <Icon size={14} />
-                    {cat.label}
-                  </button>
-                );
-              })}
-            </div>
-            {category === 'other' && (
-              <input
-                type="text"
-                value={customCategory}
-                onChange={e => setCustomCategory(e.target.value)}
-                placeholder="Enter custom category name..."
-                className="input-field w-full text-xs font-sans text-bone mt-1"
-              />
-            )}
+        ) : (
+          <div className="grid grid-cols-[1fr_110px] gap-3">
+            <Field id="input-target" label="Target" error={targetInvalid && 'Enter a target above 0'}>
+              <input id="input-target" type="number" inputMode="decimal" step="any" min={0} value={target} onChange={e => setTarget(e.target.value)} placeholder="e.g. 15" className="dx-input tabular-nums" aria-invalid={targetInvalid} />
+            </Field>
+            <Field id="input-unit" label="Unit">
+              <input id="input-unit" value={unit} maxLength={16} onChange={e => setUnit(e.target.value)} className="dx-input" />
+            </Field>
           </div>
-
-          {/* Cover Photo */}
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider">Cover Photo</label>
-            <div 
-              className="relative h-32 w-full rounded-2xl overflow-hidden border border-line/40 bg-ink-2/80 group cursor-pointer" 
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <img 
-                src={coverUrl || 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?q=80&w=1000&auto=format&fit=crop'} 
-                alt="Preview" 
-                className={`w-full h-full object-cover transition-all ${!coverUrl ? 'opacity-70 grayscale-[30%]' : ''}`} 
-              />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
-                <span className="text-white text-xs font-mono font-bold flex items-center gap-2">
-                  <Upload size={14} /> {isCompressing ? 'Compressing...' : (coverUrl ? 'Change Cover' : 'Upload Cover Image')}
-                </span>
-              </div>
-              {coverUrl && (
-                <button
-                  type="button" 
-                  onClick={(e) => { e.stopPropagation(); setCoverUrl(''); }}
-                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/70 hover:bg-black text-red-400 transition-colors z-10"
-                ><X size={14} /></button>
-              )}
-            </div>
-            <input type="file" ref={fileInputRef} onChange={handleImageFile} accept="image/*" className="hidden" />
-          </div>
-
-          {/* Title */}
-          <div id="input-title">
-            <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider mb-1">Challenge Title *</label>
-            <input
-              type="text"
-              value={title} onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. 15 km Run in 10 Days"
-              className={`input-field w-full text-sm text-bone ${submitted && !title.trim() ? 'border-red-500 bg-red-500/10' : ''}`}
-            />
-            {submitted && !title.trim() && (
-              <span className="text-red-400 text-[10px] font-mono mt-0.5 flex items-center gap-1"><AlertCircle size={10} /> Required</span>
-            )}
-          </div>
-
-          {/* Description */}
-          <div id="input-description">
-            <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider mb-1">Description & Rules *</label>
-            <textarea
-              value={description} onChange={e => setDescription(e.target.value)}
-              rows={2}
-              placeholder="Describe the challenge goal, rules..."
-              className={`input-field w-full text-sm text-bone resize-none ${submitted && !description.trim() ? 'border-red-500 bg-red-500/10' : ''}`}
-            />
-            {submitted && !description.trim() && (
-              <span className="text-red-400 text-[10px] font-mono mt-0.5 flex items-center gap-1"><AlertCircle size={10} /> Required</span>
-            )}
-          </div>
-
-          {/* Metric */}
-          <div className="space-y-2">
-            <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider">Metric</label>
-            <CustomSelect
-              value={metric}
-              onChange={(val) => {
-                setMetric(val);
-                if (val === 'distance') setUnit('km');
-                else if (val === 'calories') setUnit('kcal');
-                else if (val === 'workouts') setUnit('sessions');
-                else if (val === 'duration') setUnit('min');
-                else if (val === 'steps') setUnit('steps');
-                else if (val === 'other') setUnit('reps');
-              }}
-              options={[
-                { value: 'distance', label: '🏃 Distance' },
-                { value: 'workouts', label: '🏋️ Workout Count' },
-                { value: 'calories', label: '🔥 Calories' },
-                { value: 'duration', label: '⏱️ Duration (min)' },
-                { value: 'steps', label: '👣 Steps' },
-                { value: 'other', label: '✨ Custom' },
-              ]}
-            />
-
-            {isCustomMetric && (
-              <div className="grid grid-cols-2 gap-2 p-3 rounded-xl bg-ink-2 border border-line/30" id="input-customMetric">
-                <div>
-                  <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Custom Metric *</label>
-                  <input
-                    type="text" value={customMetric} onChange={e => setCustomMetric(e.target.value)}
-                    placeholder="e.g. Pull-ups" className={`input-field w-full text-xs text-bone ${submitted && !customMetric.trim() ? 'border-red-500' : ''}`}
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5">Unit</label>
-                  <input type="text" value={unit} onChange={e => setUnit(e.target.value)} placeholder="reps" className="input-field w-full text-xs text-bone" />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Target & Unit - Only when not custom */}
-          {!isCustomMetric && (
-            <div className="grid grid-cols-2 gap-2" id="input-target">
-              <div>
-                <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider mb-1">Target *</label>
-                <input
-                  type="number" step="any" value={target} onChange={e => setTarget(e.target.value)}
-                  placeholder="e.g. 15" className={`input-field w-full text-sm font-mono text-bone ${submitted && (!target || parseFloat(target) <= 0) ? 'border-red-500 bg-red-500/10' : ''}`}
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider mb-1">Unit</label>
-                <input type="text" value={unit} onChange={e => setUnit(e.target.value)} className="input-field w-full text-sm font-mono text-bone" />
-              </div>
+        )}
+        <div className="dx-inset px-3.5">
+          <Toggle
+            checked={autoTrack}
+            onChange={setAutoTrack}
+            label="Track automatically"
+            description="Progress updates from the activities you log."
+            icon={<Zap size={16} />}
+          />
+          {autoTrack && (
+            <div className="pb-3.5">
+              <div className="text-[12px] font-medium dx-muted mb-2">Counts</div>
+              <ChipGroup label="Activities that count" value={activityFilter} onChange={setActivityFilter} options={ACTIVITY_FILTER_OPTIONS} />
             </div>
           )}
+        </div>
+      </FormSection>
 
-          {/* Auto-Track Toggle */}
-          <div className="rounded-xl bg-ink-2 border border-line/30 p-3 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 min-w-0">
-                <Zap size={15} className={autoTrack ? 'text-emerald-400' : 'text-bone-dim'} />
-                <div>
-                  <div className="text-xs font-medium text-bone">Auto-Track Progress</div>
-                  <div className="text-[10px] text-bone-dim">Sync from your activities automatically</div>
-                </div>
-              </div>
-              <button
-                type="button" onClick={() => setAutoTrack(!autoTrack)}
-                className={`w-11 h-6 rounded-full relative transition-colors shrink-0 ${autoTrack ? 'bg-emerald-500' : 'bg-ink-3 border border-line/40'}`}
-              >
-                <motion.div
-                  animate={{ x: autoTrack ? 20 : 2 }}
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                  className="w-5 h-5 rounded-full bg-white absolute top-0.5 shadow-sm"
-                />
-              </button>
-            </div>
-            
-            {autoTrack && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
-                <label className="block text-[10px] font-mono text-bone-dim uppercase mb-1">Activity Filter</label>
-                <CustomSelect
-                  value={activityFilter}
-                  onChange={(val) => setActivityFilter(val as ChallengeActivityFilter)}
-                  options={ACTIVITY_FILTER_OPTIONS}
-                />
-              </motion.div>
-            )}
-          </div>
+      <FormSection title="Schedule">
+        <ChipGroup label="Duration" value={durationPreset} onChange={setDurationPreset} options={DURATION_PRESETS} />
+        <div className="grid grid-cols-2 gap-3">
+          <Field id="input-start" label="Starts">
+            <input id="input-start" type="datetime-local" value={startDateTime} onChange={e => { setStartDateTime(e.target.value); setDurationPreset(0); }} className="dx-input" />
+          </Field>
+          <Field id="input-end" label="Ends" error={datesInvalid && 'Must be after the start'} hint={!datesInvalid ? spanLabel(startMs, endMs) : undefined}>
+            <input id="input-end" type="datetime-local" value={endDateTime} onChange={e => { setEndDateTime(e.target.value); setDurationPreset(0); }} className="dx-input" aria-invalid={datesInvalid} />
+          </Field>
+        </div>
+      </FormSection>
 
-          {/* Duration Presets */}
-          <div className="space-y-2">
-            <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider">Duration</label>
-            <div className="flex gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {DURATION_PRESETS.map(p => (
-                <button
-                  key={p.days}
-                  type="button"
-                  onClick={() => setDurationPreset(p.days)}
-                  className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-mono transition-all ${
-                    durationPreset === p.days
-                      ? 'bg-sienna/20 text-sienna border border-sienna/40'
-                      : 'bg-ink-2 text-bone-dim border border-line/20 hover:border-line/40'
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2" id="input-start">
-              <div>
-                <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5 flex items-center gap-1">
-                  <Calendar size={11} className="text-emerald-400" /> Start
-                </label>
-                <input
-                  type="datetime-local" value={startDateTime} onChange={e => { setStartDateTime(e.target.value); setDurationPreset(0); }}
-                  className="input-field w-full text-[11px] font-mono text-bone"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-mono text-bone-dim uppercase mb-0.5 flex items-center gap-1">
-                  <Calendar size={11} className="text-amber-400" /> End
-                </label>
-                <input
-                  type="datetime-local" value={endDateTime} onChange={e => { setEndDateTime(e.target.value); setDurationPreset(0); }}
-                  className={`input-field w-full text-[11px] font-mono text-bone ${endMs <= startMs ? 'border-red-500 bg-red-500/10' : ''}`}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Scope - Personal vs Clans */}
-          <div className="space-y-2" id="input-clans">
-            <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider">Who Can Join?</label>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button" onClick={() => setScope('personal')}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-medium transition-all ${
-                  scope === 'personal' ? 'bg-sienna/15 border-sienna/40 text-sienna' : 'bg-ink-2 border-line/20 text-bone-dim'
-                }`}
-              >
-                <Eye size={14} /> Just Me (Public)
-              </button>
-              <button
-                type="button" onClick={() => setScope('clans')}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-medium transition-all ${
-                  scope === 'clans' ? 'bg-blue-500/15 border-blue-500/40 text-blue-400' : 'bg-ink-2 border-line/20 text-bone-dim'
-                }`}
-              >
-                <Shield size={14} /> My Clan(s)
-              </button>
-            </div>
-
-            {scope === 'clans' && (
-              <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
-                {userClans.length === 0 ? (
-                  <p className="text-[11px] text-bone-dim font-mono bg-ink-2 rounded-xl px-3 py-3 border border-line/20">
-                    You haven't joined any clans yet. Join a clan first to share challenges.
-                  </p>
-                ) : (
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setClanDropdownOpen(!clanDropdownOpen)}
-                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-ink-2 border border-line/30 hover:border-line/50 text-xs text-bone transition-colors"
-                    >
-                      <span className="truncate">
-                        {selectedClanIds.length === 0
-                          ? 'Select clans...'
-                          : `${selectedClanIds.length} clan${selectedClanIds.length > 1 ? 's' : ''} selected`}
-                      </span>
-                      <ChevronDown size={14} className={`text-bone-dim transition-transform ${clanDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    <AnimatePresence>
-                      {clanDropdownOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}
-                          className="absolute top-full left-0 right-0 mt-1 bg-ink-2 border border-line/40 rounded-xl overflow-hidden z-10 shadow-xl max-h-40 overflow-y-auto"
-                        >
-                          {userClans.map(clan => (
-                            <button
-                              key={clan.id}
-                              type="button"
-                              onClick={() => toggleClan(clan.id!)}
-                              className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-ink-3 transition-colors text-left"
-                            >
-                              <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${
-                                selectedClanIds.includes(clan.id!) ? 'bg-blue-500 border-blue-400' : 'border-line/40 bg-ink'
-                              }`}>
-                                {selectedClanIds.includes(clan.id!) && <Check size={12} className="text-white" />}
-                              </div>
-                              {clan.avatarUrl ? (
-                                <img src={clan.avatarUrl} className="w-6 h-6 rounded-full object-cover" alt="" />
-                              ) : (
-                                <div className="w-6 h-6 rounded-full bg-sienna/20 flex items-center justify-center">
-                                  <Shield size={12} className="text-sienna" />
-                                </div>
-                              )}
-                              <span className="text-xs text-bone truncate">{clan.name}</span>
-                            </button>
-                          ))}
-                        </motion.div>
+      <FormSection title="Who can join">
+        <ChoiceGroup label="Who can join" value={scope} onChange={setScope} options={SCOPE_OPTIONS} />
+        {scope === 'clans' && (
+          <div id="input-clans">
+            {userClans.length === 0 ? (
+              <p className="dx-inset px-3.5 py-3 text-[12.5px] dx-muted">You haven&apos;t joined any clans yet. Join one to share challenges with it.</p>
+            ) : (
+              <div className="dx-inset overflow-hidden dx-list">
+                {userClans.map(clan => {
+                  const on = selectedClanIds.includes(clan.id!);
+                  return (
+                    <button key={clan.id} type="button" role="checkbox" aria-checked={on} onClick={() => toggleClan(clan.id!)} className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left">
+                      {clan.avatarUrl ? (
+                        <img src={clan.avatarUrl} className="w-8 h-8 rounded-full object-cover" alt="" />
+                      ) : (
+                        <span className="dx-badge-icon !w-8 !h-8 !rounded-full"><Shield size={14} /></span>
                       )}
-                    </AnimatePresence>
-                  </div>
-                )}
-                {submitted && scope === 'clans' && selectedClanIds.length === 0 && (
-                  <span className="text-red-400 text-[10px] font-mono flex items-center gap-1"><AlertCircle size={10} /> Select at least one clan</span>
-                )}
-              </motion.div>
+                      <span className="flex-1 min-w-0 text-[13.5px] font-medium truncate">{clan.name}</span>
+                      <span className="w-5 h-5 rounded-md flex items-center justify-center shrink-0" style={{ background: on ? 'var(--dx-accent)' : 'transparent', border: on ? 'none' : '1.5px solid var(--dx-border-strong)', color: 'var(--dx-on-accent)' }}>
+                        {on && <Check size={12} strokeWidth={3} />}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {submitted && selectedClanIds.length === 0 && userClans.length > 0 && (
+              <p role="alert" className="mt-1.5 text-[12px] font-medium" style={{ color: '#dc2626' }}>Pick at least one clan</p>
             )}
           </div>
-
-          {/* Prize */}
-          <div>
-            <label className="block text-[11px] font-mono text-bone-dim uppercase tracking-wider mb-1 flex items-center gap-1">
-              <Trophy size={12} className="text-amber-400" /> Prize (Optional)
-            </label>
-            <input
-              type="text" value={prize} onChange={e => setPrize(e.target.value)}
-              placeholder="e.g. Bragging rights + Gold Badge" className="input-field w-full text-sm text-bone"
-            />
-          </div>
-
-          {/* Submit */}
-          <div className="pt-1 pb-safe">
-            <button
-              type="submit"
-              disabled={createMutation.isPending || isCompressing}
-              className="btn-primary w-full py-3.5 text-sm font-bold uppercase tracking-wider shadow-[0_0_20px_rgba(205,111,72,0.3)] flex items-center justify-center gap-2"
-            >
-              <Target size={16} />
-              {createMutation.isPending ? 'Creating...' : 'Start Challenge'}
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>,
-    document.body
+        )}
+        <Field id="input-prize" label="Prize" optional>
+          <input id="input-prize" value={prize} maxLength={120} onChange={e => setPrize(e.target.value)} placeholder="e.g. Bragging rights" className="dx-input" />
+        </Field>
+      </FormSection>
+    </FormSheet>
   );
 }
