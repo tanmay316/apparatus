@@ -81,10 +81,11 @@ export function ClanChatPage() {
     navigate(`/clan/${clanId}`);
   };
 
-  // Private / closed clans must go through the request flow on the clan page.
+  // Private / closed / paid clans must go through the clan page (request or checkout).
   const handleJoin = () => {
     const isPublic = !clan?.visibility || clan.visibility === 'public';
-    if (isPublic || isAdmin) joinMutation.mutate();
+    const paid = typeof clan?.joinPrice === 'number' && clan.joinPrice > 0;
+    if (isAdmin || (isPublic && !paid)) joinMutation.mutate();
     else navigate(`/clan/${clanId}`);
   };
 

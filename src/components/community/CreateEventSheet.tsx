@@ -9,6 +9,8 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createSimpleEvent } from '@/services/community';
 import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
+import { PriceField, parsePriceInput } from '@/components/market/PriceField';
+import { useMarketConfig } from '@/components/market/CheckoutButton';
 
 export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => void, prefilledClanId?: string }) {
   const { user } = useAuthStore();
@@ -26,6 +28,8 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
   const [activityType, setActivityType] = useState('Run');
   const [locationName, setLocationName] = useState('');
   const [prize, setPrize] = useState('');
+  const [ticketPrice, setTicketPrice] = useState('');
+  const marketConfig = useMarketConfig();
   const [visibility, setVisibility] = useState<'public' | 'clan_only'>(prefilledClanId ? 'clan_only' : 'public');
 
   // Start & End Date / Time
@@ -88,6 +92,9 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
         throw new Error('End date must be after start date');
       }
 
+      const price = parsePriceInput(ticketPrice, marketConfig);
+      if (price.error) throw new Error(price.error);
+
       await createSimpleEvent({
         title: title.trim(),
         description: description.trim(),
@@ -96,6 +103,7 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
         endTime: Timestamp.fromDate(end),
         status: dynamicStatus,
         prize: prize.trim() || undefined,
+        ticketPrice: price.value,
         location: locationName.trim() ? { name: locationName.trim() } : undefined,
         visibility,
         coverUrl: coverUrl || 'https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=1470&auto=format&fit=crop',
@@ -313,6 +321,8 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
               className="input-field w-full text-sm font-sans text-bone"
             />
           </div>
+
+          <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" label="Ticket price (Optional)" unit="ticket" />
 
           {/* Visibility */}
           {!prefilledClanId && (

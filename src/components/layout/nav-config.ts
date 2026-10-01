@@ -1,5 +1,5 @@
 import {
-  Apple, Award, BookOpen, Compass, Dumbbell, Globe, Medal, Ruler, Settings, Target, TrendingUp, Users,
+  Apple, Award, BookOpen, Compass, Dumbbell, Globe, Medal, Ruler, Settings, Store, Target, TrendingUp, Users,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -41,6 +41,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: 'feed', path: '/feed', label: 'Activity feed', icon: Users, match: ['/post'] },
       { id: 'community', path: '/community', label: 'Clans & events', icon: Globe, match: ['/clan'] },
+      { id: 'marketplace', path: '/marketplace', label: 'Marketplace', icon: Store, match: ['/purchase'] },
       { id: 'explore', path: '/explore', label: 'Explore', icon: Compass },
     ],
   },
@@ -75,6 +76,8 @@ const TITLES: [RegExp, string][] = [
   [/^\/profile/, 'Profile'],
   [/^\/settings/, 'Settings'],
   [/^\/admin/, 'Admin'],
+  [/^\/marketplace/, 'Marketplace'],
+  [/^\/purchase\//, 'Payment'],
   [/^\/search/, 'Search'],
 ];
 

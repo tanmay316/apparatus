@@ -164,6 +164,9 @@ export interface Plan {
   isArchived: boolean;
   clonedFrom: string | null;
   usageCount: number;
+  /** Set on a copy bought from a coach; such plans stay private. */
+  purchasedFrom?: string;
+  sellerId?: string;
   createdAt: Timestamp;
   updatedAt: Timestamp;
   days?: PlanDay[];
@@ -699,6 +702,9 @@ export interface ClanV2 {
   status: ClanStatus;
   location?: { city?: string; country?: string };
   tags: string[];
+  /** One-time price (INR) to join; 0/absent = free. */
+  joinPrice?: number;
+  paidMembers?: number;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
 }
@@ -771,6 +777,10 @@ export interface ChallengeV2 {
   category?: ChallengeCategory | string;   // allow custom categories
   autoTrack?: boolean;                     // auto-track from activities
   activityFilter?: ChallengeActivityFilter; // which activities count
+  /** Ticket price (INR); 0/absent = free. */
+  ticketPrice?: number;
+  ticketsSold?: number;
+  sponsor?: SponsorBadge;
   createdAt: Timestamp | null;
 }
 
@@ -837,7 +847,19 @@ export interface SimpleEvent {
   status: SimpleEventStatus;
   participantCount: number;
   coverUrl?: string;
+  ticketPrice?: number;
+  ticketsSold?: number;
+  sponsor?: SponsorBadge;
   createdAt: Timestamp | null;
+}
+
+/** Written by admins / the backend when a brand pays to sponsor a challenge or event. */
+export interface SponsorBadge {
+  sponsorshipId?: string;
+  name: string;
+  logoUrl?: string;
+  website?: string;
+  prize?: string;
 }
 
 export interface EventParticipant {

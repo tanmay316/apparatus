@@ -10,6 +10,8 @@ import { updateChallenge } from '@/services/community';
 import { ChallengeV2, ChallengeMetric } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
+import { PriceField, parsePriceInput } from '@/components/market/PriceField';
+import { useMarketConfig } from '@/components/market/CheckoutButton';
 
 interface EditChallengeSheetProps {
   challenge: ChallengeV2;
@@ -42,6 +44,8 @@ export function EditChallengeSheet({ challenge, isOpen, onClose }: EditChallenge
   const [unit, setUnit] = useState(challenge.unit || 'km');
   const [visibility, setVisibility] = useState<'public' | 'clan_only'>(challenge.visibility || 'public');
   const [prize, setPrize] = useState(challenge.prize || '');
+  const [ticketPrice, setTicketPrice] = useState(challenge.ticketPrice ? String(challenge.ticketPrice) : '');
+  const marketConfig = useMarketConfig();
 
   // Dates
   const sDate = challenge.startDate?.toDate ? challenge.startDate.toDate() : new Date();
@@ -113,6 +117,10 @@ export function EditChallengeSheet({ challenge, isOpen, onClose }: EditChallenge
       const finalTarget = isCustom ? 1 : (parseFloat(target) || 1);
       const finalUnit = isCustom ? (unit.trim() || 'reps') : unit.trim();
 
+      const isSeller = user.uid === challenge.createdBy;
+      const price = parsePriceInput(ticketPrice, marketConfig);
+      if (isSeller && price.error) throw new Error(price.error);
+
       await updateChallenge(challenge.id, {
         title: title.trim(),
         description: description.trim(),
@@ -123,6 +131,7 @@ export function EditChallengeSheet({ challenge, isOpen, onClose }: EditChallenge
         endDate: Timestamp.fromDate(end),
         status: dynamicStatus,
         prize: prize.trim() || undefined,
+        ...(isSeller ? { ticketPrice: price.value } : {}),
         visibility,
         coverUrl: coverUrl || undefined
       });
@@ -395,6 +404,8 @@ export function EditChallengeSheet({ challenge, isOpen, onClose }: EditChallenge
               className="input-field w-full text-sm font-sans text-bone"
             />
           </div>
+
+          <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" sellerUid={challenge.createdBy} label="Entry fee (Optional)" unit="entry" />
 
           {/* Visibility */}
           <div>

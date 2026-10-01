@@ -1,10 +1,17 @@
+import { useMemo } from 'react';
+import { Trophy } from 'lucide-react';
+import type { CardioActivity } from '@/types';
 import type { CardioAnalysis } from '@/lib/cardio-analysis';
 import { formatClock, formatPaceSec } from '@/lib/cardio-analysis';
-import { Compare, Headline, InsightList, SectionTitle, StatGrid, trendOf, type Trend } from './AnalysisParts';
+import { sessionEffort } from '@/lib/cardio-trends';
+import { ProBadge, ProLock } from '@/components/insights/ProLock';
+import { Compare, GatedInsights, Headline, SectionTitle, StatGrid, trendOf, type Trend } from './AnalysisParts';
 
 const NOUN = { run: 'run', walk: 'walk', cycle: 'ride' } as const;
+const ZONE_COLORS = ['#94a3b8', '#38bdf8', '#22c55e', '#f59e0b', '#f97316', '#ef4444'];
 
-export function CardioAnalysisView({ analysis: a }: { analysis: CardioAnalysis }) {
+export function CardioAnalysisView({ analysis: a, activity, history }: { analysis: CardioAnalysis; activity?: CardioActivity; history?: CardioActivity[] }) {
+  const effort = useMemo(() => (activity ? sessionEffort(activity, history || []) : null), [activity, history]);
   const isRide = a.type === 'cycle';
   const c = a.current;
   const p = a.previous;
@@ -48,6 +55,39 @@ export function CardioAnalysisView({ analysis: a }: { analysis: CardioAnalysis }
 
       <SectionTitle>This {noun}</SectionTitle>
       <StatGrid items={stats} />
+
+      {effort && (
+        <>
+          <SectionTitle right={<ProBadge />}>Effort & best efforts</SectionTitle>
+          <ProLock compact title="Effort score & best efforts" maxHeight={220}>
+            <div className="p-3 rounded-2xl border border-line/60">
+              <div className="grid grid-cols-3 gap-2">
+                <div><div className="text-[10.5px] text-bone-dim">Training load</div><div className="text-[18px] font-bold text-bone tabular-nums">{effort.load}</div></div>
+                <div><div className="text-[10.5px] text-bone-dim">Intensity</div><div className="text-[18px] font-bold text-bone tabular-nums">{Math.round(effort.intensity * 100)}%</div></div>
+                <div><div className="text-[10.5px] text-bone-dim">Effort</div><div className="text-[15px] font-bold text-bone mt-0.5">{effort.label}</div></div>
+              </div>
+              {effort.zones.length > 0 && (
+                <div className="mt-3 flex h-2 rounded-full overflow-hidden bg-bone/[0.06]">
+                  {effort.zones.map((z, i) => z.pct > 0 && <div key={z.zone} style={{ width: `${z.pct}%`, background: ZONE_COLORS[i] }} title={`Z${z.zone} ${z.label} ${z.pct}%`} />)}
+                </div>
+              )}
+              {effort.efforts.length > 0 && (
+                <ul className="mt-3 space-y-1">
+                  {effort.efforts.map(e => (
+                    <li key={e.label} className="flex items-center gap-2 text-[11.5px]">
+                      <span className="w-24 text-bone-dim">{e.label}</span>
+                      <span className="font-mono font-semibold text-bone tabular-nums">{formatClock(e.sec)}</span>
+                      {e.isPR ? <span className="ml-auto flex items-center gap-1 text-amber-500 font-semibold"><Trophy size={12} /> PR</span>
+                        : e.prevBest ? <span className="ml-auto text-bone-dim font-mono">best {formatClock(e.prevBest)}</span> : <span className="ml-auto text-bone-dim">first</span>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="mt-2 text-[10.5px] text-bone-dim">Load: an hour at your threshold ({isRide ? `${effort.thresholdKmh} km/h` : `${formatPaceSec(3600 / effort.thresholdKmh)} /km`}) = 100.</p>
+            </div>
+          </ProLock>
+        </>
+      )}
 
       {(p || a.recent) && (
         <>
@@ -95,7 +135,7 @@ export function CardioAnalysisView({ analysis: a }: { analysis: CardioAnalysis }
       )}
 
       <SectionTitle>Coaching insights</SectionTitle>
-      <InsightList insights={a.insights} />
+      <GatedInsights insights={a.insights} />
 
       {a.splits.length > 0 && (
         <>
@@ -142,7 +182,8 @@ export function CardioAnalysisView({ analysis: a }: { analysis: CardioAnalysis }
 
       {a.predictions.length > 0 && (
         <>
-          <SectionTitle right="estimate">Race predictions</SectionTitle>
+          <SectionTitle right={<ProBadge />}>Race predictions</SectionTitle>
+          <ProLock compact title="Race predictions" maxHeight={200}>
           <div className="grid grid-cols-2 gap-2">
             {a.predictions.map(pr => (
               <div key={pr.label} className="rounded-xl px-3 py-2 bg-bone/[0.04] border border-line/50">
@@ -155,6 +196,7 @@ export function CardioAnalysisView({ analysis: a }: { analysis: CardioAnalysis }
           <p className="mt-1.5 text-[10.5px] text-bone-dim leading-relaxed">
             From this {noun} using Riegel's formula. Most accurate for distances close to this one and assuming training for the distance.
           </p>
+          </ProLock>
         </>
       )}
     </div>

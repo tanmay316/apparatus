@@ -75,7 +75,7 @@ const REGION_GROUP: Partial<Record<MuscleRegion, MajorGroup>> = {
 const groupCache = new Map<string, Map<MajorGroup, number>>();
 
 /** Fractional set credit per muscle group: a primary mover counts a full set, a secondary half. */
-function groupShares(name: string): Map<MajorGroup, number> {
+export function groupShares(name: string): Map<MajorGroup, number> {
   const key = name.trim().toLowerCase();
   const cached = groupCache.get(key);
   if (cached) return cached;
@@ -90,7 +90,7 @@ function groupShares(name: string): Map<MajorGroup, number> {
   return shares;
 }
 
-function isWorking(exercise: ExerciseLog): boolean {
+export function isWorking(exercise: ExerciseLog): boolean {
   return completedSets(exercise).length > 0 && !isWarmupOrCooldown(exercise.name || '', exercise.section);
 }
 

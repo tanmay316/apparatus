@@ -10,6 +10,8 @@ import { updateSimpleEvent } from '@/services/community';
 import { SimpleEvent } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
+import { PriceField, parsePriceInput } from '@/components/market/PriceField';
+import { useMarketConfig } from '@/components/market/CheckoutButton';
 
 interface EditEventSheetProps {
   event: SimpleEvent;
@@ -35,6 +37,8 @@ export function EditEventSheet({ event, isOpen, onClose }: EditEventSheetProps) 
   const [activityType, setActivityType] = useState(event.activityType || 'Run');
   const [locationName, setLocationName] = useState(event.location?.name || '');
   const [prize, setPrize] = useState(event.prize || '');
+  const [ticketPrice, setTicketPrice] = useState(event.ticketPrice ? String(event.ticketPrice) : '');
+  const marketConfig = useMarketConfig();
   const [visibility, setVisibility] = useState<'public' | 'clan_only'>(event.visibility || 'public');
 
   // Dates
@@ -102,6 +106,10 @@ export function EditEventSheet({ event, isOpen, onClose }: EditEventSheetProps) 
         throw new Error('End date must be after start date');
       }
 
+      const isSeller = user.uid === event.createdBy;
+      const price = parsePriceInput(ticketPrice, marketConfig);
+      if (isSeller && price.error) throw new Error(price.error);
+
       await updateSimpleEvent(event.id, {
         title: title.trim(),
         description: description.trim(),
@@ -110,6 +118,7 @@ export function EditEventSheet({ event, isOpen, onClose }: EditEventSheetProps) 
         endTime: Timestamp.fromDate(end),
         status: dynamicStatus,
         prize: prize.trim() || undefined,
+        ...(isSeller ? { ticketPrice: price.value } : {}),
         location: locationName.trim() ? { name: locationName.trim() } : undefined,
         visibility,
         coverUrl: coverUrl || undefined
@@ -322,6 +331,8 @@ export function EditEventSheet({ event, isOpen, onClose }: EditEventSheetProps) 
               className="input-field w-full text-sm font-sans text-bone"
             />
           </div>
+
+          <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" sellerUid={event.createdBy} label="Ticket price (Optional)" unit="ticket" />
 
           {/* Visibility */}
           <div>

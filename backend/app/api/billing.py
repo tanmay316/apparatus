@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from app.core.config import settings
 from app.core.guardrails import check_rate_limit
 from app.core.security import get_current_user
+from app.services import market
 from app.services import subscription as subs
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,9 @@ async def webhook(request: Request):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payload")
     name = str(event.get("event", ""))
+    if name.startswith("payment_link."):
+        await asyncio.to_thread(market.handle_webhook, event)
+        return {"ok": True}
     entity = (((event.get("payload") or {}).get("subscription") or {}).get("entity")) or None
     sub_id = str((entity or {}).get("id", ""))
     if name.startswith("subscription.") and subs.SUBSCRIPTION_ID_RE.match(sub_id):

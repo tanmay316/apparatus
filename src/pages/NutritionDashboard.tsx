@@ -12,7 +12,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { analyzeFood, hasTrackableNutrition, logMeal, wakeUpServer } from '@/services/nutrition-api';
 import { getDailySteps, DEFAULT_STEP_GOAL } from '@/services/cardio';
 import {
-  dateKey, logFoodEntry, logQuickEntry, MAX_SAVED_FOODS, mealTypeForNow, useNutritionSetup, useTrainingBurned,
+  dateKey, logFoodEntry, logQuickEntry, MAX_SAVED_FOODS, mealTypeForNow, stepsCalories, useNutritionSetup, useTrainingBurned,
   useUpdateNutritionSetup, type SavedFood,
 } from '@/services/nutrition-setup';
 import { shiftDate } from '@/lib/analysis-common';
@@ -24,6 +24,7 @@ import MealDetailSheet from '@/components/nutrition/MealDetailSheet';
 import { ExerciseSheet, FoodPortionSheet, FoodSearchSheet, QuickAddSheet } from '@/components/nutrition/FoodSheets';
 import { NutritionProgress, NutritionSettingsSheet } from '@/components/nutrition/NutritionProgress';
 import { Ring, useLockBody } from '@/components/nutrition/cal-ui';
+import { GearPicks } from '@/components/market/GearPicks';
 import {
   mealDate, mealName, sumTotals, useMealHistory, useMealThumb, useRefreshNutrition, type LoggedMeal,
 } from '@/components/nutrition/use-nutrition-data';
@@ -262,24 +263,33 @@ export default function NutritionDashboard() {
   const totals = sumTotals(dayMeals);
 
   const burnedQ = useTrainingBurned(selected);
-  const manualBurned = setup?.burned?.[selected] || 0;
-  const burned = { workouts: burnedQ.data?.workouts || 0, cardio: burnedQ.data?.cardio || 0, manual: manualBurned };
-  const burnedTotal = burned.workouts + burned.cardio + burned.manual;
-
-  const yesterday = shiftDate(selected, -1);
-  const yMeals = byDay.get(yesterday);
-  const rollover = setup?.prefs?.rollover && yMeals?.length ? Math.max(0, Math.min(200, Math.round(goals.calories - sumTotals(yMeals).calories))) : 0;
-  const bonus = (setup?.prefs?.addBurned ? burnedTotal : 0) + rollover;
-  const dayGoal = goals.calories + bonus;
-  const calLeft = Math.round(dayGoal - totals.calories);
-  const streak = streakFrom(new Set(byDay.keys()), today, shiftDate);
-
   const stepsQ = useQuery({
     queryKey: ['daily-steps', user?.uid, selected],
     queryFn: () => getDailySteps(user!.uid, selected),
     enabled: !!user?.uid,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
+  const manualBurned = setup?.burned?.[selected] || 0;
+  // Steps outside tracked walks/runs (those are already in cardio calories).
+  const extraSteps = Math.max(0, (stepsQ.data ?? 0) - (burnedQ.data?.cardioSteps || 0));
+  const burned = {
+    workouts: burnedQ.data?.workouts || 0,
+    cardio: burnedQ.data?.cardio || 0,
+    steps: stepsCalories(extraSteps, setup?.answers?.weightKg || 70),
+    manual: manualBurned,
+  };
+  const burnedTotal = burned.workouts + burned.cardio + burned.steps + burned.manual;
+  const addBurned = setup?.prefs?.addBurned !== false;
+
+  const yesterday = shiftDate(selected, -1);
+  const yMeals = byDay.get(yesterday);
+  const rollover = setup?.prefs?.rollover && yMeals?.length ? Math.max(0, Math.min(200, Math.round(goals.calories - sumTotals(yMeals).calories))) : 0;
+  const bonus = (addBurned ? burnedTotal : 0) + rollover;
+  const dayGoal = goals.calories + bonus;
+  const calLeft = Math.round(dayGoal - totals.calories);
+  const streak = streakFrom(new Set(byDay.keys()), today, shiftDate);
+
   const stepGoal = profile?.stepGoal || DEFAULT_STEP_GOAL;
   const waterGoal = setup ? Math.max(1500, Math.round((setup.answers.weightKg * 35) / 250) * 250) : 2500;
   const water = setup?.water?.[selected] || 0;
@@ -379,6 +389,15 @@ export default function NutritionDashboard() {
     }
   };
 
+  const setPref = async (k: 'addBurned' | 'rollover', v: boolean) => {
+    const prefs = { ...(setup?.prefs || { addBurned: true, rollover: false }), [k]: v };
+    try {
+      await updateSetup({ prefs }, prev => ({ ...prev, prefs }));
+    } catch {
+      showToast('Could not save setting', 'error');
+    }
+  };
+
   const addManualBurned = async (kcal: number) => {
     const v = manualBurned + kcal;
     try {
@@ -434,7 +453,6 @@ export default function NutritionDashboard() {
     <div className="cal" style={{ width: '100%', minWidth: 0, maxWidth: 560, margin: '0 auto', paddingTop: 4, paddingBottom: 110 }}>
       {/* Header */}
       <header style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-        <span style={{ width: 34, height: 34, borderRadius: 11, background: 'var(--cal-primary)', color: 'var(--cal-on-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Apple size={18} /></span>
         <h1 style={{ flex: 1, fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em' }}>Nutrition</h1>
         <span className="cal-card" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 36, padding: '0 12px', borderRadius: 999, fontSize: 14, fontWeight: 800 }} title="Day streak">
           <Flame size={16} color="var(--cal-carbs)" /> <span className="cal-tabular">{streak}</span>
@@ -471,9 +489,17 @@ export default function NutritionDashboard() {
                     {history.isLoading ? '—' : Math.abs(calLeft).toLocaleString()}
                   </div>
                   <div style={{ marginTop: 6, fontSize: 14, fontWeight: 600 }} className="cal-muted">Calories {calLeft < 0 ? 'over' : 'left'}</div>
-                  {bonus > 0 && (
+                  {(burnedTotal > 0 || rollover > 0) && (
                     <div className="cal-tabular" style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 11.5, fontWeight: 700 }}>
-                      {setup.prefs?.addBurned && burnedTotal > 0 && <span className="cal-card-2" style={{ padding: '3px 8px', borderRadius: 999 }}>+{burnedTotal} burned</span>}
+                      {burnedTotal > 0 && (addBurned ? (
+                        <button type="button" onClick={() => setExercise(true)} className="cal-card-2" style={{ padding: '3px 8px', borderRadius: 999, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <Flame size={11} color="var(--cal-carbs)" /> +{burnedTotal} burned
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => setPref('addBurned', true)} className="cal-card-2" style={{ padding: '3px 8px', borderRadius: 999 }}>
+                          {burnedTotal} burned · add to goal
+                        </button>
+                      ))}
                       {rollover > 0 && <span className="cal-card-2" style={{ padding: '3px 8px', borderRadius: 999, color: 'var(--cal-fat)' }}>+{rollover} rollover</span>}
                     </div>
                   )}
@@ -505,6 +531,7 @@ export default function NutritionDashboard() {
                   <div className="cal-muted cal-tabular" style={{ marginTop: 10, display: 'grid', gap: 4, fontSize: 12, fontWeight: 600 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Dumbbell size={13} /> Workouts <b style={{ marginLeft: 'auto', color: 'var(--cal-text)' }}>{burned.workouts}</b></span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Footprints size={13} /> Cardio <b style={{ marginLeft: 'auto', color: 'var(--cal-text)' }}>{burned.cardio}</b></span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Footprints size={13} /> Steps <b style={{ marginLeft: 'auto', color: 'var(--cal-text)' }}>{burned.steps}</b></span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Plus size={13} /> Manual <b style={{ marginLeft: 'auto', color: 'var(--cal-text)' }}>{burned.manual}</b></span>
                   </div>
                 </button>
@@ -574,6 +601,16 @@ export default function NutritionDashboard() {
               {isToday && <button type="button" className="cal-btn" style={{ marginTop: 16, height: 46, fontSize: 15 }} onClick={() => setCamera('food')}><ScanLine size={17} /> Scan food</button>}
             </div>
           )}
+
+          <GearPicks
+            placement="nutrition"
+            variant="cal"
+            context={[
+              { lose: 'lose weight fat loss', gain: 'gain weight muscle gain bulk', maintain: 'maintain weight' }[setup.answers?.goal as 'lose' | 'gain' | 'maintain'] || '',
+              setup.answers?.diet || '',
+              ...(setup.answers?.accomplish || []),
+            ]}
+          />
         </>
       )}
 

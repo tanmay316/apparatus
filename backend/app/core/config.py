@@ -67,9 +67,25 @@ class Settings(BaseSettings):
     # Comma-separated emails that always get Pro (you, testers, giveaways).
     PRO_EMAILS: str = "tanmay.sharma4334@gmail.com,sharmamoni913@gmail.com"
 
+    # Must match isAdmin() in firestore.rules.
+    ADMIN_EMAILS: str = "tanmay.sharma4334@gmail.com,sharmamoni913@gmail.com"
+
+    # Marketplace (tickets, paid clans, coach plans, sponsorships). Platform cut in percent;
+    # the seller's share is paid out to their Razorpay Route linked account.
+    MARKET_FEE_PCT_TICKET: float = 10.0
+    MARKET_FEE_PCT_COACH: float = 20.0
+    MARKET_MIN_PRICE_INR: int = 19
+    MARKET_MAX_PRICE_INR: int = 50000
+    # Web checkouts return here after paying (/purchase/<order id>).
+    PUBLIC_APP_URL: str = "https://apparatus-46b1b.web.app"
+
     @property
     def billing_enabled(self) -> bool:
         return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET and (self.RAZORPAY_PLAN_MONTHLY or self.RAZORPAY_PLAN_YEARLY))
+
+    @property
+    def market_enabled(self) -> bool:
+        return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET)
 
     @staticmethod
     def csv(value: str) -> List[str]:

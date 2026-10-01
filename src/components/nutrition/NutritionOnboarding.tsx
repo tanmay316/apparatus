@@ -94,7 +94,7 @@ export default function NutritionOnboarding({ existing, onDone, onClose }: Props
     accomplish: prev?.accomplish ?? [],
     units: prev?.units ?? (appUnits === 'imperial' ? 'imperial' : 'metric'),
   }));
-  const [prefs, setPrefs] = useState<{ addBurned?: boolean; rollover?: boolean }>({ addBurned: existing?.prefs?.addBurned, rollover: existing?.prefs?.rollover });
+  const [prefs, setPrefs] = useState<{ addBurned?: boolean; rollover?: boolean }>({ addBurned: existing?.prefs?.addBurned ?? true, rollover: existing?.prefs?.rollover });
   const [stepIndex, setStepIndex] = useState(existing ? 1 : 0);
   const [dir, setDir] = useState(1);
   const [goals, setGoals] = useState<MacroGoals | null>(null);

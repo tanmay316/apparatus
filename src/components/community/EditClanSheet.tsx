@@ -8,6 +8,9 @@ import { useUIStore } from '@/stores/ui-store';
 import { ClanV2, ClanVisibility } from '@/types';
 import { compressImageFile } from '@/utils/image-compression';
 import { CustomSelect } from '@/components/ui/CustomSelect';
+import { useAuthStore } from '@/stores/auth-store';
+import { PriceField, parsePriceInput } from '@/components/market/PriceField';
+import { useMarketConfig } from '@/components/market/CheckoutButton';
 
 export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen: boolean, onClose: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +30,9 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
   const [tags, setTags] = useState(clan.tags.join(', '));
   const [coverUrl, setCoverUrl] = useState(clan.coverUrl || '');
   const [isCompressing, setIsCompressing] = useState(false);
+  const [joinPrice, setJoinPrice] = useState(clan.joinPrice ? String(clan.joinPrice) : '');
+  const marketConfig = useMarketConfig();
+  const isLeader = useAuthStore(s => s.user?.uid) === clan.leaderId;
 
   const handleImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -46,18 +52,22 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
   const updateMutation = useMutation({
     mutationFn: async () => {
       const parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+      const price = parsePriceInput(joinPrice, marketConfig);
+      if (isLeader && price.error) throw new Error(price.error);
       await updateClan(clan.id!, {
         name: name.trim(),
         description: description.trim(),
         visibility,
         tags: parsedTags,
-        coverUrl: coverUrl || undefined
+        coverUrl: coverUrl || undefined,
+        ...(isLeader ? { joinPrice: price.value } : {}),
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clan', clan.id] });
       queryClient.invalidateQueries({ queryKey: ['publicClans'] });
       queryClient.invalidateQueries({ queryKey: ['userClans'] });
+      queryClient.invalidateQueries({ queryKey: ['marketPaidClans'] });
       showToast('Clan updated successfully!', 'success');
       onClose();
     },
@@ -124,6 +134,10 @@ export function EditClanSheet({ clan, isOpen, onClose }: { clan: ClanV2, isOpen:
                   ]}
                 />
               </div>
+
+              {isLeader && (
+                <PriceField value={joinPrice} onChange={setJoinPrice} bucket="coach" sellerUid={clan.leaderId} label="Paid membership (one-time)" unit="member" />
+              )}
               
               <div>
                 <label htmlFor="edit-clan-tags" className="block text-xs font-mono text-bone-dim mb-1 ml-1 uppercase">Tags (comma separated)</label>

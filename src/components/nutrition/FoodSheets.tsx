@@ -279,14 +279,14 @@ export function QuickAddSheet({ onLog, onClose }: { onLog: (name: string, m: Mac
 }
 
 export function ExerciseSheet({ burned, onManual, onClose }: {
-  burned: { workouts: number; cardio: number; manual: number }; onManual: (kcal: number) => Promise<void>; onClose: () => void;
+  burned: { workouts: number; cardio: number; steps?: number; manual: number }; onManual: (kcal: number) => Promise<void>; onClose: () => void;
 }) {
   const navigate = useNavigate();
   const [manual, setManual] = useState(false);
   const [kcal, setKcal] = useState('');
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const total = burned.workouts + burned.cardio + burned.manual;
+  const total = burned.workouts + burned.cardio + (burned.steps || 0) + burned.manual;
   const n = Number(kcal);
 
   const options = [
@@ -301,7 +301,7 @@ export function ExerciseSheet({ burned, onManual, onClose }: {
       <div className="cal-card-2" style={{ padding: 14, marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 700 }}><Flame size={16} /> Burned today <span className="cal-tabular" style={{ marginLeft: 'auto', fontSize: 18, fontWeight: 800 }}>{total} cal</span></div>
         <div className="cal-muted cal-tabular" style={{ display: 'flex', gap: 14, marginTop: 6, fontSize: 12.5, fontWeight: 600 }}>
-          <span>Workouts {burned.workouts}</span><span>Cardio {burned.cardio}</span><span>Manual {burned.manual}</span>
+          <span>Workouts {burned.workouts}</span><span>Cardio {burned.cardio}</span><span>Steps {burned.steps || 0}</span><span>Manual {burned.manual}</span>
         </div>
       </div>
       {options.map(o => (

@@ -70,6 +70,8 @@ const CardioTracker = lazy(() => loadCardio().then(m => ({ default: m.CardioTrac
 const SinglePostPage = lazy(() => import('@/pages/SinglePostPage').then(m => ({ default: m.SinglePostPage })));
 const SearchPage = lazy(() => import('@/pages/SearchPage').then(m => ({ default: m.SearchPage })));
 const AthleteRanksPage = lazy(() => import('@/pages/AthleteRanksPage').then(m => ({ default: m.AthleteRanksPage })));
+const MarketplacePage = lazy(() => import('@/pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })));
+const PurchaseReturnPage = lazy(() => import('@/pages/PurchaseReturnPage').then(m => ({ default: m.PurchaseReturnPage })));
 
 // A live session reopens straight into the tracker, so fetch it before anything else.
 if (useCardioStore.getState().isTracking) void loadCardio();
@@ -412,6 +414,8 @@ export function App() {
               <Route path="profile/:username" element={<ProfilePage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="admin" element={<AdminPage />} />
+            <Route path="marketplace" element={<MarketplacePage />} />
+            <Route path="purchase/:orderId" element={<PurchaseReturnPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

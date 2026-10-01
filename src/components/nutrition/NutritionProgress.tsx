@@ -12,6 +12,7 @@ import { bmiCategory, bmiOf, buildPlan, kgToLb, lbToKg, streakFrom, type MacroGo
 import { dateKey, syncPlanToBackend, useUpdateNutritionSetup, type NutritionSetup } from '@/services/nutrition-setup';
 import { CalSheet, MACRO_META, NumberSheet, Ruler, type MacroKey } from './cal-ui';
 import { sumTotals, type LoggedMeal } from './use-nutrition-data';
+import { NutritionInsights } from '@/components/insights/NutritionInsights';
 
 export function useMeasurements() {
   const uid = useAuthStore(s => s.user?.uid);
@@ -63,6 +64,7 @@ export function NutritionProgress({ setup, byDay, goals }: { setup: NutritionSet
   const show = (kg: number) => (imperial ? Math.round(kgToLb(kg)) : Math.round(kg * 10) / 10);
 
   const weights = useMemo(() => measurements.filter(m => typeof m.weight === 'number' && m.weight > 0).sort((x, y) => x.date.localeCompare(y.date)), [measurements]);
+  const trendWeights = useMemo(() => weights.map(w => ({ date: w.date, weight: w.weight! })), [weights]);
   const current = weights.length ? weights[weights.length - 1].weight! : a.weightKg;
   const start = a.weightKg;
   const goal = a.goal === 'maintain' ? a.weightKg : a.targetWeightKg;
@@ -186,6 +188,8 @@ export function NutritionProgress({ setup, byDay, goals }: { setup: NutritionSet
         </div>
       </div>
 
+      <NutritionInsights setup={setup} byDay={byDay} goals={goals} weights={trendWeights} />
+
       <AnimatePresence>
         {logWeight && <LogWeightSheet currentKg={current} imperial={imperial} onClose={() => setLogWeight(false)} />}
       </AnimatePresence>
@@ -263,7 +267,7 @@ export function NutritionSettingsSheet({ setup, onEditPlan, onClose }: { setup: 
       </div>
 
       <div className="cal-card" style={{ padding: '4px 14px' }}>
-        <Toggle label="Add burned calories" sub="Workouts and cardio raise today's goal" on={!!setup.prefs?.addBurned} onChange={v => setPref('addBurned', v)} />
+        <Toggle label="Add burned calories" sub="Workouts and cardio raise today's goal" on={setup.prefs?.addBurned !== false} onChange={v => setPref('addBurned', v)} />
         <Toggle label="Rollover calories" sub="Carry up to 200 unused calories to the next day" on={!!setup.prefs?.rollover} onChange={v => setPref('rollover', v)} />
       </div>
 

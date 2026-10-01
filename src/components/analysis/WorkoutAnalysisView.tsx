@@ -1,6 +1,7 @@
 import { Trophy } from 'lucide-react';
 import type { WorkoutAnalysis } from '@/lib/workout-analysis';
-import { Compare, Headline, InsightList, SectionTitle, StatGrid, TrendChip, trendOf } from './AnalysisParts';
+import { Compare, GatedInsights, Headline, SectionTitle, StatGrid, TrendChip, trendOf } from './AnalysisParts';
+import { ProBadge, ProLock } from '@/components/insights/ProLock';
 
 const ZONES = [
   { key: 'strength', label: 'Strength 1–5', color: '#7c3aed' },
@@ -60,11 +61,13 @@ export function WorkoutAnalysisView({ analysis: a, imperial }: { analysis: Worko
       )}
 
       <SectionTitle>Coaching insights</SectionTitle>
-      <InsightList insights={a.insights} />
+      <GatedInsights insights={a.insights} />
 
+      {(zoneTotal > 0 || a.muscles.length > 0) && (
+        <ProLock compact title="Rep ranges & weekly muscle volume" maxHeight={260}>
       {zoneTotal > 0 && (
         <>
-          <SectionTitle right={`${zoneTotal} rep sets`}>Rep ranges</SectionTitle>
+          <SectionTitle right={`${zoneTotal} rep sets`}>Rep ranges <ProBadge className="ml-1 align-middle" /></SectionTitle>
           <div className="flex h-2.5 rounded-full overflow-hidden bg-bone/[0.06]">
             {ZONES.map(z => a.zones[z.key] > 0 && (
               <div key={z.key} style={{ width: `${(a.zones[z.key] / zoneTotal) * 100}%`, background: z.color }} />
@@ -104,6 +107,8 @@ export function WorkoutAnalysisView({ analysis: a, imperial }: { analysis: Worko
             })}
           </ul>
         </>
+      )}
+        </ProLock>
       )}
 
       {rows.length > 0 && (

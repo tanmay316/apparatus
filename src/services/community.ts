@@ -115,10 +115,10 @@ export async function getUserClans(userId: string): Promise<ClanV2[]> {
 }
 
 export async function updateClan(id: string, data: Partial<ClanV2>): Promise<void> {
-  await updateDoc(doc(db, 'clans_v2', id), {
+  await updateDoc(doc(db, 'clans_v2', id), cleanDoc({
     ...data,
     updatedAt: serverTimestamp()
-  });
+  }));
 }
 
 export async function disbandClan(id: string, reason?: string): Promise<void> {
@@ -289,10 +289,10 @@ export async function getClanChallenges(clanId: string): Promise<ChallengeV2[]> 
 }
 
 export async function updateChallenge(id: string, data: Partial<ChallengeV2>): Promise<void> {
-  await updateDoc(doc(db, 'challenges_v2', id), {
+  await updateDoc(doc(db, 'challenges_v2', id), cleanDoc({
     ...data,
     updatedAt: serverTimestamp()
-  });
+  }));
 }
 
 export async function deleteChallenge(id: string): Promise<void> {
@@ -1199,12 +1199,12 @@ export async function updateUserChallengeProgress(userId: string, updates: { met
 // ─── EVENTS (V2) ─────────────────────────────────────────────────
 
 export async function createSimpleEvent(event: Omit<SimpleEvent, 'id' | 'participantCount' | 'createdAt'> & { status?: SimpleEventStatus }): Promise<string> {
-  const docRef = await addDoc(collection(db, 'simple_events'), {
+  const docRef = await addDoc(collection(db, 'simple_events'), cleanDoc({
     ...event,
     status: event.status || 'upcoming',
     participantCount: 1,
     createdAt: serverTimestamp(),
-  });
+  }));
   
   const partId = `${docRef.id}_${event.createdBy}`;
   await setDoc(doc(db, 'simple_event_participants', partId), {
@@ -1408,10 +1408,10 @@ export async function awardEventTop3Badges(
 }
 
 export async function updateSimpleEvent(id: string, data: Partial<SimpleEvent>): Promise<void> {
-  await updateDoc(doc(db, 'simple_events', id), {
+  await updateDoc(doc(db, 'simple_events', id), cleanDoc({
     ...data,
     updatedAt: serverTimestamp()
-  });
+  }));
 }
 
 export async function deleteSimpleEvent(id: string): Promise<void> {

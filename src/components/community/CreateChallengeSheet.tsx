@@ -10,6 +10,8 @@ import { createChallenge } from '@/services/community';
 import { ChallengeMetric } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
+import { PriceField, parsePriceInput } from '@/components/market/PriceField';
+import { useMarketConfig } from '@/components/market/CheckoutButton';
 
 export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: () => void, prefilledClanId?: string }) {
   const { user } = useAuthStore();
@@ -30,6 +32,8 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
   const [unit, setUnit] = useState('km');
   const [visibility, setVisibility] = useState<'public' | 'clan_only'>(prefilledClanId ? 'clan_only' : 'public');
   const [prize, setPrize] = useState('');
+  const [ticketPrice, setTicketPrice] = useState('');
+  const marketConfig = useMarketConfig();
 
   // Start Date / Time
   const nowStr = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -96,6 +100,9 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
       const finalTarget = isCustom ? 1 : (parseFloat(target) || 1);
       const finalUnit = isCustom ? (unit.trim() || 'reps') : unit.trim();
 
+      const price = parsePriceInput(ticketPrice, marketConfig);
+      if (price.error) throw new Error(price.error);
+
       await createChallenge({
         title: title.trim(),
         description: description.trim(),
@@ -106,6 +113,7 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
         endDate: Timestamp.fromDate(end),
         status: dynamicStatus,
         prize: prize.trim() || undefined,
+        ticketPrice: price.value,
         visibility,
         coverUrl: coverUrl || 'https://images.unsplash.com/photo-1552674605-171ff7ea90b9?q=80&w=1470&auto=format&fit=crop',
         createdBy: user.uid,
@@ -385,6 +393,8 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
               className="input-field w-full text-sm font-sans text-bone"
             />
           </div>
+
+          <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" label="Entry fee (Optional)" unit="entry" />
 
           {/* Visibility */}
           {!prefilledClanId && (

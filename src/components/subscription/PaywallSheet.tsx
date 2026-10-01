@@ -19,7 +19,7 @@ const FEATURES = [
   { icon: Dumbbell, title: 'Unlimited AI workout plans', body: 'Fresh programs built from your history and goals.' },
   { icon: Camera, title: 'Unlimited food scans', body: 'Snap a meal, get calories and macros instantly.' },
   { icon: ImageIcon, title: 'Every share template', body: 'Overview, Poster, Photo and Sticker cards.' },
-  { icon: BarChart3, title: 'Pro insights', body: 'Everything new we ship for Pro, included.' },
+  { icon: BarChart3, title: 'Advanced analytics', body: 'Fitness & freshness, VO2 max, best efforts, muscle recovery, 1RM progress and your real calorie burn.' },
 ];
 
 export function PaywallSheet() {

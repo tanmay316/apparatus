@@ -21,6 +21,9 @@ import { LiveUserName } from '@/components/ui/LiveUser';
 import { EditEventSheet } from './EditEventSheet';
 import { LeaderboardBadgeChip } from './CommunityBadgeCard';
 import { useNavigate } from 'react-router-dom';
+import { CheckoutButton } from '@/components/market/CheckoutButton';
+import { SponsorBanner } from '@/components/market/SponsorBanner';
+import { formatInr, isPaid } from '@/services/market';
 
 interface EventDetailSheetProps {
   eventId: string;
@@ -156,6 +159,10 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
   const leaveMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('Not logged in');
+      if ((participants.find(p => p.userId === user.uid) as any)?.paid) {
+        const ok = await confirm({ title: 'Give up your ticket?', message: 'Tickets are not refunded when you leave. You would need to buy a new one to rejoin.', confirmText: 'Leave', type: 'danger' });
+        if (!ok) throw new Error('cancelled');
+      }
       await leaveEvent(eventId, user.uid);
     },
     onSuccess: () => {
@@ -168,7 +175,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
       queryClient.invalidateQueries({ queryKey: ['allCommunityEvents'] });
       setStatusPopup({ isOpen: true, type: 'left' });
     },
-    onError: (err: any) => showToast(err?.message || 'Failed to leave event', 'error')
+    onError: (err: any) => { if (err?.message !== 'cancelled') showToast(err?.message || 'Failed to leave event', 'error'); }
   });
 
   const deleteMutation = useMutation({
@@ -241,6 +248,14 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
   });
 
   if (!event) return null;
+
+  const onPurchased = () => {
+    setIsJoinedState(true);
+    for (const key of [['eventParticipants', eventId], ['isJoinedEvent', eventId, user?.uid], ['event', eventId], ['publicEvents'], ['clanEvents'], ['allCommunityEvents']]) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
+    setStatusPopup({ isOpen: true, type: 'joined' });
+  };
 
   const now = Date.now();
   const startTimeMs = event.startTime?.toMillis ? event.startTime.toMillis() : 0;
@@ -399,6 +414,8 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                 </div>
               )}
 
+              <SponsorBanner sponsor={event.sponsor} />
+
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 {!isClanMember ? (
@@ -419,6 +436,16 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                   >
                     {leaveMutation.isPending ? 'Cancelling...' : 'Cancel RSVP / Leave'}
                   </button>
+                ) : isPaid(event.ticketPrice) && countdownType !== 'ended' ? (
+                  <CheckoutButton
+                    kind="event"
+                    itemId={eventId}
+                    onPurchased={onPurchased}
+                    disabled={!!event.maxParticipants && participants.length >= event.maxParticipants}
+                    className="btn-primary px-8 py-2.5 text-sm font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(59,130,246,0.3)]"
+                  >
+                    {event.maxParticipants && participants.length >= event.maxParticipants ? 'Sold out' : `Get ticket · ${formatInr(event.ticketPrice)}`}
+                  </CheckoutButton>
                 ) : (
                   <button 
                     onClick={() => joinMutation.mutate()} 

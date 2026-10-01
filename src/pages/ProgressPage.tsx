@@ -15,6 +15,8 @@ import { CustomSelect } from '@/components/ui/CustomSelect';
 import { RouteMap } from '@/components/cardio/RouteMap';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 import { CardioAnalysisPanel, InlineSessionAnalysis, StrengthAnalysisPanel } from '@/components/analysis/ProgressAnalysis';
+import { CardioInsightsPanel } from '@/components/insights/CardioInsights';
+import { StrengthInsightsPanel } from '@/components/insights/StrengthInsights';
 import { getUserWorkouts } from '@/services/workouts';
 import { getUserCardioActivities } from '@/services/cardio';
 import { getUserPlans, getPlan, getPlanDays, getPublicPlansForUser, clonePlan } from '@/services/plans';
@@ -1817,6 +1819,7 @@ export function ProgressPage({
               </div>
 
               {!isOverview && <CardioAnalysisPanel activities={allCardio} />}
+              {!isOverview && <CardioInsightsPanel activities={allCardio} workouts={allWorkouts} />}
 
               {!isOverview && mixTotal > 0 && (
                 <Panel className="p-4 sm:p-5">
@@ -2148,6 +2151,7 @@ export function ProgressPage({
               )}
 
               {!isOverview && <StrengthAnalysisPanel workouts={allWorkouts} imperial={imperial} />}
+              {!isOverview && <StrengthInsightsPanel workouts={allWorkouts} imperial={imperial} />}
 
               <Panel className="p-4 sm:p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">

@@ -44,16 +44,16 @@ export function CardioSummary({ data, saveState, effort, onEffort, notes, onNote
   });
   const hasRoute = Array.isArray(data.route) && data.route.length > 1;
 
-  const analysis = useMemo(() => {
+  const current = useMemo(() => {
     if (!data.distanceKm || data.distanceKm <= 0.01) return null;
-    const current = {
+    return {
       ...data,
       type,
       route: data.route || [],
       startedAt: data.startedAt ?? { seconds: Math.floor(Date.now() / 1000) },
     } as CardioActivity;
-    return analyzeCardio(current, history || []);
-  }, [data, type, history]);
+  }, [data, type]);
+  const analysis = useMemo(() => (current ? analyzeCardio(current, history || []) : null), [current, history]);
 
   const stats = [
     { label: 'Moving time', value: formatDuration(data.durationSec || 0), unit: '' },
@@ -115,7 +115,7 @@ export function CardioSummary({ data, saveState, effort, onEffort, notes, onNote
       {analysis && (
         <section className="dx-card p-4 sm:p-5">
           <h2 className="text-sm font-bold mb-3">Session analysis</h2>
-          <CardioAnalysisView analysis={analysis} />
+          <CardioAnalysisView analysis={analysis} activity={current ?? undefined} history={history} />
         </section>
       )}
 

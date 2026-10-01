@@ -8,6 +8,7 @@ import type { Exercise, SetData } from '@/types';
 import { MUSCLE_GROUPS } from '@/lib/muscle-map';
 import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
+import { GearPicks } from '@/components/market/GearPicks';
 
 interface Props {
   exercise: Exercise;
@@ -776,6 +777,8 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                   </div>
                 )}
               </section>
+
+              <GearPicks placement="exercise" context={[exercise.name, exercise.muscleGroup || '']} />
             </>
           )}
         </div>

@@ -114,7 +114,7 @@ export function CardioAnalysisSheet({ uid, activityId, activity, history, onClos
       onClose={onClose}
       footer={current?.id && <OpenInProgress date={current.date} tab="cardio" id={current.id} onClose={onClose} />}
     >
-      {!activity && isLoading ? <Loading /> : analysis ? <CardioAnalysisView analysis={analysis} /> : <Missing />}
+      {!activity && isLoading ? <Loading /> : analysis ? <CardioAnalysisView analysis={analysis} activity={current} history={all} /> : <Missing />}
     </AnalysisSheet>
   );
 }

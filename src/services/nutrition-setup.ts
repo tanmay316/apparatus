@@ -5,6 +5,8 @@ import { useAuthStore } from '@/stores/auth-store';
 import { ageFromBirth, foodHealthScore, type MacroGoals, type PlanAnswers } from '@/lib/nutrition-plan';
 import { portion, type FoodEntry, type Macros } from '@/lib/food-db';
 import { getWorkoutsByDateRange } from '@/services/workouts';
+import { activitySteps } from '@/services/cardio';
+import type { CardioActivity } from '@/types';
 import { logMeal, updateNutritionProfile } from '@/services/nutrition-api';
 
 export interface SavedFood {
@@ -136,14 +138,21 @@ export async function logQuickEntry(name: string, m: Macros, mealType = mealType
 
 // ─── Calories burned from training ───────────────────────────
 
-export async function getTrainingBurned(uid: string, day: string): Promise<{ workouts: number; cardio: number }> {
+export async function getTrainingBurned(uid: string, day: string): Promise<{ workouts: number; cardio: number; cardioSteps: number }> {
   const [workouts, cardioSnap] = await Promise.all([
     getWorkoutsByDateRange(uid, day, day).catch(() => []),
     getDocs(query(collection(db, 'cardioActivities'), where('userId', '==', uid), where('date', '==', day))).catch(() => null),
   ]);
   const w = workouts.reduce((s, x) => s + (Number(x.calories) || 0), 0);
-  const c = cardioSnap ? cardioSnap.docs.reduce((s, d) => s + (Number(d.data().calories) || 0), 0) : 0;
-  return { workouts: Math.round(w), cardio: Math.round(c) };
+  const cardio = cardioSnap ? cardioSnap.docs.map(d => d.data() as CardioActivity) : [];
+  const c = cardio.reduce((s, a) => s + (Number(a.calories) || 0), 0);
+  const cardioSteps = cardio.reduce((s, a) => s + activitySteps(a), 0);
+  return { workouts: Math.round(w), cardio: Math.round(c), cardioSteps };
+}
+
+/** Active kcal for everyday steps (net of resting): ~0.035 kcal per step at 70 kg. */
+export function stepsCalories(steps: number, weightKg: number): number {
+  return Math.max(0, Math.round(steps * weightKg * 0.0005));
 }
 
 export function useTrainingBurned(day: string) {
@@ -152,6 +161,8 @@ export function useTrainingBurned(day: string) {
     queryKey: ['training-burned', uid, day],
     queryFn: () => getTrainingBurned(uid!, day),
     enabled: !!uid,
-    staleTime: 60_000,
+    staleTime: 15_000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
 }

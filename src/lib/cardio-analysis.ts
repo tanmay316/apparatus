@@ -49,7 +49,7 @@ function haversineKm(a: RoutePoint, b: RoutePoint): number {
 }
 
 /** Cumulative distance (km) and moving time (s) along the route, skipping pauses and GPS jumps. */
-function routeProfile(route: RoutePoint[], type: CardioActivityType, recordedKm: number): { km: number[]; sec: number[] } | null {
+export function routeProfile(route: RoutePoint[], type: CardioActivityType, recordedKm: number): { km: number[]; sec: number[] } | null {
   if (!Array.isArray(route) || route.length < 3 || !route.every(p => typeof p.ts === 'number')) return null;
   const km = [0];
   const sec = [0];
@@ -72,7 +72,7 @@ function routeProfile(route: RoutePoint[], type: CardioActivityType, recordedKm:
   return { km, sec };
 }
 
-function timeAt(profile: { km: number[]; sec: number[] }, target: number): number {
+export function timeAt(profile: { km: number[]; sec: number[] }, target: number): number {
   const { km, sec } = profile;
   for (let i = 1; i < km.length; i++) {
     if (km[i] >= target) {
@@ -104,6 +104,12 @@ export function computeSplits(activity: Pick<CardioActivity, 'route' | 'type' | 
   }
   return splits;
 }
+
+export function cardioSnapshot(a: CardioActivity): CardioSnapshot {
+  return snapshot(a);
+}
+
+export const MAX_CARDIO_KMH = MAX_KMH;
 
 function snapshot(a: CardioActivity): CardioSnapshot {
   const km = a.distanceKm || 0;

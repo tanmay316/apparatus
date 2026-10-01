@@ -23,6 +23,9 @@ import { EditChallengeSheet } from './EditChallengeSheet';
 import { LeaderboardBadgeChip } from './CommunityBadgeCard';
 import { formatChallengeGoal } from './UpcomingReminderWidget';
 import { useNavigate } from 'react-router-dom';
+import { CheckoutButton } from '@/components/market/CheckoutButton';
+import { SponsorBanner } from '@/components/market/SponsorBanner';
+import { formatInr, isPaid } from '@/services/market';
 
 export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: string; onClose: () => void }) {
   const { user, profile } = useAuthStore();
@@ -160,6 +163,10 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
   const leaveMutation = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('Not logged in');
+      if ((myParticipant as any)?.paid) {
+        const ok = await confirm({ title: 'Give up your paid spot?', message: 'Entry fees are not refunded when you leave. You would need to pay again to rejoin.', confirmText: 'Leave', type: 'danger' });
+        if (!ok) throw new Error('cancelled');
+      }
       await leaveChallenge(challengeId, user.uid);
     },
     onSuccess: () => {
@@ -173,7 +180,7 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
       queryClient.invalidateQueries({ queryKey: ['allCommunityChallenges'] });
       setStatusPopup({ isOpen: true, type: 'left' });
     },
-    onError: (err: any) => showToast(err?.message || 'Failed to leave challenge', 'error')
+    onError: (err: any) => { if (err?.message !== 'cancelled') showToast(err?.message || 'Failed to leave challenge', 'error'); }
   });
 
   const deleteMutation = useMutation({
@@ -266,6 +273,14 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
   });
 
   if (!challenge) return null;
+
+  const onPurchased = () => {
+    setIsJoinedState(true);
+    for (const key of [['challengeParticipants', challengeId], ['challengeLeaderboard', challengeId], ['isJoinedChallenge', challengeId, user?.uid], ['challenge', challengeId], ['publicChallenges'], ['clanChallenges'], ['allCommunityChallenges']]) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
+    setStatusPopup({ isOpen: true, type: 'joined' });
+  };
 
   const now = Date.now();
   const startTimeMs = challenge.startDate?.toMillis ? challenge.startDate.toMillis() : 0;
@@ -422,6 +437,8 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                 </div>
               )}
 
+              <SponsorBanner sponsor={challenge.sponsor} />
+
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-3 pt-1">
                 {!isClanMember ? (
@@ -442,6 +459,15 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                   >
                     {leaveMutation.isPending ? 'Leaving...' : 'Leave Challenge'}
                   </button>
+                ) : isPaid(challenge.ticketPrice) && countdownType !== 'ended' ? (
+                  <CheckoutButton
+                    kind="challenge"
+                    itemId={challengeId}
+                    onPurchased={onPurchased}
+                    className="btn-primary px-8 py-2.5 text-sm font-bold flex items-center gap-2 shadow-[0_0_20px_rgba(205,111,72,0.3)]"
+                  >
+                    Join · {formatInr(challenge.ticketPrice)}
+                  </CheckoutButton>
                 ) : (
                   <button 
                     onClick={() => joinMutation.mutate()} 

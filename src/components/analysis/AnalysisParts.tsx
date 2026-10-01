@@ -1,6 +1,8 @@
 import { AlertTriangle, CheckCircle2, Info, TrendingDown, TrendingUp, Minus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Insight } from '@/lib/analysis-common';
+import { useHasPro } from '@/stores/subscription-store';
+import { ProLock } from '@/components/insights/ProLock';
 
 export const TONE_STYLE = {
   up: { background: 'rgba(5, 150, 105, 0.12)', color: '#059669' },
@@ -84,6 +86,21 @@ export function InsightList({ insights }: { insights: Insight[] }) {
         );
       })}
     </ul>
+  );
+}
+
+/** First `free` insights for everyone; the rest are part of Pro. */
+export function GatedInsights({ insights, free = 2 }: { insights: Insight[]; free?: number }) {
+  const hasPro = useHasPro();
+  if (hasPro || insights.length <= free) return <InsightList insights={insights} />;
+  const rest = insights.length - free;
+  return (
+    <div className="space-y-2">
+      <InsightList insights={insights.slice(0, free)} />
+      <ProLock compact title={`${rest} more coaching insight${rest > 1 ? 's' : ''}`} maxHeight={150}>
+        <InsightList insights={insights.slice(free, free + 2)} />
+      </ProLock>
+    </div>
   );
 }
 

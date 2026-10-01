@@ -45,7 +45,7 @@ export function InlineSessionAnalysis({ kind, session, workouts, cardio, imperia
       {open && (
         <div className="mt-3">
           {workoutAnalysis && <WorkoutAnalysisView analysis={workoutAnalysis} imperial={imperial} />}
-          {cardioAnalysis && <CardioAnalysisView analysis={cardioAnalysis} />}
+          {cardioAnalysis && <CardioAnalysisView analysis={cardioAnalysis} activity={session as CardioActivity} history={cardio} />}
         </div>
       )}
     </div>
@@ -106,7 +106,7 @@ export function CardioAnalysisPanel({ activities }: { activities: CardioActivity
           options={recent.map(a => ({ value: a.id!, label: `${a.date} · ${CARDIO_LABEL[a.type] ?? 'Cardio'} ${(a.distanceKm || 0).toFixed(1)} km` }))}
         />
       </div>
-      <CardioAnalysisView analysis={analysis} />
+      <CardioAnalysisView analysis={analysis} activity={activity} history={activities} />
     </section>
   );
 }
