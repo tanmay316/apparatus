@@ -2,7 +2,7 @@ import { ExternalLink, Gift } from 'lucide-react';
 import type { SponsorBadge } from '@/types';
 import { isSafeAffiliateUrl } from '@/lib/affiliates';
 
-/** "Sponsored by …" strip for sponsored challenges and events. */
+/** "Presented by …" strip for brand-backed challenges and events. */
 export function SponsorBanner({ sponsor, compact }: { sponsor?: SponsorBadge | null; compact?: boolean }) {
   if (!sponsor?.name) return null;
   const logo = sponsor.logoUrl && (sponsor.logoUrl.startsWith('data:image/') || isSafeAffiliateUrl(sponsor.logoUrl)) ? sponsor.logoUrl : '';
@@ -12,7 +12,7 @@ export function SponsorBanner({ sponsor, compact }: { sponsor?: SponsorBadge | n
     return (
       <span className="inline-flex items-center gap-1.5 h-6 pl-1 pr-2.5 rounded-full bg-amber-500/15 text-amber-500 text-[11px] font-semibold border border-amber-500/30 max-w-full">
         {logo ? <img src={logo} alt="" className="w-4 h-4 rounded-full object-cover bg-white" /> : <Gift size={12} className="ml-1" />}
-        <span className="truncate">Sponsored by {sponsor.name}</span>
+        <span className="truncate">Presented by {sponsor.name}</span>
       </span>
     );
   }
@@ -23,7 +23,7 @@ export function SponsorBanner({ sponsor, compact }: { sponsor?: SponsorBadge | n
         {logo ? <img src={logo} alt={`${sponsor.name} logo`} className="w-full h-full object-contain" /> : <Gift size={18} className="text-amber-600" />}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[10px] font-mono uppercase font-black tracking-wider text-amber-500">Sponsored by {sponsor.name}</div>
+        <div className="text-[10px] font-mono uppercase font-black tracking-wider text-amber-500">Presented by {sponsor.name}</div>
         {sponsor.prize && <div className="text-xs font-bold text-bone mt-0.5 line-clamp-2">{sponsor.prize}</div>}
       </div>
       {site && (

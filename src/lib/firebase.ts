@@ -42,6 +42,12 @@ const app = initializeApp(firebaseConfig);
 export const auth = Capacitor.isNativePlatform()
   ? initializeAuth(app, { persistence: [indexedDBLocalPersistence, browserLocalPersistence] })
   : getAuth(app);
+
+/** The signed-in user once Firebase has restored the session (currentUser is null for a moment at startup). */
+export async function getSignedInUser() {
+  if (!auth.currentUser) await auth.authStateReady();
+  return auth.currentUser;
+}
 // IndexedDB cache: listeners answer from disk instantly on resume/cold start, then sync.
 function createFirestore(): Firestore {
   try {

@@ -13,8 +13,8 @@ import {
 import { MarketSheet } from './MarketSheet';
 
 const STATUS: Record<Sponsorship['status'], { label: string; cls: string }> = {
-  pending: { label: 'In review', cls: 'dx-pill--neutral' },
-  quoted: { label: 'Awaiting payment', cls: 'dx-pill--accent' },
+  pending: { label: 'Preparing quote', cls: 'dx-pill--neutral' },
+  quoted: { label: 'Quote ready', cls: 'dx-pill--accent' },
   paid: { label: 'Paid · setting up', cls: 'dx-pill--success' },
   live: { label: 'Live', cls: 'dx-pill--success' },
   declined: { label: 'Declined', cls: 'dx-pill--neutral' },
@@ -47,7 +47,7 @@ function SponsorRequestSheet({ onClose }: { onClose: () => void }) {
   const [prize, setPrize] = useState('');
   const [target, setTarget] = useState<string>('host');
   const [budget, setBudget] = useState('');
-  const [contactEmail, setContactEmail] = useState(user?.email || '');
+  const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [message, setMessage] = useState('');
   const [compressing, setCompressing] = useState(false);
@@ -92,7 +92,7 @@ function SponsorRequestSheet({ onClose }: { onClose: () => void }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mySponsorships'] });
-      showToast('Request sent! We\'ll reply with a quote.', 'success');
+      showToast('Thanks! We\'ll email you a quote.', 'success');
       onClose();
     },
     onError: (e: any) => showToast(e?.message || 'Could not send the request', 'error'),
@@ -100,10 +100,10 @@ function SponsorRequestSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <MarketSheet
-      title="Sponsor a challenge"
-      subtitle="Your logo and prize appear on the challenge for every athlete who joins."
+      title="Promote your brand"
+      subtitle="Tell us about your brand and the prize you'll give winners. We'll reply with a price; your logo goes live after payment."
       onClose={onClose}
-      footer={<button type="button" className="dx-btn w-full" disabled={!valid || submit.isPending || compressing} onClick={() => submit.mutate()}>{submit.isPending ? 'Sending…' : 'Send request'}</button>}
+      footer={<button type="button" className="dx-btn w-full" disabled={!valid || submit.isPending || compressing} onClick={() => submit.mutate()}>{submit.isPending ? 'Sending…' : 'Get a quote'}</button>}
     >
       <div className="space-y-4">
         <div className="flex items-center gap-3">
@@ -122,12 +122,12 @@ function SponsorRequestSheet({ onClose }: { onClose: () => void }) {
           <input id="sr-prize" className="dx-input w-full" maxLength={300} value={prize} onChange={e => setPrize(e.target.value)} placeholder="e.g. 3 months free membership for the top 3" />
         </div>
         <div>
-          <label className="dx-label" htmlFor="sr-target">Which challenge?</label>
+          <label className="dx-label" htmlFor="sr-target">Where should it appear?</label>
           <select id="sr-target" className="dx-input w-full" value={target} onChange={e => setTarget(e.target.value)}>
-            <option value="host">Apparatus hosts one for us</option>
+            <option value="host">Apparatus runs a new public challenge for us</option>
             {(targets.data || []).map(t => <option key={`${t.type}:${t.id}`} value={`${t.type}:${t.id}`}>{t.type === 'challenge' ? 'Challenge' : 'Event'}: {t.title}</option>)}
           </select>
-          <p className="text-[12px] dx-muted mt-1">Pick one of yours, or let us run a public challenge for your brand.</p>
+          <p className="text-[12px] dx-muted mt-1">Pick one of your own challenges or events, or let us run one for your brand.</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
@@ -140,7 +140,7 @@ function SponsorRequestSheet({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="dx-label" htmlFor="sr-email">Contact email</label>
-            <input id="sr-email" type="email" className="dx-input w-full" maxLength={120} value={contactEmail} onChange={e => setContactEmail(e.target.value)} />
+            <input id="sr-email" type="email" className="dx-input w-full" maxLength={120} value={contactEmail} placeholder="Where we send the quote" autoComplete="off" onChange={e => setContactEmail(e.target.value)} />
           </div>
           <div>
             <label className="dx-label" htmlFor="sr-phone">Phone (optional)</label>
@@ -175,19 +175,19 @@ export function SponsorHub() {
         <div className="flex items-start gap-3">
           <span className="dx-hero-icon"><Megaphone size={20} /></span>
           <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] opacity-75">For brands, gyms & clans</div>
-            <h2 className="mt-1 text-[21px] font-semibold leading-tight">Put your brand in front of athletes</h2>
-            <p className="mt-1.5 text-[13px] opacity-80 leading-relaxed">Sponsor a challenge with your prize and logo. Every participant sees it on the challenge, in the feed and on the leaderboard.</p>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] opacity-75">For brands, gyms & stores</div>
+            <h2 className="mt-1 text-[21px] font-semibold leading-tight">Advertise to athletes</h2>
+            <p className="mt-1.5 text-[13px] opacity-80 leading-relaxed">Feature your brand on a challenge: your logo and a prize you give away appear on the challenge, in the feed and on the leaderboard. Nothing is charged until you accept our quote.</p>
           </div>
         </div>
-        <button type="button" onClick={() => setOpen(true)} className="dx-hero-btn w-full mt-4"><Sparkles size={16} /> Request a sponsorship</button>
+        <button type="button" onClick={() => setOpen(true)} className="dx-hero-btn w-full mt-4"><Sparkles size={16} /> Get a quote</button>
       </section>
 
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {[
-          { icon: Target, t: 'Pick a challenge', b: 'One of yours, or we host a public one.' },
-          { icon: Gift, t: 'Add your prize', b: 'Products, memberships or cash for winners.' },
-          { icon: Users, t: 'Reach athletes', b: 'Your logo shows for everyone who joins.' },
+          { icon: Target, t: '1. Tell us about you', b: 'Brand, logo, the prize for winners and your budget.' },
+          { icon: Gift, t: '2. Get a quote', b: 'We reply with a price. Pay only if you accept.' },
+          { icon: Users, t: '3. Go live', b: 'Your logo and prize show to everyone who joins.' },
         ].map(s => (
           <div key={s.t} className="dx-card p-3.5 flex items-start gap-3">
             <span className="dx-badge-icon" style={{ background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)' }}><s.icon size={16} /></span>
@@ -198,7 +198,7 @@ export function SponsorHub() {
 
       {!!(mine.data || []).length && (
         <section className="dx-card p-4">
-          <div className="text-[15px] font-semibold mb-2">Your requests</div>
+          <div className="text-[15px] font-semibold mb-2">Your campaigns</div>
           <div className="dx-list">
             {mine.data!.map(s => (
               <div key={s.id} className="py-3 flex items-center gap-3">
@@ -214,15 +214,15 @@ export function SponsorHub() {
                 </span>
                 {s.status === 'quoted' && s.payUrl && (
                   <button type="button" className="dx-btn !h-9 !px-3 gap-1.5 text-[13px]" onClick={() => openPaymentPage(s.payUrl).catch(err => showToast(err.message, 'error'))}>
-                    <CreditCard size={14} /> Pay
+                    <CreditCard size={14} /> Pay quote
                   </button>
                 )}
                 {(s.status === 'pending' || s.status === 'quoted') && (
                   <button
                     type="button"
                     className="dx-icon-btn dx-icon-btn--sm"
-                    aria-label="Cancel request"
-                    onClick={async () => { if (await confirm({ title: 'Cancel this request?', message: 'You can always send a new one.', confirmText: 'Cancel request', type: 'danger' })) cancel.mutate(s.id); }}
+                    aria-label="Cancel campaign"
+                    onClick={async () => { if (await confirm({ title: 'Cancel this campaign?', message: 'You can always start a new one.', confirmText: 'Cancel campaign', type: 'danger' })) cancel.mutate(s.id); }}
                   >
                     <X size={14} />
                   </button>

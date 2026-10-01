@@ -1,5 +1,5 @@
 import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { db, getSignedInUser } from '@/lib/firebase';
 import { useSubscriptionStore } from '@/stores/subscription-store';
 import { isProRequired } from '@/services/billing';
 import { shiftDate } from '@/lib/analysis-common';
@@ -45,7 +45,7 @@ export async function getCachedSummary(uid: string, kind: SummaryKind, key: stri
 }
 
 export async function requestSummary(kind: SummaryKind, key: string, facts: Facts): Promise<AISummary> {
-  const user = auth.currentUser;
+  const user = await getSignedInUser();
   if (!user) throw new Error('Not signed in');
   const res = await fetch(`${API_BASE}/insights/summary`, {
     method: 'POST',

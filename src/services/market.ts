@@ -4,7 +4,7 @@ import {
 } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { AppLauncher } from '@capacitor/app-launcher';
-import { auth, db } from '@/lib/firebase';
+import { db, getSignedInUser } from '@/lib/firebase';
 import { isRazorpayCheckoutUrl } from '@/services/billing';
 import { logAdminAction } from '@/services/admin';
 import type { ChallengeV2, ClanV2, Plan, SimpleEvent, SponsorBadge } from '@/types';
@@ -35,7 +35,7 @@ export interface OrderView {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const user = auth.currentUser;
+  const user = await getSignedInUser();
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (user) headers.Authorization = `Bearer ${await user.getIdToken()}`;
   const res = await fetch(`${API_BASE}/market${path}`, { ...init, headers });

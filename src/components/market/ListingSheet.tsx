@@ -87,7 +87,7 @@ export function ListingSheet({ listing, onClose }: { listing: PlanListing; onClo
         )}
         <div className="dx-inset p-3.5 flex items-start gap-3 text-[13px]">
           <ShieldCheck size={18} className="dx-accent shrink-0 mt-0.5" />
-          <span className="dx-muted">The full plan is copied into your Plans right after payment. It's yours to train with and edit; it can't be re-shared publicly.</span>
+          <span className="dx-muted">Pay with UPI (GPay, PhonePe, Paytm), card or netbanking. The full plan is copied into your Plans right after payment; it's yours to train with and edit, but it can't be re-shared publicly.</span>
         </div>
       </div>
     </MarketSheet>

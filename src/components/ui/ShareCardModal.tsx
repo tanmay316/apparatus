@@ -20,6 +20,7 @@ import {
 } from '@/lib/muscle-map';
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { compressImageFile } from '@/utils/image-compression';
+import { lockBodyScroll } from '@/lib/scroll-lock';
 
 type SetEntry = { completed?: boolean; reps?: number; weight?: number; seconds?: number };
 
@@ -472,11 +473,10 @@ export function ShareCardModal({ data, onClose }: Props) {
       else if (e.key === 'ArrowLeft') cycle(-1);
       else if (e.key === 'ArrowRight') cycle(1);
     };
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockBodyScroll();
     window.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = prevOverflow;
+      unlock();
       window.removeEventListener('keydown', onKey);
     };
   }, [onClose]);

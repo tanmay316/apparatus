@@ -2,14 +2,14 @@
  * Nutrition API Service.
  * Handles all communication with the Python FastAPI backend.
  */
-import { auth } from '@/lib/firebase';
+import { getSignedInUser } from '@/lib/firebase';
 import { isProRequired } from '@/services/billing';
 import { useSubscriptionStore } from '@/stores/subscription-store';
 
 const API_BASE = import.meta.env.VITE_NUTRITION_API_URL || 'http://localhost:8000/api/v1';
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const user = auth.currentUser;
+  const user = await getSignedInUser();
   if (!user) throw new Error('Not authenticated');
   const token = await user.getIdToken();
   return {
@@ -151,6 +151,68 @@ export async function sendChatMessage(
     body: JSON.stringify({ message, session_id: sessionId }),
     signal,
   });
+}
+
+export type ChatStreamEvent =
+  | { type: 'session'; session_id: number }
+  | { type: 'status'; text: string }
+  | { type: 'delta'; text: string }
+  | { type: 'replace'; text: string };
+
+/**
+ * Coach reply streamed token by token (NDJSON). Calls `onEvent` as text arrives and resolves with the
+ * saved message. Falls back to the non-streaming endpoint on servers that don't have /chat/stream yet.
+ */
+export async function streamChatMessage(
+  message: string,
+  sessionId: number | undefined,
+  signal: AbortSignal | undefined,
+  onEvent: (e: ChatStreamEvent) => void,
+): Promise<ChatMessageResponse> {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${API_BASE}/nutrition/chat/stream`, {
+    method: 'POST',
+    cache: 'no-store',
+    headers,
+    body: JSON.stringify({ message, session_id: sessionId }),
+    signal,
+  });
+  if (res.status === 404 || res.status === 405) return sendChatMessage(message, sessionId, signal);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    if (res.status === 402 && isProRequired(err.detail)) {
+      useSubscriptionStore.getState().openPaywall(err.detail.message);
+      throw new ApiError(err.detail.message, 402);
+    }
+    throw new ApiError(typeof err.detail === 'string' ? err.detail : `API Error ${res.status}`, res.status);
+  }
+  if (!res.body) return res.json();
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let done: ChatMessageResponse | null = null;
+  const handle = (line: string) => {
+    if (!line.trim()) return;
+    let ev: any;
+    try { ev = JSON.parse(line); } catch { return; }
+    if (ev.type === 'done') done = ev as ChatMessageResponse;
+    else onEvent(ev as ChatStreamEvent);
+  };
+  for (;;) {
+    const { value, done: finished } = await reader.read();
+    if (finished) break;
+    buffer += decoder.decode(value, { stream: true });
+    let nl = buffer.indexOf('\n');
+    while (nl >= 0) {
+      handle(buffer.slice(0, nl));
+      buffer = buffer.slice(nl + 1);
+      nl = buffer.indexOf('\n');
+    }
+  }
+  handle(buffer + decoder.decode());
+  if (!done) throw new ApiError('The coach stopped responding. Please try again.', 0);
+  return done;
 }
 
 export async function getChatSessions(): Promise<ChatSessionItem[]> {

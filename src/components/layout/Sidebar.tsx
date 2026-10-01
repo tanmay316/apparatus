@@ -12,6 +12,7 @@ import { isAdminUser } from '@/lib/firebase';
 import { useUnreadAdminAlerts } from '@/services/admin-alerts';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import { NAV_SECTIONS, SETTINGS_ITEM, isNavItemActive, type NavItem } from './nav-config';
+import { lockBodyScroll } from '@/lib/scroll-lock';
 
 export const SIDEBAR_WIDTH = 256;
 
@@ -155,10 +156,9 @@ export function Sidebar() {
   useEffect(() => {
     if (!sidebarOpen || isDesktop) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeSidebar(); };
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockBodyScroll();
     window.addEventListener('keydown', onKey);
-    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+    return () => { unlock(); window.removeEventListener('keydown', onKey); };
   }, [sidebarOpen, isDesktop, closeSidebar]);
 
   if (isDesktop) {

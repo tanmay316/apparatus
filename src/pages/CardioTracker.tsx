@@ -30,6 +30,7 @@ import { calculateCorrectedElevation } from '@/services/elevation-service';
 import { NativeWorkoutLocation } from '@/utils/native-workout-location';
 import { Capacitor } from '@capacitor/core';
 import type { CardioActivityType, CardioActivity } from '@/types';
+import { lockBodyScroll } from '@/lib/scroll-lock';
 
 function toShareData(a: Partial<CardioActivity>, extra: Partial<CardioShareData> = {}): CardioShareData {
   return {
@@ -229,9 +230,7 @@ export function CardioTracker() {
   // Live screens are full-screen overlays; stop the page underneath from scrolling.
   useEffect(() => {
     if (screen !== 'ready' && screen !== 'tracking') return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    return lockBodyScroll();
   }, [screen]);
 
   // Timer - counts up continuously when active, halts cleanly when manually paused or auto-paused

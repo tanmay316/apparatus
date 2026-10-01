@@ -12,16 +12,16 @@ import { analyzeCardio } from '@/lib/cardio-analysis';
 import type { CardioActivity } from '@/types';
 import { WorkoutAnalysisView } from './WorkoutAnalysisView';
 import { CardioAnalysisView } from './CardioAnalysisView';
+import { lockBodyScroll } from '@/lib/scroll-lock';
 
 function AnalysisSheet({ title, subtitle, onClose, footer, children }: {
   title: string; subtitle?: string; onClose: () => void; footer?: ReactNode; children: ReactNode;
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockBodyScroll();
     window.addEventListener('keydown', onKey);
-    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey); };
+    return () => { unlock(); window.removeEventListener('keydown', onKey); };
   }, [onClose]);
 
   return createPortal(

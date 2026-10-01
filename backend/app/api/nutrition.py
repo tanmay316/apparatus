@@ -6,22 +6,24 @@ Nutrition & coaching API.
 - /food/log     : persist a card the user chose to track
 """
 import asyncio
+import json
 import logging
 from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.agents.coach import training
-from app.agents.coach.agent import run_coach
+from app.agents.coach.agent import run_coach, stream_coach
 from app.agents.coach.tools import ToolContext, generate_meal_plan as build_meal_plan
 from app.core.guardrails import check_rate_limit, validate_chat_message, validate_image
 from app.core.security import get_current_user
 from app.database.models import ChatMessage as ChatMessageRow, ChatSession
-from app.db.session import get_db
+from app.db.session import SessionLocal, get_db
 from app.middleware.api_keys import resolve_api_keys
 from app.providers.llm import get_llm_providers
 from app.repositories.chat_repository import ChatRepository
@@ -278,12 +280,8 @@ def _context_text(db: Session, uid: str, goals: dict, prefs: dict, training_data
     return "\n".join(f"- {l}" for l in lines if l)
 
 
-@router.post("/chat", response_model=ChatResponse)
-async def chat(
-    req: ChatRequest,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+async def _start_chat(req: ChatRequest, current_user: dict, db: Session):
+    """Checks + session bookkeeping shared by /chat and /chat/stream. Returns (session_id, history) or a ChatResponse."""
     uid = current_user["uid"]
     rate = check_rate_limit(uid, limit=20, window_seconds=60)
     if not rate.allowed:
@@ -297,9 +295,7 @@ async def chat(
         raise HTTPException(status_code=400, detail=verdict.message)
 
     await enforce_quota(current_user, "ai_call")
-    keys = await resolve_api_keys(current_user)
-    user_repo = UserRepository(db)
-    user_repo.get_or_create_user(uid, current_user.get("email", ""))
+    UserRepository(db).get_or_create_user(uid, current_user.get("email", ""))
 
     chat_repo = ChatRepository(db)
     session = chat_repo.get_session(req.session_id) if req.session_id else None
@@ -311,42 +307,119 @@ async def chat(
     history = [{"role": m.role, "content": m.content} for m in chat_repo.get_recent_messages(session.id, limit=14)]
     chat_repo.add_message(session.id, "user", req.message)
     db.commit()
+    return session.id, history
 
+
+async def _coach_context(db: Session, current_user: dict, keys: dict):
+    uid = current_user["uid"]
     today = date.today().isoformat()
     goals = user_goals(db, uid)
     prefs = _prefs(db, uid)
     ctx = ToolContext(db=db, uid=uid, token=current_user.get("_token"), keys=keys, llm=_llm(keys), goals=goals, prefs=prefs, today=today)
     training_data = await ctx.training_data()
-    context = _context_text(db, uid, goals, prefs, training_data, today)
+    return ctx, _context_text(db, uid, goals, prefs, training_data, today)
 
-    try:
-        result = await asyncio.wait_for(run_coach(ctx, req.message, history, context), timeout=90)
-    except Exception as exc:
-        db.rollback()
-        logger.error("Coach failed for %s: %s", uid, exc, exc_info=True)
-        from app.agents.coach.agent import CoachResult
-        from app.core.guardrails import FALLBACK_REPLY
-        result = CoachResult(answer=FALLBACK_REPLY)
-        refund_quota(uid, "ai_call")
 
+def _save_reply(db: Session, session_id: int, result) -> ChatResponse:
     card = result.nutrition_card
     metadata = {"tools": result.tools_used}
     if card:
         metadata["nutrition_data"] = card
     if result.reasoning:
         metadata["reasoning"] = result.reasoning
-    assistant = chat_repo.add_message(session.id, "assistant", result.answer, metadata=metadata)
+    assistant = ChatRepository(db).add_message(session_id, "assistant", result.answer, metadata=metadata)
     db.commit()
-
     return ChatResponse(
         response=result.answer,
         reasoning=result.reasoning,
-        session_id=session.id,
+        session_id=session_id,
         nutritionData=card,
         message_id=f"msg-{assistant.id}",
         tools_used=result.tools_used,
         profile_updated=result.profile_updated,
     )
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(
+    req: ChatRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    started = await _start_chat(req, current_user, db)
+    if isinstance(started, ChatResponse):
+        return started
+    session_id, history = started
+    keys = await resolve_api_keys(current_user)
+    ctx, context = await _coach_context(db, current_user, keys)
+
+    try:
+        result = await asyncio.wait_for(run_coach(ctx, req.message, history, context), timeout=90)
+    except Exception as exc:
+        db.rollback()
+        logger.error("Coach failed for %s: %s", current_user["uid"], exc, exc_info=True)
+        from app.agents.coach.agent import CoachResult
+        from app.core.guardrails import FALLBACK_REPLY
+        result = CoachResult(answer=FALLBACK_REPLY)
+        refund_quota(current_user["uid"], "ai_call")
+
+    return _save_reply(db, session_id, result)
+
+
+def _line(event: dict) -> bytes:
+    return (json.dumps(event, default=str) + "\n").encode("utf-8")
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    req: ChatRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Same as /chat, but streams NDJSON events: session → status* → delta* → (replace) → done."""
+    started = await _start_chat(req, current_user, db)
+    headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+    if isinstance(started, ChatResponse):
+        blocked = started.model_dump()
+
+        async def refused():
+            yield _line({"type": "delta", "text": blocked["response"]})
+            yield _line({"type": "done", **blocked})
+        return StreamingResponse(refused(), media_type="application/x-ndjson", headers=headers)
+
+    session_id, history = started
+    keys = await resolve_api_keys(current_user)
+    uid = current_user["uid"]
+
+    async def events():
+        # The request-scoped session may be closed once the response starts, so use our own.
+        sdb = SessionLocal()
+        try:
+            yield _line({"type": "session", "session_id": session_id})
+            yield _line({"type": "status", "text": "Thinking"})
+            ctx, context = await _coach_context(sdb, current_user, keys)
+            result = None
+            try:
+                async for event in stream_coach(ctx, req.message, history, context):
+                    if event["type"] == "done":
+                        result = event["result"]
+                    else:
+                        yield _line(event)
+            except Exception as exc:
+                sdb.rollback()
+                logger.error("Coach stream failed for %s: %s", uid, exc, exc_info=True)
+            if result is None:
+                from app.agents.coach.agent import CoachResult
+                from app.core.guardrails import FALLBACK_REPLY
+                result = CoachResult(answer=FALLBACK_REPLY)
+                refund_quota(uid, "ai_call")
+                yield _line({"type": "replace", "text": FALLBACK_REPLY})
+            saved = _save_reply(sdb, session_id, result)
+            yield _line({"type": "done", **saved.model_dump()})
+        finally:
+            sdb.close()
+
+    return StreamingResponse(events(), media_type="application/x-ndjson", headers=headers)
 
 
 # ─── Chat sessions ───────────────────────────────────────────────

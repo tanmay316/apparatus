@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
-import { ArrowLeft, Menu, Search, Settings } from 'lucide-react';
+import { ArrowLeft, Menu, Search, Settings, Store } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
@@ -113,6 +113,14 @@ export function Topbar() {
           <button onClick={() => navigate('/search')} className={`${iconBtn} lg:hidden`} aria-label="Search">
             <Search size={19} />
           </button>
+          <Link
+            to="/marketplace"
+            className={`${iconBtn} ${pathname.startsWith('/marketplace') ? '!text-bone bg-bone/5' : ''}`}
+            aria-label="Marketplace"
+            title="Marketplace"
+          >
+            <Store size={19} />
+          </Link>
           {profile && (
             <>
               <NotificationBell />

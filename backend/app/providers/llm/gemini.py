@@ -9,7 +9,7 @@ from __future__ import annotations
 import base64
 import logging
 import time
-from typing import List, Optional
+from typing import AsyncIterator, List, Optional
 
 from google import genai
 from google.genai import types as genai_types
@@ -91,6 +91,50 @@ class GeminiProvider(BaseLLMProvider):
         ]
         return await self._generate(contents, self._config(system_prompt, temperature, max_tokens, json_mode), "chat",
                                      settings.LLM_CALL_TIMEOUT)
+
+    async def stream_chat(self, messages: List[ChatMessage], system_prompt: Optional[str] = None,
+                          temperature: float = 0.7, max_tokens: Optional[int] = None) -> AsyncIterator[str]:
+        contents = [
+            genai_types.Content(
+                role="model" if m.role == "assistant" else "user",
+                parts=[genai_types.Part.from_text(text=m.content)],
+            )
+            for m in messages if m.role != "system"
+        ]
+        config = self._config(system_prompt, temperature, max_tokens, False)
+        models = [m for m in self.chat_models if not registry.is_dead("gemini", m)]
+        last_error = "no model available"
+        for model in models:
+            strip = registry.ThinkStripper()
+            started = False
+            try:
+                stream = await self.client.aio.models.generate_content_stream(model=model, contents=contents, config=config)
+                async for chunk in stream:
+                    try:
+                        piece = chunk.text or ""
+                    except Exception:
+                        piece = ""
+                    text = strip.feed(piece) if piece else ""
+                    if text:
+                        started = True
+                        yield text
+                tail = strip.flush()
+                if tail:
+                    started = True
+                    yield tail
+                if started:
+                    return
+                last_error = f"{model}: empty or blocked reply"
+            except Exception as exc:
+                if started:
+                    return
+                code = getattr(exc, "code", None)
+                message = str(exc)
+                if registry.is_model_gone_error(code if isinstance(code, int) else None, message):
+                    registry.mark_dead("gemini", model, message)
+                last_error = f"{model}: {message[:200]}"
+            logger.info("gemini stream failed: %s", last_error)
+        raise ProviderError(f"gemini: {last_error}")
 
     async def vision(self, prompt: str, image_base64: str, mime_type: str = "image/jpeg",
                      json_mode: bool = True, max_tokens: int = 2048) -> LLMResponse:

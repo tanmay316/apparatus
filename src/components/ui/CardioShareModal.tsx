@@ -17,6 +17,7 @@ import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/Rout
 import { computeSplits } from '@/lib/cardio-analysis';
 import { compressImageFile } from '@/utils/image-compression';
 import type { RoutePoint } from '@/types';
+import { lockBodyScroll } from '@/lib/scroll-lock';
 
 export interface CardioShareData {
   type: 'walk' | 'run' | 'cycle';
@@ -564,11 +565,10 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
       else if (e.key === 'ArrowLeft') cycle(-1);
       else if (e.key === 'ArrowRight') cycle(1);
     };
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockBodyScroll();
     window.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = prevOverflow;
+      unlock();
       window.removeEventListener('keydown', onKey);
     };
   }, [onClose]);

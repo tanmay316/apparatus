@@ -218,7 +218,26 @@ def _create_link(order_id: str, amount: int, title: str, notes: dict, ttl: int,
     if return_to == "web" and settings.PUBLIC_APP_URL.startswith("https://"):
         body["callback_url"] = f"{settings.PUBLIC_APP_URL.rstrip('/')}/purchase/{order_id}"
         body["callback_method"] = "get"
-    return _rzp("POST", "/payment_links", json=body)
+    try:
+        return _rzp("POST", "/payment_links", json={**body, "options": UPI_FIRST_CHECKOUT})
+    except RuntimeError:
+        # Accounts without custom checkout display reject "options"; the default page still offers UPI.
+        return _rzp("POST", "/payment_links", json=body)
+
+
+# Payment page opens on UPI (GPay, PhonePe, Paytm, any UPI app / QR), with cards, netbanking and wallets below.
+UPI_FIRST_CHECKOUT = {
+    "checkout": {
+        "method": {"upi": "1", "card": "1", "netbanking": "1", "wallet": "1"},
+        "config": {
+            "display": {
+                "blocks": {"upi": {"name": "Pay with UPI", "instruments": [{"method": "upi"}]}},
+                "sequence": ["block.upi"],
+                "preferences": {"show_default_blocks": True},
+            },
+        },
+    },
+}
 
 
 def create_checkout(user: dict, kind: str, item_id: str, return_to: str = "app") -> dict:

@@ -145,6 +145,42 @@ def strip_reasoning(text: str) -> Tuple[str, Optional[str]]:
     return _THINK_RE.sub("", text).strip(), reasoning
 
 
+class ThinkStripper:
+    """Streaming version of strip_reasoning: drops a leading <think>…</think> block from token chunks."""
+
+    OPEN, CLOSE = "<think>", "</think>"
+
+    def __init__(self) -> None:
+        self.buf = ""
+        self.state = "start"  # start → (think →) pass
+
+    def feed(self, chunk: str) -> str:
+        if self.state == "pass":
+            return chunk
+        self.buf += chunk
+        if self.state == "start":
+            head = self.buf.lstrip()
+            if not head or (len(head) < len(self.OPEN) and self.OPEN.startswith(head.lower())):
+                return ""
+            if head.lower().startswith(self.OPEN):
+                self.state = "think"
+            else:
+                self.state = "pass"
+                out, self.buf = head, ""
+                return out
+        idx = self.buf.lower().find(self.CLOSE)
+        if idx < 0:
+            return ""
+        rest = self.buf[idx + len(self.CLOSE):].lstrip()
+        self.buf, self.state = "", "pass"
+        return rest
+
+    def flush(self) -> str:
+        out = self.buf.lstrip() if self.state == "start" else ""
+        self.buf = ""
+        return out
+
+
 def extract_json(text: str):
     """First JSON object/array in a model reply (tolerates fences and chatter). Raises ValueError."""
     if text is None:

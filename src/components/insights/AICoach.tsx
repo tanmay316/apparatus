@@ -37,25 +37,54 @@ export function AskAIButton({ prompt, variant = 'app', label = 'Ask AI' }: { pro
   );
 }
 
-function SummaryBody({ s, askPrompt, cal }: { s: AISummary; askPrompt?: string; cal?: boolean }) {
+/** Characters of `total` shown so far; types out at ~120 chars/s when enabled. */
+function useReveal(total: number, enabled: boolean) {
+  const [shown, setShown] = useState(enabled ? 0 : total);
+  useEffect(() => {
+    if (!enabled) { setShown(total); return; }
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const n = Math.min(total, Math.round(((now - start) / 1000) * 120));
+      setShown(n);
+      if (n < total) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [total, enabled]);
+  return shown;
+}
+
+function SummaryBody({ s, askPrompt, cal, reveal }: { s: AISummary; askPrompt?: string; cal?: boolean; reveal?: boolean }) {
   const muted = cal ? 'cal-muted' : 'text-bone-dim';
+  const parts = [s.headline, ...s.points, s.action || ''];
+  const shown = useReveal(parts.reduce((n, p) => n + p.length, 0), !!reveal);
+  let budget = shown;
+  const [headline, ...rest] = parts.map(p => {
+    const out = p.slice(0, Math.max(0, budget));
+    budget -= p.length;
+    return out;
+  });
+  const action = rest.pop() || '';
+  const points = rest;
+  const done = shown >= parts.reduce((n, p) => n + p.length, 0);
   return (
     <>
-      <div className={`text-[16px] font-semibold leading-snug ${cal ? '' : 'text-bone'}`}>{s.headline}</div>
+      <div className={`text-[16px] font-semibold leading-snug ${cal ? '' : 'text-bone'}`}>{headline}</div>
       <ul className="mt-2 space-y-1.5">
-        {s.points.map((p, i) => (
+        {points.map((p, i) => p && (
           <li key={i} className={`flex gap-2 text-[13px] leading-relaxed ${muted}`}>
             <span className="mt-[7px] w-1.5 h-1.5 rounded-full shrink-0" style={{ background: '#d97706' }} />
             <span>{p}</span>
           </li>
         ))}
       </ul>
-      {s.action && (
+      {action && (
         <div className="mt-3 flex gap-2 items-start p-2.5 rounded-xl text-[13px] font-semibold" style={{ background: 'rgba(217,119,6,0.12)', color: cal ? 'var(--cal-text)' : 'rgb(var(--color-bone))' }}>
-          <ArrowRight size={15} className="shrink-0 mt-0.5" style={{ color: '#d97706' }} /> {s.action}
+          <ArrowRight size={15} className="shrink-0 mt-0.5" style={{ color: '#d97706' }} /> {action}
         </div>
       )}
-      {askPrompt && (
+      {askPrompt && done && (
         <div className="mt-3 flex items-center justify-between gap-2">
           <span className={`text-[10.5px] ${muted}`}>{s.source === 'fallback' ? 'Quick summary · the AI coach was busy' : 'AI coach · based on your numbers only'}</span>
           <AskAIButton variant={cal ? 'cal' : 'app'} label="Ask a follow-up" prompt={`${askPrompt}\n\nYour summary: ${s.headline}. ${s.points.join(' ')} Next: ${s.action}\n\nExplain this in more detail and tell me exactly what to do next.`} />
@@ -150,7 +179,7 @@ function SummaryCard({ kind, summaryKey, facts, askPrompt, variant = 'app', titl
   );
 
   if (status === 'empty') return null;
-  if (s) return <div className={shell} style={shellStyle}>{header}<SummaryBody s={s} askPrompt={askPrompt} cal={cal} /></div>;
+  if (s) return <div className={shell} style={shellStyle}>{header}<SummaryBody s={s} askPrompt={askPrompt} cal={cal} reveal={!!fresh && !fresh.cached} /></div>;
 
   if (status === 'loading' || (hasPro && (cached.isLoading || !tried.current))) {
     return (

@@ -17,10 +17,10 @@ import { MarketSheet } from './MarketSheet';
 import { parsePriceInput } from './PriceField';
 
 function PayoutSheet({ existing, onClose }: { existing: PayoutAccount | null; onClose: () => void }) {
-  const { user, profile } = useAuthStore();
+  const { user } = useAuthStore();
   const { showToast } = useUIStore();
-  const [legalName, setLegalName] = useState(existing?.legalName || profile?.displayName || '');
-  const [email, setEmail] = useState(existing?.email || user?.email || '');
+  const [legalName, setLegalName] = useState(existing?.legalName || '');
+  const [email, setEmail] = useState(existing?.email || '');
   const [phone, setPhone] = useState(existing?.phone || '');
   const [businessType, setBusinessType] = useState<PayoutAccount['businessType']>(existing?.businessType || 'individual');
   const [about, setAbout] = useState(existing?.about || '');
@@ -42,16 +42,16 @@ function PayoutSheet({ existing, onClose }: { existing: PayoutAccount | null; on
       <div className="space-y-4">
         <div>
           <label className="dx-label" htmlFor="po-name">Legal name (as on your bank account)</label>
-          <input id="po-name" className="dx-input w-full" value={legalName} maxLength={100} onChange={e => setLegalName(e.target.value)} />
+          <input id="po-name" className="dx-input w-full" value={legalName} maxLength={100} placeholder="Full name on your bank account" autoComplete="off" onChange={e => setLegalName(e.target.value)} />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="dx-label" htmlFor="po-email">Email</label>
-            <input id="po-email" type="email" className="dx-input w-full" value={email} maxLength={120} onChange={e => setEmail(e.target.value)} />
+            <input id="po-email" type="email" className="dx-input w-full" value={email} maxLength={120} placeholder="Where we send payout updates" autoComplete="off" onChange={e => setEmail(e.target.value)} />
           </div>
           <div>
             <label className="dx-label" htmlFor="po-phone">Phone</label>
-            <input id="po-phone" type="tel" className="dx-input w-full" value={phone} maxLength={16} placeholder="+91 98765 43210" onChange={e => setPhone(e.target.value.replace(/[^0-9+ ]/g, ''))} />
+            <input id="po-phone" type="tel" className="dx-input w-full" value={phone} maxLength={16} placeholder="Mobile number" autoComplete="off" onChange={e => setPhone(e.target.value.replace(/[^0-9+ ]/g, ''))} />
           </div>
         </div>
         <div>
@@ -63,7 +63,7 @@ function PayoutSheet({ existing, onClose }: { existing: PayoutAccount | null; on
         </div>
         <div>
           <label className="dx-label" htmlFor="po-about">What will you sell? (optional)</label>
-          <textarea id="po-about" className="dx-input w-full" rows={3} maxLength={500} value={about} onChange={e => setAbout(e.target.value)} placeholder="e.g. 12-week calisthenics plans, a paid running club, monthly 5K events" />
+          <textarea id="po-about" className="dx-input w-full" rows={3} maxLength={500} value={about} onChange={e => setAbout(e.target.value)} placeholder="e.g. Training plans, a paid running club, monthly events" />
         </div>
       </div>
     </MarketSheet>
@@ -81,7 +81,7 @@ function SellPlanSheet({ onClose }: { onClose: () => void }) {
   const plan = sellable.find(p => p.id === planId);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [price, setPrice] = useState('499');
+  const [price, setPrice] = useState('');
   const parsed = parsePriceInput(price, config);
 
   const pick = (id: string) => {
@@ -159,7 +159,7 @@ function SellPlanSheet({ onClose }: { onClose: () => void }) {
             </div>
             <div>
               <label className="dx-label" htmlFor="sp-price">Price (₹)</label>
-              <input id="sp-price" className="dx-input w-full" inputMode="numeric" value={price} onChange={e => setPrice(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))} />
+              <input id="sp-price" className="dx-input w-full" inputMode="numeric" value={price} placeholder="e.g. 499" onChange={e => setPrice(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))} />
               <p className={`text-[12px] mt-1 ${parsed.error ? 'text-red-500' : 'dx-muted'}`}>
                 {parsed.error || (parsed.value ? `You get ${formatInr(sellerShare(parsed.value, config.fees.coach))} per sale (${config.fees.coach}% platform fee).` : 'Set a price.')}
               </p>
@@ -237,6 +237,27 @@ export function SellerHub() {
   return (
     <div className="space-y-4">
       <StatusCard account={account} onSetup={() => setPayoutOpen(true)} />
+
+      {!active && (
+        <section className="dx-card p-4">
+          <div className="text-[15px] font-semibold mb-3">How selling works</div>
+          <ol className="space-y-3">
+            {[
+              { t: 'Set up payouts once', b: 'Tell us who to pay. Razorpay verifies your bank account (KYC) directly; we never see your bank details.' },
+              { t: 'Put a price on what you already make', b: 'Sell a training plan, charge a joining fee for your clan, or sell tickets for events and challenges.' },
+              { t: 'Get paid to your bank', b: `Buyers pay by UPI, card or netbanking. You keep ${100 - config.fees.coach}% of plan & clan sales and ${100 - config.fees.ticket}% of tickets; it settles to your bank automatically.` },
+            ].map((s, i) => (
+              <li key={s.t} className="flex gap-3">
+                <span className="w-6 h-6 rounded-full text-[12px] font-semibold flex items-center justify-center shrink-0 tabular" style={{ background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)' }}>{i + 1}</span>
+                <span className="min-w-0">
+                  <span className="block text-[14px] font-semibold">{s.t}</span>
+                  <span className="block text-[12.5px] dx-muted leading-snug mt-0.5">{s.b}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       <section className="grid grid-cols-3 gap-2 text-center">
         {[

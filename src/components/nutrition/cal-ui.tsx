@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Beef, Droplet, Flame, Leaf, Wheat, X } from 'lucide-react';
+import { useBodyScrollLock } from '@/lib/scroll-lock';
 
 export const MACRO_META = {
   calories: { label: 'Calories', unit: '', icon: Flame, color: 'var(--cal-text)' },
@@ -144,14 +145,7 @@ export function Ruler({ min, max, step, value, onChange, majorEvery = 10 }: {
   );
 }
 
-export function useLockBody(active = true) {
-  useEffect(() => {
-    if (!active) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
-  }, [active]);
-}
+export const useLockBody = useBodyScrollLock;
 
 /** Bottom sheet rendered in a portal above the page chrome. */
 export function CalSheet({ title, onClose, children, footer, z = 10020 }: {
@@ -177,7 +171,7 @@ export function CalSheet({ title, onClose, children, footer, z = 10020 }: {
             <button type="button" onClick={onClose} className="cal-icon-btn" aria-label="Close"><X size={18} /></button>
           </div>
         )}
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 18px 18px', overscrollBehavior: 'contain' }}>{children}</div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '8px 18px 18px', overscrollBehavior: 'contain' }}>{children}</div>
         {footer && <div style={{ padding: '10px 18px', paddingBottom: 'max(16px, env(safe-area-inset-bottom))', borderTop: '1px solid var(--cal-border)' }}>{footer}</div>}
       </motion.div>
     </div>,

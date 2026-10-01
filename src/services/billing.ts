@@ -1,4 +1,4 @@
-import { auth } from '@/lib/firebase';
+import { getSignedInUser } from '@/lib/firebase';
 
 const API_BASE = import.meta.env.VITE_NUTRITION_API_URL || 'http://localhost:8000/api/v1';
 
@@ -27,7 +27,7 @@ export function isProRequired(detail: unknown): detail is ProRequiredDetail {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const user = auth.currentUser;
+  const user = await getSignedInUser();
   if (!user) throw new Error('Not signed in');
   const res = await fetch(`${API_BASE}/billing${path}`, {
     ...init,

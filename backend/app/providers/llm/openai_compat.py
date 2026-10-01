@@ -6,9 +6,10 @@ discovery and automatic skipping of retired or rate-limited models.
 """
 from __future__ import annotations
 
+import json
 import logging
 import time
-from typing import List, Optional
+from typing import AsyncIterator, List, Optional
 
 import httpx
 
@@ -112,6 +113,61 @@ class OpenAICompatProvider(BaseLLMProvider):
         api_messages = [{"role": "system", "content": system_prompt}] if system_prompt else []
         api_messages += [{"role": m.role, "content": m.content} for m in messages]
         return await self._complete(api_messages, "chat", temperature, max_tokens, json_mode, settings.LLM_CALL_TIMEOUT)
+
+    async def stream_chat(self, messages: List[ChatMessage], system_prompt: Optional[str] = None,
+                          temperature: float = 0.7, max_tokens: Optional[int] = None) -> AsyncIterator[str]:
+        """Yields reply text as the model generates it (SSE). Falls through models until one starts."""
+        api_messages = [{"role": "system", "content": system_prompt}] if system_prompt else []
+        api_messages += [{"role": m.role, "content": m.content} for m in messages]
+        models = await self._models("chat")
+        if not models:
+            raise ProviderError(f"{self.provider_name}: no chat model available")
+        last_error = ""
+        for model in models:
+            payload = {"model": model, "messages": api_messages, "temperature": temperature, "stream": True}
+            if max_tokens:
+                payload["max_tokens"] = max_tokens
+            strip = registry.ThinkStripper()
+            started = False
+            try:
+                timeout = httpx.Timeout(settings.LLM_CALL_TIMEOUT, connect=10.0)
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream("POST", f"{self.base_url}/chat/completions", headers=self.headers, json=payload) as resp:
+                        if resp.status_code >= 400:
+                            body = (await resp.aread()).decode("utf-8", "ignore")[:600]
+                            if registry.is_model_gone_error(resp.status_code, body):
+                                registry.mark_dead(self.provider_name, model, body)
+                            last_error = f"{model}: HTTP {resp.status_code} {body[:200]}"
+                            logger.info("%s stream %s failed: %s", self.provider_name, model, last_error)
+                            continue
+                        async for line in resp.aiter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            data = line[5:].strip()
+                            if data == "[DONE]":
+                                break
+                            try:
+                                obj = json.loads(data)
+                            except ValueError:
+                                continue
+                            delta = ((obj.get("choices") or [{}])[0].get("delta") or {}).get("content") or ""
+                            text = strip.feed(delta) if isinstance(delta, str) and delta else ""
+                            if text:
+                                started = True
+                                yield text
+                tail = strip.flush()
+                if tail:
+                    started = True
+                    yield tail
+                if started:
+                    return
+                last_error = f"{model}: empty reply"
+            except httpx.HTTPError as exc:
+                if started:
+                    return
+                last_error = f"{model}: {type(exc).__name__}"
+            logger.info("%s stream %s failed: %s", self.provider_name, model, last_error[:200])
+        raise ProviderError(f"{self.provider_name}: {last_error or 'stream failed'}")
 
     async def vision(self, prompt: str, image_base64: str, mime_type: str = "image/jpeg",
                      json_mode: bool = True, max_tokens: int = 2048) -> LLMResponse:

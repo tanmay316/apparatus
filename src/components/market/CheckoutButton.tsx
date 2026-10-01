@@ -107,7 +107,7 @@ export function PaymentWaitSheet({ order, onClose, onPaid }: { order: OrderView;
           </div>
         )}
         {(paid || closed) && <button type="button" className="dx-btn mt-5 w-full" onClick={onClose}>Done</button>}
-        <p className="mt-4 text-center text-[11px] dx-muted">Payments are processed securely by Razorpay.</p>
+        <p className="mt-4 text-center text-[11px] dx-muted">Pay with any UPI app, card or netbanking. Processed securely by Razorpay.</p>
       </motion.div>
     </motion.div>,
     document.body,

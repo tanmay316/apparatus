@@ -1,4 +1,4 @@
-import { auth } from '@/lib/firebase';
+import { getSignedInUser } from '@/lib/firebase';
 import { isProRequired } from '@/services/billing';
 import { useSubscriptionStore } from '@/stores/subscription-store';
 
@@ -20,7 +20,7 @@ export interface WorkoutPlanPayload {
 }
 
 export async function generateWorkoutPlan(payload: WorkoutPlanPayload) {
-  const user = auth.currentUser;
+  const user = await getSignedInUser();
   if (!user) throw new Error('Must be logged in to generate plans');
 
   const token = await user.getIdToken();

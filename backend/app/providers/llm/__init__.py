@@ -4,7 +4,7 @@ LLM provider registry with ordered fallback.
 Order comes from LLM_PROVIDER_ORDER / VISION_PROVIDER_ORDER; each provider also
 walks its own list of candidate models (see app.providers.registry).
 """
-from typing import List, Optional
+from typing import AsyncIterator, List, Optional
 import asyncio
 import hashlib
 import logging
@@ -117,3 +117,61 @@ async def chat_with_fallback(
 
     logger.error("All LLM providers failed: %s", last_error[:300])
     return LLMResponse(content=f"All LLM providers failed: {last_error}", provider_used="none")
+
+
+async def stream_with_fallback(
+    messages: List[ChatMessage],
+    providers: List[BaseLLMProvider],
+    system_prompt: Optional[str] = None,
+    temperature: float = 0.7,
+    max_tokens: Optional[int] = None,
+    total_timeout: float = 45.0,
+    first_token_timeout: float = 25.0,
+    meta: Optional[dict] = None,
+) -> AsyncIterator[str]:
+    """Yields reply text as it is generated. Providers are tried in order until one produces a first
+    token; after that we stay with it (a mid-stream failure ends the reply early)."""
+    deadline = time.monotonic() + total_timeout
+    for provider in providers:
+        remaining = deadline - time.monotonic()
+        if remaining <= 1.0:
+            break
+        stream_fn = getattr(provider, "stream_chat", None)
+        try:
+            if stream_fn is None:
+                result = await asyncio.wait_for(provider.chat(messages, system_prompt, temperature, max_tokens, False), timeout=remaining)
+                if result.content and not result.content.startswith("Error:"):
+                    if meta is not None:
+                        meta["provider"] = result.provider_used
+                    yield result.content
+                    return
+                continue
+            agen = stream_fn(messages, system_prompt, temperature, max_tokens)
+            try:
+                first = await asyncio.wait_for(agen.__anext__(), timeout=min(remaining, first_token_timeout))
+            except StopAsyncIteration:
+                continue
+            if meta is not None:
+                meta["provider"] = provider.provider_name
+            yield first
+            try:
+                while True:
+                    left = deadline - time.monotonic()
+                    if left <= 0:
+                        logger.warning("LLM stream from %s cut at the time budget", provider.provider_name)
+                        break
+                    try:
+                        chunk = await asyncio.wait_for(agen.__anext__(), timeout=max(left, 1.0))
+                    except StopAsyncIteration:
+                        break
+                    yield chunk
+            except Exception as exc:
+                logger.warning("LLM stream from %s ended early: %s", provider.provider_name, str(exc)[:200])
+            finally:
+                await agen.aclose()
+            return
+        except asyncio.TimeoutError:
+            logger.warning("LLM stream provider %s: no first token in time", provider.provider_name)
+        except Exception as exc:
+            logger.warning("LLM stream provider %s failed: %s", provider.provider_name, str(exc)[:300])
+    logger.error("All LLM providers failed to stream")

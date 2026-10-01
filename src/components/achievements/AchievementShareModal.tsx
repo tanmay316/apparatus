@@ -14,6 +14,7 @@ import {
   type AchievementCardData, type CardFormat, type CardTheme,
 } from '@/lib/achievement-card';
 import type { Badge, UserStats } from '@/types';
+import { lockBodyScroll } from '@/lib/scroll-lock';
 
 interface Props {
   badge: Badge;
@@ -123,11 +124,10 @@ export function AchievementShareModal({ badge, earned, progress, earnedCount, to
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const unlock = lockBodyScroll();
     window.addEventListener('keydown', onKey);
     return () => {
-      document.body.style.overflow = prev;
+      unlock();
       window.removeEventListener('keydown', onKey);
     };
   }, [onClose]);

@@ -1,14 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2, Brain, ChevronDown, ChevronUp, History, Plus, Trash2, MessageSquare, Square, Flame, ChefHat, CalendarDays, Scale, Copy, Check, RefreshCw, Dumbbell, TrendingUp, Utensils } from 'lucide-react';
-import { sendChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionMessages, deleteChatSession, wakeUpServer, getNutritionImage, hasTrackableNutrition, ApiError, type FoodAnalyzeResponse, type ChatSessionItem } from '@/services/nutrition-api';
+import { streamChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionMessages, deleteChatSession, wakeUpServer, getNutritionImage, hasTrackableNutrition, ApiError, type FoodAnalyzeResponse, type ChatSessionItem } from '@/services/nutrition-api';
 import { compressImageFile } from '@/utils/image-compression';
 import { useUIStore } from '@/stores/ui-store';
 import { useHasPro, useSubscriptionStore } from '@/stores/subscription-store';
 import NutritionResultCard from './NutritionResultCard';
 import CameraScanner from './CameraScanner';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { ChatMarkdown } from './ChatMarkdown';
 
 interface ChatMessage {
   id: string;
@@ -24,6 +23,8 @@ interface ChatMessage {
   logged?: boolean;
   recipeData?: any;
   planData?: any;
+  /** Reply still arriving token by token. */
+  streaming?: boolean;
 }
 
 interface NutritionChatProps {
@@ -115,6 +116,7 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
   const [loggingMessageId, setLoggingMessageId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isWakingUp, setIsWakingUp] = useState(false);
+  const [statusText, setStatusText] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   
   // History Drawer State
@@ -366,6 +368,10 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
     const currentPreview = previewImage;
     setPreviewImage(null);
     setShowSuggestions(false);
+    setStatusText('');
+    // Id of the reply being streamed; once text has arrived we never resend the question.
+    const streamId = `ai-${Date.now()}`;
+    let streamed = false;
 
     const attemptRequest = async (retryCount = 0): Promise<void> => {
       try {
@@ -399,8 +405,35 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
             return newMessages;
           });
         } else {
-          // Text Chat Flow
-          const res = await sendChatMessage(userMsg.content, activeSessionId, controller.signal);
+          // Text Chat Flow: the reply streams in as it is generated.
+          let pending = '';
+          let frame = 0;
+          const flush = () => {
+            frame = 0;
+            if (!pending) return;
+            const add = pending;
+            pending = '';
+            setMessages(prev => prev.map(m => (m.id === streamId ? { ...m, content: m.content + add } : m)));
+          };
+          const res = await streamChatMessage(userMsg.content, activeSessionId, controller.signal, ev => {
+            if (ev.type === 'session') {
+              setSessionId(ev.session_id);
+              localStorage.setItem('apparatus_active_session_id', String(ev.session_id));
+            } else if (ev.type === 'status') {
+              setStatusText(ev.text);
+            } else if (!streamed) {
+              streamed = true;
+              setIsWakingUp(false);
+              setMessages(prev => [...prev, { id: streamId, role: 'assistant', content: ev.text, timestamp: new Date(), streaming: true }]);
+            } else if (ev.type === 'replace') {
+              pending = '';
+              setMessages(prev => prev.map(m => (m.id === streamId ? { ...m, content: ev.text } : m)));
+            } else {
+              pending += ev.text;
+              if (!frame) frame = requestAnimationFrame(flush);
+            }
+          });
+          if (frame) cancelAnimationFrame(frame);
           useSubscriptionStore.getState().bumpUsage('ai_call');
           if (res.session_id) {
             setSessionId(res.session_id);
@@ -408,25 +441,32 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
           }
           loadSessions();
           if (res.profile_updated) window.dispatchEvent(new Event('refresh-nutrition'));
-          
+
           setMessages(prev => {
-            const newMessages = [
-              ...prev,
-              {
-                id: res.message_id || `ai-${Date.now()}`,
-                role: 'assistant' as const,
-                content: res.response,
-                reasoning: res.reasoning || undefined,
-                nutritionData: hasTrackableNutrition(res.nutritionData) ? res.nutritionData! : undefined,
-                timestamp: new Date(),
-              },
-            ];
+            const final: ChatMessage = {
+              id: res.message_id || streamId,
+              role: 'assistant',
+              content: res.response,
+              reasoning: res.reasoning || undefined,
+              nutritionData: hasTrackableNutrition(res.nutritionData) ? res.nutritionData! : undefined,
+              timestamp: new Date(),
+            };
+            const newMessages = prev.some(m => m.id === streamId)
+              ? prev.map(m => (m.id === streamId ? final : m))
+              : [...prev, final];
             if (res.session_id) setCachedData(`apparatus_cached_messages_${res.session_id}`, newMessages);
             return newMessages;
           });
         }
         setIsWakingUp(false);
       } catch (err: any) {
+        if (streamed) {
+          // Keep what already arrived; just stop the cursor and say it was cut short.
+          setMessages(prev => prev.map(m => (m.id === streamId
+            ? { ...m, streaming: false, content: err.name === 'AbortError' ? `${m.content}\n\n_Stopped._` : `${m.content}\n\n_The reply was cut short. Try again._` }
+            : m)));
+          return;
+        }
         if (err.name === 'AbortError') {
           setIsWakingUp(false);
           setMessages(prev => [
@@ -477,6 +517,7 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
       await attemptRequest();
     } finally {
       setLoading(false);
+      setStatusText('');
       abortControllerRef.current = null;
     }
   };
@@ -694,28 +735,15 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
               {/* Text Content */}
               {msg.content && (
                 <div
-                  className={`px-4 py-2.5 text-[14px] leading-relaxed ${msg.role === 'user' ? 'rounded-[20px] rounded-br-md self-end' : 'rounded-[20px] rounded-tl-md self-start'}`}
+                  className={`px-4 py-2.5 text-[14px] leading-relaxed min-w-0 max-w-full ${msg.role === 'user' ? 'rounded-[20px] rounded-br-md self-end' : 'rounded-[20px] rounded-tl-md self-stretch'}`}
                   style={msg.role === 'user'
                     ? { background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' }
                     : { background: 'var(--dx-card)', border: '1px solid var(--dx-border)' }}
                 >
                   {msg.role === 'user' ? (
-                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                    <div className="whitespace-pre-wrap [overflow-wrap:anywhere]">{msg.content}</div>
                   ) : (
-                    <div className="text-[14px] leading-relaxed [&>p]:mb-3 last:[&>p]:mb-0 [&>ul]:list-disc [&>ul]:ml-5 [&>ul]:mb-3 [&>ol]:list-decimal [&>ol]:ml-5 [&>ol]:mb-3 [&>li]:mb-1 [&>h1]:font-semibold [&>h1]:mb-2 [&>h2]:font-semibold [&>h2]:mb-2 [&>h3]:font-semibold [&>h3]:mb-2 [&_strong]:font-semibold [&_table]:w-full [&_table]:text-[13px] [&_table]:text-left [&_table]:border-collapse [&_table]:mb-3 [&_th]:border-b [&_th]:border-[var(--dx-border-strong)] [&_th]:pb-2 [&_th]:font-semibold [&_th]:min-w-[90px] [&_td]:py-2 [&_td]:border-b [&_td]:border-[var(--dx-border)]">
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          table: ({node, ...props}) => (
-                            <div className="w-full overflow-x-auto scrollbar-none pb-2 mb-3 max-w-full">
-                              <table {...props} />
-                            </div>
-                          )
-                        }}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
+                    <ChatMarkdown text={msg.content} streaming={msg.streaming} />
                   )}
                 </div>
               )}
@@ -744,7 +772,7 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
               )}
 
               {/* Assistant message actions */}
-              {msg.role === 'assistant' && msg.id !== 'welcome' && !msg.nutritionData && msg.content && (
+              {msg.role === 'assistant' && msg.id !== 'welcome' && !msg.nutritionData && msg.content && !msg.streaming && (
                 <div className="flex items-center gap-0.5 self-start opacity-60 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                   <button
                     onClick={() => handleCopy(msg.id, msg.content)}
@@ -771,8 +799,8 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
           </motion.div>
         ))}
 
-        {/* Loading Indicator */}
-        {loading && (
+        {/* Loading Indicator (until the first words of the reply arrive) */}
+        {loading && !messages.some(m => m.streaming) && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
@@ -783,10 +811,13 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
             </div>
             <div className={`rounded-[20px] rounded-tl-md px-4 py-3.5 self-start ${isWakingUp ? 'w-64' : ''}`} style={{ background: 'var(--dx-card)', border: '1px solid var(--dx-border)' }}>
               {!isWakingUp ? (
-                <div className="flex items-center gap-1.5">
-                  {[0, 0.2, 0.4].map(delay => (
-                    <motion.div key={delay} animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay }} className="w-2 h-2 rounded-full" style={{ background: 'var(--dx-muted)' }} />
-                  ))}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {[0, 0.2, 0.4].map(delay => (
+                      <motion.div key={delay} animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1, repeat: Infinity, delay }} className="w-2 h-2 rounded-full" style={{ background: 'var(--dx-muted)' }} />
+                    ))}
+                  </div>
+                  {statusText && <span className="text-[12.5px] dx-muted">{statusText}…</span>}
                 </div>
               ) : (
                 <div className="flex flex-col gap-1.5">
