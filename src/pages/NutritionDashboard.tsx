@@ -139,7 +139,7 @@ function Thumb({ imageId }: { imageId: number | null }) {
 
 function MealCard({ meal, onClick }: { meal: LoggedMeal; onClick: () => void }) {
   return (
-    <motion.button layout type="button" onClick={onClick} className="cal-card" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: 10, textAlign: 'left' }}>
+    <motion.button layout type="button" onClick={onClick} className="cal-card" style={{ width: '100%', minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, padding: 10, textAlign: 'left' }}>
       <Thumb imageId={meal.image_id} />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -657,9 +657,9 @@ export default function NutritionDashboard() {
               {[0, 1].map(i => <div key={i} className="cal-skeleton" style={{ height: 112, borderRadius: 22 }} />)}
             </div>
           ) : hasEntries || isToday ? (
-            <div style={{ display: 'grid', gap: 18 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 18 }}>
               {isToday && pending.length > 0 && (
-                <div style={{ display: 'grid', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 10 }}>
                   <AnimatePresence initial={false}>
                     {pending.map(p => (
                       <PendingCard key={p.id} scan={p} onRetry={() => runScan(p)} onDismiss={() => setPending(list => list.filter(x => x.id !== p.id))} />
@@ -688,7 +688,7 @@ export default function NutritionDashboard() {
                       )}
                     </div>
                     {list.length > 0 ? (
-                      <div style={{ display: 'grid', gap: 10 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 10 }}>
                         {list.map(m => <MealCard key={m.id} meal={m} onClick={() => setOpenMeal(m)} />)}
                       </div>
                     ) : (

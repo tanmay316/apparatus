@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import {
-  BadgeIndianRupee, CalendarDays, ChevronRight, CircleHelp, LayoutGrid, Megaphone, Receipt, Search, Shield, ShieldCheck,
+  BadgeIndianRupee, CalendarDays, ChevronRight, CircleHelp, LayoutGrid, Receipt, Search, Shield, ShieldCheck,
   ShoppingBag, Store, Ticket, Trophy, Users, Wallet, X, Zap,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
@@ -15,13 +15,13 @@ import { isAmazonUrl, isSafeAffiliateUrl, withAffiliateTag, type AffiliateLink }
 import { ListingCard, ListingSheet } from '@/components/market/ListingSheet';
 import { MarketSheet } from '@/components/market/MarketSheet';
 import { SellerHub } from '@/components/market/SellerHub';
-import { SponsorHub } from '@/components/market/SponsorHub';
+import { HostHub } from '@/components/market/HostHub';
 import { SponsorBanner } from '@/components/market/SponsorBanner';
 import { ChallengeDetailSheet } from '@/components/community/ChallengeDetailSheet';
 import { EventDetailSheet } from '@/components/community/EventDetailSheet';
 
-type Tab = 'shop' | 'sell' | 'sponsor';
-const TABS: Tab[] = ['shop', 'sell', 'sponsor'];
+type Tab = 'shop' | 'host' | 'sell';
+const TABS: Tab[] = ['shop', 'host', 'sell'];
 type Category = 'all' | 'plans' | 'clubs' | 'events' | 'gear';
 const CATEGORIES: { id: Category; label: string; icon: typeof Store }[] = [
   { id: 'all', label: 'All', icon: LayoutGrid },
@@ -68,8 +68,8 @@ async function openExternal(url: string) {
 function HowItWorksSheet({ onClose, onGo }: { onClose: () => void; onGo: (t: Tab) => void }) {
   const rows = [
     { icon: ShoppingBag, t: 'Shop', b: 'Buy training plans made by coaches, join paid clans, and get tickets for events and challenges. Pay by UPI, card or netbanking; access unlocks instantly.' },
-    { icon: Wallet, t: 'Sell & earn', b: 'Coaches and gyms put a price on their plans, clans, events and challenges. Buyers pay through Razorpay and the money settles to your bank, minus a small fee.' },
-    { icon: Megaphone, t: 'Advertise', b: 'Brands pay to show their logo and a prize on a challenge. This is for businesses; regular users never need it.' },
+    { icon: Ticket, t: 'Host events', b: 'Run your own event or challenge with a ticket price. People pay in the app, Apparatus keeps a small fee for handling the payment, and you can download the list of everyone who joined.' },
+    { icon: Wallet, t: 'Sell & earn', b: 'Coaches sell training plans and charge a joining fee for their clans. Money settles to your bank, minus a small fee.' },
     { icon: ShoppingBag, t: 'Gear', b: 'Hand-picked products from partner stores like Amazon. You buy on their site at the normal price; we may earn a small commission.' },
   ];
   return (
@@ -85,8 +85,8 @@ function HowItWorksSheet({ onClose, onGo }: { onClose: () => void; onGo: (t: Tab
           </div>
         ))}
         <div className="grid grid-cols-2 gap-2 pt-1">
+          <button type="button" className="dx-btn-secondary" onClick={() => { onClose(); onGo('host'); }}>I host events</button>
           <button type="button" className="dx-btn-secondary" onClick={() => { onClose(); onGo('sell'); }}>I'm a coach</button>
-          <button type="button" className="dx-btn-secondary" onClick={() => { onClose(); onGo('sponsor'); }}>I'm a brand</button>
         </div>
       </div>
     </MarketSheet>
@@ -324,7 +324,7 @@ function Shop({ onGo }: { onGo: (t: Tab) => void }) {
 
 export function MarketplacePage() {
   const [params, setParams] = useSearchParams();
-  const raw = params.get('tab') as Tab | null;
+  const raw = params.get('tab') === 'sponsor' ? 'host' : (params.get('tab') as Tab | null);
   const tab: Tab = raw && TABS.includes(raw) ? raw : 'shop';
   const go = (t: Tab) => setParams(t === 'shop' ? {} : { tab: t }, { replace: true });
   const [help, setHelp] = useState(false);
@@ -342,8 +342,8 @@ export function MarketplacePage() {
         <div className="flex items-center gap-2">
           <div className="dx-segment flex-1 sm:w-[360px]" role="tablist">
             <button role="tab" aria-selected={tab === 'shop'} onClick={() => go('shop')}>Shop</button>
+            <button role="tab" aria-selected={tab === 'host'} onClick={() => go('host')}>Host events</button>
             <button role="tab" aria-selected={tab === 'sell'} onClick={() => go('sell')}>Sell & earn</button>
-            <button role="tab" aria-selected={tab === 'sponsor'} onClick={() => go('sponsor')}>Advertise</button>
           </div>
           <button type="button" onClick={() => setHelp(true)} className="dx-icon-btn dx-icon-btn--sm hidden sm:flex" aria-label="How the marketplace works"><CircleHelp size={17} /></button>
         </div>
@@ -351,8 +351,8 @@ export function MarketplacePage() {
 
       <motion.div variants={item} className="space-y-4">
         {tab === 'shop' && <Shop onGo={go} />}
+        {tab === 'host' && <HostHub />}
         {tab === 'sell' && <SellerHub />}
-        {tab === 'sponsor' && <SponsorHub />}
       </motion.div>
 
       <AnimatePresence>{help && <HowItWorksSheet key="help" onClose={() => setHelp(false)} onGo={go} />}</AnimatePresence>

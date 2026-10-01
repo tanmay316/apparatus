@@ -37,6 +37,8 @@ else:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allow_origins,
+    # Local dev (Vite serves https://localhost:3000), Capacitor's https://localhost, and LAN testing.
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d{1,5})?$",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

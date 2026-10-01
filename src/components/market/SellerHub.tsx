@@ -16,7 +16,7 @@ import { useMarketConfig, usePayoutAccount } from './CheckoutButton';
 import { MarketSheet } from './MarketSheet';
 import { parsePriceInput } from './PriceField';
 
-function PayoutSheet({ existing, onClose }: { existing: PayoutAccount | null; onClose: () => void }) {
+export function PayoutSheet({ existing, onClose }: { existing: PayoutAccount | null; onClose: () => void }) {
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
   const [legalName, setLegalName] = useState(existing?.legalName || '');
@@ -312,10 +312,9 @@ export function SellerHub() {
             <div className="text-[15px] font-semibold mb-1">Charge for clans, events and challenges</div>
             <ul className="dx-muted space-y-1 list-disc pl-5">
               <li>Clan settings → <b>Paid membership</b> for a one-time join fee.</li>
-              <li>When creating or editing an event → <b>Ticket price</b>.</li>
-              <li>When creating or editing a challenge → <b>Entry fee</b>.</li>
+              <li>Paid events and challenges: use the <b>Host events</b> tab to create them and download who joined.</li>
             </ul>
-            <button type="button" className="dx-link mt-2" onClick={() => navigate('/community')}>Go to Community</button>
+            <button type="button" className="dx-link mt-2" onClick={() => navigate('/marketplace?tab=host')}>Go to Host events</button>
           </section>
         </>
       )}
