@@ -1,3 +1,4 @@
+from app.core.config import settings
 """
 Shared food detection prompt used by all vision providers.
 Centralised here so changes apply everywhere at once.
@@ -280,6 +281,7 @@ Schema:
   ]
 }
 """
+FOOD_DETECTION_PROMPT = FOOD_DETECTION_PROMPT.replace("Apparatus", settings.APP_NAME)
 
 
 def build_food_prompt(user_note: str = "") -> str:

@@ -2,6 +2,7 @@ import re
 import time
 import threading
 from datetime import datetime, timezone
+from app.core.config import settings
 from app.core.firebase import get_firestore_client, get_messaging_client
 
 # Keep track of when the server started to avoid sending notifications for old messages
@@ -124,7 +125,7 @@ def process_notification(doc_data, doc_id, is_app_notification=False, is_initial
         return
 
     if is_app_notification:
-        title = _clip(doc_data.get("title") or "Apparatus Alert", 150)
+        title = _clip(doc_data.get("title") or settings.APP_NAME, 150)
         body = _clip(doc_data.get("body") or "You have a new alert", 500)
         link = _safe_link(doc_data.get("link", ""))
         extra_type = _clip(doc_data.get("type", "alert"), 40)
@@ -133,7 +134,7 @@ def process_notification(doc_data, doc_id, is_app_notification=False, is_initial
         sender_id = doc_data.get("senderId", "")
         # Self-addressed docs are the app's own reminders/achievements.
         sender_name = "" if sender_id == receiver_id else _sender_display_name(sender_id)
-        title = f"New message from {sender_name}" if sender_name else "Apparatus Notification"
+        title = f"New message from {sender_name}" if sender_name else settings.APP_NAME
         body = _clip(doc_data.get("message") or "You have a new notification", 500)
         extra = doc_data.get("extra") or {}
         if not isinstance(extra, dict):

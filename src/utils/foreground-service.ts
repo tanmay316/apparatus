@@ -72,7 +72,8 @@ export async function startWorkoutForegroundService(type: ForegroundServiceType,
       title,
       body,
       smallIcon: 'ic_notification',
-      serviceType: type === 'cardio' ? ServiceType.Location : undefined,
+      // Android FGS types: location (8) for GPS cardio, health (256) for the gym workout timer.
+      serviceType: type === 'cardio' ? ServiceType.Location : (256 as ServiceType),
       buttons: [
         { id: 1, title: isPaused ? 'RESUME' : 'PAUSE' },
         { id: 2, title: 'STOP' },
@@ -98,6 +99,7 @@ export async function updateWorkoutForegroundService(type: ForegroundServiceType
       title,
       body,
       smallIcon: 'ic_notification',
+      serviceType: type === 'cardio' ? ServiceType.Location : (256 as ServiceType),
       buttons: [
         { id: 1, title: isPaused ? 'RESUME' : 'PAUSE' },
         { id: 2, title: 'STOP' },

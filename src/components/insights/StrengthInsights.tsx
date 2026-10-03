@@ -9,6 +9,7 @@ import { CustomSelect } from '@/components/ui/CustomSelect';
 import { ProBadge, ProLock } from './ProLock';
 import { AskAIButton } from './AICoach';
 import { niceTicks, ScrollChart } from '@/components/ui/ScrollChart';
+import { BRAND } from '@/lib/brand';
 
 const tooltipStyle = { borderRadius: 12, border: '1px solid rgb(var(--color-bone) / 0.1)', background: 'rgb(var(--color-ink-2))', color: 'rgb(var(--color-bone))', fontSize: 12 };
 const tick = { fontSize: 10.5, fill: 'rgb(var(--color-bone-dim))' };
@@ -225,7 +226,7 @@ export function StrengthInsightsPanel({ workouts, imperial }: { workouts: Workou
         <h3 className="text-[15px] font-semibold text-bone flex items-center gap-2">Strength insights <ProBadge /></h3>
         <p className="text-xs text-bone-dim mt-0.5">Recovery, training load, lift progression, PRs and muscle balance</p>
       </div>
-      <ProLock title="Strength insights" reason="Track muscle recovery, training load, estimated 1RM progression, every PR and muscle balance with Apparatus Pro." maxHeight={520}>
+      <ProLock title="Strength insights" reason={`Track muscle recovery, training load, estimated 1RM progression, every PR and muscle balance with ${BRAND.name} Pro.`} maxHeight={520}>
         <StrengthInsightsBody workouts={workouts} imperial={imperial} />
       </ProLock>
     </section>

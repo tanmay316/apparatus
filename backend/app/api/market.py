@@ -26,6 +26,14 @@ class QuoteRequest(BaseModel):
     amount_inr: int = Field(..., ge=100, le=1_000_000)
 
 
+class SellerApplyRequest(BaseModel):
+    legal_name: str = Field(..., min_length=2, max_length=100)
+    email: str = Field(..., min_length=5, max_length=120)
+    business_type: str = Field(..., pattern="^(individual|business)$")
+    about: str = Field("", max_length=500)
+    terms_version: int
+
+
 def _limit(uid: str, key: str, limit: int, window: int) -> None:
     rate = check_rate_limit(f"{uid}:market:{key}", limit=limit, window_seconds=window)
     if not rate.allowed:
@@ -58,6 +66,12 @@ async def market_config():
 async def checkout(req: CheckoutRequest, current_user: dict = Depends(get_current_user)):
     _limit(current_user["uid"], "checkout", 8, 600)
     return await _call(market.create_checkout, current_user, req.kind, req.item_id, req.return_to)
+
+
+@router.post("/seller/apply")
+async def seller_apply(req: SellerApplyRequest, current_user: dict = Depends(get_current_user)):
+    _limit(current_user["uid"], "seller-apply", 5, 3600)
+    return await _call(market.apply_seller, current_user, req.model_dump())
 
 
 @router.post("/orders/{order_id}/refresh")

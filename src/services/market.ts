@@ -1,5 +1,5 @@
 import {
-  addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc,
+  addDoc, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp,
   updateDoc, where, type Timestamp,
 } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
@@ -18,10 +18,14 @@ export interface MarketConfig {
   fees: { ticket: number; coach: number };
   minPrice: number;
   maxPrice: number;
+  seller: { minAccountDays: number; newSellerMonthlyLimit: number; trustedAfterSales: number; termsVersion: number };
 }
 
 /** Used until /market/config answers; mirrors the backend defaults. */
-export const DEFAULT_MARKET_CONFIG: MarketConfig = { enabled: false, fees: { ticket: 10, coach: 20 }, minPrice: 19, maxPrice: 50000 };
+export const DEFAULT_MARKET_CONFIG: MarketConfig = {
+  enabled: false, fees: { ticket: 10, coach: 20 }, minPrice: 19, maxPrice: 50000,
+  seller: { minAccountDays: 7, newSellerMonthlyLimit: 10000, trustedAfterSales: 10, termsVersion: 1 },
+};
 
 export interface OrderView {
   orderId: string;
@@ -74,6 +78,7 @@ export async function openPaymentPage(url: string | null | undefined, preopened?
     return;
   }
   if (preopened && !preopened.closed) {
+    preopened.opener = null;
     preopened.location.href = url!;
     return;
   }
@@ -106,6 +111,8 @@ export interface PayoutAccount {
   status: PayoutStatus;
   razorpayAccountId?: string;
   adminNote?: string;
+  trusted?: boolean;
+  termsVersion?: number;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -119,20 +126,19 @@ export async function getPayoutAccount(uid: string): Promise<PayoutAccount | nul
   return snap.exists() ? (snap.data() as PayoutAccount) : null;
 }
 
-export async function savePayoutApplication(uid: string, input: Pick<PayoutAccount, 'legalName' | 'email' | 'phone' | 'businessType' | 'about'>, existing: PayoutAccount | null) {
-  await setDoc(doc(db, 'payout_accounts', uid), {
-    uid,
-    legalName: input.legalName.trim().slice(0, 100),
-    email: input.email.trim().slice(0, 120),
-    phone: input.phone.trim().slice(0, 16),
-    businessType: input.businessType,
-    about: (input.about || '').trim().slice(0, 500),
-    status: 'pending',
-    razorpayAccountId: existing?.razorpayAccountId || '',
-    adminNote: existing?.adminNote || '',
-    createdAt: existing?.createdAt || serverTimestamp(),
-    updatedAt: serverTimestamp(),
+/** Seller sign-up. The backend checks verified email + phone (from the ID token), account age, terms and bans. */
+export const applyAsSeller = (input: { legalName: string; email: string; businessType: PayoutAccount['businessType']; about: string; termsVersion: number }) =>
+  request<{ status: PayoutStatus }>('/seller/apply', {
+    method: 'POST',
+    body: JSON.stringify({
+      legal_name: input.legalName.trim(), email: input.email.trim(), business_type: input.businessType,
+      about: input.about.trim().slice(0, 500), terms_version: input.termsVersion,
+    }),
   });
+
+export async function setPayoutTrusted(uid: string, trusted: boolean) {
+  await updateDoc(doc(db, 'payout_accounts', uid), { trusted, updatedAt: serverTimestamp() });
+  await logAdminAction(trusted ? 'payout.trusted' : 'payout.untrusted', 'payout_account', uid, {});
 }
 
 export async function listPayoutAccounts(): Promise<PayoutAccount[]> {

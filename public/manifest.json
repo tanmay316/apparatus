@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "short_name": "APPARATUS",
-  "name": "APPARATUS — Multi-User Fitness Platform",
-  "description": "Track workouts, build strength, follow friends. Calisthenics, gym, and bodyweight training in one place.",
+  "short_name": "{{APP_NAME}}",
+  "name": "{{APP_NAME}}",
+  "description": "{{APP_DESCRIPTION}}",
   "icons": [
     {
       "src": "/app-icon-192.png",

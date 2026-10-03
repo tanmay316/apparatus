@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Flame, ChevronRight } from 'lucide-react';
 import { getBadge } from '@/lib/badges';
+import { BRAND } from '@/lib/brand';
 
 interface XPPanelProps {
   xp: number;
@@ -13,7 +14,7 @@ const LEVELS = [
   { min: 0, title: 'Ground Zero' },
   { min: 100, title: 'Bar Novice' },
   { min: 500, title: 'Skill Seeker' },
-  { min: 1400, title: 'Apparatus Master' },
+  { min: 1400, title: `${BRAND.name} Master` },
   { min: 3000, title: 'Iron Will' },
   { min: 5000, title: 'Peak Form' },
 ];

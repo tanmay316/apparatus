@@ -32,6 +32,9 @@ self.addEventListener('fetch', (event) => {
   // Never intercept cross-origin calls (Firebase, YouTube, map tiles, backend API).
   if (url.origin !== self.location.origin) return;
 
+  // Static pages (privacy, terms, account deletion) are not the app shell; don't cache them as one.
+  if (/\.html$/.test(url.pathname) && url.pathname !== '/index.html') return;
+
   // SPA navigations: network first, fall back to the cached shell when offline.
   if (request.mode === 'navigate') {
     event.respondWith(
@@ -61,16 +64,16 @@ self.addEventListener('fetch', (event) => {
 
 /* Web Push Notification Delivery (Supports iOS 16.4+ Home Screen PWA without Apple Dev Program) */
 self.addEventListener('push', (event) => {
-  let data = { title: 'APPARATUS', body: 'You have a new update.' };
+  let data = { title: 'Apparatus', body: 'You have a new update.' };
   if (event.data) {
     try {
       data = event.data.json();
     } catch {
-      data = { title: 'APPARATUS', body: event.data.text() };
+      data = { title: 'Apparatus', body: event.data.text() };
     }
   }
 
-  const title = data.title || data.notification?.title || 'APPARATUS';
+  const title = data.title || data.notification?.title || 'Apparatus';
   const body = data.body || data.notification?.body || '';
   const options = {
     body,

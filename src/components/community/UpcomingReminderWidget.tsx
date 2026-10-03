@@ -11,6 +11,7 @@ import { ChallengeDetailSheet } from './ChallengeDetailSheet';
 import { EventDetailSheet } from './EventDetailSheet';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import { BRAND } from '@/lib/brand';
 
 interface UpcomingItem {
   id: string;
@@ -142,7 +143,7 @@ export function UpcomingReminderWidget() {
           await setDoc(doc(db, 'notifications', `reminder_${item.id}_${user.uid}`), {
             receiverId: user.uid,
             senderId: user.uid,
-            senderName: 'Apparatus Community',
+            senderName: `${BRAND.name} Community`,
             senderPhoto: '',
             type: 'reminder',
             message: `⏰ "${item.title}" starts in ${hoursLeft} hours! Tap to view details.`,

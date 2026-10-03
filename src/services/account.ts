@@ -14,7 +14,7 @@ import {
   limit,
 } from 'firebase/firestore';
 import { deleteObject, ref } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { db, getSignedInUser, storage } from '@/lib/firebase';
 import { compressImageFile } from '@/utils/image-compression';
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -315,6 +315,9 @@ async function transferOwnershipToAdmin(uid: string) {
 // ─── Delete Account ───────────────────────────────────────────
 
 export async function deleteAccountData(uid: string, username?: string, onProgress?: (msg: string, pct: number) => void) {
+  onProgress?.('Removing nutrition and AI coach data...', 2);
+  await deleteServerAccount();
+
   const gathered = await gatherUserRefs(uid, onProgress);
   const { refs, clanMembershipDocs } = gathered;
 
@@ -331,12 +334,35 @@ export async function deleteAccountData(uid: string, username?: string, onProgre
   onProgress?.('Transferring ownership to admin...', 42);
   await transferOwnershipToAdmin(uid);
 
+  // Seller data: take listings off sale and drop a pending application. An active payout account
+  // stays (rules block it) because sales records must be kept for tax and refunds.
+  try {
+    const listings = await getDocs(query(collection(db, 'market_listings'), where('sellerId', '==', uid)));
+    await Promise.all(listings.docs.map(d => deleteDoc(d.ref).catch(() => undefined)));
+    const showcase = await getDocs(query(collection(db, 'market_items'), where('ownerId', '==', uid)));
+    await Promise.all(showcase.docs.map(d => deleteDoc(d.ref).catch(() => undefined)));
+    await deleteDoc(doc(db, 'market_requests', uid)).catch(() => undefined);
+    await deleteDoc(doc(db, 'payout_accounts', uid)).catch(() => undefined);
+  } catch { /* nothing to remove */ }
+
   // Delete everything
   onProgress?.('Deleting data...', 43);
   await safeDeleteRefs(refs, onProgress, 43, 58, 'Cleaning up');
 }
 
 // ─── Reset Account ────────────────────────────────────────────
+
+/** Backend part of deletion: nutrition database, AI chats, server-only docs, and cancelling a web Pro plan. */
+async function deleteServerAccount() {
+  const user = await getSignedInUser();
+  if (!user) throw new Error('Please sign in again to delete your account.');
+  const base = import.meta.env.VITE_NUTRITION_API_URL || 'http://localhost:8000/api/v1';
+  const res = await fetch(`${base}/account`, { method: 'DELETE', headers: { Authorization: `Bearer ${await user.getIdToken()}` } });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'Could not reach the server to delete your data. Please try again.');
+  }
+}
 
 export async function resetUserData(uid: string, onProgress?: (msg: string, pct: number) => void) {
   const gathered = await gatherUserRefs(uid, onProgress);

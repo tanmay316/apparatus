@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
@@ -7,12 +7,15 @@ import { CheckCircle2, ExternalLink, Loader2, ShieldCheck, X } from 'lucide-reac
 import { useUIStore } from '@/stores/ui-store';
 import {
   DEFAULT_MARKET_CONFIG, formatInr, getMarketConfig, openPaymentPage, refreshOrder, startCheckout, subscribePayoutAccount,
-  type MarketKind, type OrderView, type PayoutAccount,
+  type MarketConfig, type MarketKind, type OrderView, type PayoutAccount,
 } from '@/services/market';
 
 export function useMarketConfig() {
   const q = useQuery({ queryKey: ['marketConfig'], queryFn: getMarketConfig, staleTime: 60 * 60_000, retry: 1 });
-  return q.data ?? DEFAULT_MARKET_CONFIG;
+  return useMemo<MarketConfig>(
+    () => (q.data ? { ...DEFAULT_MARKET_CONFIG, ...q.data, seller: { ...DEFAULT_MARKET_CONFIG.seller, ...q.data.seller } } : DEFAULT_MARKET_CONFIG),
+    [q.data],
+  );
 }
 
 /** Live payout account for the signed-in seller (undefined while loading). */
@@ -130,7 +133,7 @@ export function CheckoutButton({ kind, itemId, className, children, onPurchased,
 
   const buy = async () => {
     if (!config.enabled) {
-      showToast('Paid tickets and memberships are coming soon.', 'info');
+      showToast('This isn\'t available right now.', 'info');
       return;
     }
     // Open the tab synchronously so the browser doesn't block it as a popup.

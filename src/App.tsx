@@ -37,6 +37,7 @@ import { MedalCelebrationModal } from '@/components/community/MedalCelebrationMo
 import { SubscriptionSync } from '@/components/subscription/SubscriptionSync';
 import { PaywallSheet } from '@/components/subscription/PaywallSheet';
 import type { AppNotificationItem } from '@/types';
+import { BRAND } from '@/lib/brand';
 
 const loadDashboard = () => import('@/pages/Dashboard');
 const loadProfile = () => import('@/pages/ProfilePage');
@@ -72,6 +73,9 @@ const SinglePostPage = lazy(() => import('@/pages/SinglePostPage').then(m => ({ 
 const SearchPage = lazy(() => import('@/pages/SearchPage').then(m => ({ default: m.SearchPage })));
 const AthleteRanksPage = lazy(() => import('@/pages/AthleteRanksPage').then(m => ({ default: m.AthleteRanksPage })));
 const MarketplacePage = lazy(() => import('@/pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })));
+const OrdersPage = lazy(() => import('@/pages/OrdersPage').then(m => ({ default: m.OrdersPage })));
+const SellerDashboardPage = lazy(() => import('@/pages/SellerDashboardPage').then(m => ({ default: m.SellerDashboardPage })));
+const PartnerPage = lazy(() => import('@/pages/PartnerPage').then(m => ({ default: m.PartnerPage })));
 const PurchaseReturnPage = lazy(() => import('@/pages/PurchaseReturnPage').then(m => ({ default: m.PurchaseReturnPage })));
 
 // A live session reopens straight into the tracker, so fetch it before anything else.
@@ -97,7 +101,7 @@ function LoadingScreen() {
       <div className="relative flex flex-col items-center">
         <img 
           src="/logo.png" 
-          alt="Apparatus" 
+          alt={BRAND.name} 
           className={`w-32 h-auto mb-8 animate-[pulse_3s_ease-in-out_infinite] opacity-90 ${dark ? 'mix-blend-screen' : 'mix-blend-multiply'}`}
           style={{ filter: dark ? 'invert(1) brightness(1.1)' : 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
         />
@@ -307,7 +311,7 @@ function PreferencesSync() {
           if (claimBanner(newNote.id, createdAtMillis)) {
             notifyDevice(
               categoryOf(newNote.type),
-              newNote.senderName || 'Apparatus',
+              newNote.senderName || BRAND.name,
               newNote.message,
               {
                 ...newNote.extra,
@@ -341,7 +345,7 @@ function PreferencesSync() {
             : ((notif.createdAt as any)?.seconds ? (notif.createdAt as any).seconds * 1000 : 0);
 
           if (claimBanner(change.doc.id, createdAtMillis)) {
-            notifyDevice(categoryOf(notif.type), notif.title || 'Apparatus', notif.body || 'New notification', {
+            notifyDevice(categoryOf(notif.type), notif.title || BRAND.name, notif.body || 'New notification', {
               ...notif,
               id: change.doc.id,
               link: notif.link,
@@ -428,8 +432,9 @@ export function App() {
               <Route path="profile/:username" element={<ProfilePage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="admin" element={<AdminPage />} />
-            <Route path="marketplace" element={<MarketplacePage />} />
-            <Route path="purchase/:orderId" element={<PurchaseReturnPage />} />
+            <Route path="marketplace" element={<MarketplacePage />} />              <Route path="marketplace/orders" element={<OrdersPage />} />
+              <Route path="seller" element={<ErrorBoundary><SellerDashboardPage /></ErrorBoundary>} />
+              <Route path="partners" element={<PartnerPage />} />            <Route path="purchase/:orderId" element={<PurchaseReturnPage />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

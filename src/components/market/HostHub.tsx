@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { collection, getDocs, limit, query, where } from 'firebase/firestore';
-import { BadgeCheck, CalendarDays, Clock, Download, Loader2, Plus, ShieldAlert, Ticket, Trophy, Wallet } from 'lucide-react';
+import { CalendarDays, Download, Loader2, Plus, Trophy } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -12,8 +11,6 @@ import { formatInr, listMySales, type MarketOrder } from '@/services/market';
 import type { ChallengeV2, SimpleEvent } from '@/types';
 import { CreateEventSheet } from '@/components/community/CreateEventSheet';
 import { CreateChallengeSheet } from '@/components/community/CreateChallengeSheet';
-import { useMarketConfig, usePayoutAccount } from './CheckoutButton';
-import { PayoutSheet } from './SellerHub';
 
 type Hosted =
   | { type: 'event'; id: string; item: SimpleEvent }
@@ -67,37 +64,11 @@ async function exportParticipants(h: Hosted, sales: MarketOrder[]) {
   return people.length;
 }
 
-function PayoutStatus({ onSetup }: { onSetup: () => void }) {
-  const { user } = useAuthStore();
-  const account = usePayoutAccount(user?.uid);
-  if (account === undefined) return <div className="dx-card h-20 animate-pulse" />;
-  const state = !account
-    ? { icon: Wallet, title: 'Set up payouts to sell tickets', body: 'One time. Razorpay checks your bank account (KYC) directly; we never see your bank details.', cta: 'Set up payouts' }
-    : account.status === 'active'
-      ? { icon: BadgeCheck, title: 'Payouts active', body: 'Add a ticket price when you create an event or challenge.', cta: '' }
-      : account.status === 'pending'
-        ? { icon: Clock, title: 'Bank verification in progress', body: 'Razorpay is verifying your payout account. You can create events now and add a price once it\'s done.', cta: '' }
-        : { icon: ShieldAlert, title: 'Payout setup needs changes', body: account.adminNote || 'Please check your details and send them again.', cta: 'Edit details' };
-  const ok = account?.status === 'active';
-  return (
-    <section className="dx-card p-4 flex items-start gap-3">
-      <span className="dx-badge-icon" style={ok ? { background: 'var(--dx-success-soft)', color: 'var(--dx-success)' } : undefined}><state.icon size={18} /></span>
-      <div className="flex-1 min-w-0">
-        <div className="text-[15px] font-semibold">{state.title}</div>
-        <p className="text-[13px] dx-muted mt-0.5 leading-snug">{state.body}</p>
-        {state.cta && <button type="button" onClick={onSetup} className="dx-btn !h-10 mt-3">{state.cta}</button>}
-      </div>
-    </section>
-  );
-}
-
-export function HostHub() {
+/** The seller's events and challenges with ticket sales, earnings and the participant export. */
+export function HostedEvents({ canCharge }: { canCharge: boolean }) {
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
-  const config = useMarketConfig();
-  const account = usePayoutAccount(user?.uid);
   const [create, setCreate] = useState<'event' | 'challenge' | null>(null);
-  const [payout, setPayout] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const hosted = useQuery({ queryKey: ['myHosted', user?.uid], queryFn: () => myHosted(user!.uid), enabled: !!user });
   const sales = useQuery({ queryKey: ['mySales', user?.uid], queryFn: () => listMySales(user!.uid), enabled: !!user });
@@ -124,48 +95,15 @@ export function HostHub() {
     }
   };
 
-  const keep = 100 - config.fees.ticket;
-
   return (
     <div className="space-y-4">
-      <section className="dx-hero p-5 sm:p-6">
-        <div className="flex items-start gap-3">
-          <span className="dx-hero-icon"><Ticket size={20} /></span>
-          <div className="flex-1 min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.08em] opacity-75">For coaches, gyms & clubs</div>
-            <h2 className="mt-1 text-[21px] font-semibold leading-tight">Host paid events & challenges</h2>
-            <p className="mt-1.5 text-[13px] opacity-80 leading-relaxed">
-              Run your own event or challenge with an entry ticket. People pay in the app; you keep {keep}% and we take {config.fees.ticket}% for handling payments. No approval needed; it's yours to run.
-            </p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-2 mt-4">
-          <button type="button" onClick={() => setCreate('event')} className="dx-hero-btn"><CalendarDays size={16} /> Paid event</button>
-          <button type="button" onClick={() => setCreate('challenge')} className="dx-hero-btn"><Trophy size={16} /> Paid challenge</button>
-        </div>
+      <section className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={() => setCreate('event')} className="dx-btn"><CalendarDays size={16} /> New paid event</button>
+        <button type="button" onClick={() => setCreate('challenge')} className="dx-btn"><Trophy size={16} /> New paid challenge</button>
       </section>
-
-      <section className="dx-card p-4">
-        <div className="text-[15px] font-semibold mb-3">How it works</div>
-        <ol className="space-y-3">
-          {[
-            { t: 'Set up payouts once', b: 'So ticket money can reach your bank.' },
-            { t: 'Create your event or challenge', b: 'Add a ticket price in the form. It appears in the Shop and in Community.' },
-            { t: 'People pay to join', b: 'UPI, cards or netbanking. Each ticket shows up below.' },
-            { t: 'Get paid and see who joined', b: `Your ${keep}% settles to your bank after the event. Download the participant list any time.` },
-          ].map((s, i) => (
-            <li key={s.t} className="flex gap-3">
-              <span className="w-6 h-6 rounded-full text-[12px] font-semibold flex items-center justify-center shrink-0 tabular" style={{ background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)' }}>{i + 1}</span>
-              <span className="min-w-0">
-                <span className="block text-[14px] font-semibold">{s.t}</span>
-                <span className="block text-[12.5px] dx-muted leading-snug mt-0.5">{s.b}</span>
-              </span>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      <PayoutStatus onSetup={() => setPayout(true)} />
+      {!canCharge && (
+        <p className="text-[12.5px] dx-muted -mt-1">You can create events now; the ticket price field unlocks once payouts are active.</p>
+      )}
 
       <section className="dx-card p-4">
         <div className="flex items-center justify-between gap-3">
@@ -209,9 +147,6 @@ export function HostHub() {
 
       {create === 'event' && <CreateEventSheet onClose={() => { setCreate(null); hosted.refetch(); }} />}
       {create === 'challenge' && <CreateChallengeSheet onClose={() => { setCreate(null); hosted.refetch(); }} />}
-      <AnimatePresence>
-        {payout && <PayoutSheet key="payout" existing={account ?? null} onClose={() => setPayout(false)} />}
-      </AnimatePresence>
     </div>
   );
 }

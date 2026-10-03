@@ -26,6 +26,8 @@ import { useNavigate } from 'react-router-dom';
 import { CheckoutButton } from '@/components/market/CheckoutButton';
 import { SponsorBanner } from '@/components/market/SponsorBanner';
 import { formatInr, isPaid } from '@/services/market';
+import { EntryFeeNote, entryFeeOf } from '@/components/market/PriceField';
+import { usePaymentsEnabled } from '@/lib/payments-mode';
 
 export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: string; onClose: () => void }) {
   const { user, profile } = useAuthStore();
@@ -33,6 +35,7 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
   const { showToast, confirm } = useUIStore();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const payments = usePaymentsEnabled();
 
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(true);
   const [editingChallenge, setEditingChallenge] = useState<ChallengeV2 | null>(null);
@@ -438,6 +441,7 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
               )}
 
               <SponsorBanner sponsor={challenge.sponsor} />
+              <EntryFeeNote fee={entryFeeOf(challenge, payments)} />
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -459,7 +463,7 @@ export function ChallengeDetailSheet({ challengeId, onClose }: { challengeId: st
                   >
                     {leaveMutation.isPending ? 'Leaving...' : 'Leave Challenge'}
                   </button>
-                ) : isPaid(challenge.ticketPrice) && countdownType !== 'ended' ? (
+                ) : payments && isPaid(challenge.ticketPrice) && countdownType !== 'ended' ? (
                   <CheckoutButton
                     kind="challenge"
                     itemId={challengeId}

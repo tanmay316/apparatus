@@ -56,7 +56,7 @@ async def summary(req: SummaryRequest, current_user: dict = Depends(get_current_
         if settings.billing_enabled and not await asyncio.to_thread(is_pro, uid, verified_email(current_user)):
             raise HTTPException(status_code=402, detail={
                 "code": "pro_required", "kind": "ai_weekly", "limit": 0, "period": "week",
-                "message": "The weekly AI coach report is part of Apparatus Pro.",
+                "message": f"The weekly AI coach report is part of {settings.APP_NAME} Pro.",
             })
     else:
         await enforce_quota(current_user, "ai_summary")

@@ -3,6 +3,7 @@ import { Browser } from '@capacitor/browser';
 import { ShoppingBag } from 'lucide-react';
 import { isAmazonUrl, matchAffiliateLinks, withAffiliateTag, type AffiliateLink, type AffiliatePlacement } from '@/lib/affiliates';
 import { recordAffiliateClick, useAffiliateCatalog } from '@/services/affiliates';
+import { BRAND } from '@/lib/brand';
 
 async function openExternal(url: string) {
   if (Capacitor.isNativePlatform()) {
@@ -63,7 +64,7 @@ export function GearPicks({ placement, context, title, variant = 'dx' }: {
         ))}
       </div>
       <p className={muted} style={{ fontSize: 11, marginTop: 8, lineHeight: 1.4 }}>
-        {anyAmazon ? 'As an Amazon Associate, Apparatus earns from qualifying purchases. ' : ''}We may earn a commission from these links at no extra cost to you.
+        {anyAmazon ? `As an Amazon Associate, ${BRAND.name} earns from qualifying purchases. ` : ''}We may earn a commission from these links at no extra cost to you.
       </p>
     </section>
   );

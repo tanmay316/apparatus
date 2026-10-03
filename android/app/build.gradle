@@ -3,6 +3,9 @@ apply plugin: 'com.android.application'
 // Single source of truth for the store version: package.json "nativeVersion" (bumped by build-apk.bat).
 def nativeVersion = new groovy.json.JsonSlurper().parse(rootProject.file('../package.json')).nativeVersion ?: '1.0.0'
 def (vMajor, vMinor, vPatch) = nativeVersion.tokenize('.').collect { it as int }
+// App name and Play Store id come from brand.config.json at the repo root.
+def brand = new groovy.json.JsonSlurper().parse(rootProject.file('../brand.config.json'))
+def resText = { String s -> s.replace("'", "\\'").replace('"', '\\"') }
 
 def keystorePropsFile = rootProject.file('keystore.properties')
 def keystoreProps = new Properties()
@@ -14,11 +17,13 @@ android {
     namespace = "com.tms.apparatus"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.tms.apparatus"
+        applicationId brand.appId
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode vMajor * 1000000 + vMinor * 1000 + vPatch
         versionName nativeVersion
+        resValue "string", "app_name", resText(brand.name)
+        resValue "string", "title_activity_main", resText(brand.name)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

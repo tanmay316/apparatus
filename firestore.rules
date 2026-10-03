@@ -204,6 +204,19 @@ service cloud.firestore {
       return !changedKeys().hasAny(['ticketPrice']) || sellPriceOk('ticketPrice', sellerUid);
     }
 
+    // In-app payments are switched by an admin (admin_settings/market.paymentsMode). While off, a
+    // price on an older item is just informational and joining stays free.
+    function paymentsOff() {
+      return !exists(/databases/$(database)/documents/admin_settings/market)
+        || get(/databases/$(database)/documents/admin_settings/market).data.get('paymentsMode', 'off') == 'off';
+    }
+
+    // Display-only entry fee for events/challenges, paid to the organiser outside the app.
+    function entryFeeOk() {
+      return request.resource.data.get('entryFee', null) == null
+        || (request.resource.data.entryFee is int && request.resource.data.entryFee >= 0 && request.resource.data.entryFee <= 100000);
+    }
+
     function imageOk(u) {
       return u == '' || (u is string && (
         (u.size() <= 500 && u.matches('https://[^ ]+'))
@@ -314,7 +327,8 @@ service cloud.firestore {
     // api_keys holds provider secrets and is admin-only; the public on/off flag lives in ai_mode.
     match /admin_settings/{document} {
       allow read: if isAdmin() || (isAuthenticated() && document != 'api_keys');
-      allow write: if isAdmin();
+      allow write: if isAdmin()
+        && (document != 'market' || request.resource.data.get('paymentsMode', 'off') in ['off', 'admin', 'on']);
     }
 
     // Append-only trail of moderation actions.
@@ -736,7 +750,7 @@ service cloud.firestore {
           (request.resource.data.userId == request.auth.uid
             && request.resource.data.role == 'member'
             && clanIsPublic(request.resource.data.clanId)
-            && isFree(clanOf(request.resource.data.clanId), 'joinPrice'))
+            && (isFree(clanOf(request.resource.data.clanId), 'joinPrice') || paymentsOff()))
           // Clan creator registering as leader
           || (request.resource.data.userId == request.auth.uid
             && request.resource.data.role == 'leader'
@@ -804,12 +818,13 @@ service cloud.firestore {
         && (request.resource.data.get('clanId', '') == ''
           || isClanMember(request.resource.data.clanId) || isClanLeader(request.resource.data.clanId))
         && sellPriceOk('ticketPrice', request.auth.uid)
+        && entryFeeOk()
         && !request.resource.data.keys().hasAny(['sponsor', 'ticketsSold']);
       // Sponsors and ticket sales are written by admins / the backend only; the payee can't be swapped.
       allow update: if isAdmin()
         || (isCompetitionManager('challenge', challengeId)
           && !changedKeys().hasAny(['sponsor', 'ticketsSold', 'createdBy'])
-          && competitionPriceOk(resource.data.createdBy))
+          && competitionPriceOk(resource.data.createdBy) && entryFeeOk())
         || (isAuthenticated() && onlyChanged(['participantCount'])
           && request.resource.data.participantCount is int
           && request.resource.data.participantCount >= 0
@@ -826,7 +841,7 @@ service cloud.firestore {
           && request.resource.data.get('rank', 0) == 0
           && request.resource.data.get('isRanked', false) == false
           && !request.resource.data.keys().hasAny(['badgeAwarded', 'customResult', 'paid', 'orderId'])
-          && isFree(competitionOf('challenge', request.resource.data.challengeId), 'ticketPrice'))
+          && (isFree(competitionOf('challenge', request.resource.data.challengeId), 'ticketPrice') || paymentsOff()))
         || isCompetitionManager('challenge', request.resource.data.challengeId);
       // Participants update their own progress; ranks and medals belong to managers.
       allow update: if isCompetitionManager('challenge', resource.data.challengeId)
@@ -852,11 +867,12 @@ service cloud.firestore {
         && (request.resource.data.get('clanId', '') == ''
           || isClanMember(request.resource.data.clanId) || isClanLeader(request.resource.data.clanId))
         && sellPriceOk('ticketPrice', request.auth.uid)
+        && entryFeeOk()
         && !request.resource.data.keys().hasAny(['sponsor', 'ticketsSold']);
       allow update: if isAdmin()
         || (isCompetitionManager('event', eventId)
           && !changedKeys().hasAny(['sponsor', 'ticketsSold', 'createdBy'])
-          && competitionPriceOk(resource.data.createdBy))
+          && competitionPriceOk(resource.data.createdBy) && entryFeeOk())
         || (isAuthenticated() && onlyChanged(['participantCount'])
           && request.resource.data.participantCount is int
           && request.resource.data.participantCount >= 0
@@ -873,7 +889,7 @@ service cloud.firestore {
           && request.resource.data.get('rank', 0) == 0
           && request.resource.data.get('isRanked', false) == false
           && !request.resource.data.keys().hasAny(['badgeAwarded', 'customResult', 'paid', 'orderId'])
-          && isFree(competitionOf('event', request.resource.data.eventId), 'ticketPrice'))
+          && (isFree(competitionOf('event', request.resource.data.eventId), 'ticketPrice') || paymentsOff()))
         || isCompetitionManager('event', request.resource.data.eventId);
       allow update: if isCompetitionManager('event', resource.data.eventId)
         || (isOwner(resource.data.userId)
@@ -1013,30 +1029,11 @@ service cloud.firestore {
     }
 
     // ─── Marketplace ────────────────────────────────────────────
-    // Seller payout application. Bank details are entered on Razorpay, never stored here;
-    // an admin creates the Route linked account and activates it.
-    function payoutFieldsOk(d) {
-      return d.keys().hasOnly(['uid', 'legalName', 'email', 'phone', 'businessType', 'about', 'status',
-          'razorpayAccountId', 'adminNote', 'createdAt', 'updatedAt'])
-        && d.uid == request.auth.uid
-        && d.legalName is string && d.legalName.size() >= 2 && d.legalName.size() <= 100
-        && emailOk(d.email)
-        && d.phone is string && d.phone.matches('[+]?[0-9 ]{8,16}')
-        && d.businessType in ['individual', 'business']
-        && textOk(d, 'about', 500)
-        && d.status == 'pending';
-    }
-
+    // Seller payout application, written by the backend after the seller sign-up checks
+    // (verified email + phone, account age, terms, not banned). Bank details live on Razorpay only.
     match /payout_accounts/{uid} {
       allow read: if isOwner(uid) || isAdmin();
-      allow create: if isAdmin()
-        || (isOwner(uid) && canPost() && payoutFieldsOk(request.resource.data)
-          && request.resource.data.get('razorpayAccountId', '') == ''
-          && request.resource.data.get('adminNote', '') == '');
-      allow update: if isAdmin()
-        || (isOwner(uid) && resource.data.status in ['pending', 'rejected'] && payoutFieldsOk(request.resource.data)
-          && request.resource.data.get('razorpayAccountId', '') == resource.data.get('razorpayAccountId', '')
-          && request.resource.data.get('adminNote', '') == resource.data.get('adminNote', ''));
+      allow create, update: if isAdmin();
       allow delete: if isAdmin() || (isOwner(uid) && resource.data.status != 'active');
     }
 
@@ -1095,7 +1092,7 @@ service cloud.firestore {
 
     match /sponsorships/{sponsorshipId} {
       allow read: if isAdmin() || (isAuthenticated() && resource.data.requesterId == request.auth.uid);
-      allow create: if canPost() && sponsorshipOk(request.resource.data);
+      allow create: if canPost() && request.auth.token.email_verified == true && sponsorshipOk(request.resource.data);
       allow update: if isAdmin()
         || (isOwner(resource.data.requesterId) && resource.data.status in ['pending', 'quoted']
           && onlyChanged(['status']) && request.resource.data.status == 'cancelled');
@@ -1109,6 +1106,69 @@ service cloud.firestore {
       allow update: if isAdmin()
         || (isAuthenticated() && onlyChanged(['clicks'])
           && request.resource.data.clicks == resource.data.get('clicks', 0) + 1);
+    }
+
+    // ─── Marketplace showcase ───
+    // Admins grant listing permission (market_partners/{uid}) after someone asks via market_requests/{uid}.
+    // Listings only link out (website) or to the owner's plan/event/challenge/clan; nothing is sold in-app.
+    function isMarketPartner() {
+      return exists(/databases/$(database)/documents/market_partners/$(request.auth.uid))
+        && get(/databases/$(database)/documents/market_partners/$(request.auth.uid)).data.get('active', false) == true;
+    }
+
+    function marketItemOk(d) {
+      return d.keys().hasOnly(['ownerId', 'ownerName', 'ownerPhoto', 'kind', 'title', 'description', 'imageUrl', 'priceText',
+          'targetType', 'targetId', 'url', 'active', 'featured', 'clicks', 'createdAt', 'updatedAt'])
+        && d.ownerId == request.auth.uid
+        && d.kind in ['product', 'gear', 'plan', 'event', 'challenge', 'clan', 'service', 'offer']
+        && d.title is string && d.title.size() >= 3 && d.title.size() <= 80
+        && textOk(d, 'description', 1000) && textOk(d, 'ownerName', 60) && textOk(d, 'ownerPhoto', 600) && textOk(d, 'priceText', 40)
+        && imageOk(d.get('imageUrl', ''))
+        && d.targetType in ['url', 'event', 'challenge', 'clan', 'plan']
+        && (d.targetType == 'url'
+          ? (d.url is string && d.url.size() <= 300 && d.url.matches('https://[^ ]+') && d.get('targetId', '') == '')
+          : (d.targetId is string && d.targetId.matches('[A-Za-z0-9_-]{1,128}') && d.get('url', '') == ''))
+        && d.active is bool;
+    }
+
+    match /market_items/{itemId} {
+      allow read: if isAuthenticated();
+      allow create: if canPost() && isMarketPartner() && marketItemOk(request.resource.data)
+        && request.resource.data.get('featured', false) == false && request.resource.data.get('clicks', 0) == 0;
+      allow update: if isAdmin()
+        || (isOwner(resource.data.ownerId) && canPost() && isMarketPartner() && marketItemOk(request.resource.data)
+          && request.resource.data.get('featured', false) == resource.data.get('featured', false)
+          && request.resource.data.get('clicks', 0) == resource.data.get('clicks', 0))
+        || (isAuthenticated() && onlyChanged(['clicks'])
+          && request.resource.data.clicks == resource.data.get('clicks', 0) + 1);
+      allow delete: if isAdmin() || isOwner(resource.data.ownerId);
+    }
+
+    match /market_partners/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    function marketRequestOk(d) {
+      return d.keys().hasOnly(['uid', 'name', 'business', 'kind', 'contactEmail', 'contactPhone', 'website', 'message',
+          'status', 'createdAt', 'updatedAt'])
+        && d.uid == request.auth.uid
+        && d.status == 'pending'
+        && d.business is string && d.business.size() >= 2 && d.business.size() <= 80
+        && d.kind in ['brand', 'gym', 'coach', 'community', 'organizer', 'other']
+        && emailOk(d.contactEmail) && textOk(d, 'contactPhone', 20) && textOk(d, 'name', 60) && textOk(d, 'message', 1000)
+        && (d.get('website', '') == '' || (d.website is string && d.website.size() <= 200 && d.website.matches('https://[^ ]+')));
+    }
+
+    // One request per person (doc id = uid); a declined request can be sent again.
+    match /market_requests/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && canPost() && request.auth.token.email_verified == true
+        && marketRequestOk(request.resource.data);
+      allow update: if isAdmin()
+        || (isOwner(uid) && canPost() && request.auth.token.email_verified == true
+          && resource.data.status in ['pending', 'declined'] && marketRequestOk(request.resource.data));
+      allow delete: if isAdmin() || isOwner(uid);
     }
 
     // ─── Catch-All ──────────────────────────────────────────────

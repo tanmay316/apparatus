@@ -19,6 +19,7 @@ from typing import Any, List, Optional
 from app.core.firebase import get_firestore_client
 from app.providers.llm import chat_with_fallback, failed
 from app.providers.llm.base import BaseLLMProvider, ChatMessage
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ Rules:
 
 Return ONLY JSON:
 {"headline": "max 80 characters", "points": ["3 observations, each max 140 characters"], "action": "one concrete thing to do next, max 140 characters"}"""
+SYSTEM_PROMPT = SYSTEM_PROMPT.replace("Apparatus", settings.APP_NAME)
 
 KIND_PROMPT = {
     "cardio": "Summarise this cardio session (run, ride or walk) compared with the athlete's history.",

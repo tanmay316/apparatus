@@ -15,6 +15,7 @@ import {
 } from '@/lib/achievement-card';
 import type { Badge, UserStats } from '@/types';
 import { lockBodyScroll } from '@/lib/scroll-lock';
+import { BRAND } from '@/lib/brand';
 
 interface Props {
   badge: Badge;
@@ -132,11 +133,11 @@ export function AchievementShareModal({ badge, earned, progress, earnedCount, to
     };
   }, [onClose]);
 
-  const fileName = `apparatus-${badge.id}-${format}.png`;
+  const fileName = `${BRAND.slug}-${badge.id}-${format}.png`;
   const pct = progress ? Math.round(Math.min(1, progress.value / progress.target) * 100) : 0;
   const shareText = earned
-    ? `Unlocked "${badge.name}" on Apparatus 🏆`
-    : `Chasing "${badge.name}" on Apparatus. ${pct}% there 💪`;
+    ? `Unlocked "${badge.name}" on ${BRAND.name} 🏆`
+    : `Chasing "${badge.name}" on ${BRAND.name}. ${pct}% there 💪`;
 
   const toBlob = () => new Promise<Blob | null>(resolve => {
     if (!canvasRef.current) resolve(null);
@@ -149,8 +150,8 @@ export function AchievementShareModal({ badge, earned, progress, earnedCount, to
     setBusy('save');
     try {
       if (Capacitor.isNativePlatform()) {
-        await Filesystem.writeFile({ path: `Apparatus/${fileName}`, data: base64(), directory: Directory.Documents, recursive: true });
-        showToast('Saved to Documents/Apparatus');
+        await Filesystem.writeFile({ path: `${BRAND.name}/${fileName}`, data: base64(), directory: Directory.Documents, recursive: true });
+        showToast(`Saved to Documents/${BRAND.name}`);
         return;
       }
       const blob = await toBlob();

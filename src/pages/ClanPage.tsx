@@ -36,6 +36,8 @@ import { ClanJoinRequestsModal } from '@/components/community/ClanJoinRequestsMo
 import { PersonalChallengeDetailSheet } from '@/components/community/PersonalChallengeDetailSheet';
 import { CreatePersonalChallengeSheet } from '@/components/community/CreatePersonalChallengeSheet';
 import { CheckoutButton } from '@/components/market/CheckoutButton';
+import { entryFeeOf } from '@/components/market/PriceField';
+import { usePaymentsEnabled } from '@/lib/payments-mode';
 import { SponsorBanner } from '@/components/market/SponsorBanner';
 import { formatInr, isPaid } from '@/services/market';
 import { BadgeIndianRupee } from 'lucide-react';
@@ -45,6 +47,7 @@ type ClanTab = 'posts' | 'challenges' | 'events' | 'members' | 'about';
 const ROLE_LABEL: Record<string, string> = { leader: 'Leader', co_leader: 'Co-Leader', member: 'Member' };
 
 export function ClanPage() {
+  const payments = usePaymentsEnabled();
   const { id: clanId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
@@ -474,7 +477,7 @@ export function ClanPage() {
             <MetaItem icon={Users}>{clan.memberCount || 0} {clan.memberCount === 1 ? 'member' : 'members'}</MetaItem>
             {clan.location?.city && <MetaItem icon={MapPin}>{clan.location.city}</MetaItem>}
             <MetaItem icon={isPublic ? Globe : Lock}>{visibilityLabel} clan</MetaItem>
-            {isPaid(clan.joinPrice) && <MetaItem icon={BadgeIndianRupee}>{formatInr(clan.joinPrice)} to join</MetaItem>}
+            {payments && isPaid(clan.joinPrice) && <MetaItem icon={BadgeIndianRupee}>{formatInr(clan.joinPrice)} to join</MetaItem>}
           </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -488,7 +491,7 @@ export function ClanPage() {
                 {leaveMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <LogOut size={15} />}
                 {leaveMutation.isPending ? 'Leaving…' : 'Leave clan'}
               </button>
-            ) : isPublic && isPaid(clan.joinPrice) && !isAdmin ? (
+            ) : isPublic && payments && isPaid(clan.joinPrice) && !isAdmin ? (
               <CheckoutButton
                 kind="clan"
                 itemId={clanId!}
@@ -860,11 +863,12 @@ export function ClanPage() {
 
                         {c.topWinner && <ChampionRow name={c.topWinner.userName} result={c.topWinner.customResult} />}
 
-                        {(goalText || c.prize || isPaid(c.ticketPrice) || c.sponsor) && (
+                        {(goalText || c.prize || entryFeeOf(c, payments) || c.sponsor) && (
                           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                             {goalText && <MetaItem icon={TrendingUp}>Goal: <span className="font-semibold text-bone">{goalText}</span></MetaItem>}
                             {c.prize && <MetaItem icon={Trophy}>{c.prize}</MetaItem>}
-                            {isPaid(c.ticketPrice) && <MetaItem icon={BadgeIndianRupee}>{formatInr(c.ticketPrice)} entry</MetaItem>}
+                            {!!entryFeeOf(c, payments) && <MetaItem icon={BadgeIndianRupee}>{formatInr(entryFeeOf(c, payments)!)} entry</MetaItem>}
+                            {payments && !entryFeeOf(c, payments) && isPaid(c.ticketPrice) && <MetaItem icon={BadgeIndianRupee}>{formatInr(c.ticketPrice)} entry</MetaItem>}
                             {c.sponsor && <SponsorBanner sponsor={c.sponsor} compact />}
                           </div>
                         )}
@@ -937,7 +941,8 @@ export function ClanPage() {
                         <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                           <MetaItem icon={MapPin}>{e.location?.name || 'Remote'}</MetaItem>
                           {e.prize && <MetaItem icon={Trophy}>{e.prize}</MetaItem>}
-                          {isPaid(e.ticketPrice) && <MetaItem icon={BadgeIndianRupee}>{formatInr(e.ticketPrice)} ticket</MetaItem>}
+                          {!!entryFeeOf(e, payments) && <MetaItem icon={BadgeIndianRupee}>{formatInr(entryFeeOf(e, payments)!)} entry</MetaItem>}
+                          {payments && !entryFeeOf(e, payments) && isPaid(e.ticketPrice) && <MetaItem icon={BadgeIndianRupee}>{formatInr(e.ticketPrice)} ticket</MetaItem>}
                           {e.sponsor && <SponsorBanner sponsor={e.sponsor} compact />}
                         </div>
 

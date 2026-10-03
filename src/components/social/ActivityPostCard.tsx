@@ -20,6 +20,7 @@ import { RouteMap } from '@/components/cardio/RouteMap';
 import { CelebrationPodiumCard } from '@/components/community/CelebrationPodiumCard';
 import { getAppShareUrl, shareContent } from '@/lib/share';
 import { useLiveDisplayName } from '@/hooks/useLiveDisplayName';
+import { BRAND } from '@/lib/brand';
 
 /** Defers heavy children (Leaflet maps) until the card scrolls near the viewport, then keeps them. */
 function MountWhenNear({ className, children }: { className?: string; children: ReactNode }) {
@@ -593,7 +594,7 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
                   <button 
                     onClick={async () => {
                       const res = await shareContent({
-                        title: activity.summary || 'Apparatus Activity Post',
+                        title: activity.summary || `${BRAND.name} Activity Post`,
                         url: getAppShareUrl(`/post/${activity.id}`),
                         dialogTitle: 'Share Activity Post'
                       });
@@ -725,8 +726,8 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
             onClick={async () => {
               if (isCelebration) {
                 const res = await shareContent({
-                  title: activity.summary || 'Competition Podium - Apparatus',
-                  text: details.text || 'Check out the competition champions on Apparatus!',
+                  title: activity.summary || `Competition Podium - ${BRAND.name}`,
+                  text: details.text || `Check out the competition champions on ${BRAND.name}!`,
                   url: getAppShareUrl(`/post/${activity.id}`),
                   dialogTitle: 'Share Podium Results'
                 });
@@ -737,7 +738,7 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
                 onShare(activity);
               } else {
                 const res = await shareContent({
-                  title: activity.summary || 'Workout on Apparatus',
+                  title: activity.summary || `Workout on ${BRAND.name}`,
                   url: getAppShareUrl(`/post/${activity.id}`),
                 });
                 if (res.method === 'clipboard') {

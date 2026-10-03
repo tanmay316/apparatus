@@ -421,7 +421,7 @@ export async function awardChallengeTop3Badges(challengeId: string): Promise<{ s
         communityId: challenge.clanId,
         clanName: challenge.clanName || '',
         authorId: 'system',
-        authorName: 'Apparatus Arena',
+        authorName: `${BRAND.name} Arena`,
         authorPhoto: '',
         title: `🏆 Challenge Winner!`,
         text: `Congratulations to ${pData.userName} for placing #${rank} and winning the ${info.name} badge in "${challenge.title}"!`,
@@ -436,7 +436,7 @@ export async function awardChallengeTop3Badges(challengeId: string): Promise<{ s
       const activityRef = doc(collection(db, 'activities'));
       batch.set(activityRef, {
         userId: 'system',
-        userName: 'Apparatus Arena',
+        userName: `${BRAND.name} Arena`,
         userPhoto: '',
         type: 'achievement',
         workoutId: null,
@@ -847,7 +847,7 @@ export async function updateLeaderboardRanks(
         addDoc(collection(db, 'notifications'), {
           receiverId: item.userId,
           senderId: auth.currentUser?.uid || challengeData?.createdBy || item.userId,
-          senderName: challengeData?.creatorName || 'Apparatus Arena',
+          senderName: challengeData?.creatorName || `${BRAND.name} Arena`,
           senderPhoto: challengeData?.creatorPhoto || '',
           type: 'achievement',
           message: `${info.emoji} Congratulations! You won the ${info.name} Medal in "${challengeTitle}"!`,
@@ -943,7 +943,7 @@ export async function updateLeaderboardRanks(
             text: `The challenge has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
             winners: top3Data,
             authorId: 'system',
-            authorName: 'Apparatus Arena',
+            authorName: `${BRAND.name} Arena`,
             authorPhoto: '',
             likesCount: 0,
             likedUserIds: [],
@@ -977,7 +977,7 @@ export async function updateLeaderboardRanks(
         } else {
           await addDoc(collection(db, 'activities'), {
             userId: 'system',
-            userName: 'Apparatus Arena',
+            userName: `${BRAND.name} Arena`,
             userPhoto: '',
             type: 'achievement',
             summary: `🏆 Challenge Concluded: ${challengeTitle}`,
@@ -1087,7 +1087,7 @@ export async function updateEventLeaderboardRanks(
         addDoc(collection(db, 'notifications'), {
           receiverId: item.userId,
           senderId: auth.currentUser?.uid || eventData?.createdBy || item.userId,
-          senderName: eventData?.creatorName || 'Apparatus Arena',
+          senderName: eventData?.creatorName || `${BRAND.name} Arena`,
           senderPhoto: '',
           type: 'achievement',
           message: `${info.emoji} Congratulations! You won the ${info.name} Medal in "${eventTitle}"!`,
@@ -1135,7 +1135,7 @@ export async function updateEventLeaderboardRanks(
           title: `🏆 Event Concluded: ${eventTitle}`,
           text: `Congratulations to our champions for their outstanding performance in "${eventTitle}"!\n\n${podiumText}`,
           authorId: 'system',
-          authorName: 'Apparatus Arena',
+          authorName: `${BRAND.name} Arena`,
           authorPhoto: '',
           likesCount: 0,
           likedUserIds: [],
@@ -1147,7 +1147,7 @@ export async function updateEventLeaderboardRanks(
       } else {
         await addDoc(collection(db, 'activities'), {
           userId: 'system',
-          userName: 'Apparatus Arena',
+          userName: `${BRAND.name} Arena`,
           userPhoto: '',
           type: 'achievement',
           summary: `🏆 Event Concluded: ${eventTitle}`,
@@ -1359,7 +1359,7 @@ export async function awardEventTop3Badges(
         communityId: event.clanId,
         clanName: event.clanName || '',
         authorId: 'system',
-        authorName: 'Apparatus Arena',
+        authorName: `${BRAND.name} Arena`,
         authorPhoto: '',
         title: `🏆 ${info.name} Winner!`,
         text: `Congratulations to ${winner.userName} for placing #${winner.rank} and winning the ${info.name} badge in "${event.title}"!`,
@@ -1374,7 +1374,7 @@ export async function awardEventTop3Badges(
       const activityRef = doc(collection(db, 'activities'));
       batch.set(activityRef, {
         userId: 'system',
-        userName: 'Apparatus Arena',
+        userName: `${BRAND.name} Arena`,
         userPhoto: '',
         type: 'achievement',
         workoutId: null,
@@ -1459,6 +1459,7 @@ export async function leaveEvent(eventId: string, userId: string): Promise<void>
 import { storage } from '@/lib/firebase';
 import { ref as storageRef, deleteObject } from 'firebase/storage';
 import type { PostComment } from '@/types';
+import { BRAND } from '@/lib/brand';
 export type { PostComment };
 
 export const createClanPost = async (postData: Omit<CommunityPost, 'id' | 'likesCount' | 'commentsCount' | 'createdAt' | 'likedUserIds'> & { imageUrl?: string; images?: string[]; poll?: ClanPoll }) => {
@@ -2190,7 +2191,7 @@ export async function backfillCelebrationPosts(): Promise<{ events: number; chal
           text: `The challenge has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
           winners: top3Cleaned,
           authorId: 'system',
-          authorName: 'Apparatus Arena',
+          authorName: `${BRAND.name} Arena`,
           authorPhoto: '',
           likesCount: 0,
           likedUserIds: [],
@@ -2205,7 +2206,7 @@ export async function backfillCelebrationPosts(): Promise<{ events: number; chal
         // Public challenge -> post to activities
         await addDoc(collection(db, 'activities'), {
           userId: 'system',
-          userName: 'Apparatus Arena',
+          userName: `${BRAND.name} Arena`,
           userPhoto: '',
           type: 'achievement',
           summary: `🏆 Challenge Concluded: ${challenge.title}`,
@@ -2237,7 +2238,7 @@ export async function backfillCelebrationPosts(): Promise<{ events: number; chal
           addDoc(collection(db, 'notifications'), {
             receiverId: w.userId,
             senderId: challenge.createdBy || 'system',
-            senderName: challenge.creatorName || 'Apparatus Arena',
+            senderName: challenge.creatorName || `${BRAND.name} Arena`,
             senderPhoto: '',
             type: 'achievement',
             message: `${info.emoji} Congratulations! You placed Rank #${i + 1} (${info.name}) in "${challenge.title}"!`,
@@ -2358,7 +2359,7 @@ export async function backfillCelebrationPosts(): Promise<{ events: number; chal
           text: `The event has officially concluded! Huge congratulations to our champions:\n\n${podiumText}`,
           winners: top3Cleaned,
           authorId: 'system',
-          authorName: 'Apparatus Arena',
+          authorName: `${BRAND.name} Arena`,
           authorPhoto: '',
           likesCount: 0,
           likedUserIds: [],
@@ -2373,7 +2374,7 @@ export async function backfillCelebrationPosts(): Promise<{ events: number; chal
         // Public event -> post to activities
         await addDoc(collection(db, 'activities'), {
           userId: 'system',
-          userName: 'Apparatus Arena',
+          userName: `${BRAND.name} Arena`,
           userPhoto: '',
           type: 'achievement',
           summary: `🏆 Event Concluded: ${event.title}`,
@@ -2407,7 +2408,7 @@ export async function backfillCelebrationPosts(): Promise<{ events: number; chal
           addDoc(collection(db, 'notifications'), {
             receiverId: matchingPart.userId,
             senderId: event.createdBy || 'system',
-            senderName: event.creatorName || 'Apparatus Arena',
+            senderName: event.creatorName || `${BRAND.name} Arena`,
             senderPhoto: '',
             type: 'achievement',
             message: `${rankInfo.emoji} Congratulations! You placed Rank #${w.rank} (${rankInfo.name}) in "${event.title}"!`,

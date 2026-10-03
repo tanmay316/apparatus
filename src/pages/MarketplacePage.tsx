@@ -1,36 +1,41 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import {
-  BadgeIndianRupee, CalendarDays, ChevronRight, CircleHelp, LayoutGrid, Receipt, Search, Shield, ShieldCheck,
-  ShoppingBag, Store, Ticket, Trophy, Users, Wallet, X, Zap,
+  CalendarDays, ChevronRight, CircleHelp, Dumbbell, LayoutGrid, MousePointerClick, Package, Receipt, Search, Shield,
+  ShoppingBag, Store, Ticket, Trophy, Users, X,
 } from 'lucide-react';
-import { useAuthStore } from '@/stores/auth-store';
-import { formatInr, listActiveListings, listMyPurchases, listPaidClans, listTicketed, type PlanListing, type TicketedItem } from '@/services/market';
+import { formatInr, listActiveListings, listPaidClans, listTicketed, type PlanListing, type TicketedItem } from '@/services/market';
+import { listShowcase, type ShowcaseItem, type ShowcaseKind } from '@/services/showcase';
 import { recordAffiliateClick, useAffiliateCatalog } from '@/services/affiliates';
 import { isAmazonUrl, isSafeAffiliateUrl, withAffiliateTag, type AffiliateLink } from '@/lib/affiliates';
+import { usePaymentsEnabled } from '@/lib/payments-mode';
 import { ListingCard, ListingSheet } from '@/components/market/ListingSheet';
 import { MarketSheet } from '@/components/market/MarketSheet';
-import { SellerHub } from '@/components/market/SellerHub';
-import { HostHub } from '@/components/market/HostHub';
+import { ShowcaseCard, ShowcaseSheet, useMarketPartner } from '@/components/market/Showcase';
 import { SponsorBanner } from '@/components/market/SponsorBanner';
 import { ChallengeDetailSheet } from '@/components/community/ChallengeDetailSheet';
 import { EventDetailSheet } from '@/components/community/EventDetailSheet';
+import { BRAND } from '@/lib/brand';
 
-type Tab = 'shop' | 'host' | 'sell';
-const TABS: Tab[] = ['shop', 'host', 'sell'];
-type Category = 'all' | 'plans' | 'clubs' | 'events' | 'gear';
+// Seller tools used to live in marketplace tabs; old links land on My listings.
+const LEGACY_TABS: Record<string, string> = { sell: 'plans', host: 'events', sponsor: 'events' };
+type Category = 'all' | 'products' | 'plans' | 'events' | 'clubs' | 'services';
 const CATEGORIES: { id: Category; label: string; icon: typeof Store }[] = [
   { id: 'all', label: 'All', icon: LayoutGrid },
+  { id: 'products', label: 'Products & gear', icon: ShoppingBag },
   { id: 'plans', label: 'Training plans', icon: CalendarDays },
-  { id: 'clubs', label: 'Paid clans', icon: Shield },
   { id: 'events', label: 'Events & challenges', icon: Ticket },
-  { id: 'gear', label: 'Gear', icon: ShoppingBag },
+  { id: 'clubs', label: 'Clans & communities', icon: Shield },
+  { id: 'services', label: 'Coaching & services', icon: Dumbbell },
 ];
-const INTRO_KEY = 'apparatus.market-intro-seen';
+const CATEGORY_OF: Record<ShowcaseKind, Exclude<Category, 'all'>> = {
+  product: 'products', gear: 'products', offer: 'products', plan: 'plans', event: 'events', challenge: 'events', clan: 'clubs', service: 'services',
+};
+const INTRO_KEY = 'apparatus.market-intro-seen.v2';
 
 const container = { hidden: {}, show: { transition: { staggerChildren: 0.04 } } };
 const item = { hidden: { opacity: 0, y: 8 }, show: { opacity: 1, y: 0 } };
@@ -64,16 +69,15 @@ async function openExternal(url: string) {
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
-/** Plain-language explanation of everything the marketplace does. */
-function HowItWorksSheet({ onClose, onGo }: { onClose: () => void; onGo: (t: Tab) => void }) {
+function HowItWorksSheet({ onClose, onList }: { onClose: () => void; onList: () => void }) {
   const rows = [
-    { icon: ShoppingBag, t: 'Shop', b: 'Buy training plans made by coaches, join paid clans, and get tickets for events and challenges. Pay by UPI, card or netbanking; access unlocks instantly.' },
-    { icon: Ticket, t: 'Host events', b: 'Run your own event or challenge with a ticket price. People pay in the app, Apparatus keeps a small fee for handling the payment, and you can download the list of everyone who joined.' },
-    { icon: Wallet, t: 'Sell & earn', b: 'Coaches sell training plans and charge a joining fee for their clans. Money settles to your bank, minus a small fee.' },
-    { icon: ShoppingBag, t: 'Gear', b: 'Hand-picked products from partner stores like Amazon. You buy on their site at the normal price; we may earn a small commission.' },
+    { icon: Store, t: 'Discover', b: 'Products, training plans, events, challenges and communities from brands, gyms, coaches and organisers.' },
+    { icon: MousePointerClick, t: 'Tap through', b: 'Each listing opens the brand\'s own website, or the plan, event or clan right here in the app.' },
+    { icon: ShoppingBag, t: 'Gear picks', b: 'Hand-picked products from stores like Amazon. We may earn a small commission at no extra cost to you.' },
+    { icon: Users, t: 'List yours', b: 'Brands, gyms, coaches and community owners can ask to be listed. Our team will get in touch.' },
   ];
   return (
-    <MarketSheet title="How the marketplace works" subtitle="Everything here is optional. The app stays free to use." onClose={onClose}>
+    <MarketSheet title="How the marketplace works" onClose={onClose}>
       <div className="space-y-3">
         {rows.map(r => (
           <div key={r.t} className="dx-inset p-3.5 flex gap-3">
@@ -84,10 +88,7 @@ function HowItWorksSheet({ onClose, onGo }: { onClose: () => void; onGo: (t: Tab
             </div>
           </div>
         ))}
-        <div className="grid grid-cols-2 gap-2 pt-1">
-          <button type="button" className="dx-btn-secondary" onClick={() => { onClose(); onGo('host'); }}>I host events</button>
-          <button type="button" className="dx-btn-secondary" onClick={() => { onClose(); onGo('sell'); }}>I'm a coach</button>
-        </div>
+        <button type="button" className="dx-btn-secondary w-full" onClick={() => { onClose(); onList(); }}>List on the marketplace</button>
       </div>
     </MarketSheet>
   );
@@ -116,30 +117,45 @@ function GearCard({ link, tag }: { link: AffiliateLink; tag?: string }) {
   );
 }
 
-function Shop({ onGo }: { onGo: (t: Tab) => void }) {
+const SECTION: Record<Exclude<Category, 'all'>, { title: string; icon: typeof Store }> = {
+  products: { title: 'Products & offers', icon: Package },
+  plans: { title: 'Training plans', icon: CalendarDays },
+  events: { title: 'Events & challenges', icon: Trophy },
+  clubs: { title: 'Clans & communities', icon: Shield },
+  services: { title: 'Coaching & services', icon: Dumbbell },
+};
+
+function Shop({ onList }: { onList: () => void }) {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const payments = usePaymentsEnabled();
   const [listing, setListing] = useState<PlanListing | null>(null);
+  const [showcase, setShowcase] = useState<ShowcaseItem | null>(null);
   const [open, setOpen] = useState<{ kind: 'event' | 'challenge'; id: string } | null>(null);
   const [cat, setCat] = useState<Category>('all');
   const [search, setSearch] = useState('');
   const [intro, setIntro] = useState(() => !localStorage.getItem(INTRO_KEY));
   const [help, setHelp] = useState(false);
-  const listings = useQuery({ queryKey: ['marketListings'], queryFn: listActiveListings, staleTime: 60_000 });
-  const clans = useQuery({ queryKey: ['marketPaidClans'], queryFn: listPaidClans, staleTime: 60_000 });
-  const tickets = useQuery({ queryKey: ['marketTickets'], queryFn: listTicketed, staleTime: 60_000 });
+  const items = useQuery({ queryKey: ['showcase'], queryFn: listShowcase, staleTime: 60_000 });
+  const listings = useQuery({ queryKey: ['marketListings'], queryFn: listActiveListings, staleTime: 60_000, enabled: payments });
+  const clans = useQuery({ queryKey: ['marketPaidClans'], queryFn: listPaidClans, staleTime: 60_000, enabled: payments });
+  const tickets = useQuery({ queryKey: ['marketTickets'], queryFn: listTicketed, staleTime: 60_000, enabled: payments });
   const gear = useAffiliateCatalog();
-  const purchases = useQuery({ queryKey: ['myPurchases', user?.uid], queryFn: () => listMyPurchases(user!.uid), enabled: !!user });
 
   const q = search.trim().toLowerCase();
-  const plans = useMemo(() => (listings.data || []).filter(l => has(q, l.title, l.description, l.sellerName)), [listings.data, q]);
-  const paidClans = useMemo(() => (clans.data || []).filter(c => has(q, c.name, c.description)), [clans.data, q]);
-  const ticketed = useMemo(() => (tickets.data || []).filter(t => has(q, t.item.title, t.item.description)), [tickets.data, q]);
+  const shown = useMemo(() => (items.data || []).filter(i => has(q, i.title, i.description, i.ownerName, i.priceText)), [items.data, q]);
+  const plans = useMemo(() => payments ? (listings.data || []).filter(l => has(q, l.title, l.description, l.sellerName)) : [], [payments, listings.data, q]);
+  const paidClans = useMemo(() => payments ? (clans.data || []).filter(c => has(q, c.name, c.description)) : [], [payments, clans.data, q]);
+  const ticketed = useMemo(() => payments ? (tickets.data || []).filter(t => has(q, t.item.title, t.item.description)) : [], [payments, tickets.data, q]);
   const products = useMemo(() => (gear.data?.links || []).filter(l => isSafeAffiliateUrl(l.url) && has(q, l.title, l.partner)), [gear.data, q]);
-  const loading = listings.isLoading || clans.isLoading || tickets.isLoading;
-  const show = (c: Category) => cat === 'all' || cat === c;
+  const loading = items.isLoading || (payments && (listings.isLoading || clans.isLoading || tickets.isLoading));
   const preview = cat === 'all' ? 4 : 60;
-  const nothing = !loading && ![plans, paidClans, ticketed, products].some((list, i) => list.length && show((['plans', 'clubs', 'events', 'gear'] as Category[])[i]));
+  const groups = (Object.keys(SECTION) as Exclude<Category, 'all'>[])
+    .filter(c => cat === 'all' || cat === c)
+    .map(c => ({ c, list: shown.filter(i => CATEGORY_OF[i.kind] === c) }));
+  const show = (c: Category) => cat === 'all' || cat === c;
+  const nothing = !loading && !groups.some(g => g.list.length)
+    && !(show('products') && products.length) && !(show('plans') && plans.length)
+    && !(show('clubs') && paidClans.length) && !(show('events') && ticketed.length);
 
   const closeIntro = () => { localStorage.setItem(INTRO_KEY, '1'); setIntro(false); };
 
@@ -151,7 +167,7 @@ function Shop({ onGo }: { onGo: (t: Tab) => void }) {
           type="search"
           value={search}
           onChange={e => setSearch(e.target.value.slice(0, 60))}
-          placeholder="Search plans, clans, events, gear"
+          placeholder="Search products, plans, events, clans"
           className="dx-input w-full !pl-10 !h-11 !rounded-2xl"
           aria-label="Search the marketplace"
         />
@@ -182,9 +198,9 @@ function Shop({ onGo }: { onGo: (t: Tab) => void }) {
           <div className="text-[15px] font-semibold pr-10">New here? This is how it works</div>
           <ol className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { t: 'Pick something', b: 'Coach-made plans, paid clans, event tickets or gear.' },
-              { t: 'Pay securely', b: 'UPI, card or netbanking through Razorpay.' },
-              { t: 'Use it instantly', b: 'Plans land in Plans; clans and tickets unlock right away.' },
+              { t: 'Browse', b: 'Products, plans, events and communities from brands, gyms and coaches.' },
+              { t: 'Tap through', b: 'Open their website, or the plan, event or clan in the app.' },
+              { t: 'Deal with them directly', b: 'Questions and orders go straight to the brand or organiser.' },
             ].map((s, i) => (
               <li key={s.t} className="flex gap-2.5">
                 <span className="w-6 h-6 rounded-full text-[12px] font-semibold flex items-center justify-center shrink-0 tabular" style={{ background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)' }}>{i + 1}</span>
@@ -196,23 +212,20 @@ function Shop({ onGo }: { onGo: (t: Tab) => void }) {
         </section>
       )}
 
-      <div className="grid grid-cols-3 gap-2 text-[11.5px]">
-        {[
-          { icon: BadgeIndianRupee, t: 'UPI & cards' },
-          { icon: Zap, t: 'Instant access' },
-          { icon: ShieldCheck, t: 'Secure by Razorpay' },
-        ].map(s => (
-          <div key={s.t} className="dx-inset px-2 py-2 flex items-center justify-center gap-1.5 font-medium text-center">
-            <s.icon size={13} className="dx-accent shrink-0" /> {s.t}
-          </div>
-        ))}
-      </div>
-
       {loading && <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">{[0, 1, 2, 3].map(i => <div key={i} className="dx-card h-44 animate-pulse" />)}</div>}
+
+      {groups.map(({ c, list }) => list.length > 0 && (
+        <div key={c} className="space-y-3">
+          <SectionHead icon={SECTION[c].icon} title={SECTION[c].title} count={list.length} onMore={cat === 'all' && list.length > preview ? () => setCat(c) : undefined} />
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {list.slice(0, preview).map(i => <ShowcaseCard key={i.id} item={i} onOpen={() => setShowcase(i)} />)}
+          </div>
+        </div>
+      ))}
 
       {show('plans') && plans.length > 0 && (
         <>
-          <SectionHead icon={CalendarDays} title="Training plans" hint="Made by coaches. Yours to keep after buying." count={plans.length} onMore={cat === 'all' && plans.length > preview ? () => setCat('plans') : undefined} />
+          <SectionHead icon={CalendarDays} title="Plans from coaches" hint="Yours to keep after buying." count={plans.length} onMore={cat === 'all' && plans.length > preview ? () => setCat('plans') : undefined} />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {plans.slice(0, preview).map(l => <ListingCard key={l.id} listing={l} onOpen={() => setListing(l)} />)}
           </div>
@@ -221,7 +234,7 @@ function Shop({ onGo }: { onGo: (t: Tab) => void }) {
 
       {show('clubs') && paidClans.length > 0 && (
         <>
-          <SectionHead icon={Shield} title="Paid clans" hint="One-time fee to join a coached community." count={paidClans.length} onMore={cat === 'all' && paidClans.length > preview ? () => setCat('clubs') : undefined} />
+          <SectionHead icon={Shield} title="Member clans" count={paidClans.length} onMore={cat === 'all' && paidClans.length > preview ? () => setCat('clubs') : undefined} />
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {paidClans.slice(0, preview).map(c => (
               <button key={c.id} type="button" onClick={() => navigate(`/clan/${c.id}`)} className="dx-card overflow-hidden text-left flex flex-col">
@@ -241,7 +254,7 @@ function Shop({ onGo }: { onGo: (t: Tab) => void }) {
 
       {show('events') && ticketed.length > 0 && (
         <>
-          <SectionHead icon={Ticket} title="Events & challenges" hint="Tickets and entry fees. Book your spot." count={ticketed.length} onMore={cat === 'all' && ticketed.length > preview ? () => setCat('events') : undefined} />
+          <SectionHead icon={Ticket} title="Tickets" count={ticketed.length} onMore={cat === 'all' && ticketed.length > preview ? () => setCat('events') : undefined} />
           <div className="dx-card dx-list overflow-hidden">
             {ticketed.slice(0, preview).map(t => {
               const d = dateParts(t);
@@ -264,14 +277,14 @@ function Shop({ onGo }: { onGo: (t: Tab) => void }) {
         </>
       )}
 
-      {show('gear') && products.length > 0 && (
+      {show('products') && products.length > 0 && (
         <>
-          <SectionHead icon={ShoppingBag} title="Gear picks" hint="Bought on the partner's site at their price." count={products.length} onMore={cat === 'all' && products.length > preview ? () => setCat('gear') : undefined} />
+          <SectionHead icon={ShoppingBag} title="Gear picks" hint="Bought on the store's own site." count={products.length} onMore={cat === 'all' && products.length > preview ? () => setCat('products') : undefined} />
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {products.slice(0, preview).map(l => <GearCard key={l.id} link={l} tag={gear.data?.settings?.amazonTag} />)}
           </div>
           <p className="text-[11px] dx-muted leading-snug">
-            {products.some(l => isAmazonUrl(l.url)) ? 'As an Amazon Associate, Apparatus earns from qualifying purchases. ' : ''}We may earn a commission from these links at no extra cost to you.
+            {products.some(l => isAmazonUrl(l.url)) ? `As an Amazon Associate, ${BRAND.name} earns from qualifying purchases. ` : ''}We may earn a commission from these links at no extra cost to you.
           </p>
         </>
       )}
@@ -280,41 +293,14 @@ function Shop({ onGo }: { onGo: (t: Tab) => void }) {
         <motion.div variants={item} className="dx-card p-8 text-center">
           <Store size={26} className="mx-auto dx-accent" />
           <div className="mt-2 text-[15px] font-semibold">{q ? `Nothing found for "${search.trim()}"` : 'Nothing here yet'}</div>
-          <p className="mt-1 text-[13px] dx-muted">{q ? 'Try a different word or another category.' : 'Coaches are setting up their shops. Check back soon, or start selling yourself.'}</p>
-          {!q && <button type="button" className="dx-btn mt-4" onClick={() => onGo('sell')}>Start selling</button>}
+          <p className="mt-1 text-[13px] dx-muted">{q ? 'Try a different word or another category.' : 'Listings from brands, gyms and coaches will show up here.'}</p>
+          {!q && <button type="button" className="dx-btn mt-4" onClick={onList}>List yours</button>}
         </motion.div>
       )}
-
-      {!!purchases.data?.length && cat === 'all' && !q && (
-        <>
-          <SectionHead icon={Receipt} title="Your orders" />
-          <div className="dx-card dx-list overflow-hidden">
-            {purchases.data.map(o => (
-              <button
-                key={o.id}
-                type="button"
-                className="w-full p-3.5 flex items-center gap-3 text-left"
-                onClick={() => {
-                  if (o.kind === 'plan' && o.result?.planId) navigate(`/plans/${o.result.planId}`);
-                  else if (o.kind === 'clan') navigate(`/clan/${o.itemId}`);
-                  else if (o.kind === 'event' || o.kind === 'challenge') setOpen({ kind: o.kind, id: o.itemId });
-                }}
-              >
-                <span className="flex-1 min-w-0">
-                  <span className="block text-[14px] font-semibold truncate">{o.title}</span>
-                  <span className="block text-[12px] dx-muted">{o.createdAt?.toDate?.().toLocaleDateString() || ''}</span>
-                </span>
-                <span className="text-[13px] font-semibold tabular">{formatInr(o.amount / 100)}</span>
-                <ChevronRight size={16} className="dx-muted" />
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-
       <AnimatePresence>
         {listing && <ListingSheet key={listing.id} listing={listing} onClose={() => setListing(null)} />}
-        {help && <HowItWorksSheet key="help" onClose={() => setHelp(false)} onGo={onGo} />}
+        {showcase && <ShowcaseSheet key={showcase.id} item={showcase} onClose={() => setShowcase(null)} />}
+        {help && <HowItWorksSheet key="help" onClose={() => setHelp(false)} onList={onList} />}
       </AnimatePresence>
       {open?.kind === 'event' && <EventDetailSheet eventId={open.id} onClose={() => setOpen(null)} />}
       {open?.kind === 'challenge' && <ChallengeDetailSheet challengeId={open.id} onClose={() => setOpen(null)} />}
@@ -323,39 +309,43 @@ function Shop({ onGo }: { onGo: (t: Tab) => void }) {
 }
 
 export function MarketplacePage() {
-  const [params, setParams] = useSearchParams();
-  const raw = params.get('tab') === 'sponsor' ? 'host' : (params.get('tab') as Tab | null);
-  const tab: Tab = raw && TABS.includes(raw) ? raw : 'shop';
-  const go = (t: Tab) => setParams(t === 'shop' ? {} : { tab: t }, { replace: true });
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const payments = usePaymentsEnabled();
+  const partner = useMarketPartner();
+  const legacy = LEGACY_TABS[params.get('tab') || ''];
   const [help, setHelp] = useState(false);
+  const toListings = () => navigate('/seller');
+  useEffect(() => {
+    if (legacy) navigate('/seller', { replace: true });
+  }, [legacy, navigate]);
 
   return (
     <motion.div variants={container} initial="hidden" animate="show" className="dx pro-scope w-full min-w-0 max-w-5xl mx-auto pt-1 sm:pt-4 space-y-4 pb-24">
-      <motion.header variants={item} className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-[24px] sm:text-[28px] font-semibold tracking-tight leading-tight">Marketplace</h1>
-            <p className="text-[13px] dx-muted mt-0.5">Training plans, paid clans, event tickets and gear.</p>
-          </div>
-          <button type="button" onClick={() => setHelp(true)} className="dx-icon-btn dx-icon-btn--sm sm:hidden" aria-label="How the marketplace works"><CircleHelp size={17} /></button>
+      <motion.header variants={item} className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-[24px] sm:text-[28px] font-semibold tracking-tight leading-tight">Marketplace</h1>
+          <p className="text-[13px] dx-muted mt-0.5">Products, plans, events and communities from brands, gyms and coaches.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="dx-segment flex-1 sm:w-[360px]" role="tablist">
-            <button role="tab" aria-selected={tab === 'shop'} onClick={() => go('shop')}>Shop</button>
-            <button role="tab" aria-selected={tab === 'host'} onClick={() => go('host')}>Host events</button>
-            <button role="tab" aria-selected={tab === 'sell'} onClick={() => go('sell')}>Sell & earn</button>
-          </div>
-          <button type="button" onClick={() => setHelp(true)} className="dx-icon-btn dx-icon-btn--sm hidden sm:flex" aria-label="How the marketplace works"><CircleHelp size={17} /></button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button type="button" onClick={() => setHelp(true)} className="dx-icon-btn dx-icon-btn--sm" aria-label="How the marketplace works"><CircleHelp size={17} /></button>
+          {payments && <button type="button" onClick={() => navigate('/marketplace/orders')} className="dx-btn-secondary !h-9 !px-3 text-[13px]"><Receipt size={15} /> Orders</button>}
         </div>
       </motion.header>
 
       <motion.div variants={item} className="space-y-4">
-        {tab === 'shop' && <Shop onGo={go} />}
-        {tab === 'host' && <HostHub />}
-        {tab === 'sell' && <SellerHub />}
+        <Shop onList={toListings} />
+        <button type="button" onClick={toListings} className="dx-card w-full p-4 flex items-center gap-3 text-left">
+          <span className="dx-badge-icon"><Store size={18} /></span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-[15px] font-semibold">{partner ? 'My listings' : 'List on the marketplace'}</span>
+            <span className="block text-[12.5px] dx-muted">{partner ? 'Add or update what you show here.' : 'For brands, gyms, coaches and community owners.'}</span>
+          </span>
+          <ChevronRight size={18} className="dx-muted shrink-0" />
+        </button>
       </motion.div>
 
-      <AnimatePresence>{help && <HowItWorksSheet key="help" onClose={() => setHelp(false)} onGo={go} />}</AnimatePresence>
+      <AnimatePresence>{help && <HowItWorksSheet key="help" onClose={() => setHelp(false)} onList={toListings} />}</AnimatePresence>
     </motion.div>
   );
 }

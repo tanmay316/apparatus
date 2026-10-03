@@ -8,7 +8,8 @@ accounts are always read from Firestore here; the client only names the item it 
 
 Firestore (written with the Admin SDK; the rules keep clients out):
   market_orders/{orderId}   one checkout attempt and its outcome
-  payout_accounts/{uid}     seller application; an admin sets status=active + razorpayAccountId
+  payout_accounts/{uid}     seller application (written here after the sign-up checks); an admin sets
+                            status=active + razorpayAccountId, and may mark the seller trusted
   sponsorships/{id}         brand request; an admin quotes a fee, the payment applies the sponsor
 """
 from __future__ import annotations
@@ -18,6 +19,7 @@ import re
 import secrets
 import string
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app.core.config import settings
@@ -38,12 +40,18 @@ ORDER_ID_RE = re.compile(r"^mo_[A-Za-z0-9]{16}$")
 LINK_ID_RE = re.compile(r"^plink_[A-Za-z0-9]{6,40}$")
 ACCOUNT_ID_RE = re.compile(r"^acc_[A-Za-z0-9]{6,40}$")
 DOC_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+PHONE_RE = re.compile(r"^\+91[6-9][0-9]{9}$")
+EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,120}\.[^@\s]{2,}$")
+SELLER_TERMS_VERSION = 1
+IST = timezone(timedelta(hours=5, minutes=30))
 
 LINK_TTL_SEC = 30 * 60
 REUSE_SEC = 25 * 60
 SPONSOR_LINK_TTL_SEC = 7 * 24 * 3600
 TRANSFER_RETRY_SEC = 15 * 60
 HOLD_AFTER_END_SEC = 2 * 24 * 3600
+# Tickets for something without an end date are still held, so a host can't collect and vanish.
+UNDATED_HOLD_SEC = 14 * 24 * 3600
 
 
 class MarketError(Exception):
@@ -87,6 +95,12 @@ def public_config() -> dict:
         "fees": {"ticket": settings.MARKET_FEE_PCT_TICKET, "coach": settings.MARKET_FEE_PCT_COACH},
         "minPrice": settings.MARKET_MIN_PRICE_INR,
         "maxPrice": settings.MARKET_MAX_PRICE_INR,
+        "seller": {
+            "minAccountDays": settings.MARKET_SELLER_MIN_ACCOUNT_DAYS,
+            "newSellerMonthlyLimit": settings.MARKET_NEW_SELLER_MONTHLY_INR,
+            "trustedAfterSales": settings.MARKET_TRUSTED_AFTER_SALES,
+            "termsVersion": SELLER_TERMS_VERSION,
+        },
     }
 
 
@@ -97,13 +111,129 @@ def _db():
     return db
 
 
-def payout_account(db, uid: str) -> Optional[str]:
+_mode_cache: dict = {"at": 0.0, "mode": "off"}
+MODE_TTL_SEC = 15
+
+
+def payments_mode(db) -> str:
+    """admin_settings/market.paymentsMode: 'off' (default), 'admin' (admins only, for testing) or 'on'."""
+    if time.time() - _mode_cache["at"] > MODE_TTL_SEC:
+        snap = db.collection("admin_settings").document("market").get()
+        mode = ((snap.to_dict() or {}) if snap.exists else {}).get("paymentsMode")
+        _mode_cache.update(at=time.time(), mode=mode if mode in ("off", "admin", "on") else "off")
+    return _mode_cache["mode"]
+
+
+def require_payments(db, user: dict) -> None:
+    mode = payments_mode(db)
+    if mode == "on" or (mode == "admin" and is_admin(user)):
+        return
+    raise MarketError(503, "Payments are not available.")
+
+
+def _payout_doc(db, uid: str) -> dict:
     if not uid or not DOC_ID_RE.match(uid):
-        return None
+        return {}
     snap = db.collection("payout_accounts").document(uid).get()
-    data = (snap.to_dict() or {}) if snap.exists else {}
+    return (snap.to_dict() or {}) if snap.exists else {}
+
+
+def payout_account(db, uid: str) -> Optional[str]:
+    data = _payout_doc(db, uid)
     acc = str(data.get("razorpayAccountId") or "")
     return acc if data.get("status") == "active" and ACCOUNT_ID_RE.match(acc) else None
+
+
+def _month_start() -> float:
+    now = datetime.now(IST)
+    return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+
+def check_new_seller_cap(db, seller: str, amount: int) -> None:
+    """New sellers may take at most MARKET_NEW_SELLER_MONTHLY_INR a month until they're trusted."""
+    cap = settings.MARKET_NEW_SELLER_MONTHLY_INR * 100
+    if cap <= 0 or _payout_doc(db, seller).get("trusted") is True:
+        return
+    sales, month_total = 0, 0
+    now, start = time.time(), _month_start()
+    # Unpaid links that can still be paid count too, so a burst of parallel checkouts can't overshoot the cap.
+    q = (db.collection("market_orders").where("sellerId", "==", seller)
+         .where("status", "in", ["fulfilled", "created"]).limit(1000))
+    for snap in q.stream():
+        o = snap.to_dict() or {}
+        created_at = float(o.get("createdAtSec") or 0)
+        if o.get("status") == "fulfilled":
+            sales += 1
+            if created_at >= start:
+                month_total += int(o.get("amount") or 0)
+        elif now - created_at < LINK_TTL_SEC:
+            month_total += int(o.get("amount") or 0)
+    if sales >= settings.MARKET_TRUSTED_AFTER_SALES:
+        return
+    if month_total + amount > cap:
+        raise MarketError(409, "This seller has reached their monthly limit as a new seller. Please try again next month.")
+
+
+def account_created_at(uid: str) -> Optional[float]:
+    from firebase_admin import auth
+    try:
+        return auth.get_user(uid).user_metadata.creation_timestamp / 1000
+    except Exception:
+        logger.warning("Could not read account age for %s", uid)
+        return None
+
+
+def _banned(db, uid: str) -> bool:
+    snap = db.collection("bans").document(uid).get()
+    data = (snap.to_dict() or {}) if snap.exists else {}
+    if data.get("active") is not True:
+        return False
+    expires = _to_epoch(data.get("expiresAt"))
+    return not expires or expires > time.time()
+
+
+def apply_seller(user: dict, form: dict) -> dict:
+    """Seller sign-up. Identity comes from the verified token; Razorpay does bank KYC after an admin links the account."""
+    uid = user["uid"]
+    if not user.get("email_verified"):
+        raise MarketError(403, "Verify your email address first.")
+    phone = str(user.get("phone_number") or "")
+    if not PHONE_RE.match(phone):
+        raise MarketError(403, "Verify your phone number first.")
+    min_days = settings.MARKET_SELLER_MIN_ACCOUNT_DAYS
+    created = account_created_at(uid)
+    if created is None or time.time() - created < min_days * 86400:
+        raise MarketError(403, f"Your account needs to be at least {min_days} days old to sell.")
+    if form.get("terms_version") != SELLER_TERMS_VERSION:
+        raise MarketError(400, "Please accept the seller terms.")
+    legal_name = " ".join(str(form.get("legal_name") or "").split())[:100]
+    email = str(form.get("email") or "").strip()[:120]
+    business = form.get("business_type")
+    if len(legal_name) < 2 or not EMAIL_RE.match(email) or business not in ("individual", "business"):
+        raise MarketError(400, "Please check your details.")
+
+    db = _db()
+    require_payments(db, user)
+    if _banned(db, uid):
+        raise MarketError(403, "Your account can't sell right now.")
+    ref = db.collection("payout_accounts").document(uid)
+    snap = ref.get()
+    existing = (snap.to_dict() or {}) if snap.exists else None
+    if existing and existing.get("status") not in ("pending", "rejected"):
+        raise MarketError(409, "Your payout account is already set up. Contact support to change it.")
+    for other in db.collection("payout_accounts").where("phone", "==", phone).limit(3).stream():
+        if other.id != uid:
+            raise MarketError(409, "This phone number is already used by another seller account.")
+
+    doc = {
+        "uid": uid, "legalName": legal_name, "email": email, "phone": phone, "businessType": business,
+        "about": str(form.get("about") or "").strip()[:500], "status": "pending",
+        "termsVersion": SELLER_TERMS_VERSION, "termsAcceptedAt": _server_ts(), "updatedAt": _server_ts(),
+    }
+    if not existing:
+        doc.update(createdAt=_server_ts(), razorpayAccountId="", adminNote="")
+    ref.set(doc, merge=True)
+    return {"status": "pending"}
 
 
 def _doc(db, collection: str, doc_id: str) -> dict:
@@ -153,6 +283,9 @@ def describe_item(db, kind: str, item_id: str, uid: str) -> dict:
             raise MarketError(403, "Join the clan first to get a ticket.")
         if end and end > now:
             hold_until = int(end + HOLD_AFTER_END_SEC)
+        else:
+            start = _to_epoch(data.get("startTime" if kind == "event" else "startDate"))
+            hold_until = int(max(start or 0, now) + UNDATED_HOLD_SEC)
     elif kind == "clan":
         seller = str(data.get("leaderId") or "")
         title = f"{data.get('name') or 'Clan'} membership"
@@ -244,6 +377,7 @@ def create_checkout(user: dict, kind: str, item_id: str, return_to: str = "app")
     if not settings.market_enabled:
         raise MarketError(503, "Payments are not available yet.")
     db = _db()
+    require_payments(db, user)
     uid = user["uid"]
     info = describe_item(db, kind, item_id, uid)
     if not payout_account(db, info["sellerId"]):
@@ -259,6 +393,7 @@ def create_checkout(user: dict, kind: str, item_id: str, return_to: str = "app")
         if o.get("amount") == total and o.get("shortUrl") and time.time() - float(o.get("createdAtSec") or 0) < REUSE_SEC:
             return _public_order(snap.id, o)
 
+    check_new_seller_cap(db, info["sellerId"], total)
     name, photo = _buyer_profile(db, uid)
     email = verified_email(user)
     order_id = new_order_id()

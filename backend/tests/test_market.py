@@ -94,7 +94,7 @@ def get(coll, doc_id):
 
 
 for coll in ("market_orders", "simple_events", "simple_event_participants", "clans_v2", "clan_memberships", "plans",
-             "market_listings", "payout_accounts", "users", "sponsorships", "challenges_v2"):
+             "market_listings", "payout_accounts", "users", "sponsorships", "challenges_v2", "bans", "admin_settings"):
     for d in db.collection(coll).stream():
         d.reference.delete()
 
@@ -118,6 +118,25 @@ db.collection("market_listings").document("l1").set({"sellerId": "seller", "plan
 db.collection("challenges_v2").document("ch1").set({"title": "Push-up month", "createdBy": "seller", "status": "active"})
 
 buyer = {"uid": "buyer", "email": "buyer@example.com", "email_verified": True}
+admin_user = {"uid": "adm", "email": settings.csv(settings.ADMIN_EMAILS)[0], "email_verified": True}
+
+
+def set_mode(mode):
+    db.collection("admin_settings").document("market").set({"paymentsMode": mode})
+    market._mode_cache["at"] = 0
+
+
+# Payments switch
+db.collection("admin_settings").document("market").delete()
+market._mode_cache["at"] = 0
+check("payments are off by default", raises(lambda: market.create_checkout(buyer, "event", "ev1"), 503))
+set_mode("admin")
+check("admin-only mode blocks everyone else", raises(lambda: market.create_checkout(buyer, "event", "ev1"), 503))
+adm = market.create_checkout(admin_user, "event", "ev1")
+check("admin-only mode lets admins test", adm["status"] == "created")
+db.collection("market_orders").document(adm["orderId"]).delete()
+links.clear()
+set_mode("on")
 
 # Event ticket
 o1 = market.create_checkout(buyer, "event", "ev1", "web")
@@ -147,6 +166,8 @@ market.handle_webhook({"event": "payment_link.paid", "payload": {"payment_link":
 check("replays don't double count", get("simple_events", "ev1")["participantCount"] == 2)
 check("replays don't double pay", len([c for c in calls if c[1].endswith("/transfers")]) == 1)
 check("can't buy a second ticket", raises(lambda: market.create_checkout(buyer, "event", "ev1"), 409))
+db.collection("simple_events").document("undated").set({"title": "Open meetup", "createdBy": "seller", "ticketPrice": 99, "status": "upcoming"})
+check("undated tickets are still held", (market.describe_item(db, "event", "undated", "buyer")["holdUntil"] or 0) > time.time() + 13 * 86400)
 
 # Guards
 seller = {"uid": "seller", "email": "s@example.com", "email_verified": True}
@@ -214,5 +235,41 @@ check("no account → transfer failed", get("market_orders", o5["orderId"])["tra
 db.collection("payout_accounts").document("seller").update({"status": "active"})
 check("retry without force does nothing", market.transfer_seller_share(db, o5["orderId"])["status"] == "failed")
 check("admin retry succeeds", market.transfer_seller_share(db, o5["orderId"], force=True)["status"] == "created")
+
+# Seller sign-up
+ages = {"old": time.time() - 30 * 86400, "new": time.time() - 86400}
+market.account_created_at = lambda uid: ages.get(uid)
+form = {"legal_name": "Old  Coach", "email": "coach@example.com", "business_type": "individual", "about": "plans", "terms_version": market.SELLER_TERMS_VERSION}
+old = {"uid": "old", "email_verified": True, "phone_number": "+919876543210"}
+check("unverified email can't sell", raises(lambda: market.apply_seller({**old, "email_verified": False}, form), 403))
+check("unverified phone can't sell", raises(lambda: market.apply_seller({**old, "phone_number": None}, form), 403))
+check("new account can't sell yet", raises(lambda: market.apply_seller({**old, "uid": "new"}, form), 403))
+check("terms must be accepted", raises(lambda: market.apply_seller(old, {**form, "terms_version": 0}), 400))
+check("bad email rejected", raises(lambda: market.apply_seller(old, {**form, "email": "nope"}), 400))
+db.collection("bans").document("old").set({"active": True})
+check("banned user can't sell", raises(lambda: market.apply_seller(old, form), 403))
+db.collection("bans").document("old").delete()
+check("eligible user applies", market.apply_seller(old, form)["status"] == "pending")
+acc = get("payout_accounts", "old")
+check("phone comes from the verified token", acc["phone"] == "+919876543210" and acc["legalName"] == "Old Coach" and acc["termsVersion"] == 1)
+check("pending application can be edited", market.apply_seller(old, {**form, "about": "clans"})["status"] == "pending" and get("payout_accounts", "old")["about"] == "clans")
+ages["twin"] = ages["old"]
+check("one phone per seller", raises(lambda: market.apply_seller({**old, "uid": "twin"}, form), 409))
+db.collection("payout_accounts").document("old").update({"status": "active", "razorpayAccountId": "acc_OLD123456789"})
+check("active account can't be rewritten", raises(lambda: market.apply_seller(old, form), 409))
+
+# New-seller monthly cap
+settings.MARKET_NEW_SELLER_MONTHLY_INR = 300
+db.collection("simple_events").document("cap1").set({"title": "Cap", "createdBy": "old", "ticketPrice": 199, "status": "upcoming", "endTime": future})
+db.collection("simple_events").document("cap2").set({"title": "Cap 2", "createdBy": "old", "ticketPrice": 199, "status": "upcoming", "endTime": future})
+oc = market.create_checkout(buyer, "event", "cap1")
+check("retrying your own unpaid checkout isn't blocked by the cap", market.create_checkout(buyer, "event", "cap1")["orderId"] == oc["orderId"])
+check("unpaid links count toward the cap", raises(lambda: market.create_checkout({"uid": "buyer2"}, "event", "cap2"), 409))
+pay(oc["orderId"])
+market.refresh_order(oc["orderId"], "buyer")
+check("new seller over the monthly cap is blocked", raises(lambda: market.create_checkout(buyer, "event", "cap2"), 409))
+db.collection("payout_accounts").document("old").update({"trusted": True})
+check("trusted seller has no cap", market.create_checkout(buyer, "event", "cap2")["status"] == "created")
+settings.MARKET_NEW_SELLER_MONTHLY_INR = 10000
 
 sys.exit(1 if failed else 0)

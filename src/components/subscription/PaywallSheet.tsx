@@ -8,11 +8,12 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
+import { CAN_PURCHASE, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
 import {
   PRO_PRICES, checkCoupon, getBillingStatus, isRazorpayCheckoutUrl, loadRazorpayCheckout, redeemCoupon,
   startSubscription, verifySubscription, type CouponInfo, type ProPlan,
 } from '@/services/billing';
+import { BRAND } from '@/lib/brand';
 
 const FEATURES = [
   { icon: Bot, title: 'Unlimited AI coach', body: 'Ask anything about your training and nutrition, any time.' },
@@ -78,7 +79,7 @@ export function PaywallSheet() {
     if (open && isPro && (busy || waitingForBrowser)) {
       setBusy(false);
       setWaitingForBrowser(false);
-      showToast('Welcome to Apparatus Pro!', 'success');
+      showToast(`Welcome to ${BRAND.name} Pro!`, 'success');
     }
   }, [isPro, open, busy, waitingForBrowser, showToast]);
 
@@ -99,8 +100,8 @@ export function PaywallSheet() {
       const rzp = new Razorpay({
         key: sub.key_id,
         subscription_id: sub.subscription_id,
-        name: 'Apparatus',
-        description: `Apparatus Pro · ${plan === 'yearly' ? 'Yearly' : 'Monthly'}`,
+        name: BRAND.name,
+        description: `${BRAND.name} Pro · ${plan === 'yearly' ? 'Yearly' : 'Monthly'}`,
         prefill: { name: profile?.displayName || '', email: user.email || '' },
         theme: { color: theme === 'dark' ? '#5d2a1a' : '#17191c' },
         handler: async (resp: { razorpay_payment_id: string; razorpay_subscription_id: string; razorpay_signature: string }) => {
@@ -138,7 +139,7 @@ export function PaywallSheet() {
           <motion.div
             role="dialog"
             aria-modal="true"
-            aria-label="Apparatus Pro"
+            aria-label={`${BRAND.name} Pro`}
             initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 40, opacity: 0 }}
@@ -151,7 +152,7 @@ export function PaywallSheet() {
                 <X size={16} />
               </button>
               <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] opacity-80">
-                <Crown size={14} /> Apparatus Pro
+                <Crown size={14} /> {BRAND.name} Pro
               </div>
               <h2 className="mt-2 text-[24px] leading-tight font-semibold">
                 {isPro ? "You're on Pro" : 'Train smarter, without limits'}
@@ -182,6 +183,7 @@ export function PaywallSheet() {
                 <p className="mt-5 text-[13px] dx-muted">Subscriptions open soon.</p>
               ) : (
                 <>
+                  {CAN_PURCHASE && (
                   <div className="mt-5 grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Plan">
                     {(['yearly', 'monthly'] as ProPlan[]).map(p => {
                       const selected = plan === p;
@@ -210,6 +212,7 @@ export function PaywallSheet() {
                       );
                     })}
                   </div>
+                  )}
 
                   <div className="mt-3">
                     {!showCoupon && !coupon ? (
@@ -260,15 +263,19 @@ export function PaywallSheet() {
                       <Loader2 size={16} className="animate-spin shrink-0 mt-0.5" />
                       <span>Finish the payment in your browser, then come back. Pro unlocks here automatically.</span>
                     </div>
+                  ) : !CAN_PURCHASE ? (
+                    coupon?.type === 'discount' ? <p className="mt-4 text-[13px] dx-muted">This code can't be used in the app.</p> : null
                   ) : (
                     <button type="button" onClick={checkout} disabled={busy} className="dx-btn w-full mt-4 !h-12 !text-[15px]">
                       {busy ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={17} />}
                       {busy ? 'Opening checkout…' : `Get Pro · ${price.amount}/${price.per}${coupon?.type === 'discount' ? ' (discount applied)' : ''}`}
                     </button>
                   )}
-                  <p className="mt-3 text-center text-[11.5px] dx-muted">
-                    Cancel anytime in Settings. Secure payments by Razorpay: UPI, cards and netbanking.
-                  </p>
+                  {CAN_PURCHASE && (
+                    <p className="mt-3 text-center text-[11.5px] dx-muted">
+                      Cancel anytime in Settings. Secure payments by Razorpay: UPI, cards and netbanking.
+                    </p>
+                  )}
                 </>
               )}
             </div>

@@ -2,6 +2,7 @@ import { db } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Capacitor, CapacitorHttp } from '@capacitor/core';
 import { EXERCISE_ONTOLOGY } from './exercise-ontology';
+import { BRAND } from './brand';
 
 const YT_WEB_KEY = 'AIzaSyA3NioUdgkc2Lh9YBxtl5ZgSctL2-izpII';
 const YT_ANDROID_KEY = 'AIzaSyD0XhRfSlGyZZLQXx8A7hM5WPMOcg2UycE';
@@ -256,7 +257,7 @@ export function scoreVideo(title: string, exerciseName: string): number {
 // ─── Network helpers ──────────────────────────────────────────
 
 /** The web API key is restricted to the hosting origin. */
-const WEB_REFERER = 'https://apparatus-46b1b.web.app/';
+const WEB_REFERER = `${BRAND.webUrl}/`;
 const ANDROID_PACKAGE = 'com.tms.apparatus';
 /** A "not found" result is retried after this long instead of blocking for days. */
 const NOT_FOUND_RETRY_MS = 6 * 60 * 60 * 1000;

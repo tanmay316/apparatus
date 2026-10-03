@@ -2,7 +2,7 @@
   "name": "apparatus",
   "private": true,
   "version": "2.0.91",
-  "nativeVersion": "2.1.3",
+  "nativeVersion": "2.1.4",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,9 @@
     "ota:upload": "npm run build && npx otakit upload --release",
     "ios:setup": "bash ./ios-native/setup-ios.sh",
     "ios:sync": "npm run build && node ios-native/patch-ios.cjs && npx cap sync ios",
-    "ios:open": "npx cap open ios"
+    "ios:open": "npx cap open ios",
+    "brand:sync": "node scripts/sync-brand.cjs",
+    "prebuild": "node scripts/sync-brand.cjs"
   },
   "dependencies": {
     "@capacitor-community/native-audio": "^8.0.0",

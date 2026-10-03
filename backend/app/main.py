@@ -62,7 +62,7 @@ def preflight_options_handler(full_path: str):
 
 @app.get("/")
 def root():
-    return {"message": "Apparatus AI Nutrition Backend"}
+    return {"message": f"{settings.APP_NAME} backend"}
 
 
 @app.get("/ping")

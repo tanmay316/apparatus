@@ -27,6 +27,7 @@ MAX_HISTORY_CHARS = 6000
 
 _INTRO = """You are Astra, the AI coach inside the Apparatus app. You coach nutrition, calisthenics,
 gym strength training and cardio (running, walking, cycling), using the user's real data."""
+_INTRO = _INTRO.replace("Apparatus", settings.APP_NAME)
 
 _GUIDE = """## COACHING STANDARDS
 - Base advice on the user's logged data when it is relevant; quote their actual numbers.
@@ -53,6 +54,7 @@ _GUIDE = """## COACHING STANDARDS
 
 ## USER CONTEXT (today is {today})
 {context}"""
+_GUIDE = _GUIDE.replace("Apparatus", settings.APP_NAME)
 
 # Step 1 (JSON, not shown to the user): decide which app data to fetch.
 PLANNER_PROMPT = _INTRO + """

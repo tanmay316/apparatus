@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.providers.llm.base import BaseLLMProvider, ChatMessage
 from app.providers.llm import chat_with_fallback
+from app.core.config import settings
 
 
 class RecipeOutput(BaseModel):
@@ -36,6 +37,7 @@ Rules:
 - Support Indian, Western, Mediterranean, Asian cuisines
 - Optimize for the user's fitness goal when specified
 - Return ONLY valid JSON"""
+RECIPE_SYSTEM_PROMPT = RECIPE_SYSTEM_PROMPT.replace("Apparatus", settings.APP_NAME)
 
 
 class RecipeAgent:

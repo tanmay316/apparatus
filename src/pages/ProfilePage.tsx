@@ -32,6 +32,7 @@ import { getUserClans, getUserCommunityBadges } from '@/services/community';
 import { CommunityBadgeCard } from '@/components/community/CommunityBadgeCard';
 import { MedalShareModal } from '@/components/community/MedalShareModal';
 import { uploadAvatar, uploadProfileCover } from '@/services/account';
+import { BRAND } from '@/lib/brand';
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
 
@@ -567,7 +568,7 @@ export function ProfilePage() {
                   event.stopPropagation();
                   const profileUrl = getAppShareUrl(`/profile/${p.username}`);
                   const res = await shareContent({
-                    title: `${p.displayName} on Apparatus`,
+                    title: `${p.displayName} on ${BRAND.name}`,
                     url: profileUrl,
                     dialogTitle: 'Share Athlete Profile',
                   });
@@ -668,7 +669,7 @@ export function ProfilePage() {
                   <ChevronRight size={11} className="opacity-70 group-hover:translate-x-0.5 transition-transform" />
                 </Link>
                 {p.proBadge && (
-                  <span className="dx-pill" style={{ background: 'rgba(245, 179, 1, 0.14)', color: '#c98a1f' }} title="Apparatus Pro member">
+                  <span className="dx-pill" style={{ background: 'rgba(245, 179, 1, 0.14)', color: '#c98a1f' }} title={`${BRAND.name} Pro member`}>
                     <Crown size={11} /> Pro
                   </span>
                 )}

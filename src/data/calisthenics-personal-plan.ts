@@ -1,5 +1,6 @@
 import type { Plan, Exercise, PlanDay } from '@/types';
 import { Timestamp } from 'firebase/firestore';
+import { BRAND } from '@/lib/brand';
 
 const ex = (name: string, sets: string, tempo = '', rest = '', cues: string[] = []): Exercise => {
   const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(name + ' form tutorial')}`;
@@ -17,7 +18,7 @@ const breath = (): Exercise[] => [ex('Bhastrika breathing', '3 x 20 breaths'), e
 const day = (dayNumber: number, title: string, skill: string, time: string, skillWork: Exercise[], strength: Exercise[], cooldown = breath()): PlanDay => ({ dayNumber, title, skill, time, type: 'strength', order: dayNumber, warmup: [...warmup(), ...breath()], skillWork, strength, cooldown });
 
 export const personalCalisthenicsPlan: Plan = {
-  ownerId: 'SYSTEM', ownerName: 'Apparatus', title: '6-Day Calisthenics Protocol v3',
+  ownerId: 'SYSTEM', ownerName: BRAND.name, title: '6-Day Calisthenics Protocol v3',
   description: 'Personal 7-day schedule from the v3 PDF: hypertrophy-focused calisthenics, skill practice, yoga, pranayama, and meditation.',
   type: 'sample', tags: ['calisthenics', 'bodyweight', 'skills', 'yoga', 'hypertrophy'], daysPerWeek: 7,
   estimatedDuration: '45-90 min', isPublic: true, isArchived: false, clonedFrom: null, usageCount: 0,

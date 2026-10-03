@@ -779,6 +779,8 @@ export interface ChallengeV2 {
   activityFilter?: ChallengeActivityFilter; // which activities count
   /** Ticket price (INR); 0/absent = free. */
   ticketPrice?: number;
+  /** Display-only entry fee (INR) collected by the organiser outside the app. */
+  entryFee?: number | null;
   ticketsSold?: number;
   sponsor?: SponsorBadge;
   createdAt: Timestamp | null;
@@ -848,6 +850,8 @@ export interface SimpleEvent {
   participantCount: number;
   coverUrl?: string;
   ticketPrice?: number;
+  /** Display-only entry fee (INR) collected by the organiser outside the app. */
+  entryFee?: number | null;
   ticketsSold?: number;
   sponsor?: SponsorBadge;
   createdAt: Timestamp | null;

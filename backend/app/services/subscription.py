@@ -136,7 +136,7 @@ class QuotaResult:
             "kind": self.kind,
             "limit": self.limit,
             "period": self.period,
-            "message": f"You've used your {self.limit} free {noun}{when}. Upgrade to Apparatus Pro for unlimited access.",
+            "message": f"You've used your {self.limit} free {noun}{when}. Upgrade to {settings.APP_NAME} Pro for unlimited access.",
         }
 
 
@@ -463,7 +463,7 @@ def redeem_free_coupon(uid: str, email: Optional[str], code: str) -> dict:
         raise CouponError("Coupons are not available right now.")
     current = get_entitlement(uid, email)
     if current.get("pro") and current.get("provider") != "coupon":
-        raise CouponError("You already have Apparatus Pro.")
+        raise CouponError(f"You already have {settings.APP_NAME} Pro.")
 
     from google.cloud import firestore as gcf
     red_ref = ref.collection("redemptions").document(uid)

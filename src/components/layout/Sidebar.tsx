@@ -12,7 +12,10 @@ import { isAdminUser } from '@/lib/firebase';
 import { useUnreadAdminAlerts } from '@/services/admin-alerts';
 import { useIsDesktop } from '@/hooks/useMediaQuery';
 import { NAV_SECTIONS, SETTINGS_ITEM, isNavItemActive, type NavItem } from './nav-config';
+import { usePayoutAccount } from '@/components/market/CheckoutButton';
+import { useMarketPartner } from '@/components/market/use-market-partner';
 import { lockBodyScroll } from '@/lib/scroll-lock';
+import { BRAND } from '@/lib/brand';
 
 export const SIDEBAR_WIDTH = 256;
 
@@ -50,6 +53,8 @@ function SidebarContent({ onClose, docked }: { onClose?: () => void; docked?: bo
   const dayId = useWorkoutStore(s => s.dayId);
   const isAdmin = isAdminUser(user);
   const adminUnread = useUnreadAdminAlerts();
+  const hasPayout = !!usePayoutAccount(user?.uid);
+  const isSeller = !!useMarketPartner() || hasPayout;
 
   const go = (path: string) => { onClose?.(); navigate(path); };
 
@@ -71,7 +76,7 @@ function SidebarContent({ onClose, docked }: { onClose?: () => void; docked?: bo
       <div className="flex items-center justify-between h-12 px-4 shrink-0">
         <Link to="/" onClick={onClose} className="flex items-center gap-2.5">
           <img src="/logo.png" alt="" className="h-6 w-auto brand-logo-img" />
-          <span className="font-sans tracking-[0.3em] text-[12px] font-light text-bone">ΛPPΛRΛTUS</span>
+          <span className="font-sans tracking-[0.3em] text-[12px] font-light text-bone">{BRAND.wordmark}</span>
         </Link>
         {!docked && (
           <button onClick={onClose} className="w-9 h-9 rounded-xl text-bone-dim hover:bg-bone/5 hover:text-bone flex items-center justify-center" aria-label="Close menu">
@@ -117,7 +122,7 @@ function SidebarContent({ onClose, docked }: { onClose?: () => void; docked?: bo
           <div key={section.title} className="mb-2">
             <div className={sectionTitle}>{section.title}</div>
             <div className="space-y-0.5">
-              {section.items.map(item => <NavLink key={item.id} item={item} active={isNavItemActive(item, pathname)} onNavigate={onClose} />)}
+              {section.items.filter(item => !item.sellerOnly || isSeller).map(item => <NavLink key={item.id} item={item} active={isNavItemActive(item, pathname)} onNavigate={onClose} />)}
             </div>
           </div>
         ))}

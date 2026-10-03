@@ -1,4 +1,5 @@
-/** Canvas renderer for shareable achievement cards (1080px wide PNG). */
+
+import { BRAND } from '@/lib/brand';/** Canvas renderer for shareable achievement cards (1080px wide PNG). */
 
 export type CardFormat = 'post' | 'story' | 'square';
 export type CardTheme = 'gold' | 'ember' | 'midnight' | 'light';
@@ -316,7 +317,7 @@ export async function renderAchievementCard(data: AchievementCardData, format: C
   ctx.textAlign = 'left';
   ctx.font = `800 34px ${SANS}`;
   setSpacing(ctx, 9);
-  ctx.fillText('APPARATUS', PAD, PAD + 30);
+  ctx.fillText(BRAND.upper, PAD, PAD + 30);
   setSpacing(ctx, 0);
   ctx.textAlign = 'right';
   ctx.fillStyle = p.muted;

@@ -14,6 +14,7 @@ import {
 } from '@/lib/nutrition-plan';
 import { syncPlanToBackend, useUpdateNutritionSetup, type NutritionSetup } from '@/services/nutrition-setup';
 import { MACRO_META, NumberSheet, Ring, Ruler, Wheel, useLockBody, type MacroKey } from './cal-ui';
+import { BRAND } from '@/lib/brand';
 
 type StepId =
   | 'welcome' | 'gender' | 'workouts' | 'results' | 'body' | 'birth' | 'goal' | 'target' | 'realistic'
@@ -512,7 +513,7 @@ export default function NutritionOnboarding({ existing, onDone, onClose }: Props
             <Option selected={prefs.addBurned === false} onClick={() => setPrefs(p => ({ ...p, addBurned: false }))} label="No" />
             <Option selected={prefs.addBurned === true} onClick={() => setPrefs(p => ({ ...p, addBurned: true }))} label="Yes" />
           </div>
-          <p className="cal-muted" style={{ marginTop: 14, fontSize: 13, lineHeight: 1.5 }}>Workouts and runs you track in Apparatus are counted automatically.</p>
+          <p className="cal-muted" style={{ marginTop: 14, fontSize: 13, lineHeight: 1.5 }}>Workouts and runs you track in {BRAND.name} are counted automatically.</p>
         </>
       );
       break;

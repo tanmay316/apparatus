@@ -20,6 +20,7 @@ from app.providers.llm.base import ChatMessage
 from app.engine.workout_engine import assemble_plan, apply_llm_review_delta
 from app.data.exercise_db import EXERCISES
 from app.agents.coach.training import fetch_training_data, within_days, _completed_sets, best_set_text
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/workout", tags=["workout"])
@@ -67,6 +68,7 @@ COACHING RULES:
   train far less often than requested, say so kindly in the description and keep the plan realistic.
 • Injuries: list exercises that load the injured area in "avoid_exercises".
 • Leave arrays empty when nothing applies. Never invent requests the user did not make."""
+BLUEPRINT_SYSTEM_PROMPT = BLUEPRINT_SYSTEM_PROMPT.replace("Apparatus", settings.APP_NAME)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -103,6 +105,7 @@ OUTPUT STRICTLY VALID JSON:
     }
   ]
 }"""
+REVIEW_SYSTEM_PROMPT = REVIEW_SYSTEM_PROMPT.replace("Apparatus", settings.APP_NAME)
 
 
 def _history(data: dict) -> tuple[str, list[str]]:

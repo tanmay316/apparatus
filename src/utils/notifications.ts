@@ -6,6 +6,7 @@ import { db } from '@/lib/firebase';
 import { safeInternalPath } from '@/lib/validation';
 import { allowsBanner } from '@/lib/notification-center';
 import { getNotificationPrefs, type NotificationCategory, type NotificationPrefs } from '@/stores/notification-prefs-store';
+import { BRAND } from '@/lib/brand';
 
 export type NotificationPermissionState = 'granted' | 'denied' | 'prompt' | 'unsupported';
 
@@ -187,7 +188,7 @@ export async function showNotification(id: number, title: string, body: string, 
       await LocalNotifications.schedule({
         notifications: [
           {
-            title: title || 'Apparatus',
+            title: title || BRAND.name,
             body: body || 'New message in clan',
             id: safeId,
             extra: extraData,
@@ -204,7 +205,7 @@ export async function showNotification(id: number, title: string, body: string, 
         await LocalNotifications.schedule({
           notifications: [
             {
-              title: title || 'Apparatus',
+              title: title || BRAND.name,
               body: body || 'New notification',
               id: safeId,
               extra: extraData,
@@ -260,7 +261,7 @@ async function cancelPending(match: (id: number) => boolean) {
 
 const REMINDER_COPY = [
   { title: 'Time to train 💪', body: "Your session is waiting. Even a short workout keeps the streak alive." },
-  { title: 'Ready when you are 🏋️', body: 'Open Apparatus to start today\'s workout or log a run.' },
+  { title: 'Ready when you are 🏋️', body: `Open ${BRAND.name} to start today's workout or log a run.` },
   { title: 'Keep the momentum 🔥', body: 'Consistency builds your rank. Get a quality session in today.' },
   { title: "Today's training 📋", body: 'Check your plan and knock out your session.' },
 ];

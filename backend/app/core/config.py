@@ -1,10 +1,24 @@
+import json
 import os
+from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings
 
 
+def _brand() -> dict:
+    # app/brand.json is copied from the repo-root brand.config.json by `npm run brand:sync` (also runs on build).
+    try:
+        return json.loads((Path(__file__).resolve().parents[1] / "brand.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+_BRAND = _brand()
+
+
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Apparatus AI Nutrition Backend"
+    APP_NAME: str = _BRAND.get("name", "Apparatus")
+    PROJECT_NAME: str = f"{_BRAND.get('name', 'Apparatus')} backend"
     API_V1_STR: str = "/api/v1"
 
     # CORS — stored as comma-separated string, parsed at runtime. Defaults to * to allow web & mobile apps.
@@ -76,8 +90,12 @@ class Settings(BaseSettings):
     MARKET_FEE_PCT_COACH: float = 20.0
     MARKET_MIN_PRICE_INR: int = 19
     MARKET_MAX_PRICE_INR: int = 50000
+    # Seller sign-up: account age, and a monthly sales cap until a seller is trusted (admin flag or N completed sales).
+    MARKET_SELLER_MIN_ACCOUNT_DAYS: int = 7
+    MARKET_NEW_SELLER_MONTHLY_INR: int = 10000
+    MARKET_TRUSTED_AFTER_SALES: int = 10
     # Web checkouts return here after paying (/purchase/<order id>).
-    PUBLIC_APP_URL: str = "https://apparatus-46b1b.web.app"
+    PUBLIC_APP_URL: str = _BRAND.get("webUrl", "https://apparatus-46b1b.web.app")
 
     @property
     def billing_enabled(self) -> bool:

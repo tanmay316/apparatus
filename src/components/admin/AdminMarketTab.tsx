@@ -4,15 +4,17 @@ import { BadgeIndianRupee, ExternalLink, Gift, Link2, Pencil, Receipt, RotateCw,
 import { useUIStore } from '@/stores/ui-store';
 import {
   applySponsor, formatInr, listPayoutAccounts, listRecentOrders, listSponsorships, quoteSponsorship, retryTransfer,
-  reviewPayoutAccount, setSponsorshipStatus, type PayoutAccount, type Sponsorship,
+  reviewPayoutAccount, setPayoutTrusted, setSponsorshipStatus, type PayoutAccount, type Sponsorship,
 } from '@/services/market';
 import {
   deleteAffiliateLink, getAffiliateSettings, listAffiliateLinks, saveAffiliateLink, saveAffiliateSettings,
 } from '@/services/affiliates';
 import { isSafeAffiliateUrl, type AffiliateLink, type AffiliatePlacement } from '@/lib/affiliates';
 import { CopyId, EmptyState, ErrorState, FilterPills, LoadingState, RefreshButton, SectionHeader, formatWhen, useReasonDialog } from './AdminShared';
+import { ListingRequests, ListingsModeration, PaymentsSwitch } from './AdminShowcase';
+import { BRAND } from '@/lib/brand';
 
-type Section = 'payouts' | 'sponsors' | 'affiliates' | 'orders';
+type Section = 'payments' | 'requests' | 'listings' | 'payouts' | 'sponsors' | 'affiliates' | 'orders';
 
 const pill = (tone: 'ok' | 'warn' | 'off' | 'bad') => ({
   ok: 'bg-emerald-500/15 text-emerald-500', warn: 'bg-amber-500/15 text-amber-500', off: 'bg-bone/10 text-bone-dim', bad: 'bg-danger/15 text-danger',
@@ -26,6 +28,11 @@ function Payouts() {
   const review = useMutation({
     mutationFn: ({ acc, status, accountId, note }: { acc: PayoutAccount; status: PayoutAccount['status']; accountId?: string; note?: string }) =>
       reviewPayoutAccount(acc.uid, { status, razorpayAccountId: accountId, adminNote: note }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminPayouts'] }); showToast('Saved'); },
+    onError: (e: any) => showToast(e?.message || 'Could not save', 'error'),
+  });
+  const trust = useMutation({
+    mutationFn: (acc: PayoutAccount) => setPayoutTrusted(acc.uid, !acc.trusted),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['adminPayouts'] }); showToast('Saved'); },
     onError: (e: any) => showToast(e?.message || 'Could not save', 'error'),
   });
@@ -58,6 +65,8 @@ function Payouts() {
                   <span className="font-semibold text-sm">{acc.legalName}</span>
                   <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded uppercase ${pill(acc.status === 'active' ? 'ok' : acc.status === 'pending' ? 'warn' : 'bad')}`}>{acc.status}</span>
                   <span className="text-[11px] text-bone-dim">{acc.businessType}</span>
+                  {acc.trusted && <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded uppercase ${pill('ok')}`}>trusted</span>}
+                  {!acc.termsVersion && <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded uppercase ${pill('warn')}`}>old application</span>}
                 </div>
                 <div className="text-xs text-bone-dim mt-0.5">{acc.email} · {acc.phone}</div>
                 {acc.about && <div className="text-xs mt-1">{acc.about}</div>}
@@ -68,6 +77,7 @@ function Payouts() {
                 {acc.status !== 'active' && <button type="button" className="btn-primary py-1.5 px-3 text-xs" onClick={() => approve(acc)}>Activate</button>}
                 {acc.status === 'active' && <button type="button" className="btn-secondary py-1.5 px-3 text-xs" onClick={() => approve(acc)}>Change account</button>}
                 {acc.status === 'pending' && <button type="button" className="btn-secondary py-1.5 px-3 text-xs" onClick={() => reject(acc, 'rejected')}>Ask for changes</button>}
+                {acc.status === 'active' && <button type="button" className="btn-secondary py-1.5 px-3 text-xs" disabled={trust.isPending} onClick={() => trust.mutate(acc)}>{acc.trusted ? 'Remove trust' : 'Mark trusted'}</button>}
                 {acc.status === 'active' && <button type="button" className="btn-danger py-1.5 px-3 text-xs" onClick={() => reject(acc, 'suspended')}>Pause</button>}
               </div>
             </div>
@@ -145,7 +155,7 @@ function Sponsors() {
                 </div>
                 <div className="text-xs mt-0.5"><b>Prize:</b> {s.prize}</div>
                 <div className="text-xs text-bone-dim mt-0.5">
-                  {s.targetType === 'host' ? 'Wants Apparatus to host' : `${s.targetType}: ${s.targetTitle || s.targetId}`} · {s.contactEmail}{s.contactPhone ? ` · ${s.contactPhone}` : ''} · {formatWhen(s.createdAt)}
+                  {s.targetType === 'host' ? `Wants ${BRAND.name} to host` : `${s.targetType}: ${s.targetTitle || s.targetId}`} · {s.contactEmail}{s.contactPhone ? ` · ${s.contactPhone}` : ''} · {formatWhen(s.createdAt)}
                 </div>
                 {s.message && <div className="text-xs mt-1 whitespace-pre-wrap">{s.message}</div>}
                 <div className="mt-1 flex gap-3 flex-wrap">
@@ -333,19 +343,25 @@ function Orders() {
 }
 
 export function AdminMarketTab() {
-  const [section, setSection] = useState<Section>('payouts');
+  const [section, setSection] = useState<Section>('payments');
   return (
     <div className="space-y-5">
       <FilterPills<Section>
         value={section}
         onChange={setSection}
         options={[
+          { id: 'payments', label: 'Payments switch' },
+          { id: 'requests', label: 'Listing requests' },
+          { id: 'listings', label: 'Listings' },
+          { id: 'affiliates', label: 'Affiliate links' },
           { id: 'payouts', label: 'Payouts' },
           { id: 'sponsors', label: 'Sponsorships' },
-          { id: 'affiliates', label: 'Affiliate links' },
           { id: 'orders', label: 'Orders' },
         ]}
       />
+      {section === 'payments' && <PaymentsSwitch />}
+      {section === 'requests' && <ListingRequests />}
+      {section === 'listings' && <ListingsModeration />}
       {section === 'payouts' && <Payouts />}
       {section === 'sponsors' && <Sponsors />}
       {section === 'affiliates' && <Affiliates />}

@@ -10,6 +10,7 @@ import { InsightList } from '@/components/analysis/AnalysisParts';
 import { ProBadge, ProLock } from './ProLock';
 import { AskAIButton } from './AICoach';
 import { niceTicks, ScrollChart } from '@/components/ui/ScrollChart';
+import { BRAND } from '@/lib/brand';
 
 const TYPES: { value: CardioActivityType; label: string }[] = [
   { value: 'run', label: 'Run' }, { value: 'walk', label: 'Walk' }, { value: 'cycle', label: 'Ride' },
@@ -240,7 +241,7 @@ export function CardioInsightsPanel({ activities, workouts }: { activities: Card
           <p className="text-xs text-bone-dim mt-0.5">Fitness, best efforts, VO2 max, zones and route history</p>
         </div>
       </div>
-      <ProLock title="Performance insights" reason="See your fitness & freshness, best efforts, VO2 max, race predictions, intensity zones and route history with Apparatus Pro." maxHeight={520}>
+      <ProLock title="Performance insights" reason={`See your fitness & freshness, best efforts, VO2 max, race predictions, intensity zones and route history with ${BRAND.name} Pro.`} maxHeight={520}>
         <CardioInsightsBody activities={activities} workouts={workouts} />
       </ProLock>
     </section>

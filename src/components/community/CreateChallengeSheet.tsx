@@ -7,8 +7,9 @@ import { createChallenge } from '@/services/community';
 import { ChallengeMetric } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
-import { PriceField, parsePriceInput } from '@/components/market/PriceField';
+import { EntryFeeField, PriceField, parseEntryFee, parsePriceInput } from '@/components/market/PriceField';
 import { useMarketConfig } from '@/components/market/CheckoutButton';
+import { usePaymentsEnabled } from '@/lib/payments-mode';
 import { ChoiceGroup, CoverPicker, Field, FormSection, FormSheet, spanLabel, STATUS_LABEL, StatusPill, type Choice } from '@/components/ui/FormSheet';
 
 const METRICS: Choice<string>[] = [
@@ -40,6 +41,8 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
   const [visibility, setVisibility] = useState<'public' | 'clan_only'>(prefilledClanId ? 'clan_only' : 'public');
   const [prize, setPrize] = useState('');
   const [ticketPrice, setTicketPrice] = useState('');
+  const [entryFee, setEntryFee] = useState('');
+  const payments = usePaymentsEnabled();
   const marketConfig = useMarketConfig();
 
   // Start Date / Time
@@ -100,6 +103,8 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
 
       const price = parsePriceInput(ticketPrice, marketConfig);
       if (price.error) throw new Error(price.error);
+      const fee = parseEntryFee(entryFee);
+      if (!payments && fee.error) throw new Error(fee.error);
 
       await createChallenge({
         title: title.trim(),
@@ -112,6 +117,7 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
         status: dynamicStatus,
         prize: prize.trim() || undefined,
         ticketPrice: price.value,
+        entryFee: payments ? undefined : fee.value ?? undefined,
         visibility,
         coverUrl: coverUrl || 'https://images.unsplash.com/photo-1552674605-171ff7ea90b9?q=80&w=1470&auto=format&fit=crop',
         createdBy: user.uid,
@@ -215,6 +221,7 @@ export function CreateChallengeSheet({ onClose, prefilledClanId }: { onClose: ()
           <ChoiceGroup label="Who can join" value={visibility} onChange={setVisibility} options={VISIBILITY} />
         )}
         <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" label="Entry fee" unit="entry" />
+        <EntryFeeField id="challenge-fee" value={entryFee} onChange={setEntryFee} />
         <Field id="ch-prize" label="Prizes" optional>
           <input id="ch-prize" value={prize} maxLength={120} onChange={e => setPrize(e.target.value)} placeholder="e.g. Gold badge for the winner" className="dx-input" />
         </Field>

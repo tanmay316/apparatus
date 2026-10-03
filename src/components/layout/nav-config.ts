@@ -1,5 +1,5 @@
 import {
-  Apple, Award, BookOpen, Compass, Dumbbell, Globe, Medal, Ruler, Settings, Store, Target, TrendingUp, Users,
+  Apple, Award, BookOpen, Compass, Dumbbell, Globe, Medal, Ruler, Settings, Store, Target, TrendingUp, Users, Wallet,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -10,6 +10,8 @@ export interface NavItem {
   icon: LucideIcon;
   /** Extra path prefixes that should highlight this item. */
   match?: string[];
+  /** Only shown to people allowed to list on the marketplace (or with a seller account). */
+  sellerOnly?: boolean;
 }
 
 export interface NavSection {
@@ -42,6 +44,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: 'feed', path: '/feed', label: 'Activity feed', icon: Users, match: ['/post'] },
       { id: 'community', path: '/community', label: 'Clans & events', icon: Globe, match: ['/clan'] },
       { id: 'marketplace', path: '/marketplace', label: 'Marketplace', icon: Store, match: ['/purchase'] },
+      { id: 'seller', path: '/seller', label: 'My listings', icon: Wallet, sellerOnly: true },
       { id: 'explore', path: '/explore', label: 'Explore', icon: Compass },
     ],
   },
@@ -76,7 +79,10 @@ const TITLES: [RegExp, string][] = [
   [/^\/profile/, 'Profile'],
   [/^\/settings/, 'Settings'],
   [/^\/admin/, 'Admin'],
+  [/^\/marketplace\/orders/, 'Your orders'],
   [/^\/marketplace/, 'Marketplace'],
+  [/^\/seller/, 'My listings'],
+  [/^\/partners/, 'Partner with us'],
   [/^\/purchase\//, 'Payment'],
   [/^\/search/, 'Search'],
 ];

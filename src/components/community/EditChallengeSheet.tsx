@@ -10,8 +10,10 @@ import { updateChallenge } from '@/services/community';
 import { ChallengeV2, ChallengeMetric } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
-import { PriceField, parsePriceInput } from '@/components/market/PriceField';
+import { EntryFeeField, PriceField, parseEntryFee, parsePriceInput } from '@/components/market/PriceField';
 import { useMarketConfig } from '@/components/market/CheckoutButton';
+import { usePaymentsEnabled } from '@/lib/payments-mode';
+import { isPaid } from '@/services/market';
 
 interface EditChallengeSheetProps {
   challenge: ChallengeV2;
@@ -45,6 +47,8 @@ export function EditChallengeSheet({ challenge, isOpen, onClose }: EditChallenge
   const [visibility, setVisibility] = useState<'public' | 'clan_only'>(challenge.visibility || 'public');
   const [prize, setPrize] = useState(challenge.prize || '');
   const [ticketPrice, setTicketPrice] = useState(challenge.ticketPrice ? String(challenge.ticketPrice) : '');
+  const [entryFee, setEntryFee] = useState(String(challenge.entryFee || challenge.ticketPrice || ''));
+  const payments = usePaymentsEnabled();
   const marketConfig = useMarketConfig();
 
   // Dates
@@ -120,6 +124,10 @@ export function EditChallengeSheet({ challenge, isOpen, onClose }: EditChallenge
       const isSeller = user.uid === challenge.createdBy;
       const price = parsePriceInput(ticketPrice, marketConfig);
       if (isSeller && price.error) throw new Error(price.error);
+      const fee = parseEntryFee(entryFee);
+      if (!payments && fee.error) throw new Error(fee.error);
+      // With payments off, an older in-app ticket price becomes the plain entry fee.
+      const feeUpdate = payments ? {} : { entryFee: fee.value, ...(isPaid(challenge.ticketPrice) ? { ticketPrice: 0 } : {}) };
 
       await updateChallenge(challenge.id, {
         title: title.trim(),
@@ -131,7 +139,8 @@ export function EditChallengeSheet({ challenge, isOpen, onClose }: EditChallenge
         endDate: Timestamp.fromDate(end),
         status: dynamicStatus,
         prize: prize.trim() || undefined,
-        ...(isSeller ? { ticketPrice: price.value } : {}),
+        ...(isSeller && payments ? { ticketPrice: price.value } : {}),
+        ...feeUpdate,
         visibility,
         coverUrl: coverUrl || undefined
       });
@@ -406,6 +415,7 @@ export function EditChallengeSheet({ challenge, isOpen, onClose }: EditChallenge
           </div>
 
           <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" sellerUid={challenge.createdBy} label="Entry fee (Optional)" unit="entry" />
+          <EntryFeeField id="edit-challenge-fee" value={entryFee} onChange={setEntryFee} />
 
           {/* Visibility */}
           <div>

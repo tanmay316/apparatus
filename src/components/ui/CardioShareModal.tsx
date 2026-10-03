@@ -12,12 +12,13 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import { useUIStore } from '@/stores/ui-store';
-import { requirePro, useHasPro } from '@/stores/subscription-store';
+import { CAN_PURCHASE, requirePro, useHasPro } from '@/stores/subscription-store';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
 import { computeSplits } from '@/lib/cardio-analysis';
 import { compressImageFile } from '@/utils/image-compression';
 import type { RoutePoint } from '@/types';
 import { lockBodyScroll } from '@/lib/scroll-lock';
+import { BRAND } from '@/lib/brand';
 
 export interface CardioShareData {
   type: 'walk' | 'run' | 'cycle';
@@ -217,7 +218,7 @@ function elevationSeries(route: RoutePoint[], buckets = 48): number[] | null {
 // ─── Card primitives ─────────────────────────────────────────
 
 function Wordmark({ color = '#FFFFFF', size = 12 }: { color?: string; size?: number }) {
-  return <span style={{ color, fontSize: size, fontWeight: 800, letterSpacing: '0.32em', lineHeight: 1 }}>APPARATUS</span>;
+  return <span style={{ color, fontSize: size, fontWeight: 800, letterSpacing: '0.32em', lineHeight: 1 }}>{BRAND.upper}</span>;
 }
 
 function RouteSvg({ pts, width, height, color, stroke = 4, pad = 6, glow = true, ends = true, endFill = '#FFFFFF', endColor }: {
@@ -482,7 +483,7 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
   const paperAccent = isLight(accent) ? INK : accent;
   const hasPro = useHasPro();
   const layoutLocked = !hasPro && PRO_LAYOUTS.has(layout);
-  const unlockTemplate = () => requirePro(`The ${LAYOUT_OPTIONS.find(l => l.id === layout)?.label} template is part of Apparatus Pro.`);
+  const unlockTemplate = () => requirePro(`The ${LAYOUT_OPTIONS.find(l => l.id === layout)?.label} template is part of ${BRAND.name} Pro.`);
   const isSquare = aspectRatio === '1/1';
   const designH = isSquare ? DESIGN_W : Math.round((DESIGN_W * 16) / 9);
   const isTransparent = TRANSPARENT_LAYOUTS.has(layout);
@@ -589,7 +590,7 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
 
   // ─── Export ───
   const cardBg = layout === 'bold' ? accent : layout === 'editorial' ? PAPER : isTransparent ? 'transparent' : layout === 'summary' ? '#000000' : '#0B0B0D';
-  const fileName = `apparatus-${data.type}-${format(day, 'yyyy-MM-dd')}.png`;
+  const fileName = `${BRAND.slug}-${data.type}-${format(day, 'yyyy-MM-dd')}.png`;
 
   const getCanvas = async (): Promise<HTMLCanvasElement | null> => {
     if (!cardRef.current) return null;
@@ -655,12 +656,12 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
       }
       if (Capacitor.isNativePlatform()) {
         await Filesystem.writeFile({
-          path: `Apparatus/${fileName}`,
+          path: `${BRAND.name}/${fileName}`,
           data: canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, ''),
           directory: Directory.Documents,
           recursive: true,
         });
-        useUIStore.getState().showToast('Saved to Documents/Apparatus', 'success');
+        useUIStore.getState().showToast(`Saved to Documents/${BRAND.name}`, 'success');
       } else {
         downloadCanvas(canvas);
         useUIStore.getState().showToast('Activity card saved', 'success');
@@ -674,7 +675,7 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
     }
   };
 
-  const shareText = `${title}: ${distText} km in ${clock(sec)}. Tracked with Apparatus.`;
+  const shareText = `${title}: ${distText} km in ${clock(sec)}. Tracked with ${BRAND.name}.`;
 
   const handleShare = async () => {
     if (layoutLocked && !unlockTemplate()) return;
@@ -1187,7 +1188,7 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
               <section className={tabVisibility('layout')}>
                 <ControlHeading>Template</ControlHeading>
                 <div className={`${hScroll} md:grid-cols-4`}>
-                  {LAYOUT_OPTIONS.map(opt => {
+                  {LAYOUT_OPTIONS.filter(opt => CAN_PURCHASE || hasPro || !PRO_LAYOUTS.has(opt.id)).map(opt => {
                     const selected = layout === opt.id;
                     return (
                       <button key={opt.id} type="button" onClick={() => setLayout(opt.id)} aria-pressed={selected} className="shrink-0 w-[62px] md:w-auto flex flex-col items-center gap-1.5 group">

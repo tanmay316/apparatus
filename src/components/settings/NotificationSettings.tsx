@@ -12,6 +12,7 @@ import {
   requestNotificationPermission,
   type NotificationPermissionState,
 } from '@/utils/notifications';
+import { BRAND } from '@/lib/brand';
 
 const CATEGORY_ROWS: { id: NotificationCategory; label: string; description: string; icon: typeof Users }[] = [
   { id: 'social', label: 'Social', description: 'Likes, comments, follows and cheers', icon: Users },
@@ -72,7 +73,7 @@ export function NotificationSettings() {
       <SettingsSection id="notifications" title="Notifications" description="Choose what alerts you. The bell keeps everything either way.">
         <SettingRow
           label={isNative ? 'Device notifications' : 'Browser notifications'}
-          description={permission === 'denied' ? `Allow Apparatus in your ${isNative ? 'phone' : 'browser'} settings.` : undefined}
+          description={permission === 'denied' ? `Allow ${BRAND.name} in your ${isNative ? 'phone' : 'browser'} settings.` : undefined}
         >
           <div className="flex items-center gap-2">
             <span className={status.className}>{status.text}</span>
@@ -114,7 +115,7 @@ export function NotificationSettings() {
         </div>
       </SettingsSection>
 
-      <SettingsSection id="reminders" title="Reminders" description={isNative ? 'Scheduled on your phone, even when the app is closed.' : 'Shown in the bell while Apparatus is open.'}>
+      <SettingsSection id="reminders" title="Reminders" description={isNative ? 'Scheduled on your phone, even when the app is closed.' : `Shown in the bell while ${BRAND.name} is open.`}>
         <div className="pb-3.5 space-y-1">
           <Toggle
             checked={prefs.workoutReminders}

@@ -6,6 +6,7 @@ import { LOCAL_FOODS, portion, searchLocal, searchOpenFoodFacts, type FoodEntry,
 import { foodHealthScore } from '@/lib/nutrition-plan';
 import { mealTypeForNow, type SavedFood } from '@/services/nutrition-setup';
 import { CalSheet, MACRO_META } from './cal-ui';
+import { BRAND } from '@/lib/brand';
 
 export const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 
@@ -433,7 +434,7 @@ export function ExerciseSheet({ burned, onManual, onClose }: {
           <button type="submit" className="cal-btn" style={{ height: 52 }} disabled={!(n > 0 && n <= 5000) || busy}>Add</button>
         </form>
       )}
-      <p className="cal-muted" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>Workouts and cardio you track in Apparatus are added automatically.</p>
+      <p className="cal-muted" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>Workouts and cardio you track in {BRAND.name} are added automatically.</p>
     </CalSheet>
   );
 }

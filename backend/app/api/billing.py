@@ -70,7 +70,7 @@ async def subscribe(req: SubscribeRequest, current_user: dict = Depends(get_curr
     uid = current_user["uid"]
     _limit(uid, "subscribe", 5, 600)
     if await asyncio.to_thread(subs.is_pro, uid, subs.verified_email(current_user)):
-        raise HTTPException(status_code=409, detail="You already have Apparatus Pro.")
+        raise HTTPException(status_code=409, detail=f"You already have {settings.APP_NAME} Pro.")
     coupon = None
     if req.coupon:
         try:

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-# Apparatus — iOS platform setup (run on macOS with Xcode + CocoaPods)
+# iOS platform setup (run on macOS with Xcode + CocoaPods)
 #
 #   ./ios-native/setup-ios.sh
 #
@@ -12,6 +12,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+
+# App name comes from brand.config.json (avoid apostrophes in it; PlistBuddy strings are single-quoted).
+APP_NAME="$(node -p "require('./brand.config.json').name")"
 
 IOS_APP_DIR="$ROOT/ios/App/App"
 PLIST="$IOS_APP_DIR/Info.plist"
@@ -56,23 +59,27 @@ pb() { /usr/libexec/PlistBuddy -c "$1" "$PLIST" >/dev/null 2>&1 || true; }
 
 # Location — Always is required so distance keeps accruing with the app closed.
 pb "Delete :NSLocationWhenInUseUsageDescription"
-pb "Add :NSLocationWhenInUseUsageDescription string 'Apparatus uses your location to map your route and measure distance, pace and elevation during walks, runs and rides.'"
+pb "Add :NSLocationWhenInUseUsageDescription string '${APP_NAME} uses your location to map your route and measure distance, pace and elevation during walks, runs and rides.'"
 pb "Delete :NSLocationAlwaysAndWhenInUseUsageDescription"
-pb "Add :NSLocationAlwaysAndWhenInUseUsageDescription string 'Apparatus needs background location so your route, distance and pace keep recording accurately when the screen is off or you switch apps mid-workout.'"
+pb "Add :NSLocationAlwaysAndWhenInUseUsageDescription string '${APP_NAME} needs background location so your route, distance and pace keep recording accurately when the screen is off or you switch apps mid-workout.'"
 pb "Delete :NSLocationAlwaysUsageDescription"
-pb "Add :NSLocationAlwaysUsageDescription string 'Apparatus needs background location so your route, distance and pace keep recording accurately when the screen is off or you switch apps mid-workout.'"
+pb "Add :NSLocationAlwaysUsageDescription string '${APP_NAME} needs background location so your route, distance and pace keep recording accurately when the screen is off or you switch apps mid-workout.'"
 
 # Motion — step counting via the pedometer.
 pb "Delete :NSMotionUsageDescription"
-pb "Add :NSMotionUsageDescription string 'Apparatus uses motion data to count your daily steps and the steps in your walks and runs.'"
+pb "Add :NSMotionUsageDescription string '${APP_NAME} uses motion data to count your daily steps and the steps in your walks and runs.'"
 
 # Camera / photo library — profile photos and community post images.
 pb "Delete :NSCameraUsageDescription"
-pb "Add :NSCameraUsageDescription string 'Apparatus uses the camera to scan meals and barcodes, and for profile and progress photos.'"
+pb "Add :NSCameraUsageDescription string '${APP_NAME} uses the camera to scan meals and barcodes, and for profile and progress photos.'"
 pb "Delete :NSPhotoLibraryUsageDescription"
-pb "Add :NSPhotoLibraryUsageDescription string 'Apparatus needs photo access so you can pick profile and community post images.'"
+pb "Add :NSPhotoLibraryUsageDescription string '${APP_NAME} needs photo access so you can pick profile and community post images.'"
 pb "Delete :NSPhotoLibraryAddUsageDescription"
-pb "Add :NSPhotoLibraryAddUsageDescription string 'Apparatus saves your workout and medal share cards to your photo library.'"
+pb "Add :NSPhotoLibraryAddUsageDescription string '${APP_NAME} saves your workout and medal share cards to your photo library.'"
+
+# Home-screen name.
+pb "Delete :CFBundleDisplayName"
+pb "Add :CFBundleDisplayName string '${APP_NAME}'"
 
 # Background modes — 'location' keeps CoreLocation delivering while backgrounded,
 # 'remote-notification' lets FCM data pushes wake the app.

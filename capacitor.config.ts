@@ -3,10 +3,11 @@ import { readFileSync } from 'fs';
 
 // OTA bundles are tied to this native version, so a new APK never boots an older downloaded web bundle.
 const nativeVersion: string = JSON.parse(readFileSync('package.json', 'utf8')).nativeVersion;
+const brand: { name: string; appId: string } = JSON.parse(readFileSync('brand.config.json', 'utf8'));
 
 const config: CapacitorConfig = {
-  appId: 'com.tms.apparatus',
-  appName: 'Apparatus',
+  appId: brand.appId,
+  appName: brand.name,
   webDir: 'dist',
   plugins: {
     OtaKit: {
@@ -35,6 +36,7 @@ const config: CapacitorConfig = {
     backgroundColor: '#00000000'
   },
   server: {
+    // The WebView origin. Changing it would wipe every installed user's saved login and offline data.
     hostname: 'apparatus.app',
     androidScheme: 'https',
     iosScheme: 'capacitor'

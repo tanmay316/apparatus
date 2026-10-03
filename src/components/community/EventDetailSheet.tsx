@@ -24,6 +24,8 @@ import { useNavigate } from 'react-router-dom';
 import { CheckoutButton } from '@/components/market/CheckoutButton';
 import { SponsorBanner } from '@/components/market/SponsorBanner';
 import { formatInr, isPaid } from '@/services/market';
+import { EntryFeeNote, entryFeeOf } from '@/components/market/PriceField';
+import { usePaymentsEnabled } from '@/lib/payments-mode';
 
 interface EventDetailSheetProps {
   eventId: string;
@@ -36,6 +38,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
   const { showToast, confirm } = useUIStore();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const payments = usePaymentsEnabled();
 
   const [isDetailsExpanded, setIsDetailsExpanded] = useState(true);
   const [editingEvent, setEditingEvent] = useState<SimpleEvent | null>(null);
@@ -415,6 +418,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
               )}
 
               <SponsorBanner sponsor={event.sponsor} />
+              <EntryFeeNote fee={entryFeeOf(event, payments)} />
 
               {/* Action Buttons */}
               <div className="flex flex-wrap items-center gap-3 pt-1">
@@ -436,7 +440,7 @@ export function EventDetailSheet({ eventId, onClose }: EventDetailSheetProps) {
                   >
                     {leaveMutation.isPending ? 'Cancelling...' : 'Cancel RSVP / Leave'}
                   </button>
-                ) : isPaid(event.ticketPrice) && countdownType !== 'ended' ? (
+                ) : payments && isPaid(event.ticketPrice) && countdownType !== 'ended' ? (
                   <CheckoutButton
                     kind="event"
                     itemId={eventId}

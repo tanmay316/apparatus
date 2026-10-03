@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Crown, Loader2, Sparkles, Ticket } from 'lucide-react';
 import { SettingRow, SettingsSection } from '@/components/settings/SettingsLayout';
-import { useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
+import { CAN_PURCHASE, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
 import { useUIStore } from '@/stores/ui-store';
 import { PRO_PRICES, cancelSubscription, getBillingStatus } from '@/services/billing';
+import { BRAND } from '@/lib/brand';
 
 const USAGE_LABELS: Record<string, string> = {
   ai_call: 'AI requests (coach, recipes, meal plans)',
@@ -29,7 +30,7 @@ export function ProSettings() {
 
   const handleCancel = async () => {
     const ok = await confirm({
-      title: 'Cancel Apparatus Pro?',
+      title: `Cancel ${BRAND.name} Pro?`,
       message: renews ? `You keep Pro until ${renews}. You won't be charged again.` : "You won't be charged again.",
       confirmText: 'Cancel plan',
       cancelText: 'Keep Pro',
@@ -49,30 +50,32 @@ export function ProSettings() {
   };
 
   return (
-    <SettingsSection id="pro" title="Apparatus Pro" description="Unlimited AI coaching, plans, food scans and every share template.">
+    <SettingsSection id="pro" title={`${BRAND.name} Pro`} description={isPro || CAN_PURCHASE ? 'Unlimited AI coaching, plans, food scans and every share template.' : 'Your plan and free AI allowance.'}>
       <SettingRow
         label={isPro ? `${planLabel} plan` : 'Free plan'}
         description={isPro
           ? comped ? 'Pro is on the house for this account.'
             : renews ? (viaCoupon ? `Free Pro until ${renews}` : cancelled ? `Cancelled · Pro until ${renews}` : `Renews on ${renews}`) : 'Active'
-          : `From ${PRO_PRICES.monthly.amount}/month or ${PRO_PRICES.yearly.amount}/year.`}
+          : CAN_PURCHASE ? `From ${PRO_PRICES.monthly.amount}/month or ${PRO_PRICES.yearly.amount}/year.` : 'Have a code? Redeem it here.'}
       >
         {isPro ? (
           <span className="dx-pill dx-pill--accent !h-7 !px-3"><Crown size={12} /> Pro</span>
         ) : (
           <div className="flex gap-2">
-            <button type="button" onClick={() => openPaywall()} className="dx-btn-secondary !h-9 !px-3.5 !text-[13px]">
+            <button type="button" onClick={() => openPaywall(undefined, { redeem: true })} className="dx-btn-secondary !h-9 !px-3.5 !text-[13px]">
               <Ticket size={14} /> Redeem code
             </button>
-            <button type="button" onClick={() => openPaywall()} className="dx-btn !h-9 !px-4 !text-[13px]">
-              <Sparkles size={15} /> Upgrade
-            </button>
+            {CAN_PURCHASE && (
+              <button type="button" onClick={() => openPaywall()} className="dx-btn !h-9 !px-4 !text-[13px]">
+                <Sparkles size={15} /> Upgrade
+              </button>
+            )}
           </div>
         )}
       </SettingRow>
 
       {!isPro && Object.keys(usage).length > 0 && (
-        <SettingRow label="Free AI allowance" description="Allowances reset each day, week or month. Pro removes all limits.">
+        <SettingRow label="Free AI allowance" description={CAN_PURCHASE ? 'Allowances reset each day, week or month. Pro removes all limits.' : 'Allowances reset each day, week or month.'}>
           <div className="w-full sm:w-72 space-y-2">
             {Object.entries(usage).map(([kind, u]) => {
               const pct = u.limit > 0 ? Math.min(100, Math.round((u.used / u.limit) * 100)) : 0;

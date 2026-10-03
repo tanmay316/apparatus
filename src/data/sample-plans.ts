@@ -2,6 +2,7 @@ import type { Plan } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { personalCalisthenicsPlan } from '@/data/calisthenics-personal-plan';
 import { tmsCalisthenicsPlan } from '@/data/calisthenics-tms-plan';
+import { BRAND } from '@/lib/brand';
 
 function ex(name: string, sets: string, tempo: string, rest: string, cues: string[], yt?: string) {
   const query = yt || name;
@@ -14,9 +15,9 @@ const now = Timestamp.now();
 // 1. 6-Day Calisthenics Protocol
 export const calisthenicsStarterPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: 'Calisthenics Workout',
-  description: 'The original APPARATUS 6-day split focusing on strength, skill (handstands/levers), and mobility.',
+  description: `The original ${BRAND.upper} 6-day split focusing on strength, skill (handstands/levers), and mobility.`,
   type: 'sample',
   tags: ['calisthenics', 'bodyweight', 'advanced'],
   daysPerWeek: 6,
@@ -147,7 +148,7 @@ export const calisthenicsStarterPlan: Plan = {
 // 2. Push Pull Legs
 export const pushPullLegsPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: 'Push Pull Legs',
   description: 'Classic 3-day hypertrophy split. Push muscles one day, pull the next, legs to finish. Run it once or twice a week for serious gains.',
   type: 'sample',
@@ -261,7 +262,7 @@ export const pushPullLegsPlan: Plan = {
 // 3. Upper Lower Split
 export const upperLowerPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: 'Upper Lower Split',
   description: '4-day powerbuilding split. Two upper and two lower days with alternating strength and volume focus. Great balance of size and strength.',
   type: 'sample',
@@ -403,7 +404,7 @@ export const upperLowerPlan: Plan = {
 // 4. Bro Split
 export const broSplitPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: 'Bro Split',
   description: '5-day bodybuilder split. One muscle group per day for max volume and pump. The classic bodybuilding approach for serious hypertrophy.',
   type: 'sample',
@@ -569,7 +570,7 @@ export const broSplitPlan: Plan = {
 // 5. 3-Day Plan (Full Body)
 export const threeDayPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: '3 days plan',
   description: 'Efficient 3-day full body program. Hit every muscle group each session with compound lifts. Perfect for beginners or busy schedules.',
   type: 'sample',
@@ -681,7 +682,7 @@ export const threeDayPlan: Plan = {
 // 6. 5-Day Plan (Intermediate Strength Split)
 export const fiveDayPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: '5 days plan',
   description: 'Intermediate 5-day strength split. Push, pull, legs, upper volume, and lower + core. Balanced strength and hypertrophy for serious lifters.',
   type: 'sample',
@@ -853,7 +854,7 @@ export const fiveDayPlan: Plan = {
 // 7. Home Workout Plan (No Equipment)
 export const homeWorkoutPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: 'home workout plan',
   description: 'No equipment needed. Full body bodyweight training you can do anywhere. Perfect for beginners building baseline strength and endurance.',
   type: 'sample',
@@ -960,7 +961,7 @@ export const homeWorkoutPlan: Plan = {
 
 export const hyroxPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: 'HYROX Performance Program',
   description: 'Intermediate–Advanced HYROX race prep. Improve race performance, strength, endurance, VO2 Max, and work capacity.',
   type: 'sample',
@@ -1139,7 +1140,7 @@ export const hyroxPlan: Plan = {
 
 export const fatLossPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: 'Beginner Fat Loss Program',
   description: 'Lose body fat while preserving muscle. Focuses on fat loss, learning movement patterns, and building consistency.',
   type: 'sample',
@@ -1277,7 +1278,7 @@ export const fatLossPlan: Plan = {
 
 export const postureCorePlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: 'Posture & Core Program',
   description: 'Improve posture, reduce stiffness, strengthen the core. Designed for office workers and students.',
   type: 'sample',
@@ -1394,7 +1395,7 @@ export const postureCorePlan: Plan = {
 
 export const powerliftingPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: 'Powerlifting Strength Program',
   description: 'Increase Squat, Bench, and Deadlift. 12-week peaking block for intermediate to advanced lifters.',
   type: 'sample',
@@ -1506,7 +1507,7 @@ export const powerliftingPlan: Plan = {
 
 export const marathonPlan: Plan = {
   ownerId: 'SYSTEM',
-  ownerName: 'Apparatus',
+  ownerName: BRAND.name,
   title: 'Marathon Training Program',
   description: 'Complete a full marathon (42.2 km). 16-week progression blending easy runs, speed work, tempo runs, and long distance.',
   type: 'sample',

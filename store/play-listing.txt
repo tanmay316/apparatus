@@ -1,0 +1,108 @@
+PLAY CONSOLE LISTING AND FORMS
+==============================
+Text to paste into Play Console. Replace "Apparatus" if you rename the app (brand.config.json does the app itself).
+Graphics: store/icon-512.png (app icon), store/feature-graphic.png (1024x500). Screenshots: at least 2 phone shots, 1080x1920 or similar.
+
+
+MAIN STORE LISTING
+------------------
+App name (max 30):
+Apparatus: Workouts & Nutrition
+
+Short description (max 80):
+Workouts, running, nutrition and an AI coach. Train with friends in clans.
+
+Full description (max 4000):
+Apparatus brings your training, cardio, nutrition and fitness community together in one app.
+
+STRENGTH & CALISTHENICS
+• Build plans or generate one with AI, matched to your goal, days and equipment
+• Log sets, reps and weight with rest timers and progressive overload tips
+• Calisthenics skill tutor with step-by-step progressions (planche, front lever, handstand and more)
+• Muscle map, weekly volume and personal records
+
+RUNNING, WALKING & CYCLING
+• GPS tracking with live pace, splits, elevation and route maps
+• Step counter and daily step goal
+• Training load, fitness and fatigue trends, race predictions
+
+NUTRITION
+• Log meals by photo, barcode or search
+• Calorie and macro targets that adapt to your progress
+• Water tracking and meal groups (breakfast, lunch, snacks, dinner)
+
+AI COACH
+• Ask questions about training and food, get answers grounded in your own data
+• Weekly progress reports and session summaries
+
+COMMUNITY
+• Join clans, chat, take on challenges and events, and climb leaderboards
+• Share workout and run cards with friends
+• Discover products, plans and events from gyms, coaches and brands in the Marketplace
+
+Apparatus Pro unlocks advanced analytics and more AI. The core app is free.
+
+Questions or feedback: tanmay.sharma4334@gmail.com
+
+Category: Health & Fitness
+Tags: Fitness, Workout tracker, Running, Nutrition, Calorie counter
+Contact email: tanmay.sharma4334@gmail.com
+Website: https://apparatus-46b1b.web.app
+Privacy policy URL: https://apparatus-46b1b.web.app/privacy.html
+
+
+APP CONTENT (Policy > App content)
+----------------------------------
+Privacy policy: https://apparatus-46b1b.web.app/privacy.html
+Ads: No, the app has no ads.
+App access: Some features need sign-in. Give reviewers a test account (email + password) with sample data.
+Content rating: complete the IARC questionnaire. Users can chat and share content (clans, posts), so answer
+  "Yes" to user interaction / user-generated content. No violence, gambling or mature content.
+Target audience: 18+ (or 16+). Do NOT select under-13 age groups.
+News app: No.
+Government app: No.
+Financial features: None (only in-app subscription).
+Health apps declaration: Fitness / activity tracking, nutrition / diet tracking. Not a medical device, no medical advice.
+Account deletion URL: https://apparatus-46b1b.web.app/delete-account.html
+  (In-app: Settings > Account > Delete account. Deletes app data and the sign-in.)
+
+
+DATA SAFETY
+-----------
+Does the app collect or share user data? Yes (collects). Shared with third parties: No
+  (AI providers, Razorpay and Firebase act as service providers on our behalf, which is not "sharing").
+Encrypted in transit: Yes.   Users can request deletion: Yes.
+
+Data collected (all: "Collected", not shared, used for App functionality; Account management where noted):
+• Personal info: Name, Email address, User IDs (account management)
+• Financial info: Purchase history (Pro subscription status). Card/UPI details are handled by Razorpay, not us.
+• Location: Precise location (only while recording a run/walk/ride). Optional.
+• Health and fitness: Health info (weight, height, body measurements), Fitness info (workouts, steps, cardio).
+• Photos: Profile photo, food photos for meal scanning. Optional.
+• Messages: In-app messages (clan chat, AI coach chat).
+• App activity: App interactions, Other user-generated content (posts, comments, plans).
+• Device or other IDs: Push notification token.
+Processing ephemeral? No. Collection required? Name/email/user ID required; everything else optional.
+
+
+SENSITIVE PERMISSIONS / DECLARATIONS
+------------------------------------
+Foreground service types (Policy > App content > Foreground service permissions):
+• FOREGROUND_SERVICE_LOCATION: records the GPS route, distance and pace of a run, walk or ride the user
+  starts. Notification shown the whole time; stops when the user finishes. Record a short screen video
+  of starting a run and the notification, upload it (YouTube unlisted) and paste the link.
+• FOREGROUND_SERVICE_HEALTH: keeps the workout timer and step count running during a workout the user starts.
+Location: foreground only (no background location permission).
+Physical activity (ACTIVITY_RECOGNITION): step counting.
+Camera: food photo and barcode scanning, profile photo.
+
+
+RELEASE CHECKLIST
+-----------------
+1. powershell -ExecutionPolicy Bypass -File android\create-upload-key.ps1   (once; back up the .jks + password)
+2. Add the printed SHA-1/SHA-256 to Firebase > Project settings > Android app (Google sign-in needs it).
+3. build-apk.bat  ->  Apparatus.aab
+4. Play Console > Create app > Internal testing > upload the .aab
+5. Play Console > Setup > App signing: copy the "App signing key" SHA-1/SHA-256 into Firebase too.
+6. Fill everything above, then promote Internal -> Closed testing (new personal developer accounts need
+   12+ testers for 14 days) -> Production.

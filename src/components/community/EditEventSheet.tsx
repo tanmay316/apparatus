@@ -10,8 +10,10 @@ import { updateSimpleEvent } from '@/services/community';
 import { SimpleEvent } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
-import { PriceField, parsePriceInput } from '@/components/market/PriceField';
+import { EntryFeeField, PriceField, parseEntryFee, parsePriceInput } from '@/components/market/PriceField';
 import { useMarketConfig } from '@/components/market/CheckoutButton';
+import { usePaymentsEnabled } from '@/lib/payments-mode';
+import { isPaid } from '@/services/market';
 
 interface EditEventSheetProps {
   event: SimpleEvent;
@@ -38,6 +40,8 @@ export function EditEventSheet({ event, isOpen, onClose }: EditEventSheetProps) 
   const [locationName, setLocationName] = useState(event.location?.name || '');
   const [prize, setPrize] = useState(event.prize || '');
   const [ticketPrice, setTicketPrice] = useState(event.ticketPrice ? String(event.ticketPrice) : '');
+  const [entryFee, setEntryFee] = useState(String(event.entryFee || event.ticketPrice || ''));
+  const payments = usePaymentsEnabled();
   const marketConfig = useMarketConfig();
   const [visibility, setVisibility] = useState<'public' | 'clan_only'>(event.visibility || 'public');
 
@@ -109,6 +113,10 @@ export function EditEventSheet({ event, isOpen, onClose }: EditEventSheetProps) 
       const isSeller = user.uid === event.createdBy;
       const price = parsePriceInput(ticketPrice, marketConfig);
       if (isSeller && price.error) throw new Error(price.error);
+      const fee = parseEntryFee(entryFee);
+      if (!payments && fee.error) throw new Error(fee.error);
+      // With payments off, an older in-app ticket price becomes the plain entry fee.
+      const feeUpdate = payments ? {} : { entryFee: fee.value, ...(isPaid(event.ticketPrice) ? { ticketPrice: 0 } : {}) };
 
       await updateSimpleEvent(event.id, {
         title: title.trim(),
@@ -118,7 +126,8 @@ export function EditEventSheet({ event, isOpen, onClose }: EditEventSheetProps) 
         endTime: Timestamp.fromDate(end),
         status: dynamicStatus,
         prize: prize.trim() || undefined,
-        ...(isSeller ? { ticketPrice: price.value } : {}),
+        ...(isSeller && payments ? { ticketPrice: price.value } : {}),
+        ...feeUpdate,
         location: locationName.trim() ? { name: locationName.trim() } : undefined,
         visibility,
         coverUrl: coverUrl || undefined
@@ -333,6 +342,7 @@ export function EditEventSheet({ event, isOpen, onClose }: EditEventSheetProps) 
           </div>
 
           <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" sellerUid={event.createdBy} label="Ticket price (Optional)" unit="ticket" />
+          <EntryFeeField id="edit-event-fee" value={entryFee} onChange={setEntryFee} />
 
           {/* Visibility */}
           <div>

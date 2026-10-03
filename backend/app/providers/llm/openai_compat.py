@@ -43,7 +43,7 @@ class OpenAICompatProvider(BaseLLMProvider):
     def headers(self) -> dict:
         h = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
         if self.provider_name == "openrouter":
-            h.update({"HTTP-Referer": "https://apparatus.fitness", "X-Title": "Apparatus"})
+            h.update({"HTTP-Referer": settings.PUBLIC_APP_URL, "X-Title": settings.APP_NAME})
         return h
 
     async def _models(self, kind: str) -> List[str]:

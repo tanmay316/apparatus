@@ -4,6 +4,7 @@ import { Footprints, Play } from 'lucide-react';
 import { DEFAULT_STEP_GOAL, getDailySteps } from '@/services/cardio';
 import { pedometerService } from '@/services/pedometer';
 import { localDateKey } from '@/lib/stats';
+import { BRAND } from '@/lib/brand';
 
 const RING = 2 * Math.PI * 26;
 
@@ -90,7 +91,7 @@ export function StepGoalCard({ userId, goal }: { userId: string; goal?: number }
     )}
     {permission === 'denied' && (
       <p className="text-[11.5px] dx-muted px-1">
-        Step access is off, so only tracked walks and runs count. Turn on Physical activity / Motion &amp; Fitness for Apparatus in your phone settings.
+        Step access is off, so only tracked walks and runs count. Turn on Physical activity / Motion &amp; Fitness for {BRAND.name} in your phone settings.
       </p>
     )}
     </div>

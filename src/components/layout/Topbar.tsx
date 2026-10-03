@@ -8,6 +8,7 @@ import { getAvatarUrl } from '@/lib/avatar';
 import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useUnreadAdminAlerts } from '@/services/admin-alerts';
 import { ROOT_PATHS, getRouteTitle } from './nav-config';
+import { BRAND } from '@/lib/brand';
 
 const iconBtn = 'w-10 h-10 rounded-full text-bone-dim hover:text-bone hover:bg-bone/5 active:bg-bone/10 flex items-center justify-center transition-colors shrink-0';
 
@@ -92,7 +93,7 @@ export function Topbar() {
         <div className="flex-1 min-w-0 flex items-center">
           {isRoot ? (
             <Link to="/" className="flex items-center gap-2 lg:hidden px-1" aria-label="Home">
-              <img src="/logo.png" alt="Apparatus" className="h-6 w-auto brand-logo-img" />
+              <img src="/logo.png" alt={BRAND.name} className="h-6 w-auto brand-logo-img" />
             </Link>
           ) : (
             <h1 className="text-[16px] font-semibold text-bone truncate px-1 lg:hidden">{title}</h1>

@@ -1,7 +1,8 @@
 import { Share } from '@capacitor/share';
 import { Clipboard } from '@capacitor/clipboard';
+import { BRAND } from '@/lib/brand';
 
-export const PRODUCTION_URL = 'https://apparatus-46b1b.web.app';
+export const PRODUCTION_URL = BRAND.webUrl;
 
 /**
  * Returns a guaranteed production web URL for sharing, even when running
@@ -42,7 +43,7 @@ export interface ShareOptions {
  */
 export async function shareContent(options: ShareOptions): Promise<{ success: boolean; method: 'native' | 'clipboard' }> {
   const shareUrl = options.url || getAppShareUrl();
-  const title = options.title || 'Apparatus';
+  const title = options.title || BRAND.name;
   const text = options.text ? `${options.text}\n${shareUrl}` : shareUrl;
 
   // 1. Try Capacitor Native Share

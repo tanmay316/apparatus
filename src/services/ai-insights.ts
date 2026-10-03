@@ -5,6 +5,7 @@ import { isProRequired } from '@/services/billing';
 import { shiftDate } from '@/lib/analysis-common';
 import type { Facts } from '@/lib/ai-facts';
 import type { CardioActivity, Workout } from '@/types';
+import { BRAND } from '@/lib/brand';
 
 const API_BASE = import.meta.env.VITE_NUTRITION_API_URL || 'http://localhost:8000/api/v1';
 
@@ -53,7 +54,7 @@ export async function requestSummary(kind: SummaryKind, key: string, facts: Fact
     body: JSON.stringify({ kind, key, facts: JSON.parse(JSON.stringify(facts)) }),
   });
   const body = await res.json().catch(() => ({}));
-  if (res.status === 402 || isProRequired(body.detail)) throw new ProRequiredError(body.detail?.message || 'Part of Apparatus Pro');
+  if (res.status === 402 || isProRequired(body.detail)) throw new ProRequiredError(body.detail?.message || `Part of ${BRAND.name} Pro`);
   // 404/405 = the server hasn't been updated with the AI coach endpoint yet.
   if (res.status === 404 || res.status === 405) throw new Error('The AI coach isn’t available on the server yet.');
   if (res.status === 429) throw new Error(typeof body.detail === 'string' ? body.detail : 'Too many requests. Try again in a few minutes.');

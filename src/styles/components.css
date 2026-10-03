@@ -649,19 +649,6 @@
     background-color: rgba(255, 255, 255, 0.07) !important;
   }
 
-  /* Fix the garbled A glyphs in exported cardio images without changing the
-     share-card layout or its selected text colour. */
-  .cardio-share-brand {
-    font-size: 0 !important;
-    letter-spacing: 0 !important;
-  }
-
-  .cardio-share-brand::after {
-    content: 'APPARATUS';
-    font-size: 18px;
-    letter-spacing: 0.24em;
-  }
-
   /* ─── Surface hierarchy ──────────────────────────────────── */
   [data-theme='dark'] nav,
   [data-theme='dark'] .navbar,

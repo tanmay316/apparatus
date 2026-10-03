@@ -10,6 +10,7 @@ import { Ring } from '@/components/nutrition/cal-ui';
 import { ProBadge, ProLock } from './ProLock';
 import { AskAIButton } from './AICoach';
 import { niceTicks, ScrollChart } from '@/components/ui/ScrollChart';
+import { BRAND } from '@/lib/brand';
 
 const tooltipStyle = { borderRadius: 12, border: 'none', background: 'var(--cal-card)', color: 'var(--cal-text)', fontSize: 12 };
 const tick = { fontSize: 10.5, fill: 'var(--cal-muted)' };
@@ -208,7 +209,7 @@ export function NutritionInsights(props: { setup: NutritionSetup; byDay: Map<str
         <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.02em' }}>Smart insights</div>
         <ProBadge />
       </div>
-      <ProLock variant="cal" title="Smart nutrition insights" reason="See your real calorie burn, trend weight and goal date, consistency, macro averages and eating patterns with Apparatus Pro." maxHeight={560}>
+      <ProLock variant="cal" title="Smart nutrition insights" reason={`See your real calorie burn, trend weight and goal date, consistency, macro averages and eating patterns with ${BRAND.name} Pro.`} maxHeight={560}>
         <Body {...props} />
       </ProLock>
     </div>

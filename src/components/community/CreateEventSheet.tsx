@@ -6,8 +6,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createSimpleEvent } from '@/services/community';
 import { Timestamp } from 'firebase/firestore';
 import { compressImageFile } from '@/utils/image-compression';
-import { PriceField, parsePriceInput } from '@/components/market/PriceField';
+import { EntryFeeField, PriceField, parseEntryFee, parsePriceInput } from '@/components/market/PriceField';
 import { useMarketConfig } from '@/components/market/CheckoutButton';
+import { usePaymentsEnabled } from '@/lib/payments-mode';
 import { ChoiceGroup, CoverPicker, Field, FormSection, FormSheet, spanLabel, STATUS_LABEL, StatusPill, type Choice } from '@/components/ui/FormSheet';
 
 const ACTIVITY_TYPES: Choice<string>[] = [
@@ -35,6 +36,8 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
   const [locationName, setLocationName] = useState('');
   const [prize, setPrize] = useState('');
   const [ticketPrice, setTicketPrice] = useState('');
+  const [entryFee, setEntryFee] = useState('');
+  const payments = usePaymentsEnabled();
   const marketConfig = useMarketConfig();
   const [visibility, setVisibility] = useState<'public' | 'clan_only'>(prefilledClanId ? 'clan_only' : 'public');
 
@@ -91,6 +94,8 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
 
       const price = parsePriceInput(ticketPrice, marketConfig);
       if (price.error) throw new Error(price.error);
+      const fee = parseEntryFee(entryFee);
+      if (!payments && fee.error) throw new Error(fee.error);
 
       await createSimpleEvent({
         title: title.trim(),
@@ -101,6 +106,7 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
         status: dynamicStatus,
         prize: prize.trim() || undefined,
         ticketPrice: price.value,
+        entryFee: payments ? undefined : fee.value ?? undefined,
         location: locationName.trim() ? { name: locationName.trim() } : undefined,
         visibility,
         coverUrl: coverUrl || 'https://images.unsplash.com/photo-1517649763962-0c623266ddc0?q=80&w=1470&auto=format&fit=crop',
@@ -176,6 +182,7 @@ export function CreateEventSheet({ onClose, prefilledClanId }: { onClose: () => 
           <ChoiceGroup label="Who can join" value={visibility} onChange={setVisibility} options={VISIBILITY} />
         )}
         <PriceField value={ticketPrice} onChange={setTicketPrice} bucket="ticket" label="Ticket price" unit="ticket" />
+        <EntryFeeField id="event-fee" value={entryFee} onChange={setEntryFee} />
         <Field id="event-prize" label="Prizes" optional>
           <input id="event-prize" value={prize} maxLength={120} onChange={e => setPrize(e.target.value)} placeholder="e.g. Medals for the top 3" className="dx-input" />
         </Field>

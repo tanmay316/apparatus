@@ -11,6 +11,7 @@ import appLogo from '@/assets/logo.png';
 import type { EarnedCommunityBadge } from '@/types';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
+import { BRAND } from '@/lib/brand';
 
 interface MedalShareModalProps {
   badge: EarnedCommunityBadge;
@@ -27,7 +28,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
   const [theme, setTheme] = useState<'dark-gold' | 'cyber-noir' | 'peach' | 'light-gold' | 'crimson'>('dark-gold');
 
   const rawPhoto = profile?.photoURL || user?.photoURL || '';
-  const displayName = profile?.displayName || user?.displayName || 'Apparatus Athlete';
+  const displayName = profile?.displayName || user?.displayName || `${BRAND.name} Athlete`;
 
   const [avatarSrc, setAvatarSrc] = useState<string | null>(rawPhoto || null);
   const [imgError, setImgError] = useState(false);
@@ -238,7 +239,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
       const canvas = await getCanvas();
       if (!canvas) throw new Error('Failed to generate image canvas');
 
-      const fileName = `apparatus_medal_${badge.rank}_${Date.now()}.png`;
+      const fileName = `${BRAND.slug}_medal_${badge.rank}_${Date.now()}.png`;
 
       // 1. Native Mobile (Capacitor)
       if (Capacitor.isNativePlatform()) {
@@ -252,7 +253,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
 
           await Share.share({
             title: `${medalConfig.title} - ${badge.title}`,
-            text: `I just won ${medalConfig.title} in "${badge.title}" on Apparatus Arena! 🏆`,
+            text: `I just won ${medalConfig.title} in "${badge.title}" on ${BRAND.name} Arena! 🏆`,
             files: [fileResult.uri],
             dialogTitle: 'Share Medal Card',
           });
@@ -278,7 +279,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
             await navigator.share({
               files: [file],
               title: `${medalConfig.title} - ${badge.title}`,
-              text: `I just won ${medalConfig.title} in "${badge.title}" on Apparatus Arena! 🏆`,
+              text: `I just won ${medalConfig.title} in "${badge.title}" on ${BRAND.name} Arena! 🏆`,
             });
           } catch (shareErr: any) {
             if (shareErr?.name !== 'AbortError') {
@@ -308,14 +309,14 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
       const canvas = await getCanvas();
       if (!canvas) throw new Error('Failed to render canvas');
 
-      const fileName = `apparatus_medal_${badge.rank}_${Date.now()}.png`;
+      const fileName = `${BRAND.slug}_medal_${badge.rank}_${Date.now()}.png`;
 
       // 1. Native Mobile (Capacitor) - save directly to device storage, no share sheet.
       if (Capacitor.isNativePlatform()) {
         try {
           const base64Data = canvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '');
           await Filesystem.writeFile({
-            path: `Apparatus/${fileName}`,
+            path: `${BRAND.name}/${fileName}`,
             data: base64Data,
             directory: Directory.Documents,
             recursive: true,
@@ -471,7 +472,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
               <div className="flex items-center gap-2">
                 <img
                   src={appLogo}
-                  alt="Apparatus"
+                  alt={BRAND.name}
                   className={`${aspectRatio === '1/1' ? 'h-5' : 'h-6'} w-auto object-contain shrink-0 drop-shadow-sm`}
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = '/logo.png';
@@ -483,7 +484,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
                   } font-light ${tPrimary} uppercase select-none`}
                   style={{ textShadow: '0 0 10px rgba(93,42,26,0.3)' }}
                 >
-                  ΛPPΛRΛTUS
+                  {BRAND.wordmark}
                 </span>
               </div>
 
@@ -775,7 +776,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
               </div>
 
               <div className="text-right shrink-0">
-                <span className={`text-[9px] font-mono ${tTertiary}`}>apparatus.fit</span>
+                <span className={`text-[9px] font-mono ${tTertiary}`}>{BRAND.name}</span>
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
 import type { Plan, Exercise, PlanDay } from '@/types';
 import { Timestamp } from 'firebase/firestore';
+import { BRAND } from '@/lib/brand';
 
 const ex = (name: string, sets: string, tempo = '', rest = '', cues: string[] = []): Exercise => {
   const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(name + ' form tutorial')}`;
@@ -14,7 +15,7 @@ const now = Timestamp.now();
 
 export const tmsCalisthenicsPlan: Plan = {
   ownerId: 'SYSTEM', 
-  ownerName: 'Apparatus', 
+  ownerName: BRAND.name, 
   title: 'Tms Calisthenics Hypertrophy + Skills Program',
   description: 'Phase 1 Skills: Handstand and L-sit only. Split: Push • Legs • Pull • Push • Legs+Mobility • Pull • Recovery',
   type: 'sample', 

@@ -21,12 +21,14 @@ import { DEFAULT_STEP_GOAL, getDailySteps } from '@/services/cardio';
 import { pedometerService } from '@/services/pedometer';
 import { getAvatarUrl } from '@/lib/avatar';
 import { localDateKey } from '@/lib/stats';
+import { SUPPORT_EMAIL, openLegal } from '@/lib/legal';
 import { acceptAllFollowRequests, restrictPublicContent } from '@/services/social';
 import { computeAthleteRank } from '@/lib/rank';
 import type { UserProfile } from '@/types';
+import { BRAND } from '@/lib/brand';
 
 const SECTIONS = [
-  { id: 'pro', label: 'Apparatus Pro', icon: Crown },
+  { id: 'pro', label: `${BRAND.name} Pro`, icon: Crown },
   { id: 'profile', label: 'Profile', icon: User },
   { id: 'body', label: 'Body and training', icon: Scale },
   { id: 'goals', label: 'Daily goals', icon: Footprints },
@@ -248,7 +250,7 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
     setExporting(true);
     try {
       const data = await exportAccountData(user.uid);
-      downloadJson(data, `apparatus-export-${new Date().toISOString().slice(0, 10)}.json`);
+      downloadJson(data, `${BRAND.slug}-export-${new Date().toISOString().slice(0, 10)}.json`);
       showToast('Your account export is ready');
     } catch (error: any) {
       showToast(error?.message || 'Could not export account data', 'error');
@@ -354,7 +356,7 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
   const handleLogout = async () => {
     const confirmed = await confirm({
       title: 'Sign Out',
-      message: 'Sign out of Apparatus on this device?',
+      message: `Sign out of ${BRAND.name} on this device?`,
       confirmText: 'Sign Out',
       type: 'warning',
       icon: 'logout',
@@ -396,7 +398,7 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
     <div className="dx pro-scope max-w-6xl mx-auto pt-1 sm:pt-4 pb-16">
       <header className="mb-5 px-1">
         <h1 className="text-[26px] sm:text-[30px] font-semibold tracking-tight leading-tight">Settings</h1>
-        <p className="text-[14px] dx-muted mt-1">Manage your account, privacy and how Apparatus works for you.</p>
+        <p className="text-[14px] dx-muted mt-1">Manage your account, privacy and how {BRAND.name} works for you.</p>
       </header>
 
       <nav aria-label="Settings sections" className="lg:hidden -mx-1 px-1 mb-5 flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
@@ -685,6 +687,18 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
               <button type="button" onClick={handleLogout} className="dx-btn-secondary !h-9 !px-3.5 !text-[13px]">
                 <LogOut size={14} /> Sign out
               </button>
+            </SettingRow>
+          </SettingsSection>
+
+          <SettingsSection id="about" title="About">
+            <SettingRow label="Help and support" description={SUPPORT_EMAIL}>
+              <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`${BRAND.name} support`)}`} className="dx-btn-secondary !h-9 !px-3.5 !text-[13px]">Contact</a>
+            </SettingRow>
+            <SettingRow label="Privacy policy" description="What we collect and how it's used.">
+              <button type="button" onClick={() => openLegal('privacy')} className="dx-btn-secondary !h-9 !px-3.5 !text-[13px]">Open</button>
+            </SettingRow>
+            <SettingRow label="Terms of use" description={`The rules for using ${BRAND.name}.`}>
+              <button type="button" onClick={() => openLegal('terms')} className="dx-btn-secondary !h-9 !px-3.5 !text-[13px]">Open</button>
             </SettingRow>
           </SettingsSection>
 

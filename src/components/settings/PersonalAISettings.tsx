@@ -3,6 +3,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Save, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import { useAuthStore } from '../../stores/auth-store';
+import { BRAND } from '@/lib/brand';
 
 type KeyName = 'groq_api_key' | 'nvidia_api_key' | 'gemini_api_key' | 'openrouter_api_key';
 
@@ -71,7 +72,7 @@ export default function PersonalAISettings() {
           <ShieldCheck size={17} />
         </span>
         <div>
-          <div className="text-[14px] font-medium" style={{ color: 'var(--dx-text)' }}>Provided by Apparatus</div>
+          <div className="text-[14px] font-medium" style={{ color: 'var(--dx-text)' }}>Provided by {BRAND.name}</div>
           <div className="text-[12.5px] dx-muted mt-0.5">AI features are enabled for everyone. No personal keys needed.</div>
         </div>
       </div>

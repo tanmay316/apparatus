@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore, isAppleSignInAvailable } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { Loader2, Mail, Lock, ArrowRight, X } from 'lucide-react';
+import { openLegal } from '@/lib/legal';
+import { BRAND } from '@/lib/brand';
 
 export function AuthPage() {
   const { signInWithGoogle, signInWithApple, signInWithEmail, signUpWithEmail, resetPassword, loading } = useAuthStore();
@@ -122,7 +124,7 @@ export function AuthPage() {
           <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-white/[0.04] border border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.6)] flex items-center justify-center backdrop-blur-xl">
             <img
               src="/logo.png"
-              alt="Apparatus"
+              alt={BRAND.name}
               className="w-12 h-12 sm:w-14 sm:h-14 object-contain filter invert brightness-125 drop-shadow-[0_0_16px_rgba(224,90,43,0.6)]"
               onError={(e) => {
                 (e.target as HTMLImageElement).src = '/logo.png';
@@ -142,7 +144,7 @@ export function AuthPage() {
             className="font-sans tracking-[0.4em] text-3xl sm:text-4xl font-light text-white uppercase select-none leading-none pl-1.5"
             style={{ textShadow: '0 0 20px rgba(224,90,43,0.35)' }}
           >
-            ΛPPΛRΛTUS
+            {BRAND.wordmark}
           </h1>
           <p className="text-xs sm:text-sm font-sans text-white/60 tracking-wider">
             Gym, Calisthenics & Social Fitness
@@ -310,7 +312,10 @@ export function AuthPage() {
 
         {/* Minimal Legal Footer */}
         <p className="text-[11px] text-white/35 font-sans text-center leading-relaxed mt-4">
-          By continuing, you agree to our Terms & Privacy Policy
+          By continuing, you agree to our{' '}
+          <button type="button" onClick={() => openLegal('terms')} className="underline underline-offset-2 hover:text-white/60">Terms</button>
+          {' & '}
+          <button type="button" onClick={() => openLegal('privacy')} className="underline underline-offset-2 hover:text-white/60">Privacy Policy</button>
         </p>
       </motion.div>
     </div>

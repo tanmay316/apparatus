@@ -7,6 +7,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { useAuthStore } from '@/stores/auth-store';
 import { createPlan, savePlanDay } from '@/services/plans';
 import { generateWorkoutPlan } from '@/services/workout-api';
+import { BRAND } from '@/lib/brand';
 
 interface Props {
   isOpen: boolean;
@@ -162,7 +163,7 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
               <Sparkles size={20} />
             </div>
             <div>
-              <h2 className="font-serif text-xl font-medium">Apparatus AI</h2>
+              <h2 className="font-serif text-xl font-medium">{BRAND.name} AI</h2>
               <p className="text-xs font-mono text-[var(--muted)] uppercase tracking-wider">Plan Generator</p>
             </div>
           </div>

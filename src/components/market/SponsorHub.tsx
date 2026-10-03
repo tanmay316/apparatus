@@ -3,7 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { collection, getDocs, limit, query, where } from 'firebase/firestore';
 import { BadgeCheck, CreditCard, Gift, ImagePlus, Megaphone, Sparkles, Target, Users, X } from 'lucide-react';
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { compressImageFile } from '@/utils/image-compression';
@@ -11,6 +11,7 @@ import {
   cancelSponsorship, createSponsorship, formatInr, listMySponsorships, openPaymentPage, type Sponsorship,
 } from '@/services/market';
 import { MarketSheet } from './MarketSheet';
+import { BRAND } from '@/lib/brand';
 
 const STATUS: Record<Sponsorship['status'], { label: string; cls: string }> = {
   pending: { label: 'Preparing quote', cls: 'dx-pill--neutral' },
@@ -69,7 +70,8 @@ function SponsorRequestSheet({ onClose }: { onClose: () => void }) {
   };
 
   const site = website.trim() && !/^https:\/\//.test(website.trim()) ? `https://${website.trim().replace(/^http:\/\//, '')}` : website.trim();
-  const valid = brandName.trim().length >= 2 && prize.trim().length >= 2 && /^[^@ ]+@[^@ ]+\.[^@ ]+$/.test(contactEmail.trim());
+  const emailVerified = !!auth.currentUser?.emailVerified;
+  const valid = emailVerified && brandName.trim().length >= 2 && prize.trim().length >= 2 && /^[^@ ]+@[^@ ]+\.[^@ ]+$/.test(contactEmail.trim());
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -100,12 +102,15 @@ function SponsorRequestSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <MarketSheet
-      title="Promote your brand"
+      title={`Partner with ${BRAND.name}`}
       subtitle="Tell us about your brand and the prize you'll give winners. We'll reply with a price; your logo goes live after payment."
       onClose={onClose}
       footer={<button type="button" className="dx-btn w-full" disabled={!valid || submit.isPending || compressing} onClick={() => submit.mutate()}>{submit.isPending ? 'Sending…' : 'Get a quote'}</button>}
     >
       <div className="space-y-4">
+        {!emailVerified && (
+          <p className="dx-inset p-3 text-[13px]">Verify your account email first (we sent a link when you signed up). This keeps spam out.</p>
+        )}
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => fileRef.current?.click()} className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center overflow-hidden shrink-0 border" style={{ borderColor: 'var(--dx-border)' }} aria-label="Upload logo">
             {logoUrl ? <img src={logoUrl} alt="Logo preview" className="w-full h-full object-contain" /> : <ImagePlus size={20} color="#6b7280" />}
@@ -124,7 +129,7 @@ function SponsorRequestSheet({ onClose }: { onClose: () => void }) {
         <div>
           <label className="dx-label" htmlFor="sr-target">Where should it appear?</label>
           <select id="sr-target" className="dx-input w-full" value={target} onChange={e => setTarget(e.target.value)}>
-            <option value="host">Apparatus runs a new public challenge for us</option>
+            <option value="host">{BRAND.name} runs a new public challenge for us</option>
             {(targets.data || []).map(t => <option key={`${t.type}:${t.id}`} value={`${t.type}:${t.id}`}>{t.type === 'challenge' ? 'Challenge' : 'Event'}: {t.title}</option>)}
           </select>
           <p className="text-[12px] dx-muted mt-1">Pick one of your own challenges or events, or let us run one for your brand.</p>
@@ -176,8 +181,8 @@ export function SponsorHub() {
           <span className="dx-hero-icon"><Megaphone size={20} /></span>
           <div className="flex-1 min-w-0">
             <div className="text-[11px] font-semibold uppercase tracking-[0.08em] opacity-75">For brands, gyms & stores</div>
-            <h2 className="mt-1 text-[21px] font-semibold leading-tight">Advertise to athletes</h2>
-            <p className="mt-1.5 text-[13px] opacity-80 leading-relaxed">Feature your brand on a challenge: your logo and a prize you give away appear on the challenge, in the feed and on the leaderboard. Nothing is charged until you accept our quote.</p>
+            <h2 className="mt-1 text-[21px] font-semibold leading-tight">Partner with {BRAND.name}</h2>
+            <p className="mt-1.5 text-[13px] opacity-80 leading-relaxed">Present a challenge: your logo and a prize you give away appear on the challenge, in the feed and on the leaderboard. Our team reviews every request, and nothing is charged until you accept our quote.</p>
           </div>
         </div>
         <button type="button" onClick={() => setOpen(true)} className="dx-hero-btn w-full mt-4"><Sparkles size={16} /> Get a quote</button>
@@ -207,7 +212,7 @@ export function SponsorHub() {
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-[14px] font-semibold truncate">{s.brandName}</div>
-                  <div className="text-[12px] dx-muted truncate">{s.targetType === 'host' ? 'Hosted by Apparatus' : s.targetTitle || s.targetType}{s.amountInr ? ` · ${formatInr(s.amountInr)}` : ''}</div>
+                  <div className="text-[12px] dx-muted truncate">{s.targetType === 'host' ? `Hosted by ${BRAND.name}` : s.targetTitle || s.targetType}{s.amountInr ? ` · ${formatInr(s.amountInr)}` : ''}</div>
                 </div>
                 <span className={`dx-pill ${STATUS[s.status]?.cls || 'dx-pill--neutral'}`}>
                   {s.status === 'live' && <BadgeCheck size={12} />}{STATUS[s.status]?.label || s.status}

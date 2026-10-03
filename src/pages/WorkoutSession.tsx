@@ -28,6 +28,7 @@ import { updateUserChallengeProgress } from '@/services/community';
 import { ExerciseIllustration } from '@/components/ui/ExerciseIllustration';
 import { getBadge } from '@/lib/badges';
 import { effectiveStreak } from '@/lib/stats';
+import { BRAND } from '@/lib/brand';
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -357,7 +358,7 @@ export function WorkoutSession() {
       showPersistentNotification(
         1001,
         `${store.dayTitle || 'Workout'} Active`,
-        'Apparatus is tracking your session.'
+        `${BRAND.name} is tracking your session.`
       );
     });
   }, [store.isActive, sessionFinished, store.startedAt, store.planId, store.dayId, user]);

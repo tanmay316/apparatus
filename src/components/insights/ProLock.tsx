@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Crown, Lock } from 'lucide-react';
-import { requirePro, useHasPro } from '@/stores/subscription-store';
+import { CAN_PURCHASE, requirePro, useHasPro } from '@/stores/subscription-store';
+import { BRAND } from '@/lib/brand';
 
 /** Small "PRO" pill for section titles. */
 export function ProBadge({ className = '' }: { className?: string }) {
@@ -26,6 +27,8 @@ export function ProLock({ children, title, reason, compact, maxHeight = 320, var
 }) {
   const hasPro = useHasPro();
   if (hasPro) return <>{children}</>;
+  // Store builds have no way to buy Pro, so locked content is left out instead of teased.
+  if (!CAN_PURCHASE) return null;
   const cal = variant === 'cal';
   const shade = cal
     ? 'linear-gradient(180deg, transparent, color-mix(in srgb, var(--cal-bg) 60%, transparent) 40%, color-mix(in srgb, var(--cal-bg) 88%, transparent))'
@@ -44,7 +47,7 @@ export function ProLock({ children, title, reason, compact, maxHeight = 320, var
           {!compact && reason && <p className={`mt-1 text-[12px] leading-snug ${cal ? 'cal-muted' : 'text-bone-dim'}`}>{reason}</p>}
           <button
             type="button"
-            onClick={() => requirePro(reason || `${title} is part of Apparatus Pro.`)}
+            onClick={() => requirePro(reason || `${title} is part of ${BRAND.name} Pro.`)}
             className="mt-3 inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-semibold"
             style={{ background: 'linear-gradient(135deg,#f5b544,#d97706)', color: '#1a1206' }}
           >

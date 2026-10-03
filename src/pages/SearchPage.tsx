@@ -20,6 +20,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { EventDetailSheet } from '@/components/community/EventDetailSheet';
 import { ChallengeDetailSheet } from '@/components/community/ChallengeDetailSheet';
 import type { Activity, ChallengeV2, ClanV2, Plan, SimpleEvent } from '@/types';
+import { BRAND } from '@/lib/brand';
 
 type Exercise = typeof COMPACT_LIBRARY[number];
 type TabId = 'top' | 'athletes' | 'clans' | 'events' | 'challenges' | 'posts' | 'plans' | 'exercises';
@@ -230,7 +231,7 @@ export function SearchPage() {
       query={query}
       leading={iconTile(<BookOpen size={19} />, 'bg-indigo-500/10 text-indigo-500')}
       title={p.title}
-      subtitle={[`${p.daysPerWeek ?? '?'} days/week`, p.estimatedDuration, p.type === 'sample' ? 'Apparatus plan' : p.ownerName].filter(Boolean).join(' · ')}
+      subtitle={[`${p.daysPerWeek ?? '?'} days/week`, p.estimatedDuration, p.type === 'sample' ? `${BRAND.name} plan` : p.ownerName].filter(Boolean).join(' · ')}
     />
   );
   const renderExercise = (e: Exercise) => (

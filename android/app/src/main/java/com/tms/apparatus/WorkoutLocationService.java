@@ -786,7 +786,7 @@ public final class WorkoutLocationService extends Service {
         }
         long baseTime = startedAt + totalPausedMs;
 
-        String title = isPaused ? activity + " (Paused)" : "Apparatus • " + activity;
+        String title = isPaused ? activity + " (Paused)" : getString(R.string.app_name) + " • " + activity;
         String paceStr = formatPace(distanceMeters, movingDurationSec);
         String distStr = String.format(Locale.US, "%.2f km", distanceMeters / 1000f);
 
