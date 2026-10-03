@@ -2,11 +2,10 @@
 Subscription logic tests (no network, no Firestore).
 Run: cd backend; ./venv/Scripts/python tests/test_subscription.py
 """
-import hashlib
-import hmac
 import os
 import sys
 import time
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -27,27 +26,47 @@ now = time.time()
 check("active with future end is pro", subs.compute_pro("active", now + 86400, now))
 check("active in grace window is pro", subs.compute_pro("active", now - 86400, now))
 check("active long expired is not pro", not subs.compute_pro("active", now - 10 * 86400, now))
+check("Play grace period is pro", subs.compute_pro("grace", now + 3600, now))
 check("cancelled keeps paid period", subs.compute_pro("cancelled", now + 3600, now))
 check("cancelled after period is not pro", not subs.compute_pro("cancelled", now - 1, now))
-check("halted is not pro", not subs.compute_pro("halted", now + 86400, now))
-check("created (unpaid) is not pro", not subs.compute_pro("created", None, now))
+check("on hold is not pro", not subs.compute_pro("on_hold", now + 86400, now))
+check("pending payment is not pro", not subs.compute_pro("pending_payment", now + 86400, now))
+check("expired is not pro", not subs.compute_pro("expired", now + 86400, now))
 
-settings.RAZORPAY_KEY_SECRET = "secret_test"
-sig = hmac.new(b"secret_test", b"pay_ABC1234|sub_XYZ7890", hashlib.sha256).hexdigest()
-check("checkout signature valid", subs.verify_checkout_signature("pay_ABC1234", "sub_XYZ7890", sig))
-check("checkout signature tampered", not subs.verify_checkout_signature("pay_ABC9999", "sub_XYZ7890", sig))
+# ─── Google Play ───
+from app.services import play_billing as play  # noqa: E402
 
-settings.RAZORPAY_WEBHOOK_SECRET = "whsec"
-body = b'{"event":"subscription.activated"}'
-wsig = hmac.new(b"whsec", body, hashlib.sha256).hexdigest()
-check("webhook signature valid", subs.verify_webhook_signature(body, wsig))
-check("webhook signature wrong body", not subs.verify_webhook_signature(body + b" ", wsig))
+settings.GOOGLE_PLAY_PRO_PRODUCT_ID = "pro"
+end_iso = datetime.fromtimestamp(now + 30 * 86400, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+sub = {
+    "subscriptionState": "SUBSCRIPTION_STATE_ACTIVE",
+    "acknowledgementState": "ACKNOWLEDGEMENT_STATE_PENDING",
+    "externalAccountIdentifiers": {"obfuscatedExternalAccountId": play.account_id("u1")},
+    "lineItems": [{"productId": "pro", "expiryTime": end_iso, "offerDetails": {"basePlanId": "yearly"}}],
+}
+info = play.parse(sub)
+check("parse reads state, plan and expiry", info["status"] == "active" and info["plan"] == "yearly" and abs(info["end"] - (now + 30 * 86400)) < 2)
+check("parse sees unacknowledged purchase", info["acknowledged"] is False)
+check("account id is a 64-char hash, not the uid", len(play.account_id("u1")) == 64 and "u1" not in play.account_id("u1"))
+check("unknown Play state counts as expired", play.parse({**sub, "subscriptionState": "WHAT"})["status"] == "expired")
+try:
+    play.parse({**sub, "lineItems": [{"productId": "other", "expiryTime": end_iso}]})
+    check("other products never grant Pro", False)
+except play.PlayError:
+    check("other products never grant Pro", True)
+for bad in ("short", "tok en with spaces" * 3, "../../purchases" + "x" * 20, "a" * 2000):
+    check(f"token shape rejected: {bad[:20]!r}", not play.TOKEN_RE.match(bad))
+settings.GOOGLE_PLAY_RTDN_AUDIENCE = ""
+check("push endpoint closed until configured", not play.verify_push("Bearer abc"))
+settings.GOOGLE_PLAY_RTDN_AUDIENCE, settings.GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT = "https://x.test/rtdn", "rtdn@x.iam.gserviceaccount.com"
+check("push rejects a forged token", not play.verify_push("Bearer not-a-jwt"))
+check("push needs a bearer token", not play.verify_push(""))
 
 settings.PRO_EMAILS = "vip@example.com"
 check("comped email is pro", subs.get_entitlement("u1", "VIP@example.com")["pro"])
 
 # Quotas are off while billing is not configured.
-settings.RAZORPAY_KEY_ID = ""
+settings.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = ""
 check("no billing -> unlimited", subs.consume_quota("u1", "a@b.c", "coach_chat").allowed)
 
 detail = subs.QuotaResult(False, "food_scan", 3, 3, "day").detail()
@@ -61,13 +80,6 @@ check("lifetime message wording", life.startswith("You've used your 1 free AI wo
 # ─── Security hardening ───
 check("unverified email never gets comped Pro", subs.verified_email({"email": "vip@example.com", "email_verified": False}) is None)
 check("verified email passes through", subs.verified_email({"email": "vip@example.com", "email_verified": True}) == "vip@example.com")
-check("checkout rejects malformed ids", not subs.verify_checkout_signature("pay_1/../x", "sub_1", sig))
-for bad in ("sub_abc/../../payments", "sub_", "SUB_123456", "sub_123456?x=1"):
-    try:
-        subs.fetch_subscription(bad)
-        check(f"fetch rejects {bad!r}", False)
-    except ValueError:
-        check(f"fetch rejects {bad!r}", True)
 check("coupon grant active before end", subs.compute_pro("granted", now + 60, now))
 check("coupon grant has no grace", not subs.compute_pro("granted", now - 60, now))
 
@@ -87,10 +99,7 @@ check("unlimited coupon (max 0)", coupon_error({**free, "maxRedemptions": 0, "re
 check("expired coupon", "expired" in (coupon_error({**free, "expiresAt": now - 1}) or ""))
 check("one redemption per user", "already used" in (coupon_error(free, used=True) or ""))
 check("free coupon needs sane days", coupon_error({**free, "days": 0}) is not None)
-disc = {"type": "discount", "offerId": "offer_ABC123", "plan": "yearly", "active": True}
-check("valid discount coupon", coupon_error(disc, plan="yearly") is None)
-check("discount plan restriction", "yearly plan" in (coupon_error(disc, plan="monthly") or ""))
-check("discount needs a Razorpay offer", coupon_error({**disc, "offerId": "hack"}) is not None)
+check("discount coupons are no longer ours (Play promo codes)", coupon_error({"type": "discount", "offerId": "offer_ABC123", "active": True}) is not None)
 check("unknown coupon type", coupon_error({**free, "type": "lifetime"}) is not None)
 for code, ok in (("free30", True), ("  WELCOME-2026 ", True), ("ab", False), ("../x", False), ("A" * 40, False)):
     try:

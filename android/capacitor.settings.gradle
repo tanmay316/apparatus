@@ -83,5 +83,8 @@ project(':capgo-capacitor-pedometer').projectDir = new File('../node_modules/@ca
 include ':capgo-capacitor-social-login'
 project(':capgo-capacitor-social-login').projectDir = new File('../node_modules/@capgo/capacitor-social-login/android')
 
+include ':capgo-native-purchases'
+project(':capgo-native-purchases').projectDir = new File('../node_modules/@capgo/native-purchases/android')
+
 include ':otakit-capacitor-updater'
 project(':otakit-capacitor-updater').projectDir = new File('../node_modules/@otakit/capacitor-updater/android')

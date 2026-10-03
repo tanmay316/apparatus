@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Crown, Loader2, Sparkles, Ticket } from 'lucide-react';
+import { Crown, ExternalLink, Loader2, RotateCcw, Sparkles, Ticket } from 'lucide-react';
 import { SettingRow, SettingsSection } from '@/components/settings/SettingsLayout';
 import { CAN_PURCHASE, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
 import { useUIStore } from '@/stores/ui-store';
-import { PRO_PRICES, cancelSubscription, getBillingStatus } from '@/services/billing';
+import { getBillingStatus } from '@/services/billing';
+import { manageProSubscription, restorePro } from '@/lib/play-billing';
 import { BRAND } from '@/lib/brand';
 
 const USAGE_LABELS: Record<string, string> = {
@@ -18,8 +19,8 @@ const PERIOD_LABEL = { day: 'per day', week: 'this week', month: 'per month', li
 export function ProSettings() {
   const { enabled, entitlement, comped, usage, openPaywall } = useSubscriptionStore();
   const isPro = useIsPro();
-  const { confirm, showToast } = useUIStore();
-  const [cancelling, setCancelling] = useState(false);
+  const { showToast } = useUIStore();
+  const [restoring, setRestoring] = useState(false);
 
   if (!enabled && !isPro) return null;
 
@@ -27,25 +28,18 @@ export function ProSettings() {
   const cancelled = entitlement.status === 'cancelled';
   const viaCoupon = entitlement.status === 'granted';
   const planLabel = comped ? 'Complimentary' : viaCoupon ? 'Coupon' : entitlement.plan === 'yearly' ? 'Yearly' : entitlement.plan === 'monthly' ? 'Monthly' : 'Pro';
+  const viaPlay = isPro && !comped && !viaCoupon && !!entitlement.subscriptionId;
 
-  const handleCancel = async () => {
-    const ok = await confirm({
-      title: `Cancel ${BRAND.name} Pro?`,
-      message: renews ? `You keep Pro until ${renews}. You won't be charged again.` : "You won't be charged again.",
-      confirmText: 'Cancel plan',
-      cancelText: 'Keep Pro',
-      type: 'danger',
-    });
-    if (!ok) return;
-    setCancelling(true);
+  const handleRestore = async () => {
+    setRestoring(true);
     try {
-      await cancelSubscription();
-      showToast('Your plan is cancelled. Pro stays active until the end of this period.', 'success');
+      const pro = await restorePro();
       getBillingStatus().then(useSubscriptionStore.getState().setStatus).catch(() => {});
+      showToast(pro ? 'Pro restored.' : 'No Pro subscription found on this Google account.', pro ? 'success' : 'info');
     } catch (err: any) {
-      showToast(err?.message || 'Could not cancel right now.', 'error');
+      showToast(err?.message || 'Could not restore right now.', 'error');
     } finally {
-      setCancelling(false);
+      setRestoring(false);
     }
   };
 
@@ -56,7 +50,7 @@ export function ProSettings() {
         description={isPro
           ? comped ? 'Pro is on the house for this account.'
             : renews ? (viaCoupon ? `Free Pro until ${renews}` : cancelled ? `Cancelled · Pro until ${renews}` : `Renews on ${renews}`) : 'Active'
-          : CAN_PURCHASE ? `From ${PRO_PRICES.monthly.amount}/month or ${PRO_PRICES.yearly.amount}/year.` : 'Have a code? Redeem it here.'}
+          : CAN_PURCHASE ? 'Monthly or yearly, billed through Google Play.' : 'Have a code? Redeem it here.'}
       >
         {isPro ? (
           <span className="dx-pill dx-pill--accent !h-7 !px-3"><Crown size={12} /> Pro</span>
@@ -93,10 +87,25 @@ export function ProSettings() {
         </SettingRow>
       )}
 
-      {isPro && !comped && entitlement.subscriptionId && !cancelled && (
-        <SettingRow label="Manage plan" description="Cancel anytime; you keep Pro until the period ends.">
-          <button type="button" onClick={handleCancel} disabled={cancelling} className="dx-btn-secondary !h-9 !px-3.5 !text-[13px]" style={{ color: '#dc2626' }}>
-            {cancelling && <Loader2 size={14} className="animate-spin" />} Cancel plan
+      {viaPlay && (
+        <SettingRow
+          label="Manage plan"
+          description={CAN_PURCHASE
+            ? (cancelled ? 'Resubscribe or change plan in Google Play.' : 'Change or cancel in Google Play; you keep Pro until the period ends.')
+            : 'Manage it in Google Play on your Android phone.'}
+        >
+          {CAN_PURCHASE && (
+            <button type="button" onClick={() => manageProSubscription().catch(() => {})} className="dx-btn-secondary !h-9 !px-3.5 !text-[13px]">
+              <ExternalLink size={14} /> Google Play
+            </button>
+          )}
+        </SettingRow>
+      )}
+
+      {CAN_PURCHASE && enabled && !viaPlay && !comped && (
+        <SettingRow label="Restore purchase" description="Bought Pro on another phone with this Google account?">
+          <button type="button" onClick={handleRestore} disabled={restoring} className="dx-btn-secondary !h-9 !px-3.5 !text-[13px]">
+            {restoring ? <Loader2 size={14} className="animate-spin" /> : <RotateCcw size={14} />} Restore
           </button>
         </SettingRow>
       )}

@@ -1,18 +1,14 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Capacitor } from '@capacitor/core';
-import { AppLauncher } from '@capacitor/app-launcher';
 import {
-  BarChart3, Bot, Camera, Check, Crown, Dumbbell, ImageIcon, Loader2, Sparkles, Ticket, X,
+  BarChart3, Bot, Camera, Check, Crown, Dumbbell, ImageIcon, Loader2, RotateCcw, Sparkles, Ticket, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { CAN_PURCHASE, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
-import {
-  PRO_PRICES, checkCoupon, getBillingStatus, isRazorpayCheckoutUrl, loadRazorpayCheckout, redeemCoupon,
-  startSubscription, verifySubscription, type CouponInfo, type ProPlan,
-} from '@/services/billing';
+import { checkCoupon, getBillingStatus, redeemCoupon, type CouponInfo, type ProPlan } from '@/services/billing';
+import { buyPro, isPurchaseCancelled, loadPlayPrices, restorePro } from '@/lib/play-billing';
 import { BRAND } from '@/lib/brand';
 
 const FEATURES = [
@@ -28,28 +24,28 @@ export function PaywallSheet() {
   const close = useSubscriptionStore(s => s.closePaywall);
   const plans = useSubscriptionStore(s => s.enabled);
   const isPro = useIsPro();
-  const { user, profile } = useAuthStore();
-  const { showToast, theme } = useUIStore();
+  const { user } = useAuthStore();
+  const { showToast } = useUIStore();
   const [plan, setPlan] = useState<ProPlan>('yearly');
   const [busy, setBusy] = useState(false);
-  const [waitingForBrowser, setWaitingForBrowser] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [prices, setPrices] = useState<Partial<Record<ProPlan, string>> | null>(null);
   const [showCoupon, setShowCoupon] = useState(false);
   const [code, setCode] = useState('');
   const [coupon, setCoupon] = useState<CouponInfo | null>(null);
   const [couponBusy, setCouponBusy] = useState(false);
 
   useEffect(() => {
-    if (!open) { setBusy(false); setWaitingForBrowser(false); setShowCoupon(false); setCode(''); setCoupon(null); }
-  }, [open]);
+    if (!open) { setBusy(false); setShowCoupon(false); setCode(''); setCoupon(null); return; }
+    if (CAN_PURCHASE && plans && !prices) loadPlayPrices().then(setPrices).catch(() => setPrices({}));
+  }, [open, plans, prices]);
 
   const applyCoupon = async () => {
     const trimmed = code.trim().toUpperCase();
     if (trimmed.length < 3) return;
     setCouponBusy(true);
     try {
-      const info = await checkCoupon(trimmed);
-      setCoupon(info);
-      if (info.type === 'discount' && info.plan !== 'any') setPlan(info.plan);
+      setCoupon(await checkCoupon(trimmed));
     } catch (err: any) {
       setCoupon(null);
       showToast(err?.message || 'That code isn\'t valid.', 'error');
@@ -74,56 +70,42 @@ export function PaywallSheet() {
     }
   };
 
-  // The entitlement listener flips this as soon as the payment lands (browser or checkout).
-  useEffect(() => {
-    if (open && isPro && (busy || waitingForBrowser)) {
-      setBusy(false);
-      setWaitingForBrowser(false);
-      showToast(`Welcome to ${BRAND.name} Pro!`, 'success');
-    }
-  }, [isPro, open, busy, waitingForBrowser, showToast]);
+  const refreshStatus = () => getBillingStatus().then(useSubscriptionStore.getState().setStatus).catch(() => {});
 
   const checkout = async () => {
     if (!user) return;
     setBusy(true);
     try {
-      const sub = await startSubscription(plan, coupon?.type === 'discount' ? coupon.code : undefined);
-      if (Capacitor.isNativePlatform()) {
-        if (!isRazorpayCheckoutUrl(sub.short_url)) throw new Error('Checkout link unavailable. Please try again.');
-        await AppLauncher.openUrl({ url: sub.short_url });
-        setWaitingForBrowser(true);
-        setBusy(false);
-        return;
+      const pro = await buyPro(plan, user.uid);
+      refreshStatus();
+      if (pro) {
+        showToast(`Welcome to ${BRAND.name} Pro!`, 'success');
+        close();
+      } else {
+        showToast('Payment is pending. Pro unlocks as soon as Google Play confirms it.', 'info');
       }
-      await loadRazorpayCheckout();
-      const Razorpay = (window as any).Razorpay;
-      const rzp = new Razorpay({
-        key: sub.key_id,
-        subscription_id: sub.subscription_id,
-        name: BRAND.name,
-        description: `${BRAND.name} Pro · ${plan === 'yearly' ? 'Yearly' : 'Monthly'}`,
-        prefill: { name: profile?.displayName || '', email: user.email || '' },
-        theme: { color: theme === 'dark' ? '#5d2a1a' : '#17191c' },
-        handler: async (resp: { razorpay_payment_id: string; razorpay_subscription_id: string; razorpay_signature: string }) => {
-          try {
-            await verifySubscription(resp);
-            getBillingStatus().then(useSubscriptionStore.getState().setStatus).catch(() => {});
-          } catch (err: any) {
-            showToast(err?.message || 'Payment received. Pro will unlock in a moment.', 'info');
-          } finally {
-            setBusy(false);
-          }
-        },
-        modal: { ondismiss: () => setBusy(false) },
-      });
-      rzp.open();
     } catch (err: any) {
+      if (!isPurchaseCancelled(err)) showToast(err?.message || 'Could not complete the purchase.', 'error');
+    } finally {
       setBusy(false);
-      showToast(err?.message || 'Could not start checkout.', 'error');
     }
   };
 
-  const price = PRO_PRICES[plan];
+  const restore = async () => {
+    setRestoring(true);
+    try {
+      const pro = await restorePro();
+      refreshStatus();
+      showToast(pro ? 'Pro restored.' : 'No Pro subscription found on this Google account.', pro ? 'success' : 'info');
+      if (pro) close();
+    } catch (err: any) {
+      showToast(err?.message || 'Could not restore right now.', 'error');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const price = prices?.[plan];
 
   return createPortal(
     <AnimatePresence>
@@ -179,15 +161,13 @@ export function PaywallSheet() {
                 <div className="mt-5 flex items-center gap-2 text-[14px] font-semibold" style={{ color: 'var(--dx-success)' }}>
                   <Check size={18} /> All Pro features are unlocked.
                 </div>
-              ) : !plans ? (
-                <p className="mt-5 text-[13px] dx-muted">Subscriptions open soon.</p>
               ) : (
                 <>
-                  {CAN_PURCHASE && (
+                  {CAN_PURCHASE && plans && (
                   <div className="mt-5 grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Plan">
                     {(['yearly', 'monthly'] as ProPlan[]).map(p => {
                       const selected = plan === p;
-                      const info = PRO_PRICES[p];
+                      const amount = prices?.[p];
                       return (
                         <button
                           key={p}
@@ -195,19 +175,21 @@ export function PaywallSheet() {
                           role="radio"
                           aria-checked={selected}
                           onClick={() => setPlan(p)}
-                          disabled={coupon?.type === 'discount' && coupon.plan !== 'any' && coupon.plan !== p}
+                          disabled={prices !== null && !amount}
                           className="relative text-left rounded-2xl p-3.5 transition-colors disabled:opacity-40"
                           style={{
                             border: `1.5px solid ${selected ? 'var(--dx-accent)' : 'var(--dx-border)'}`,
                             background: selected ? 'var(--dx-accent-soft)' : 'var(--dx-card-2)',
                           }}
                         >
-                          {info.note && (
-                            <span className="dx-pill dx-pill--accent absolute -top-2.5 right-3 !h-5 !text-[10px]">{info.note}</span>
+                          {p === 'yearly' && (
+                            <span className="dx-pill dx-pill--accent absolute -top-2.5 right-3 !h-5 !text-[10px]">Best value</span>
                           )}
                           <span className="block text-[12px] dx-muted font-semibold uppercase tracking-wide">{p === 'yearly' ? 'Yearly' : 'Monthly'}</span>
-                          <span className="block mt-1 text-[20px] font-semibold tabular">{info.amount}</span>
-                          <span className="block text-[12px] dx-muted">per {info.per}</span>
+                          <span className="block mt-1 text-[20px] font-semibold tabular min-h-[28px]">
+                            {amount ?? (prices === null ? <Loader2 size={16} className="animate-spin mt-1.5" /> : '—')}
+                          </span>
+                          <span className="block text-[12px] dx-muted">per {p === 'yearly' ? 'year' : 'month'}</span>
                         </button>
                       );
                     })}
@@ -225,8 +207,7 @@ export function PaywallSheet() {
                         <div className="min-w-0 flex-1">
                           <div className="text-[13px] font-semibold font-mono">{coupon.code}</div>
                           <div className="text-[12px] dx-muted leading-snug">
-                            {coupon.label || (coupon.type === 'free' ? `${coupon.days} days of Pro, free` : 'Discount applied at checkout')}
-                            {coupon.type === 'discount' && coupon.plan !== 'any' ? ` · ${coupon.plan} plan` : ''}
+                            {coupon.label || `${coupon.days} days of Pro, free`}
                           </div>
                         </div>
                         <button type="button" onClick={() => { setCoupon(null); setCode(''); }} aria-label="Remove coupon" className="dx-icon-btn dx-icon-btn--sm !w-8 !h-8">
@@ -253,28 +234,26 @@ export function PaywallSheet() {
                     )}
                   </div>
 
-                  {coupon?.type === 'free' ? (
+                  {coupon ? (
                     <button type="button" onClick={redeemFree} disabled={couponBusy} className="dx-btn w-full mt-4 !h-12 !text-[15px]">
                       {couponBusy ? <Loader2 size={18} className="animate-spin" /> : <Crown size={17} />}
                       {couponBusy ? 'Unlocking…' : `Redeem · ${coupon.days} days of Pro free`}
                     </button>
-                  ) : waitingForBrowser ? (
-                    <div className="mt-4 dx-inset p-3.5 text-[13px] leading-snug flex gap-2.5">
-                      <Loader2 size={16} className="animate-spin shrink-0 mt-0.5" />
-                      <span>Finish the payment in your browser, then come back. Pro unlocks here automatically.</span>
-                    </div>
-                  ) : !CAN_PURCHASE ? (
-                    coupon?.type === 'discount' ? <p className="mt-4 text-[13px] dx-muted">This code can't be used in the app.</p> : null
-                  ) : (
-                    <button type="button" onClick={checkout} disabled={busy} className="dx-btn w-full mt-4 !h-12 !text-[15px]">
+                  ) : CAN_PURCHASE && plans ? (
+                    <button type="button" onClick={checkout} disabled={busy || !price} className="dx-btn w-full mt-4 !h-12 !text-[15px]">
                       {busy ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={17} />}
-                      {busy ? 'Opening checkout…' : `Get Pro · ${price.amount}/${price.per}${coupon?.type === 'discount' ? ' (discount applied)' : ''}`}
+                      {busy ? 'Opening Google Play…' : price ? `Get Pro · ${price}/${plan === 'yearly' ? 'year' : 'month'}` : 'Get Pro'}
                     </button>
-                  )}
-                  {CAN_PURCHASE && (
-                    <p className="mt-3 text-center text-[11.5px] dx-muted">
-                      Cancel anytime in Settings. Secure payments by Razorpay: UPI, cards and netbanking.
-                    </p>
+                  ) : null}
+                  {CAN_PURCHASE && plans && (
+                    <>
+                      <p className="mt-3 text-center text-[11.5px] dx-muted leading-snug">
+                        Billed through Google Play. Renews automatically; cancel anytime in Google Play → Subscriptions.
+                      </p>
+                      <button type="button" onClick={restore} disabled={restoring} className="mt-2 w-full inline-flex items-center justify-center gap-1.5 text-[12.5px] font-semibold dx-muted">
+                        {restoring ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />} Restore purchase
+                      </button>
+                    </>
                   )}
                 </>
               )}

@@ -2,14 +2,15 @@ import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTime
 import { auth, db } from '@/lib/firebase';
 import { logAdminAction } from '@/services/admin';
 
+/** Our coupons only grant free Pro days; paid-plan discounts are Google Play promo codes (Play Console). */
 export type CouponType = 'free' | 'discount';
 
 export interface Coupon {
   code: string;
   type: CouponType;
-  /** Free coupons: days of Pro granted. */
+  /** Days of Pro granted. */
   days?: number;
-  /** Discount coupons: Razorpay offer id (create the offer in the Razorpay dashboard). */
+  /** Legacy discount coupons only. */
   offerId?: string;
   plan: 'any' | 'monthly' | 'yearly';
   label: string;
@@ -36,18 +37,17 @@ export async function listCoupons(): Promise<Coupon[]> {
   return snap.docs.map(d => ({ ...(d.data() as Coupon), code: d.id }));
 }
 
-export async function createCoupon(input: Omit<Coupon, 'redeemedCount' | 'createdAt'>): Promise<void> {
+export async function createCoupon(input: Omit<Coupon, 'redeemedCount' | 'createdAt' | 'type' | 'offerId' | 'plan'>): Promise<void> {
   const code = input.code.trim().toUpperCase();
   if (!COUPON_CODE_RE.test(code)) throw new Error('Codes are 3-32 characters: A-Z, 0-9, - and _.');
-  if (input.type === 'free' && !(input.days && input.days >= 1 && input.days <= 3660)) throw new Error('Free coupons need 1-3660 days.');
-  if (input.type === 'discount' && !input.offerId?.startsWith('offer_')) throw new Error('Discount coupons need a Razorpay offer id (offer_...).');
+  if (!(input.days && input.days >= 1 && input.days <= 3660)) throw new Error('Coupons need 1-3660 days.');
   const ref = doc(db, 'coupons', code);
   if ((await getDoc(ref)).exists()) throw new Error('That code already exists.');
   await setDoc(ref, {
     code,
-    type: input.type,
-    ...(input.type === 'free' ? { days: input.days } : { offerId: input.offerId!.trim() }),
-    plan: input.plan,
+    type: 'free',
+    days: input.days,
+    plan: 'any',
     label: input.label.trim().slice(0, 120),
     maxRedemptions: Math.max(0, Math.floor(input.maxRedemptions || 0)),
     redeemedCount: 0,
@@ -56,7 +56,7 @@ export async function createCoupon(input: Omit<Coupon, 'redeemedCount' | 'create
     createdAt: serverTimestamp(),
     createdBy: auth.currentUser?.uid || '',
   });
-  await logAdminAction('coupon.create', 'coupon', code, { label: input.label, details: input.type === 'free' ? `${input.days} days free` : `offer ${input.offerId}` });
+  await logAdminAction('coupon.create', 'coupon', code, { label: input.label, details: `${input.days} days free` });
 }
 
 export async function setCouponActive(coupon: Coupon, active: boolean): Promise<void> {

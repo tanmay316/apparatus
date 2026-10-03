@@ -2,7 +2,7 @@
 Server-side part of account deletion: everything the app can't delete itself.
 
 The app deletes its Firestore data and the Firebase login; this removes the nutrition database rows,
-server-only Firestore docs (entitlement, usage, billing, AI summaries) and stops a web Pro subscription.
+server-only Firestore docs (entitlement, usage, AI summaries, Play purchase links) and stops Pro renewals.
 Marketplace orders are kept: they are financial records.
 """
 from __future__ import annotations
@@ -16,6 +16,7 @@ from app.database.models import (
     ChatMessage, ChatSession, MealItem, MealLog, MealPlan, NutritionSummary, SavedRecipe, ScannedImage, User, UserGoal,
     UserInsight, UserPreference,
 )
+from app.services import play_billing as play
 from app.services import subscription as subs
 
 logger = logging.getLogger(__name__)
@@ -23,11 +24,16 @@ logger = logging.getLogger(__name__)
 
 def _cancel_pro(uid: str) -> bool:
     entitlement = subs.get_entitlement(uid, None)
-    sub_id = entitlement.get("subscriptionId")
-    if not sub_id or entitlement.get("provider") != "razorpay" or entitlement.get("status") == "cancelled":
+    key = entitlement.get("subscriptionId")
+    if not key or entitlement.get("provider") != "google_play" or entitlement.get("status") in ("cancelled", "expired"):
         return False
-    # Cancel now rather than at the end of the period: there is no account left to use it.
-    subs._rzp("POST", f"/subscriptions/{sub_id}/cancel", json={"cancel_at_cycle_end": 0})
+    db = get_firestore_client()
+    snap = db.collection("play_purchases").document(key).get() if db else None
+    token = (snap.to_dict() or {}).get("token") if snap and snap.exists else None
+    if not token:
+        return False
+    # Stops renewals; there is no account left to use the remaining period.
+    play.cancel(token)
     return True
 
 
@@ -55,6 +61,8 @@ def _delete_firestore(uid: str) -> None:
     for sub in ("private", "ai_insights"):
         for doc in user_ref.collection(sub).list_documents():
             doc.delete()
+    for purchase in db.collection("play_purchases").where("uid", "==", uid).limit(50).stream():
+        purchase.reference.delete()
 
 
 def delete_account_data(db: Session, uid: str) -> dict:
@@ -62,7 +70,7 @@ def delete_account_data(db: Session, uid: str) -> dict:
     try:
         cancelled = _cancel_pro(uid)
     except Exception:
-        # Deleting must not be blocked by Razorpay; the renewal webhook finds no account afterwards.
+        # Deleting must not be blocked by Google Play; renewal notices find no account afterwards.
         logger.exception("Could not cancel subscription for deleted account %s", uid)
     _delete_sql(db, uid)
     _delete_firestore(uid)

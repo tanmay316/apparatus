@@ -72,17 +72,27 @@ class Settings(BaseSettings):
     AGENT_TOTAL_BUDGET: float = 55.0
     AGENT_MAX_STEPS: int = 4
 
-    # Subscriptions (Razorpay). Billing and free-tier AI limits stay off until the keys are set.
-    RAZORPAY_KEY_ID: str = ""
-    RAZORPAY_KEY_SECRET: str = ""
-    RAZORPAY_WEBHOOK_SECRET: str = ""
-    RAZORPAY_PLAN_MONTHLY: str = ""
-    RAZORPAY_PLAN_YEARLY: str = ""
+    # Pro subscriptions (Google Play Billing). Billing and free-tier AI limits stay off until the
+    # service account is set. Play Console: subscription product GOOGLE_PLAY_PRO_PRODUCT_ID with
+    # base plans "monthly" and "yearly".
+    GOOGLE_PLAY_PACKAGE: str = _BRAND.get("appId", "com.tms.apparatus")
+    GOOGLE_PLAY_PRO_PRODUCT_ID: str = "pro"
+    # Service-account key JSON (raw or base64) with "View financial data" + "Manage orders" in Play Console.
+    GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: str = ""
+    # Real-time developer notifications (Pub/Sub push). Audience = the push endpoint URL;
+    # the service account is the one set as the push subscription's authentication identity.
+    GOOGLE_PLAY_RTDN_AUDIENCE: str = ""
+    GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT: str = ""
     # Comma-separated emails that always get Pro (you, testers, giveaways).
     PRO_EMAILS: str = "tanmay.sharma4334@gmail.com,sharmamoni913@gmail.com"
 
     # Must match isAdmin() in firestore.rules.
     ADMIN_EMAILS: str = "tanmay.sharma4334@gmail.com,sharmamoni913@gmail.com"
+
+    # Marketplace payments (off by default, admin switch). Uses Razorpay payment links + Route payouts.
+    RAZORPAY_KEY_ID: str = ""
+    RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
 
     # Marketplace (tickets, paid clans, coach plans, sponsorships). Platform cut in percent;
     # the seller's share is paid out to their Razorpay Route linked account.
@@ -99,7 +109,7 @@ class Settings(BaseSettings):
 
     @property
     def billing_enabled(self) -> bool:
-        return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET and (self.RAZORPAY_PLAN_MONTHLY or self.RAZORPAY_PLAN_YEARLY))
+        return bool(self.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)
 
     @property
     def market_enabled(self) -> bool:

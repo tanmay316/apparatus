@@ -1,18 +1,15 @@
 """
-Apparatus Pro: entitlements, free-tier AI quotas and Razorpay subscriptions.
+Pro: entitlements, free-tier AI quotas and coupons. Purchases come from Google Play (services/play_billing.py).
 
 Firestore (Admin SDK only; the rules block client writes):
   users/{uid}/private/entitlement  { pro, plan, status, provider, subscriptionId, currentPeriodEnd, couponCode, updatedAt }
   users/{uid}/private/usage        { day, month, counts: { <kind>: n } }
-  users/{uid}/private/billing      { pendingSubscriptionId, pendingPlan, pendingCoupon, pendingShortUrl, pendingAt }
   coupons/{CODE}                   admin-managed; coupons/{CODE}/redemptions/{uid} server-written
 
-Everything fails open: without Firestore or Razorpay keys nobody is limited.
+Everything fails open: without Firestore or Play credentials nobody is limited.
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
 import logging
 import re
 import time
@@ -20,14 +17,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
-import requests
-
 from app.core.config import settings
 from app.core.firebase import get_firestore_client
 
 logger = logging.getLogger(__name__)
-
-RAZORPAY_API = "https://api.razorpay.com/v1"
 
 # kind -> (free allowance, period). "ai_call" is one shared daily pool for the coach,
 # recipes and meal plans; "lifetime" allowances never reset.
@@ -39,20 +32,13 @@ FREE_LIMITS: dict[str, tuple[int, str]] = {
     "ai_summary": (1, "week"),
 }
 
-PLANS = {
-    "monthly": {"setting": "RAZORPAY_PLAN_MONTHLY", "total_count": 120},
-    "yearly": {"setting": "RAZORPAY_PLAN_YEARLY", "total_count": 10},
-}
+PLANS = ("monthly", "yearly")
 
-# Razorpay retries failed renewals ("pending") before halting; keep access meanwhile.
-_ACTIVE_STATUSES = {"active", "authenticated", "pending"}
+# "active"/"grace" keep a short window past the period end in case a renewal notice is late.
+_ACTIVE_STATUSES = {"active", "grace"}
 _GRACE_SEC = 3 * 24 * 3600
 
-# Razorpay ids are interpolated into API paths, so only accept their exact shape.
-SUBSCRIPTION_ID_RE = re.compile(r"^sub_[A-Za-z0-9]{6,40}$")
-PAYMENT_ID_RE = re.compile(r"^pay_[A-Za-z0-9]{6,40}$")
 COUPON_RE = re.compile(r"^[A-Z0-9][A-Z0-9_-]{2,31}$")
-_PENDING_REUSE_SEC = 30 * 60
 
 
 def verified_email(user: dict) -> Optional[str]:
@@ -227,138 +213,6 @@ def usage_summary(uid: str) -> dict:
     return {kind: {"used": counts.get(kind, 0), "limit": limit, "period": period} for kind, (limit, period) in FREE_LIMITS.items()}
 
 
-# ─── Razorpay ────────────────────────────────────────────────────
-
-def _rzp(method: str, path: str, **kwargs) -> dict:
-    resp = requests.request(
-        method, f"{RAZORPAY_API}{path}",
-        auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET),
-        timeout=15, **kwargs,
-    )
-    if resp.status_code >= 400:
-        logger.error("Razorpay %s %s -> %s %s", method, path, resp.status_code, resp.text[:300])
-        raise RuntimeError("Payment provider error")
-    return resp.json()
-
-
-def plan_id(plan: str) -> str:
-    cfg = PLANS.get(plan)
-    return getattr(settings, cfg["setting"], "") if cfg else ""
-
-
-def create_subscription(uid: str, plan: str, coupon: Optional[dict] = None) -> dict:
-    pid = plan_id(plan)
-    if not pid:
-        raise ValueError("Unknown plan")
-    code = coupon["code"] if coupon else ""
-    billing_ref = _private(uid, "billing")
-
-    # Reuse the unpaid checkout from a moment ago instead of opening a second one
-    # (two paid subscriptions would double-charge the user).
-    if billing_ref:
-        snap = billing_ref.get()
-        pending = (snap.to_dict() or {}) if snap.exists else {}
-        if (pending.get("pendingPlan") == plan and pending.get("pendingCoupon", "") == code
-                and time.time() - float(pending.get("pendingAt") or 0) < _PENDING_REUSE_SEC
-                and SUBSCRIPTION_ID_RE.match(str(pending.get("pendingSubscriptionId", "")))):
-            try:
-                existing = fetch_subscription(pending["pendingSubscriptionId"])
-                if existing.get("status") == "created":
-                    return {"subscription_id": existing["id"], "short_url": existing.get("short_url"), "key_id": settings.RAZORPAY_KEY_ID}
-            except Exception:
-                pass
-
-    body = {
-        "plan_id": pid,
-        "total_count": PLANS[plan]["total_count"],
-        "quantity": 1,
-        "customer_notify": 1,
-        "notes": {"uid": uid, "plan": plan, **({"coupon": code} if code else {})},
-    }
-    if coupon and coupon.get("offerId"):
-        body["offer_id"] = coupon["offerId"]
-    sub = _rzp("POST", "/subscriptions", json=body)
-    if billing_ref:
-        billing_ref.set({
-            "pendingSubscriptionId": sub["id"], "pendingPlan": plan, "pendingCoupon": code,
-            "pendingShortUrl": sub.get("short_url"), "pendingAt": time.time(),
-        })
-    return {"subscription_id": sub["id"], "short_url": sub.get("short_url"), "key_id": settings.RAZORPAY_KEY_ID}
-
-
-def fetch_subscription(subscription_id: str) -> dict:
-    if not SUBSCRIPTION_ID_RE.match(subscription_id or ""):
-        raise ValueError("Invalid subscription id")
-    return _rzp("GET", f"/subscriptions/{subscription_id}")
-
-
-def cancel_subscription(subscription_id: str) -> dict:
-    if not SUBSCRIPTION_ID_RE.match(subscription_id or ""):
-        raise ValueError("Invalid subscription id")
-    return _rzp("POST", f"/subscriptions/{subscription_id}/cancel", json={"cancel_at_cycle_end": 1})
-
-
-def verify_checkout_signature(payment_id: str, subscription_id: str, signature: str) -> bool:
-    if not settings.RAZORPAY_KEY_SECRET or not PAYMENT_ID_RE.match(payment_id or "") or not SUBSCRIPTION_ID_RE.match(subscription_id or ""):
-        return False
-    expected = hmac.new(
-        settings.RAZORPAY_KEY_SECRET.encode(), f"{payment_id}|{subscription_id}".encode(), hashlib.sha256,
-    ).hexdigest()
-    return hmac.compare_digest(expected, signature or "")
-
-
-def verify_webhook_signature(body: bytes, signature: str) -> bool:
-    if not settings.RAZORPAY_WEBHOOK_SECRET:
-        return False
-    expected = hmac.new(settings.RAZORPAY_WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature or "")
-
-
-def save_subscription(sub: dict, expected_uid: Optional[str] = None) -> Optional[dict]:
-    """Writes the entitlement from a Razorpay subscription entity (source of truth: Razorpay)."""
-    notes = sub.get("notes") or {}
-    uid = notes.get("uid") if isinstance(notes, dict) else None
-    if not uid or (expected_uid and uid != expected_uid):
-        logger.warning("Subscription %s has no/mismatched uid", sub.get("id"))
-        return None
-    # Only our own plans can grant Pro (defence in depth against foreign subscription ids).
-    if sub.get("plan_id") not in {plan_id(p) for p in PLANS if plan_id(p)}:
-        logger.warning("Subscription %s is on an unknown plan", sub.get("id"))
-        return None
-    ref = _private(uid, "entitlement")
-    if not ref:
-        return None
-    status = str(sub.get("status", ""))
-    end = sub.get("current_end")
-    end_dt = datetime.fromtimestamp(end, tz=timezone.utc) if end else None
-    plan = notes.get("plan") or next((p for p in PLANS if plan_id(p) == sub.get("plan_id")), "monthly")
-    pro = compute_pro(status, float(end) if end else None)
-    # Late events for an old subscription must not revoke a newer active one.
-    existing = ref.get()
-    current = (existing.to_dict() or {}) if existing.exists else {}
-    if current.get("subscriptionId") != sub.get("id") and current.get("pro") and not pro:
-        return current
-    from google.cloud import firestore as gcf
-    entitlement = {
-        "pro": pro,
-        "plan": plan,
-        "status": status,
-        "provider": "razorpay",
-        "subscriptionId": sub.get("id"),
-        "currentPeriodEnd": end_dt,
-        "updatedAt": gcf.SERVER_TIMESTAMP,
-    }
-    ref.set(entitlement, merge=True)
-    _set_badge(uid, pro)
-    code = notes.get("coupon")
-    if pro and isinstance(code, str) and COUPON_RE.match(code):
-        _record_redemption(code, uid, "discount")
-    billing_ref = _private(uid, "billing")
-    if pro and billing_ref:
-        billing_ref.set({"pendingSubscriptionId": None, "pendingAt": 0}, merge=True)
-    return entitlement
-
-
 def _set_badge(uid: str, pro: bool) -> None:
     try:
         # Public badge on the profile; the rules stop clients from setting it themselves.
@@ -368,8 +222,8 @@ def _set_badge(uid: str, pro: bool) -> None:
 
 
 # ─── Coupons ──────────────────────────────────────────────────────────────
-# coupons/{CODE}: { type: 'free'|'discount', days, offerId, plan: 'any'|'monthly'|'yearly',
-#                   label, maxRedemptions (0 = unlimited), redeemedCount, expiresAt, active }
+# coupons/{CODE}: { type: 'free', days, label, maxRedemptions (0 = unlimited), redeemedCount, expiresAt, active }
+# Discounts on the paid plan are Google Play promo codes (Play Console), not ours.
 
 class CouponError(Exception):
     """User-facing reason a coupon can't be used."""
@@ -398,16 +252,8 @@ def _check_coupon(data: dict, redeemed_by_user: bool, plan: Optional[str]) -> No
         raise CouponError("This code has been fully claimed.")
     if redeemed_by_user:
         raise CouponError("You've already used this code.")
-    kind = data.get("type")
-    if kind == "free" and not (1 <= int(data.get("days") or 0) <= 3660):
+    if data.get("type") != "free" or not (1 <= int(data.get("days") or 0) <= 3660):
         raise CouponError("That code isn't valid.")
-    if kind == "discount" and not str(data.get("offerId") or "").startswith("offer_"):
-        raise CouponError("That code isn't valid.")
-    if kind not in ("free", "discount"):
-        raise CouponError("That code isn't valid.")
-    only = data.get("plan") or "any"
-    if kind == "discount" and plan and only in PLANS and plan != only:
-        raise CouponError(f"This code only works with the {only} plan.")
 
 
 def load_coupon(code: str, uid: str, plan: Optional[str] = None) -> dict:
@@ -424,8 +270,7 @@ def load_coupon(code: str, uid: str, plan: Optional[str] = None) -> dict:
         "type": data["type"],
         "label": str(data.get("label") or "")[:120],
         "days": int(data.get("days") or 0),
-        "plan": data.get("plan") or "any",
-        "offerId": data.get("offerId") if data["type"] == "discount" else None,
+        "plan": "any",
     }
 
 
@@ -474,8 +319,6 @@ def redeem_free_coupon(uid: str, email: Optional[str], code: str) -> dict:
         data = (snap.to_dict() or {}) if snap.exists else {}
         used = red_ref.get(transaction=transaction).exists if data else False
         _check_coupon(data, used, None)
-        if data["type"] != "free":
-            raise CouponError("This code gives a discount. Pick a plan to use it at checkout.")
         ent_snap = ent_ref.get(transaction=transaction)
         ent = (ent_snap.to_dict() or {}) if ent_snap.exists else {}
         start = time.time()

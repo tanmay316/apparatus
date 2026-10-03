@@ -1,4 +1,4 @@
-/* Apparatus PWA service worker.
+/* Swasth PWA service worker.
  *
  * Deliberately network-first for everything: the app is Firebase-backed and ships
  * frequent builds, so serving a stale cached shell would be worse than a slow load.
@@ -64,16 +64,16 @@ self.addEventListener('fetch', (event) => {
 
 /* Web Push Notification Delivery (Supports iOS 16.4+ Home Screen PWA without Apple Dev Program) */
 self.addEventListener('push', (event) => {
-  let data = { title: 'Apparatus', body: 'You have a new update.' };
+  let data = { title: 'Swasth', body: 'You have a new update.' };
   if (event.data) {
     try {
       data = event.data.json();
     } catch {
-      data = { title: 'Apparatus', body: event.data.text() };
+      data = { title: 'Swasth', body: event.data.text() };
     }
   }
 
-  const title = data.title || data.notification?.title || 'Apparatus';
+  const title = data.title || data.notification?.title || 'Swasth';
   const body = data.body || data.notification?.body || '';
   const options = {
     body,

@@ -5,7 +5,7 @@ import { Copy, RefreshCw, Ticket, Trash2 } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
 import {
   COUPON_CODE_RE, createCoupon, deleteCoupon, generateCouponCode, listCoupons, setCouponActive,
-  type Coupon, type CouponType,
+  type Coupon,
 } from '@/services/coupons';
 import { EmptyState, ErrorState, LoadingState, RefreshButton, SectionHeader, formatWhen } from './AdminShared';
 
@@ -15,10 +15,7 @@ export function AdminCouponsTab() {
   const coupons = useQuery({ queryKey: ['adminCoupons'], queryFn: listCoupons });
 
   const [code, setCode] = useState(() => generateCouponCode());
-  const [type, setType] = useState<CouponType>('free');
   const [days, setDays] = useState(30);
-  const [offerId, setOfferId] = useState('');
-  const [plan, setPlan] = useState<Coupon['plan']>('any');
   const [label, setLabel] = useState('');
   const [maxRedemptions, setMaxRedemptions] = useState(1);
   const [expires, setExpires] = useState('');
@@ -30,7 +27,7 @@ export function AdminCouponsTab() {
 
   const create = useMutation({
     mutationFn: () => createCoupon({
-      code, type, days, offerId, plan, label, maxRedemptions, active: true,
+      code, days, label, maxRedemptions, active: true,
       expiresAt: expires ? Timestamp.fromDate(new Date(`${expires}T23:59:59`)) : null,
     }),
     onSuccess: () => {
@@ -55,12 +52,12 @@ export function AdminCouponsTab() {
   });
 
   const validCode = COUPON_CODE_RE.test(code);
-  const canCreate = validCode && (type === 'free' ? days >= 1 : offerId.startsWith('offer_'));
+  const canCreate = validCode && days >= 1;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] gap-5">
       <section className="card p-5">
-        <SectionHeader icon={Ticket} title="New coupon" description="Give free Pro days, or a discount through a Razorpay offer." />
+        <SectionHeader icon={Ticket} title="New coupon" description="Give free Pro days. For discounts on the paid plan, create a promo code in Play Console → Monetize → Promo codes." />
         <div className="space-y-4">
           <div>
             <label htmlFor="cp-code" className="label">Code</label>
@@ -79,42 +76,13 @@ export function AdminCouponsTab() {
           </div>
 
           <div>
-            <span className="label">Type</span>
-            <div className="grid grid-cols-2 gap-2">
-              {(['free', 'discount'] as CouponType[]).map(t => (
-                <button key={t} type="button" onClick={() => setType(t)} className={`py-2 rounded-xl text-sm font-semibold border ${type === t ? 'border-sienna bg-sienna/10 text-sienna' : 'border-line text-bone-dim'}`}>
-                  {t === 'free' ? 'Free Pro' : 'Discount'}
-                </button>
-              ))}
-            </div>
+            <label htmlFor="cp-days" className="label">Days of Pro</label>
+            <input id="cp-days" type="number" min={1} max={3660} value={days} onChange={e => setDays(Math.max(1, Math.min(3660, Number(e.target.value) || 1)))} className="input-field" />
           </div>
-
-          {type === 'free' ? (
-            <div>
-              <label htmlFor="cp-days" className="label">Days of Pro</label>
-              <input id="cp-days" type="number" min={1} max={3660} value={days} onChange={e => setDays(Math.max(1, Math.min(3660, Number(e.target.value) || 1)))} className="input-field" />
-            </div>
-          ) : (
-            <>
-              <div>
-                <label htmlFor="cp-offer" className="label">Razorpay offer id</label>
-                <input id="cp-offer" value={offerId} onChange={e => setOfferId(e.target.value.trim())} placeholder="offer_XXXXXXXXXXXX" className="input-field font-mono" />
-                <p className="text-[11px] text-bone-dim mt-1">Create the offer in Razorpay → Offers (for subscriptions). The price change is enforced by Razorpay.</p>
-              </div>
-              <div>
-                <span className="label">Plan</span>
-                <select value={plan} onChange={e => setPlan(e.target.value as Coupon['plan'])} className="input-field">
-                  <option value="any">Any plan</option>
-                  <option value="monthly">Monthly only</option>
-                  <option value="yearly">Yearly only</option>
-                </select>
-              </div>
-            </>
-          )}
 
           <div>
             <label htmlFor="cp-label" className="label">Shown to user</label>
-            <input id="cp-label" value={label} maxLength={120} onChange={e => setLabel(e.target.value)} placeholder={type === 'free' ? '1 month of Pro on us' : '50% off your first 3 months'} className="input-field" />
+            <input id="cp-label" value={label} maxLength={120} onChange={e => setLabel(e.target.value)} placeholder="1 month of Pro on us" className="input-field" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">

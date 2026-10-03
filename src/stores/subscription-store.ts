@@ -1,13 +1,10 @@
 import { create } from 'zustand';
-import { Capacitor } from '@capacitor/core';
 import type { BillingStatus, QuotaUsage } from '@/services/billing';
 import { useUIStore } from '@/stores/ui-store';
+import { PLAY_BILLING } from '@/lib/play-billing';
 
-/**
- * App-store builds can't sell a digital subscription through Razorpay (Play / App Store billing rules),
- * so they never show prices or checkout. Pro bought on the web still unlocks everything in the app.
- */
-export const CAN_PURCHASE = !Capacitor.isNativePlatform();
+/** Pro is sold through Google Play only; Pro bought there unlocks the web and iPhone apps too. */
+export const CAN_PURCHASE = PLAY_BILLING;
 const FREE_LIMIT_MESSAGE = "You've reached the free limit for now. It resets soon.";
 
 export interface Entitlement {

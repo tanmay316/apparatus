@@ -5,11 +5,21 @@ import {
 import { Capacitor } from '@capacitor/core';
 import { AppLauncher } from '@capacitor/app-launcher';
 import { db, getSignedInUser } from '@/lib/firebase';
-import { isRazorpayCheckoutUrl } from '@/services/billing';
 import { logAdminAction } from '@/services/admin';
 import type { ChallengeV2, ClanV2, Plan, SimpleEvent, SponsorBadge } from '@/types';
 
 const API_BASE = import.meta.env.VITE_NUTRITION_API_URL || 'http://localhost:8000/api/v1';
+
+/** Only ever send buyers to Razorpay's own hosted payment pages. */
+function isRazorpayCheckoutUrl(url: string | undefined): url is string {
+  if (!url) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && (u.hostname === 'rzp.io' || u.hostname === 'razorpay.com' || u.hostname.endsWith('.razorpay.com'));
+  } catch {
+    return false;
+  }
+}
 
 export type MarketKind = 'event' | 'challenge' | 'clan' | 'plan';
 

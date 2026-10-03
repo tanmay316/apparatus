@@ -14,6 +14,8 @@ Firestore (written with the Admin SDK; the rules keep clients out):
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import re
 import secrets
@@ -22,11 +24,35 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+import requests
+
 from app.core.config import settings
 from app.core.firebase import get_firestore_client
-from app.services.subscription import PAYMENT_ID_RE, _rzp, _to_epoch, verified_email
+from app.services.subscription import _to_epoch, verified_email
 
 logger = logging.getLogger(__name__)
+
+RAZORPAY_API = "https://api.razorpay.com/v1"
+PAYMENT_ID_RE = re.compile(r"^pay_[A-Za-z0-9]{6,40}$")
+
+
+def _rzp(method: str, path: str, **kwargs) -> dict:
+    resp = requests.request(
+        method, f"{RAZORPAY_API}{path}",
+        auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET),
+        timeout=15, **kwargs,
+    )
+    if resp.status_code >= 400:
+        logger.error("Razorpay %s %s -> %s %s", method, path, resp.status_code, resp.text[:300])
+        raise RuntimeError("Payment provider error")
+    return resp.json()
+
+
+def verify_webhook_signature(body: bytes, signature: str) -> bool:
+    if not settings.RAZORPAY_WEBHOOK_SECRET:
+        return False
+    expected = hmac.new(settings.RAZORPAY_WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature or "")
 
 # kind -> (collection, fee bucket, price field)
 KINDS: dict[str, tuple[str, str, str]] = {

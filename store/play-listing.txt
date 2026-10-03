@@ -1,19 +1,19 @@
 PLAY CONSOLE LISTING AND FORMS
 ==============================
-Text to paste into Play Console. Replace "Apparatus" if you rename the app (brand.config.json does the app itself).
+Text to paste into Play Console. Replace "Swasth" if you rename the app (brand.config.json does the app itself).
 Graphics: store/icon-512.png (app icon), store/feature-graphic.png (1024x500). Screenshots: at least 2 phone shots, 1080x1920 or similar.
 
 
 MAIN STORE LISTING
 ------------------
 App name (max 30):
-Apparatus: Workouts & Nutrition
+Swasth: Workouts & Nutrition
 
 Short description (max 80):
 Workouts, running, nutrition and an AI coach. Train with friends in clans.
 
 Full description (max 4000):
-Apparatus brings your training, cardio, nutrition and fitness community together in one app.
+Swasth brings your training, cardio, nutrition and fitness community together in one app.
 
 STRENGTH & CALISTHENICS
 • Build plans or generate one with AI, matched to your goal, days and equipment
@@ -40,7 +40,7 @@ COMMUNITY
 • Share workout and run cards with friends
 • Discover products, plans and events from gyms, coaches and brands in the Marketplace
 
-Apparatus Pro unlocks advanced analytics and more AI. The core app is free.
+Swasth Pro unlocks advanced analytics and more AI. The core app is free.
 
 Questions or feedback: tanmay.sharma4334@gmail.com
 
@@ -70,12 +70,12 @@ Account deletion URL: https://apparatus-46b1b.web.app/delete-account.html
 DATA SAFETY
 -----------
 Does the app collect or share user data? Yes (collects). Shared with third parties: No
-  (AI providers, Razorpay and Firebase act as service providers on our behalf, which is not "sharing").
+  (AI providers and Firebase act as service providers on our behalf, which is not "sharing").
 Encrypted in transit: Yes.   Users can request deletion: Yes.
 
 Data collected (all: "Collected", not shared, used for App functionality; Account management where noted):
 • Personal info: Name, Email address, User IDs (account management)
-• Financial info: Purchase history (Pro subscription status). Card/UPI details are handled by Razorpay, not us.
+• Financial info: Purchase history (Pro subscription status). Payments are handled by Google Play.
 • Location: Precise location (only while recording a run/walk/ride). Optional.
 • Health and fitness: Health info (weight, height, body measurements), Fitness info (workouts, steps, cardio).
 • Photos: Profile photo, food photos for meal scanning. Optional.
@@ -101,8 +101,35 @@ RELEASE CHECKLIST
 -----------------
 1. powershell -ExecutionPolicy Bypass -File android\create-upload-key.ps1   (once; back up the .jks + password)
 2. Add the printed SHA-1/SHA-256 to Firebase > Project settings > Android app (Google sign-in needs it).
-3. build-apk.bat  ->  Apparatus.aab
+3. build-apk.bat  ->  Swasth.aab
 4. Play Console > Create app > Internal testing > upload the .aab
 5. Play Console > Setup > App signing: copy the "App signing key" SHA-1/SHA-256 into Firebase too.
 6. Fill everything above, then promote Internal -> Closed testing (new personal developer accounts need
    12+ testers for 14 days) -> Production.
+
+
+PRO SUBSCRIPTION (GOOGLE PLAY BILLING)
+--------------------------------------
+Needs a Google Payments merchant profile: Play Console > Settings > Payments profile (bank account, PAN).
+1. Upload a build that includes billing (any testing track) - products can only be created after that.
+2. Monetize > Products > Subscriptions > Create subscription:
+     Product ID: pro          (must be exactly "pro")
+     Base plan IDs: monthly (auto-renewing, 1 month) and yearly (auto-renewing, 1 year), set prices, Activate.
+   Optional: free-trial or intro offers on a base plan; discounts = Monetize > Promo codes.
+3. Service account so the server can check purchases:
+     Google Cloud console (same project as Play) > IAM > Service accounts > Create > Keys > Add key (JSON).
+     Enable "Google Play Android Developer API" in that project.
+     Play Console > Users and permissions > Invite the service-account email with
+     "View financial data" and "Manage orders and subscriptions".
+     Render env: GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = the JSON file contents (paste as-is or base64).
+     Pro limits switch on as soon as this is set.
+4. Real-time notifications (renewals, cancellations, refunds arrive within seconds):
+     Cloud console > Pub/Sub > Create topic "play-billing"; add principal
+     google-play-developer-notifications@system.gserviceaccount.com as "Pub/Sub Publisher".
+     Create a push subscription on it: endpoint https://<backend>/api/v1/billing/play/rtdn,
+     enable authentication with a service account (e.g. the one from step 3).
+     Render env: GOOGLE_PLAY_RTDN_AUDIENCE = that endpoint URL,
+                 GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT = the push service-account email.
+     Play Console > Monetize > Monetization setup > Real-time developer notifications: topic
+     projects/<project>/topics/play-billing, then "Send test notification".
+5. Setup > License testing: add your Gmail so test purchases are free. Install from the testing track and buy.

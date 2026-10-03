@@ -4,12 +4,13 @@ import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSubscriptionStore, type Entitlement } from '@/stores/subscription-store';
 import { getBillingStatus } from '@/services/billing';
+import { PLAY_BILLING, restorePro } from '@/lib/play-billing';
 
 const GRACE_MS = 3 * 24 * 3600 * 1000;
 
-/** Mirrors backend compute_pro: renewals get a grace window, cancelled plans run to period end. */
+/** Mirrors backend compute_pro: active plans get a short grace window, cancelled plans run to period end. */
 export function entitlementIsPro(status: string | undefined, endMs: number | null, now = Date.now()): boolean {
-  if (status === 'active' || status === 'authenticated' || status === 'pending') return endMs == null || endMs + GRACE_MS > now;
+  if (status === 'active' || status === 'grace') return endMs == null || endMs + GRACE_MS > now;
   if (status === 'cancelled' || status === 'granted') return endMs != null && endMs > now;
   return false;
 }
@@ -37,10 +38,18 @@ export function SubscriptionSync() {
     }, () => {});
 
     let lastFetch = 0;
+    let restored = false;
     const refresh = () => {
       if (Date.now() - lastFetch < 60_000) return;
       lastFetch = Date.now();
-      getBillingStatus().then(useSubscriptionStore.getState().setStatus).catch(() => {});
+      getBillingStatus().then(status => {
+        useSubscriptionStore.getState().setStatus(status);
+        // Picks up a Play purchase that was paid but never confirmed (app closed mid-purchase).
+        if (PLAY_BILLING && status.enabled && !status.entitlement?.pro && !restored) {
+          restored = true;
+          restorePro().catch(() => {});
+        }
+      }).catch(() => {});
     };
     refresh();
     const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };

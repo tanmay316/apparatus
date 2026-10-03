@@ -69,6 +69,8 @@ dependencies {
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation "com.google.android.gms:play-services-location:21.3.0"
     implementation "androidx.work:work-runtime:2.10.0"
+    // Play Billing pulls the empty "listenablefuture" stub; WorkManager needs the real class.
+    implementation "com.google.guava:guava:33.3.1-android"
     implementation project(':capacitor-cordova-android-plugins')
 }
 

@@ -36,6 +36,7 @@ dependencies {
     implementation project(':capawesome-team-capacitor-android-foreground-service')
     implementation project(':capgo-capacitor-pedometer')
     implementation project(':capgo-capacitor-social-login')
+    implementation project(':capgo-native-purchases')
     implementation project(':otakit-capacitor-updater')
 
 }
