@@ -8,6 +8,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import appLogo from '@/assets/logo.png';
+import appLogoLight from '@/assets/logo-light.png';
 import type { EarnedCommunityBadge } from '@/types';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -471,7 +472,7 @@ export function MedalShareModal({ badge, onClose }: MedalShareModalProps) {
             <div className="relative z-10 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <img
-                  src={appLogo}
+                  src={isLight ? appLogo : appLogoLight}
                   alt={BRAND.name}
                   className={`${aspectRatio === '1/1' ? 'h-5' : 'h-6'} w-auto object-contain shrink-0 drop-shadow-sm`}
                   onError={(e) => {

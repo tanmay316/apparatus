@@ -123,9 +123,9 @@ export function AuthPage() {
           {/* Icon Badge */}
           <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-white/[0.04] border border-white/10 shadow-[0_12px_36px_rgba(0,0,0,0.6)] flex items-center justify-center backdrop-blur-xl">
             <img
-              src="/logo.png"
+              src="/logo-light.png"
               alt={BRAND.name}
-              className="w-12 h-12 sm:w-14 sm:h-14 object-contain filter invert brightness-125 drop-shadow-[0_0_16px_rgba(224,90,43,0.6)]"
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow-[0_0_16px_rgba(224,90,43,0.6)]"
               onError={(e) => {
                 (e.target as HTMLImageElement).src = '/logo.png';
               }}

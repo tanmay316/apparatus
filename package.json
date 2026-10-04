@@ -2,7 +2,7 @@
   "name": "apparatus",
   "private": true,
   "version": "2.0.91",
-  "nativeVersion": "2.1.4",
+  "nativeVersion": "2.1.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,6 +15,7 @@
     "ios:sync": "npm run build && node ios-native/patch-ios.cjs && npx cap sync ios",
     "ios:open": "npx cap open ios",
     "brand:sync": "node scripts/sync-brand.cjs",
+    "icons": "node scripts/generate-icons.cjs",
     "prebuild": "node scripts/sync-brand.cjs"
   },
   "dependencies": {

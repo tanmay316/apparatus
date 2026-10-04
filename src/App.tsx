@@ -99,11 +99,11 @@ function LoadingScreen() {
   return (
     <div className={`fixed inset-0 flex flex-col items-center justify-center z-[9999] ${dark ? 'bg-[#050505]' : 'bg-[#f4a080]'}`}>
       <div className="relative flex flex-col items-center">
-        <img 
-          src="/logo.png" 
-          alt={BRAND.name} 
-          className={`w-32 h-auto mb-8 animate-[pulse_3s_ease-in-out_infinite] opacity-90 ${dark ? 'mix-blend-screen' : 'mix-blend-multiply'}`}
-          style={{ filter: dark ? 'invert(1) brightness(1.1)' : 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
+        <img
+          src={dark ? '/logo-light.png' : '/logo.png'}
+          alt={BRAND.name}
+          className="w-28 h-auto mb-8 animate-[pulse_3s_ease-in-out_infinite] opacity-90"
+          style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.1))' }}
         />
       </div>
     </div>
