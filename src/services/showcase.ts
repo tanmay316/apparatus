@@ -90,7 +90,10 @@ export async function updateShowcaseItem(item: ShowcaseItem, input: ShowcaseInpu
   });
 }
 
-export const deleteShowcaseItem = (id: string) => deleteDoc(doc(db, 'market_items', id));
+export const deleteShowcaseItem = async (id: string) => {
+  await deleteDoc(doc(db, 'market_items', id));
+  void import('@/lib/live-deletions').then(m => m.announceDeletion('showcase', id));
+};
 
 export function recordShowcaseClick(id: string) {
   updateDoc(doc(db, 'market_items', id), { clicks: increment(1) }).catch(() => undefined);

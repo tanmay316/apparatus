@@ -578,6 +578,28 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && resource.data.receiverId == request.auth.uid;
     }
 
+    // ─── Deletion broadcast ─────────────────────────────────────
+    // Tombstones tell other devices to drop deleted content from their caches at once.
+    // Only for content that really is gone, so nobody can hide live items on others' screens.
+    function deletedPath(kind, id) {
+      return /databases/$(database)/documents/$({
+        'challenge': 'challenges_v2', 'event': 'simple_events', 'clan': 'clans_v2', 'post': 'community_posts',
+        'announcement': 'community_announcements', 'activity': 'activities', 'listing': 'market_listings', 'showcase': 'market_items'
+      }[kind])/$(id);
+    }
+    match /deletions/{deletionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.keys().hasOnly(['kind', 'id', 'by', 'at'])
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.at == request.time
+        && request.resource.data.kind in ['challenge', 'event', 'clan', 'post', 'announcement', 'activity', 'listing', 'showcase']
+        && request.resource.data.id is string
+        && request.resource.data.id.matches('[A-Za-z0-9_-]{1,128}')
+        && !exists(deletedPath(request.resource.data.kind, request.resource.data.id));
+      allow update, delete: if false;
+    }
+
     // ─── System Logs ────────────────────────────────────────────
     match /systemLogs/{logId} {
       allow create: if isAuthenticated()

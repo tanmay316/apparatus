@@ -60,6 +60,7 @@ export async function deleteActivity(activityId: string): Promise<void> {
   // Also attempt deleting directly by activityId from workouts and cardioActivities
   await deleteDoc(doc(db, 'workouts', activityId)).catch(() => {});
   await deleteDoc(doc(db, 'cardioActivities', activityId)).catch(() => {});
+  void import('@/lib/live-deletions').then(m => m.announceDeletion('activity', activityId));
   const { scheduleStatsReconcile } = await import('@/services/stats');
   scheduleStatsReconcile(auth.currentUser?.uid);
 }

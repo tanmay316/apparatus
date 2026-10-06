@@ -81,7 +81,8 @@ async def analyze_food(
     background_tasks.add_task(cleanup_old_images_job, 7)
 
     result = await scan_food(db, uid, keys, req.image_base64, req.mime_type, meal_type, req.note, req.session_id)
-    if result.get("status") != "ok":
+    # Only our own failures are refunded; "not food" still used a vision call.
+    if result.get("status") == "failed":
         refund_quota(uid, "food_scan")
     return FoodAnalyzeResponse(**result)
 

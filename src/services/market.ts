@@ -234,7 +234,10 @@ export async function updateListing(listing: PlanListing, patch: Partial<Pick<Pl
   await updateDoc(doc(db, 'market_listings', listing.id), { ...patch, updatedAt: serverTimestamp() });
 }
 
-export const deleteListing = (id: string) => deleteDoc(doc(db, 'market_listings', id));
+export const deleteListing = async (id: string) => {
+  await deleteDoc(doc(db, 'market_listings', id));
+  void import('@/lib/live-deletions').then(m => m.announceDeletion('listing', id));
+};
 
 // ─── Orders ──────────────────────────────────────────────────────
 

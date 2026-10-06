@@ -362,6 +362,17 @@ function PreferencesSync() {
     };
   }, [user?.uid, queryClient]);
 
+  // Content someone else deletes (challenges, events, posts…) disappears here right away.
+  useEffect(() => {
+    if (!user?.uid) return;
+    let unsub: (() => void) | undefined;
+    let cancelled = false;
+    import('@/lib/live-deletions').then(m => {
+      if (!cancelled) unsub = m.subscribeDeletions(queryClient, err => console.warn('Deletion sync error:', err));
+    }).catch(() => {});
+    return () => { cancelled = true; unsub?.(); };
+  }, [user?.uid, queryClient]);
+
   // Weekly AI coach report (Pro): once per week, shortly after launch.
   const subLoaded = useSubscriptionStore(s => s.loaded);
   useEffect(() => {

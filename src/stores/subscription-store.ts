@@ -17,7 +17,7 @@ export interface Entitlement {
 }
 
 interface SubscriptionState {
-  /** Billing is live on the backend; until then nothing is locked. */
+  /** Billing is live on the backend; until then nothing is locked. Assumed live until the server says otherwise. */
   enabled: boolean;
   loaded: boolean;
   /** Live from users/{uid}/private/entitlement (written by the backend). */
@@ -26,7 +26,9 @@ interface SubscriptionState {
   comped: boolean;
   usage: Record<string, QuotaUsage>;
   paywall: { open: boolean; reason?: string };
-  setStatus: (status: BillingStatus) => void;
+  setStatus: (status: BillingStatus, uid?: string) => void;
+  /** Last known billing state for this account, used until /billing/status answers. */
+  restore: (uid: string) => void;
   setEntitlement: (e: Entitlement) => void;
   /** Counts a successful AI use locally so the remaining allowance updates without a round trip. */
   bumpUsage: (kind: string) => void;
@@ -37,20 +39,34 @@ interface SubscriptionState {
 }
 
 const EMPTY: Entitlement = { pro: false };
+const STORE_KEY = 'apparatus.billing';
+
+/** Last answer from /billing/status. Unknown = billing live, so blocking the request can't unlock Pro. */
+function remembered(): { enabled: boolean; compedUid: string | null } {
+  try {
+    const v = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+    if (v && typeof v.enabled === 'boolean') return { enabled: v.enabled, compedUid: typeof v.compedUid === 'string' ? v.compedUid : null };
+  } catch { /* corrupt or unavailable storage */ }
+  return { enabled: true, compedUid: null };
+}
+
+function remember(enabled: boolean, compedUid: string | null) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ enabled, compedUid })); } catch { /* storage full or blocked */ }
+}
 
 export const useSubscriptionStore = create<SubscriptionState>((set) => ({
-  enabled: false,
+  enabled: remembered().enabled,
   loaded: false,
   entitlement: EMPTY,
   comped: false,
   usage: {},
   paywall: { open: false },
-  setStatus: (status) => set({
-    enabled: status.enabled,
-    loaded: true,
-    usage: status.usage || {},
-    comped: status.entitlement?.plan === 'comp' && !!status.entitlement.pro,
-  }),
+  setStatus: (status, uid) => {
+    const comped = status.entitlement?.plan === 'comp' && !!status.entitlement.pro;
+    remember(status.enabled, comped && uid ? uid : null);
+    set({ enabled: status.enabled, loaded: true, usage: status.usage || {}, comped });
+  },
+  restore: (uid) => set({ enabled: remembered().enabled, comped: remembered().compedUid === uid }),
   setEntitlement: (entitlement) => set({ entitlement }),
   bumpUsage: (kind) => set(state => {
     const u = state.usage[kind];
@@ -64,7 +80,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
     set({ paywall: { open: true, reason } });
   },
   closePaywall: () => set({ paywall: { open: false } }),
-  reset: () => set({ enabled: false, loaded: false, entitlement: EMPTY, comped: false, usage: {}, paywall: { open: false } }),
+  reset: () => set({ enabled: remembered().enabled, loaded: false, entitlement: EMPTY, comped: false, usage: {}, paywall: { open: false } }),
 }));
 
 const hasProState = (s: SubscriptionState) => s.entitlement.pro || s.comped;

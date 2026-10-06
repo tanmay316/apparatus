@@ -34,6 +34,15 @@ FREE_LIMITS: dict[str, tuple[int, str]] = {
 
 PLANS = ("monthly", "yearly")
 
+# Pro is "unlimited" for people, but a daily fair-use cap stops one account (or a leaked token)
+# from running up LLM bills. Counted separately as "pro_<kind>" and reset daily.
+PRO_DAILY_LIMITS: dict[str, int] = {
+    "ai_call": 150,
+    "food_scan": 40,
+    "workout_plan": 10,
+    "ai_summary": 40,
+}
+
 # "active"/"grace" keep a short window past the period end in case a renewal notice is late.
 _ACTIVE_STATUSES = {"active", "grace"}
 _GRACE_SEC = 3 * 24 * 3600
@@ -112,6 +121,7 @@ class QuotaResult:
     limit: int = 0
     used: int = 0
     period: str = "day"
+    pro: bool = False
 
     def detail(self) -> dict:
         noun = {"ai_call": "AI requests", "food_scan": "food scans", "ai_summary": "AI coach summary" if self.limit == 1 else "AI coach summaries",
@@ -144,11 +154,15 @@ def consume_quota(uid: str, email: Optional[str], kind: str) -> QuotaResult:
     limit, period = FREE_LIMITS.get(kind, (0, "day"))
     if not settings.billing_enabled or kind not in FREE_LIMITS:
         return QuotaResult(True, kind, limit, 0, period)
-    if is_pro(uid, email):
-        return QuotaResult(True, kind, limit, 0, period)
+    pro = is_pro(uid, email)
+    if pro:
+        if kind not in PRO_DAILY_LIMITS:
+            return QuotaResult(True, kind, limit, 0, period, pro=True)
+        limit, period = PRO_DAILY_LIMITS[kind], "day"
+    counter = f"pro_{kind}" if pro else kind
     ref = _private(uid, "usage")
     if not ref:
-        return QuotaResult(True, kind, limit, 0, period)
+        return QuotaResult(True, kind, limit, 0, period, pro=pro)
 
     from google.cloud import firestore as gcf
 
@@ -159,18 +173,18 @@ def consume_quota(uid: str, email: Optional[str], kind: str) -> QuotaResult:
         snap = ref.get(transaction=transaction)
         data = (snap.to_dict() or {}) if snap.exists else {}
         counts = _fresh_counts(data, day, month, week)
-        used = int(counts.get(kind, 0))
+        used = int(counts.get(counter, 0))
         if used >= limit:
-            return QuotaResult(False, kind, limit, used, period)
-        counts[kind] = used + 1
+            return QuotaResult(False, kind, limit, used, period, pro=pro)
+        counts[counter] = used + 1
         transaction.set(ref, {"day": day, "month": month, "week": week, "counts": counts})
-        return QuotaResult(True, kind, limit, used + 1, period)
+        return QuotaResult(True, kind, limit, used + 1, period, pro=pro)
 
     try:
         return _txn(get_firestore_client().transaction())
     except Exception as exc:
         logger.warning("Quota check failed for %s/%s: %s", uid, kind, exc)
-        return QuotaResult(True, kind, limit, 0, period)
+        return QuotaResult(True, kind, limit, 0, period, pro=pro)
 
 
 def refund_quota(uid: str, kind: str) -> None:
@@ -182,7 +196,12 @@ def refund_quota(uid: str, kind: str) -> None:
         return
     try:
         from google.cloud import firestore as gcf
-        ref.update({f"counts.{kind}": gcf.Increment(-1)})
+        snap = ref.get()
+        counts = ((snap.to_dict() or {}).get("counts") or {}) if snap.exists else {}
+        # Pro uses are counted under pro_<kind>; refund whichever was charged, never below zero.
+        key = f"pro_{kind}" if int(counts.get(f"pro_{kind}", 0)) > 0 and is_pro(uid) else kind
+        if int(counts.get(key, 0)) > 0:
+            ref.update({f"counts.{key}": gcf.Increment(-1)})
     except Exception:
         pass
 
@@ -194,6 +213,8 @@ async def enforce_quota(current_user: dict, kind: str) -> None:
 
     result = await asyncio.to_thread(consume_quota, current_user["uid"], verified_email(current_user), kind)
     if not result.allowed:
+        if result.pro:
+            raise HTTPException(status_code=429, detail="You've reached today's fair-use limit for this feature. It resets tomorrow.")
         raise HTTPException(status_code=402, detail=result.detail())
 
 

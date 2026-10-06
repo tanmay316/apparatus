@@ -22,6 +22,7 @@ export function SubscriptionSync() {
   useEffect(() => {
     const store = useSubscriptionStore.getState();
     if (!uid) { store.reset(); return; }
+    store.restore(uid);
 
     const unsub = onSnapshot(doc(db, 'users', uid, 'private', 'entitlement'), snap => {
       const data = snap.data();
@@ -43,7 +44,7 @@ export function SubscriptionSync() {
       if (Date.now() - lastFetch < 60_000) return;
       lastFetch = Date.now();
       getBillingStatus().then(status => {
-        useSubscriptionStore.getState().setStatus(status);
+        useSubscriptionStore.getState().setStatus(status, uid);
         // Picks up a Play purchase that was paid but never confirmed (app closed mid-purchase).
         if (PLAY_BILLING && status.enabled && !status.entitlement?.pro && !restored) {
           restored = true;

@@ -108,4 +108,34 @@ for code, ok in (("free30", True), ("  WELCOME-2026 ", True), ("ab", False), (".
     except subs.CouponError:
         check(f"normalize {code!r}", not ok)
 
+# ─── Pro fair-use cap (needs the Firestore emulator) ───
+fs = None
+if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+    from google.auth.credentials import AnonymousCredentials  # noqa: E402
+    from google.cloud import firestore  # noqa: E402
+    fs = firestore.Client(project="demo-apparatus", credentials=AnonymousCredentials())
+    subs.get_firestore_client = lambda: fs
+
+if fs:
+    settings.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = "{}"  # billing on
+    uid = "fairuse1"
+    fs.document(f"users/{uid}/private/entitlement").set({"status": "active", "currentPeriodEnd": None, "provider": "google_play"})
+    fs.document(f"users/{uid}/private/usage").delete()
+    cap = subs.PRO_DAILY_LIMITS["food_scan"]
+    results = [subs.consume_quota(uid, None, "food_scan") for _ in range(cap + 1)]
+    check("pro gets far more than the free allowance", all(r.allowed for r in results[:cap]) and cap > subs.FREE_LIMITS["food_scan"][0])
+    check("pro stops at the daily fair-use cap", not results[-1].allowed and results[-1].pro)
+    subs.refund_quota(uid, "food_scan")
+    check("refund gives a pro use back", subs.consume_quota(uid, None, "food_scan").allowed)
+    check("pro usage doesn't eat the free counter", int((fs.document(f"users/{uid}/private/usage").get().to_dict() or {}).get("counts", {}).get("food_scan", 0)) == 0)
+    free_uid = "fairuse2"
+    fs.document(f"users/{free_uid}/private/usage").delete()
+    subs.consume_quota(free_uid, None, "food_scan")
+    subs.consume_quota(free_uid, None, "food_scan")
+    third = subs.consume_quota(free_uid, None, "food_scan")
+    check("free user still capped at 2 with a 402-style result", not third.allowed and not third.pro)
+    settings.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = ""
+else:
+    print("skip fair-use checks (no emulator)")
+
 sys.exit(1 if failed else 0)

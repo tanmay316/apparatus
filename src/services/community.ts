@@ -2,6 +2,7 @@ import { collection, doc, addDoc, getDoc, getDocs, updateDoc, deleteDoc, query, 
 import { auth, db } from '@/lib/firebase';
 import type { ClanV2, ClanMembership, ChallengeV2, ChallengeParticipant, ChallengeProgressLog, SimpleEvent, EventParticipant, ChallengeMetric, ChallengeStatus, ChallengeActivityFilter, SimpleEventStatus, CommunityPost, EarnedCommunityBadge, ClanPoll, ClanPollOption, ClanPollVoter, CommunityAnnouncement, ClanMessage, AppNotificationType, ClanJoinRequest } from '@/types';
 import { notify } from '@/services/social';
+import { announceDeletion } from '@/lib/live-deletions';
 
 // ─── UTILS ────────────────────────────────────────────────────────
 export function cleanDoc<T extends Record<string, any>>(obj: T): T {
@@ -77,6 +78,7 @@ export async function deleteClan(clanId: string): Promise<void> {
   // We can just delete the clan doc. We could also delete memberships/posts/events/challenges
   // but to keep it simple, we just delete the main doc for now.
   await deleteDoc(doc(db, 'clans_v2', clanId));
+  void announceDeletion('clan', clanId);
 }
 export async function getClan(id: string): Promise<ClanV2 | null> {
   const snap = await getDoc(doc(db, 'clans_v2', id));
@@ -144,6 +146,10 @@ export async function disbandClan(id: string, reason?: string): Promise<void> {
   batch.delete(doc(db, 'clans_v2', id));
 
   await batch.commit();
+  void announceDeletion('clan', id);
+  void announceDeletion('post', ...postsSnap.docs.map(d => d.id));
+  void announceDeletion('event', ...eventsSnap.docs.map(d => d.id));
+  void announceDeletion('challenge', ...challengesSnap.docs.map(d => d.id));
 }
 
 export async function joinClan(userId: string, userName: string, userPhoto: string, clanId: string): Promise<void> {
@@ -303,6 +309,7 @@ export async function deleteChallenge(id: string): Promise<void> {
   participantsSnap.docs.forEach(d => batch.delete(d.ref));
   
   await batch.commit();
+  void announceDeletion('challenge', id);
 }
 
 export async function updateChallengeParticipantScore(challengeId: string, userId: string, newProgress: number): Promise<void> {
@@ -1422,6 +1429,7 @@ export async function deleteSimpleEvent(id: string): Promise<void> {
   participantsSnap.docs.forEach(d => batch.delete(d.ref));
   
   await batch.commit();
+  void announceDeletion('event', id);
 }
 
 export async function joinEvent(eventId: string, userId: string, userName: string, userPhoto: string): Promise<void> {
@@ -1907,6 +1915,7 @@ export async function deleteClanPost(postId: string): Promise<void> {
   const commentsSnap = await getDocs(query(collection(db, 'community_post_comments'), where('postId', '==', postId)));
   commentsSnap.docs.forEach(d => batch.delete(d.ref));
   await batch.commit();
+  void announceDeletion('post', postId);
 }
 
 export async function getUserCommunityBadges(userId: string): Promise<EarnedCommunityBadge[]> {
@@ -2552,6 +2561,7 @@ export async function updateClanAnnouncement(
 
 export async function deleteClanAnnouncement(announcementId: string): Promise<void> {
   await deleteDoc(doc(db, 'community_announcements', announcementId));
+  void announceDeletion('announcement', announcementId);
 }
 
 // ─── CLAN DISCUSSION & CHAT ──────────────────────────────────────
