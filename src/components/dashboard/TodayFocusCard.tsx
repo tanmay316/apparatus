@@ -20,16 +20,20 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
-        className="dx-card p-5 sm:p-6"
+        className="dx-card p-4 sm:p-6"
       >
-        <div className="w-11 h-11 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)' }}>
-          <Compass size={22} />
+        <div className="flex items-start gap-3">
+          <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0" style={{ background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)' }}>
+            <Compass size={22} />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-[17px] sm:text-[18px] font-semibold tracking-tight leading-snug">Choose a plan to start training</h2>
+            <p className="text-[13px] dx-muted mt-0.5 max-w-sm leading-snug">
+              Get personalized daily sessions and track your progress.
+            </p>
+          </div>
         </div>
-        <h2 className="text-[18px] font-semibold tracking-tight">Choose a plan to start training</h2>
-        <p className="text-[13px] dx-muted mt-1 mb-5 max-w-sm leading-relaxed">
-          Select a workout plan to get personalized daily sessions and track your progress.
-        </p>
-        <div className="flex gap-2.5">
+        <div className="flex gap-2.5 mt-4">
           <Link to="/plans" className="dx-btn flex-1 sm:flex-none">Browse plans</Link>
           <Link to="/explore" className="dx-btn-secondary flex-1 sm:flex-none">
             <Compass size={16} /> Explore

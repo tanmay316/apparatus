@@ -856,7 +856,7 @@ export function ProfilePage() {
                   <p className="text-sm text-[var(--muted)]">No workouts logged yet. Start training to kick off your timeline!</p>
                 </div>
               ) : (
-                <div className="relative pl-6 border-l border-[var(--border)] space-y-8">
+                <div className="relative pl-6 border-l border-[var(--border)] space-y-5 sm:space-y-8">
                   {publicWorkouts.slice(0, visibleTimelineCount).map((workout, idx) => {
                     const relativeTime = getRelativeTime(workout.date || new Date().toISOString());
                     return (

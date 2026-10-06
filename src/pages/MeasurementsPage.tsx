@@ -229,7 +229,7 @@ export function MeasurementsPage() {
   };
 
   return (
-    <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
+    <motion.div variants={container} initial="hidden" animate="show" className="space-y-4 sm:space-y-6">
       {/* Header */}
       <motion.div variants={item} className="pb-5 border-b border-line mb-6">
         <div className="font-mono text-amber text-xs tracking-widest mb-1">METRIC TRACKER</div>
@@ -238,7 +238,7 @@ export function MeasurementsPage() {
       </motion.div>
 
       {/* Analytics row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
         <motion.div variants={item} className="card p-5">
           <div className="flex items-center gap-2 mb-4">
             <Scale size={18} className="text-sienna" />
@@ -256,7 +256,7 @@ export function MeasurementsPage() {
         </motion.div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
         {/* Form */}
         <motion.div variants={item} className="card p-5 lg:col-span-1">
           <h3 className="font-display text-base mb-4">LOG NEW METRICS</h3>

@@ -43,11 +43,12 @@ async function openExternal(url: string) {
 
 export { useMarketPartner } from './use-market-partner';
 
-export function ShowcaseCard({ item, onOpen }: { item: ShowcaseItem; onOpen: () => void }) {
+/** `wide`: fills a 2-column row on phones (image left, text right) so no half-empty rows. */
+export function ShowcaseCard({ item, onOpen, wide = false }: { item: ShowcaseItem; onOpen: () => void; wide?: boolean }) {
   const Icon = KIND_ICON[item.kind] || Package;
   return (
-    <button type="button" onClick={onOpen} className="dx-card overflow-hidden text-left flex flex-col min-w-0">
-      <div className="aspect-[16/10] w-full flex items-center justify-center overflow-hidden" style={{ background: 'var(--dx-inset, rgba(127,127,127,0.08))' }}>
+    <button type="button" onClick={onOpen} className={`dx-card overflow-hidden text-left flex min-w-0 ${wide ? 'col-span-2 sm:col-span-1 flex-row sm:flex-col' : 'flex-col'}`}>
+      <div className={`${wide ? 'w-[42%] shrink-0 sm:w-full' : 'w-full'} aspect-[16/10] flex items-center justify-center overflow-hidden`} style={{ background: 'var(--dx-inset, rgba(127,127,127,0.08))' }}>
         {item.imageUrl ? <img src={item.imageUrl} alt="" className="w-full h-full object-cover" loading="lazy" /> : <Icon size={28} className="dx-muted" />}
       </div>
       <div className="p-3 flex flex-col gap-0.5 flex-1 min-w-0">

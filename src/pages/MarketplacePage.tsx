@@ -94,17 +94,21 @@ function HowItWorksSheet({ onClose, onList }: { onClose: () => void; onList: () 
   );
 }
 
-function GearCard({ link, tag }: { link: AffiliateLink; tag?: string }) {
+/** Odd last card of a 2-column phone grid takes the full row. */
+const isWide = (i: number, n: number) => n % 2 === 1 && i === n - 1;
+
+function GearCard({ link, tag, wide = false }: { link: AffiliateLink; tag?: string; wide?: boolean }) {
+  const image = link.imageUrl && /^https:\/\//.test(link.imageUrl);
   return (
     <button
       type="button"
       onClick={() => { recordAffiliateClick(link.id); openExternal(withAffiliateTag(link.url, tag)); }}
-      className="dx-card overflow-hidden text-left flex flex-col"
+      className={`dx-card overflow-hidden text-left flex min-w-0 ${wide ? 'col-span-2 sm:col-span-1 flex-row sm:flex-col' : 'flex-col'}`}
     >
-      <div className="aspect-square bg-white flex items-center justify-center p-3">
-        {link.imageUrl && /^https:\/\//.test(link.imageUrl)
+      <div className={`${wide ? 'w-[38%] shrink-0 sm:w-full' : 'w-full'} ${image ? 'aspect-square bg-white p-3' : 'aspect-[4/3]'} flex items-center justify-center`} style={image ? undefined : { background: 'var(--dx-inset, rgba(127,127,127,0.08))' }}>
+        {image
           ? <img src={link.imageUrl} alt="" loading="lazy" className="w-full h-full object-contain" />
-          : <ShoppingBag size={28} color="#9ca3af" />}
+          : <ShoppingBag size={26} className="dx-muted" />}
       </div>
       <div className="p-3 flex-1 flex flex-col gap-1">
         <div className="text-[13px] font-semibold leading-snug line-clamp-2">{link.title}</div>
@@ -218,7 +222,7 @@ function Shop({ onList }: { onList: () => void }) {
         <div key={c} className="space-y-3">
           <SectionHead icon={SECTION[c].icon} title={SECTION[c].title} count={list.length} onMore={cat === 'all' && list.length > preview ? () => setCat(c) : undefined} />
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {list.slice(0, preview).map(i => <ShowcaseCard key={i.id} item={i} onOpen={() => setShowcase(i)} />)}
+            {list.slice(0, preview).map((i, idx, arr) => <ShowcaseCard key={i.id} item={i} wide={isWide(idx, arr.length)} onOpen={() => setShowcase(i)} />)}
           </div>
         </div>
       ))}
@@ -236,8 +240,8 @@ function Shop({ onList }: { onList: () => void }) {
         <>
           <SectionHead icon={Shield} title="Member clans" count={paidClans.length} onMore={cat === 'all' && paidClans.length > preview ? () => setCat('clubs') : undefined} />
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {paidClans.slice(0, preview).map(c => (
-              <button key={c.id} type="button" onClick={() => navigate(`/clan/${c.id}`)} className="dx-card overflow-hidden text-left flex flex-col">
+            {paidClans.slice(0, preview).map((c, idx, arr) => (
+              <button key={c.id} type="button" onClick={() => navigate(`/clan/${c.id}`)} className={`dx-card overflow-hidden text-left flex flex-col ${isWide(idx, arr.length) ? 'col-span-2 sm:col-span-1' : ''}`}>
                 <div className="h-24 overflow-hidden" style={{ background: 'linear-gradient(135deg,#1f2937,#7a3a24)' }}>
                   {c.coverUrl && <img src={c.coverUrl} alt="" loading="lazy" className="w-full h-full object-cover" />}
                 </div>
@@ -281,7 +285,7 @@ function Shop({ onList }: { onList: () => void }) {
         <>
           <SectionHead icon={ShoppingBag} title="Gear picks" hint="Bought on the store's own site." count={products.length} onMore={cat === 'all' && products.length > preview ? () => setCat('products') : undefined} />
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {products.slice(0, preview).map(l => <GearCard key={l.id} link={l} tag={gear.data?.settings?.amazonTag} />)}
+            {products.slice(0, preview).map((l, idx, arr) => <GearCard key={l.id} link={l} wide={isWide(idx, arr.length)} tag={gear.data?.settings?.amazonTag} />)}
           </div>
           <p className="text-[11px] dx-muted leading-snug">
             {products.some(l => isAmazonUrl(l.url)) ? `As an Amazon Associate, ${BRAND.name} earns from qualifying purchases. ` : ''}We may earn a commission from these links at no extra cost to you.

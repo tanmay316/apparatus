@@ -158,7 +158,7 @@ function WarmupGuide() {
   const completedCount = completed.filter(Boolean).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-4">
         <section className="card p-6 bg-gradient-to-br from-sienna/15 via-ink-2 to-ink-2">
           <div className="flex items-start justify-between gap-4">
@@ -236,7 +236,7 @@ function NutritionGuide() {
   const [glasses, setGlasses] = useState(0);
   const [expanded, setExpanded] = useState<number | null>(null);
 
-  return <div className="space-y-6">
+  return <div className="space-y-4 sm:space-y-6">
     <section className="card p-6 bg-gradient-to-br from-amber/15 via-ink-2 to-ink-2">
       <div className="max-w-2xl"><div className="tag-amber mb-4">THE 80/20 PLATE</div><h2 className="font-display text-3xl mb-2">Eat for the next session.</h2><p className="text-sm text-bone-dim leading-relaxed">Build most meals from a reliable base, adjust portions to your goal, and let consistency beat perfect tracking. If you have a medical condition or a history of disordered eating, work with a qualified clinician.</p></div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">{nutritionCards.map(card => { const Icon = card.icon; return <div key={card.label} className="bg-ink/50 border border-line/60 rounded-lg p-4"><Icon size={18} className={card.color} /><div className="font-mono text-[10px] text-bone-dim mt-3">{card.label.toUpperCase()}</div><div className={`font-display text-2xl mt-1 ${card.color}`}>{card.value}</div><p className="text-xs text-bone-dim leading-relaxed mt-2">{card.detail}</p></div>; })}</div>
@@ -257,7 +257,7 @@ export function GuidePage() {
   const activeSection: GuideSection = section === 'nutrition' ? section : 'warmup';
   const meta = pageMeta[activeSection];
 
-  return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+  return <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4 sm:space-y-6">
     <div className="pb-5 border-b border-line"><div className="font-mono text-amber text-xs tracking-widest mb-1">{meta.eyebrow}</div><h1 className="font-display text-3xl mb-1">{meta.title}</h1><p className="text-bone-dim text-sm max-w-2xl leading-relaxed">{meta.description}</p></div>
     {activeSection === 'warmup' && <WarmupGuide />}
     {activeSection === 'nutrition' && <NutritionGuide />}

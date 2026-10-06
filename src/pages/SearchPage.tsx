@@ -335,7 +335,7 @@ export function SearchPage() {
         )}
       </header>
 
-      <div className="max-w-3xl mx-auto px-1 sm:px-2 pt-3 pb-24 space-y-6">
+      <div className="max-w-3xl mx-auto px-1 sm:px-2 pt-3 pb-24 space-y-5 sm:space-y-6">
         {!hasQuery ? (
           <>
             {input.trim().length === 1 && <p className="px-3 text-sm text-bone-dim">Keep typing — at least 2 characters.</p>}

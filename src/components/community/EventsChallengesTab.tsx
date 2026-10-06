@@ -126,7 +126,7 @@ export function EventsChallengesTab() {
   });
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-5 sm:space-y-8 animate-in fade-in duration-500">
       {/* Filters */}
       <div className="flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {(['all', 'active', 'upcoming', 'concluded'] as const).map(f => (
@@ -226,7 +226,7 @@ export function EventsChallengesTab() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
         
         {/* Challenges List */}
         <div>

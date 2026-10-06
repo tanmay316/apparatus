@@ -259,7 +259,7 @@ export function Dashboard() {
       />
 
       {/* Mobile: one column in reading order. Desktop: main column + sticky side rail. */}
-      <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6 lg:[grid-template-areas:'focus_side''weekly_side''feed_side'] lg:[grid-template-rows:auto_auto_1fr]">
+      <div className="flex flex-col gap-3.5 sm:gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-6 lg:[grid-template-areas:'focus_side''weekly_side''feed_side'] lg:[grid-template-rows:auto_auto_1fr]">
         <div className="order-1 lg:[grid-area:focus]">
           <TodayFocusCard
             activePlan={activePlan}

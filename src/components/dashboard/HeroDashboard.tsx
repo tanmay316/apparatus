@@ -31,7 +31,7 @@ export function HeroDashboard({ displayName, streak, rankLabel, completedCount, 
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="mb-5"
+      className="mb-4 sm:mb-5"
     >
       <div className="min-w-0">
         <p className="dx-eyebrow">{today}</p>
