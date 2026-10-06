@@ -1,4 +1,5 @@
 import type { ExerciseLog, ExerciseVolumeChange, ProgressiveOverloadSummary, SetData, Workout } from '@/types';
+import { sameExercise } from '@/lib/exercise-name';
 
 export function completedSets(exercise?: ExerciseLog | null): SetData[] {
   return (exercise?.sets || []).filter(set => set.completed !== false && (Number(set.reps) > 0 || Number(set.seconds) > 0 || Number(set.weight) > 0));
@@ -81,13 +82,12 @@ export function findPersonalRecords(
 ): string[] {
   const records: string[] = [];
   for (const current of currentWorkout.exercises || []) {
-    const name = current.name?.trim().toLowerCase();
-    if (!name) continue;
+    if (!current.name?.trim()) continue;
     const currentBest = bestSetMetric(current);
     if (currentBest <= 0) continue;
     let previousBest = 0;
     for (const workout of history) {
-      const match = (workout.exercises || []).find(exercise => exercise.name?.trim().toLowerCase() === name);
+      const match = (workout.exercises || []).find(exercise => sameExercise(exercise.name, current.name));
       if (match) previousBest = Math.max(previousBest, bestSetMetric(match));
     }
     if (previousBest > 0 && currentBest > previousBest * IMPROVEMENT_TOLERANCE) records.push(current.name);
@@ -124,15 +124,13 @@ export function summarizeProgressiveOverload(
   let mostRecentMatchDate: string | undefined;
 
   for (const current of currentExercises) {
-    const name = current.name.trim().toLowerCase();
-
     // Compare against this exercise's own personal best from prior sessions (the best set
     // seen so far), not just whatever was logged in the single most recent workout.
     let bestPrevious: ExerciseLog | null = null;
     let bestPreviousMetric = -1;
     let bestPreviousDate: string | undefined;
     for (const workout of history) {
-      const match = (workout.exercises || []).find(exercise => exercise.name.trim().toLowerCase() === name);
+      const match = (workout.exercises || []).find(exercise => sameExercise(exercise.name, current.name));
       if (!match) continue;
       const metric = bestSetMetric(match);
       if (!bestPrevious || metric > bestPreviousMetric) {

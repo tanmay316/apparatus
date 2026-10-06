@@ -24,6 +24,7 @@ import { requestForegroundPermissions, startWorkoutForegroundService, updateWork
 import { playSuccessChime } from '@/utils/audio';
 import { calculateBodyweightReps } from '@/lib/muscle-map';
 import { compareExerciseProgress } from '@/lib/progressive-overload';
+import { sameExercise } from '@/lib/exercise-name';
 import { updateUserChallengeProgress } from '@/services/community';
 import { ExerciseIllustration } from '@/components/ui/ExerciseIllustration';
 import { getBadge } from '@/lib/badges';
@@ -148,7 +149,6 @@ export function WorkoutSession() {
 
   const findPreviousExerciseLog = (exerciseName: string) => {
     if (!exerciseName) return undefined;
-    const targetName = exerciseName.trim().toLowerCase();
     for (const workout of workoutHistory) {
       if (completedWorkoutForDay) {
         if (workout.id && workout.id === completedWorkoutForDay.id) continue;
@@ -157,7 +157,7 @@ export function WorkoutSession() {
         if (workout.date === completedWorkoutForDay.date && workout.dayId === completedWorkoutForDay.dayId) continue;
       }
       
-      const foundEx = workout.exercises?.find((ex: any) => ex.name?.trim().toLowerCase() === targetName);
+      const foundEx = workout.exercises?.find((ex: any) => sameExercise(ex.name, exerciseName));
       if (foundEx && foundEx.sets && Array.isArray(foundEx.sets)) {
         const completedSets = foundEx.sets.filter((s: any) => 
           s.completed !== false && ((s.reps ?? 0) > 0 || (s.seconds ?? 0) > 0 || (s.weight ?? 0) > 0)

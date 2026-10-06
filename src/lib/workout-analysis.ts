@@ -3,6 +3,7 @@ import {
   bestSetMetric, completedSets, estimatedOneRepMax, exerciseTrainingVolume, exerciseVolumeUnit, summarizeProgressiveOverload,
 } from '@/lib/progressive-overload';
 import { isWarmupOrCooldown, resolveExercise, type MuscleRegion } from '@/lib/muscle-map';
+import { sameExercise } from '@/lib/exercise-name';
 import { shiftDate, startMs, type Insight } from '@/lib/analysis-common';
 
 export type { Insight };
@@ -114,7 +115,7 @@ export function repZone(reps: number): RepZone | undefined {
   return reps <= 5 ? 'strength' : reps <= 12 ? 'hypertrophy' : 'endurance';
 }
 
-const sameName = (a?: string, b?: string) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+const sameName = sameExercise;
 const pct = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : undefined);
 const signed = (n: number, suffix = '') => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n)}${suffix}`;
 
@@ -132,8 +133,8 @@ export function analyzeWorkout(workout: Workout, history: Workout[], options: An
   const earlier = history
     .filter(h => h !== workout && (!workout.id || h.id !== workout.id) && startMs(h) < currentMs)
     .sort((a, b) => startMs(a) - startMs(b));
-  // Same baseline as the saved overload summary: earlier days only, each exercise vs its best session.
-  const priorDays = earlier.filter(h => h.date !== date && (h.exercises || []).length > 0);
+  // Same baseline as the saved overload summary: every earlier session, each exercise vs its best one.
+  const priorDays = earlier.filter(h => (h.exercises || []).length > 0);
 
   const overload = workout.progressiveOverload?.volumeChangePercent !== undefined
     ? workout.progressiveOverload

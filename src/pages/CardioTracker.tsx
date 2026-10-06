@@ -171,6 +171,7 @@ export function CardioTracker() {
   const [shareDataOverride, setShareDataOverride] = useState<CardioShareData | null>(null);
   const [recentActivities, setRecentActivities] = useState<CardioActivity[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const historyLoadedRef = useRef(false);
   const [workoutEffort, setWorkoutEffort] = useState<string>('moderate');
   const [workoutNotes, setWorkoutNotes] = useState<string>('');
   const [visibility, setVisibilityState] = useState<CardioVisibility>(loadCardioVisibility);
@@ -215,13 +216,14 @@ export function CardioTracker() {
     }
   };
 
-  // History powers the hub (week, bests, list); the service already loads all sessions, so keep them all.
+  // History powers the hub (week, bests, list) and the post-session comparison.
+  // The summary loads it too: starting fast or resuming after a restart skips the hub load.
   useEffect(() => {
-    if (!user || screen !== 'select') return;
+    if (!user || !(screen === 'select' || (screen === 'summary' && !historyLoadedRef.current))) return;
     let cancelled = false;
     setHistoryLoading(true);
     getUserCardioActivities(user.uid, 1000)
-      .then(list => { if (!cancelled) setRecentActivities(list); })
+      .then(list => { if (!cancelled) { historyLoadedRef.current = true; setRecentActivities(list); } })
       .catch(console.error)
       .finally(() => { if (!cancelled) setHistoryLoading(false); });
     return () => { cancelled = true; };
@@ -442,7 +444,11 @@ export function CardioTracker() {
       steps,
     };
 
-    setSummaryData({ ...data, date: localDateKey(new Date(finalStore.startedAt || Date.now())) });
+    setSummaryData({
+      ...data,
+      date: localDateKey(new Date(finalStore.startedAt || Date.now())),
+      ...(finalStore.startedAt ? { startedAt: Timestamp.fromMillis(finalStore.startedAt) } : {}),
+    });
     setSavedId(null);
     feedPostIdRef.current = null;
     setWorkoutEffort('moderate');
@@ -1105,7 +1111,7 @@ export function CardioTracker() {
           onRetry={() => { pendingSaveRef.current?.(); }}
           visibility={visibility}
           onVisibility={handleVisibilityChange}
-          history={recentActivities}
+          history={historyLoadedRef.current ? recentActivities : undefined}
         />
         {showShare && shareDataOverride && (
           <CardioShareModal

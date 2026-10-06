@@ -2,6 +2,7 @@ import { collection, doc, setDoc, getDoc, runTransaction, Timestamp, query, wher
 import { auth, db } from '@/lib/firebase';
 import type { Workout, UserStats, ProgressiveOverloadSummary } from '@/types';
 import { findPersonalRecords, summarizeProgressiveOverload } from '@/lib/progressive-overload';
+import { sameExercise } from '@/lib/exercise-name';
 import { applySession, bestHoldSeconds, completesPlanWeek, heaviestLiftKg, localDateKey } from '@/lib/stats';
 import { workoutMetrics } from '@/lib/performance';
 import { isFollowing, visibilityForUser } from '@/services/social';
@@ -41,11 +42,11 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>):
     const previousSnapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)));
     const isFirstWorkoutEver = previousSnapshot.empty;
     earlierWorkouts = previousSnapshot.docs.map(item => ({ id: item.id, ...item.data() } as Workout));
-    // Pass full workout history (not just the last session on the same plan day) so each
-    // exercise is compared against its own true personal best, which is what "progressive
-    // overload" actually means.
+    // Every earlier session (incl. earlier today), so each exercise is compared against its
+    // own true personal best, which is what "progressive overload" actually means.
+    const currentStart = workout.startedAt?.seconds ?? Infinity;
     const previousWorkouts = earlierWorkouts
-      .filter(item => item.date !== workout.date && (item.exercises || []).length > 0)
+      .filter(item => (item.exercises || []).length > 0 && (item.startedAt?.seconds ?? 0) < currentStart)
       .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0));
     progressiveOverload = summarizeProgressiveOverload(workout, previousWorkouts, isFirstWorkoutEver);
   } catch {
@@ -174,7 +175,7 @@ export const getExerciseHistory = async (
   const results: { date: string; sets: any[]; notes: string; seconds: number }[] = [];
 
   for (const workout of allDocs) {
-    const match = workout.exercises?.find(e => e.name === exerciseName);
+    const match = workout.exercises?.find(e => sameExercise(e.name, exerciseName));
     if (match) {
       results.push({
         date: workout.date,

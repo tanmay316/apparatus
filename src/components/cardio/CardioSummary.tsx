@@ -30,7 +30,7 @@ interface Props {
   onRetry: () => void;
   visibility: CardioVisibility;
   onVisibility: (v: CardioVisibility) => void;
-  /** Earlier sessions, for comparison and coaching. */
+  /** Earlier sessions, for comparison and coaching. Undefined while they load. */
   history?: CardioActivity[];
 }
 
@@ -53,7 +53,7 @@ export function CardioSummary({ data, saveState, effort, onEffort, notes, onNote
       startedAt: data.startedAt ?? { seconds: Math.floor(Date.now() / 1000) },
     } as CardioActivity;
   }, [data, type]);
-  const analysis = useMemo(() => (current ? analyzeCardio(current, history || []) : null), [current, history]);
+  const analysis = useMemo(() => (current && history ? analyzeCardio(current, history) : null), [current, history]);
 
   const stats = [
     { label: 'Moving time', value: formatDuration(data.durationSec || 0), unit: '' },
@@ -112,10 +112,14 @@ export function CardioSummary({ data, saveState, effort, onEffort, notes, onNote
         </div>
       </section>
 
-      {analysis && (
+      {analysis ? (
         <section className="dx-card p-4 sm:p-5">
           <h2 className="text-sm font-bold mb-3">Session analysis</h2>
           <CardioAnalysisView analysis={analysis} activity={current ?? undefined} history={history} />
+        </section>
+      ) : current && !history && (
+        <section className="dx-card p-4 sm:p-5 flex items-center gap-2.5 text-[13px] text-[var(--dx-muted)]">
+          <Loader2 size={16} className="animate-spin shrink-0" /> Comparing with your past sessions…
         </section>
       )}
 
