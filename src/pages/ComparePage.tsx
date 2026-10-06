@@ -10,8 +10,7 @@ import type { CardioActivityType } from '@/types';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { CAN_PURCHASE, useHasPro } from '@/stores/subscription-store';
-import { getUserWorkouts } from '@/services/workouts';
-import { getUserCardioActivities } from '@/services/cardio';
+import { historyQuery } from '@/services/history';
 import { CompareProRequiredError, loadCompareTarget, loadNutritionCompare } from '@/services/compare';
 import { compareAthletes, nutritionEdges, type Comparison, type Momentum, type NutritionSide } from '@/lib/athlete-compare';
 import { RANGE_LABEL, RANGE_OPTIONS, rangeDays, type TimeRange } from '@/lib/time-range';
@@ -326,16 +325,8 @@ export function ComparePage() {
     enabled: !!me?.uid && !!uid,
     staleTime: 2 * 60_000,
   });
-  const { data: myWorkouts = [], isLoading: loadingW } = useQuery({
-    queryKey: ['allWorkouts', me?.uid],
-    queryFn: () => getUserWorkouts(me!.uid, 500),
-    enabled: !!me?.uid,
-  });
-  const { data: myCardio = [], isLoading: loadingC } = useQuery({
-    queryKey: ['allCardioActivities', me?.uid],
-    queryFn: () => getUserCardioActivities(me!.uid, 500),
-    enabled: !!me?.uid,
-  });
+  const { data: myWorkouts = [], isLoading: loadingW } = useQuery(historyQuery('workouts', me?.uid));
+  const { data: myCardio = [], isLoading: loadingC } = useQuery(historyQuery('cardio', me?.uid));
 
   const name = target?.profile?.displayName || 'Athlete';
   const first = name.split(' ')[0] || name;

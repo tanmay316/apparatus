@@ -25,6 +25,7 @@ import { playSuccessChime } from '@/utils/audio';
 import { calculateBodyweightReps } from '@/lib/muscle-map';
 import { compareExerciseProgress } from '@/lib/progressive-overload';
 import { sameExercise } from '@/lib/exercise-name';
+import { historyQuery } from '@/services/history';
 import { updateUserChallengeProgress } from '@/services/community';
 import { ExerciseIllustration } from '@/components/ui/ExerciseIllustration';
 import { getBadge } from '@/lib/badges';
@@ -110,31 +111,7 @@ export function WorkoutSession() {
     enabled: !!user,
   });
 
-  const { data: workoutHistory = [] } = useQuery({
-    queryKey: ['workoutHistory', user?.uid],
-    queryFn: async () => {
-      const q = query(
-        collection(db, 'workouts'),
-        where('userId', '==', user!.uid)
-      );
-      const snap = await getDocs(q);
-      const getWorkoutTime = (w: any): number => {
-        if (w.startedAt?.toMillis) return w.startedAt.toMillis();
-        if (w.startedAt?.seconds) return w.startedAt.seconds * 1000;
-        if (w.finishedAt?.toMillis) return w.finishedAt.toMillis();
-        if (w.finishedAt?.seconds) return w.finishedAt.seconds * 1000;
-        if (w.date) {
-          const t = new Date(w.date).getTime();
-          if (!isNaN(t)) return t;
-        }
-        return 0;
-      };
-      return snap.docs
-        .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
-        .sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a));
-    },
-    enabled: !!user,
-  });
+  const { data: workoutHistory = [] } = useQuery(historyQuery('workouts', user?.uid));
 
   const currentDay = days.find(d => d.id === dayId);
   const todayCompletedWorkouts = todayWorkouts.filter((w: any) => w.dayId === dayId);

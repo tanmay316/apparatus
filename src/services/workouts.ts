@@ -7,6 +7,7 @@ import { applySession, bestHoldSeconds, completesPlanWeek, heaviestLiftKg, local
 import { workoutMetrics } from '@/lib/performance';
 import { isFollowing, visibilityForUser } from '@/services/social';
 import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@/services/stats';
+import { forgetSession, getMyHistory, isMe, rememberSession } from '@/services/history';
 
 function removeUndefined(obj: any): any {
   if (Array.isArray(obj)) {
@@ -39,9 +40,8 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>):
   let progressiveOverload;
   let earlierWorkouts: Workout[] = [];
   try {
-    const previousSnapshot = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)));
-    const isFirstWorkoutEver = previousSnapshot.empty;
-    earlierWorkouts = previousSnapshot.docs.map(item => ({ id: item.id, ...item.data() } as Workout));
+    earlierWorkouts = await getMyHistory('workouts', userId);
+    const isFirstWorkoutEver = earlierWorkouts.length === 0;
     // Every earlier session (incl. earlier today), so each exercise is compared against its
     // own true personal best, which is what "progressive overload" actually means.
     const currentStart = workout.startedAt?.seconds ?? Infinity;
@@ -90,9 +90,10 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>):
 
     transaction.set(workoutRef, removeUndefined(workoutData));
     transaction.set(statsRef, outcome.stats);
-    return outcome;
+    return { ...outcome, saved: workoutData as Workout };
   });
 
+  rememberSession('workouts', userId, result.saved);
   notifyUnlockedBadges(userId, result.unlocked).catch(() => {});
   syncAthleteRank(userId, result.stats).catch(() => {});
   import('@/lib/query-client').then(({ queryClient }) => queryClient.invalidateQueries({ queryKey: ['training-burned'] })).catch(() => {});
@@ -130,15 +131,23 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>):
 
 /** A saved workout plus the user's full workout history, for session analysis. */
 export const getWorkoutWithHistory = async (userId: string, workoutId: string): Promise<{ workout: Workout; history: Workout[] } | null> => {
+  if (isMe(userId)) {
+    const history = await getMyHistory('workouts', userId);
+    const cached = history.find(w => w.id === workoutId);
+    if (cached) return { workout: cached, history };
+  }
   const snap = await getDoc(doc(db, 'workouts', workoutId));
   if (!snap.exists()) return null;
   const workout = { id: snap.id, ...snap.data() } as Workout;
   if (workout.userId !== userId) return null;
-  const historySnap = await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)));
-  return { workout, history: historySnap.docs.map(item => ({ id: item.id, ...item.data() } as Workout)) };
+  const history = isMe(userId)
+    ? await getMyHistory('workouts', userId, { fresh: true })
+    : (await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)))).docs.map(item => ({ id: item.id, ...item.data() } as Workout));
+  return { workout, history };
 };
 
 export const getUserWorkouts = async (userId: string, limitCount = 10): Promise<Workout[]> => {
+  if (isMe(userId)) return (await getMyHistory('workouts', userId)).slice(0, limitCount);
   const q = query(
     collection(db, 'workouts'),
     where('userId', '==', userId)
@@ -161,14 +170,10 @@ export const getExerciseHistory = async (
   exerciseName: string,
   limitCount = 5
 ): Promise<{ date: string; sets: any[]; notes: string }[]> => {
-  const q = query(
-    collection(db, 'workouts'),
-    where('userId', '==', userId)
-  );
-  const snapshot = await getDocs(q);
-  
-  const allDocs = snapshot.docs
-    .map(d => ({ id: d.id, ...d.data() } as Workout))
+  const all = isMe(userId)
+    ? await getMyHistory('workouts', userId)
+    : (await getDocs(query(collection(db, 'workouts'), where('userId', '==', userId)))).docs.map(d => ({ id: d.id, ...d.data() } as Workout));
+  const allDocs = all
     .sort((a, b) => (b.startedAt?.seconds || 0) - (a.startedAt?.seconds || 0))
     .slice(0, 250);
 
@@ -239,5 +244,6 @@ export const getPublicWorkoutsForUser = async (userId: string, viewerId?: string
 
 export const deleteWorkout = async (workoutId: string): Promise<void> => {
   await deleteDoc(doc(db, 'workouts', workoutId));
+  forgetSession(auth.currentUser?.uid, workoutId);
   scheduleStatsReconcile(auth.currentUser?.uid);
 };

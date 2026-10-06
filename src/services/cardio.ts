@@ -8,6 +8,7 @@ import { pedometerService } from '@/services/pedometer';
 import { scheduleInactivityReminders } from '@/utils/notifications';
 import { isFollowing, visibilityForUser } from '@/services/social';
 import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@/services/stats';
+import { forgetSession, getMyHistory, isMe, patchSession, rememberSession } from '@/services/history';
 
 /**
  * Perpendicular distance from a point (x0, y0) to line segment (x1, y1)-(x2, y2) in lat/lng degrees.
@@ -129,6 +130,7 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
     transaction.set(statsRef, result.stats);
     return result;
   });
+  rememberSession('cardio', userId, dataToSave as CardioActivity);
   notifyUnlockedBadges(userId, outcome.unlocked).catch(() => {});
   syncAthleteRank(userId, outcome.stats).catch(() => {});
   scheduleInactivityReminders().catch(() => {});
@@ -261,6 +263,12 @@ async function notifyCardioAnalysis(userId: string, activityId: string, type: Ca
 
 /** A saved session plus the user's full cardio history, for session analysis. */
 export const getCardioWithHistory = async (userId: string, activityId: string): Promise<{ activity: CardioActivity; history: CardioActivity[] } | null> => {
+  if (isMe(userId)) {
+    let history = await getMyHistory('cardio', userId);
+    if (!history.some(a => a.id === activityId)) history = await getMyHistory('cardio', userId, { fresh: true });
+    const activity = history.find(a => a.id === activityId);
+    return activity ? { activity, history } : null;
+  }
   const snap = await getDocs(query(collection(db, 'cardioActivities'), where('userId', '==', userId)));
   const history = snap.docs.map(d => ({ id: d.id, ...d.data() } as CardioActivity));
   const activity = history.find(a => a.id === activityId);
@@ -268,6 +276,7 @@ export const getCardioWithHistory = async (userId: string, activityId: string): 
 };
 
 export const getUserCardioActivities = async (userId: string, count = 20): Promise<CardioActivity[]> => {
+  if (isMe(userId)) return (await getMyHistory('cardio', userId)).slice(0, count);
   const q = query(
     collection(db, 'cardioActivities'),
     where('userId', '==', userId)
@@ -300,6 +309,7 @@ export const getVisibleCardioActivitiesForUser = async (userId: string, viewerId
 
 export const updateCardioActivityNotes = async (activityId: string, notes: string): Promise<void> => {
   await updateDoc(doc(db, 'cardioActivities', activityId), { notes: notes.slice(0, 500) });
+  patchSession('cardio', auth.currentUser?.uid, activityId, { notes: notes.slice(0, 500) });
 };
 
 /** Changes who can see a saved session and its feed post; returns the level actually applied. */
@@ -314,10 +324,12 @@ export const updateCardioVisibility = async (
   batch.update(doc(db, 'cardioActivities', activityId), { visibility: applied });
   if (feedPostId) batch.update(doc(db, 'activities', feedPostId), { visibility: applied });
   await batch.commit();
+  patchSession('cardio', userId, activityId, { visibility: applied });
   return applied;
 };
 
 export const deleteCardioActivity = async (activityId: string): Promise<void> => {
   await deleteDoc(doc(db, 'cardioActivities', activityId));
+  forgetSession(auth.currentUser?.uid, activityId);
   scheduleStatsReconcile(auth.currentUser?.uid);
 };

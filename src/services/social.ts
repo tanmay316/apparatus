@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch, onSnapshot, documentId } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch, onSnapshot, documentId, type Query } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { validateComment } from '@/lib/validation';
 import { followNeedsApproval, getProfileVisibility } from '@/lib/privacy';
@@ -53,6 +53,7 @@ export async function deleteActivity(activityId: string): Promise<void> {
     await deleteDoc(activityRef).catch(() => {});
     await deleteDoc(doc(db, 'workouts', linkedWorkoutId)).catch(() => {});
     await deleteDoc(doc(db, 'cardioActivities', linkedWorkoutId)).catch(() => {});
+    void import('@/services/history').then(m => m.forgetSession(auth.currentUser?.uid, linkedWorkoutId));
   } catch {
     // If fetching activity failed, still attempt direct delete by id
     await deleteDoc(activityRef).catch(() => {});
@@ -60,6 +61,7 @@ export async function deleteActivity(activityId: string): Promise<void> {
   // Also attempt deleting directly by activityId from workouts and cardioActivities
   await deleteDoc(doc(db, 'workouts', activityId)).catch(() => {});
   await deleteDoc(doc(db, 'cardioActivities', activityId)).catch(() => {});
+  void import('@/services/history').then(m => m.forgetSession(auth.currentUser?.uid, activityId));
   void import('@/lib/live-deletions').then(m => m.announceDeletion('activity', activityId));
   const { scheduleStatsReconcile } = await import('@/services/stats');
   scheduleStatsReconcile(auth.currentUser?.uid);
@@ -378,7 +380,7 @@ export async function getPublicActivities(limitCount = 100): Promise<Activity[]>
 export async function getUserFeedActivities(userId: string, isOwn = false, isFollowing = false): Promise<Activity[]> {
   const coll = collection(db, 'activities');
   if (isOwn) {
-    const snaps = await getDocs(query(coll, where('userId', '==', userId)));
+    const snaps = await newest(query(coll, where('userId', '==', userId)), 100);
     return snaps.docs.map(d => ({ id: d.id, ...d.data() } as Activity)).sort((a, b) => {
       const timeA = (a.createdAt as any)?.seconds || 0;
       const timeB = (b.createdAt as any)?.seconds || 0;
@@ -386,8 +388,8 @@ export async function getUserFeedActivities(userId: string, isOwn = false, isFol
     });
   } else if (isFollowing) {
     const [s1, s2] = await Promise.all([
-      getDocs(query(coll, where('userId', '==', userId), where('visibility', '==', 'public'))),
-      getDocs(query(coll, where('userId', '==', userId), where('visibility', '==', 'followers'))),
+      newest(query(coll, where('userId', '==', userId), where('visibility', '==', 'public')), 100),
+      newest(query(coll, where('userId', '==', userId), where('visibility', '==', 'followers')), 100),
     ]);
     const map = new Map<string, Activity>();
     [...s1.docs, ...s2.docs].forEach(d => map.set(d.id, { id: d.id, ...d.data() } as Activity));
@@ -397,7 +399,7 @@ export async function getUserFeedActivities(userId: string, isOwn = false, isFol
       return timeB - timeA;
     });
   } else {
-    const snaps = await getDocs(query(coll, where('userId', '==', userId), where('visibility', '==', 'public')));
+    const snaps = await newest(query(coll, where('userId', '==', userId), where('visibility', '==', 'public')), 100);
     return snaps.docs.map(d => ({ id: d.id, ...d.data() } as Activity)).sort((a, b) => {
       const timeA = (a.createdAt as any)?.seconds || 0;
       const timeB = (b.createdAt as any)?.seconds || 0;
@@ -406,16 +408,20 @@ export async function getUserFeedActivities(userId: string, isOwn = false, isFol
   }
 }
 
+/** Newest `n` docs of a query (needs a createdAt index); falls back to the full query if the index is missing. */
+const newest = (base: Query, n: number) => getDocs(query(base, orderBy('createdAt', 'desc'), limit(n))).catch(() => getDocs(base));
+
 export async function getFeed(userId: string, followingUids: string[]): Promise<FeedItem[]> {
   // 1. Fetch activities (include user, following athletes, and system celebration posts)
   const ownerIds = [...new Set([userId, 'system', ...followingUids])].slice(0, 31);
+  const activitiesRef = collection(db, 'activities');
   const activitySnapshots = await Promise.all(ownerIds.flatMap(uid => {
     if (uid === userId || uid === 'system') {
-      return [getDocs(query(collection(db, 'activities'), where('userId', '==', uid)))];
+      return [newest(query(activitiesRef, where('userId', '==', uid)), 50)];
     }
     return [
-      getDocs(query(collection(db, 'activities'), where('userId', '==', uid), where('visibility', '==', 'public'))),
-      getDocs(query(collection(db, 'activities'), where('userId', '==', uid), where('visibility', '==', 'followers')))
+      newest(query(activitiesRef, where('userId', '==', uid), where('visibility', '==', 'public')), 20),
+      newest(query(activitiesRef, where('userId', '==', uid), where('visibility', '==', 'followers')), 20),
     ];
   }));
   
@@ -433,7 +439,7 @@ export async function getFeed(userId: string, followingUids: string[]): Promise<
       for (let i = 0; i < clanIds.length; i += 10) chunks.push(clanIds.slice(i, i + 10));
       
       const postSnaps = await Promise.all(
-        chunks.map(chunk => getDocs(query(collection(db, 'community_posts'), where('communityId', 'in', chunk))))
+        chunks.map(chunk => newest(query(collection(db, 'community_posts'), where('communityId', 'in', chunk)), 50))
       );
       clanPosts = postSnaps.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data(), feedType: 'clan_post' } as CommunityPost & { feedType: 'clan_post' })));
     }

@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getBadge } from '@/lib/badges';
 import { rebuildStats } from '@/lib/stats';
@@ -12,13 +12,13 @@ import type { CardioActivity, UserProfile, UserStats, Workout } from '@/types';
 /** Rebuilds users/{uid}/stats/current from the user's workouts and cardio sessions. */
 export async function reconcileUserStats(uid: string): Promise<UserStats> {
   const statsRef = doc(db, 'users', uid, 'stats', 'current');
-  const [statsSnap, workoutSnap, cardioSnap] = await Promise.all([
+  // Fresh reads (rare: after a delete or a stats-version bump); also refreshes the shared history cache.
+  const { getMyHistory } = await import('@/services/history');
+  const [statsSnap, workouts, cardio] = await Promise.all([
     getDoc(statsRef),
-    getDocs(query(collection(db, 'workouts'), where('userId', '==', uid))),
-    getDocs(query(collection(db, 'cardioActivities'), where('userId', '==', uid))),
+    getMyHistory('workouts', uid, { fresh: true }),
+    getMyHistory('cardio', uid, { fresh: true }),
   ]);
-  const workouts = workoutSnap.docs.map(d => ({ id: d.id, ...d.data() } as Workout));
-  const cardio = cardioSnap.docs.map(d => ({ id: d.id, ...d.data() } as CardioActivity));
   await recalculateStoredCalories(uid, workouts, cardio);
 
   const planDaysPerWeek: Record<string, number> = {};

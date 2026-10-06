@@ -7,8 +7,7 @@ import { getPlan, getPlanDays, savePlanDay } from '@/services/plans';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { ExerciseAutocomplete } from '@/components/ui/ExerciseAutocomplete';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { historyQuery } from '@/services/history';
 import type { PlanDay, Exercise } from '@/types';
 
 function ExerciseSection({ 
@@ -196,31 +195,7 @@ export function DayView() {
   const { data: plan } = useQuery({ queryKey: ['plan', planId], queryFn: () => getPlan(planId!) });
   const { data: days } = useQuery({ queryKey: ['planDays', planId], queryFn: () => getPlanDays(planId!) });
 
-  const { data: workoutHistory = [] } = useQuery({
-    queryKey: ['workoutHistory', user?.uid],
-    queryFn: async () => {
-      const q = query(
-        collection(db, 'workouts'),
-        where('userId', '==', user!.uid)
-      );
-      const snap = await getDocs(q);
-      const getWorkoutTime = (w: any): number => {
-        if (w.startedAt?.toMillis) return w.startedAt.toMillis();
-        if (w.startedAt?.seconds) return w.startedAt.seconds * 1000;
-        if (w.finishedAt?.toMillis) return w.finishedAt.toMillis();
-        if (w.finishedAt?.seconds) return w.finishedAt.seconds * 1000;
-        if (w.date) {
-          const t = new Date(w.date).getTime();
-          if (!isNaN(t)) return t;
-        }
-        return 0;
-      };
-      return snap.docs
-        .map(doc => ({ id: doc.id, ...(doc.data() as any) }))
-        .sort((a, b) => getWorkoutTime(b) - getWorkoutTime(a));
-    },
-    enabled: !!user,
-  });
+  const { data: workoutHistory = [] } = useQuery(historyQuery('workouts', user?.uid));
 
   useEffect(() => {
     if (days) {

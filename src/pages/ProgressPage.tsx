@@ -22,8 +22,7 @@ import { TrainingToolsPanel } from '@/components/insights/TrainingTools';
 import { HeatmapPanel } from '@/components/insights/HeatmapPanel';
 import { WeeklyReportCard } from '@/components/insights/AICoach';
 import { bucketIndex, bucketSize, earliestDate, RANGE_LABEL, RANGE_OPTIONS, rangeBuckets, rangeDays, rangeStart, type BucketSize, type TimeRange } from '@/lib/time-range';
-import { getUserWorkouts } from '@/services/workouts';
-import { getUserCardioActivities } from '@/services/cardio';
+import { historyQuery } from '@/services/history';
 import { getUserPlans, getPlan, getPlanDays, getPublicPlansForUser, clonePlan } from '@/services/plans';
 import { getFollowing, getUsersByUids } from '@/services/social';
 import { getUserEventRegistrations, getEventsByIds } from '@/services/events';
@@ -946,18 +945,10 @@ export function ProgressPage({
   const [selectedFollowerPlanId, setSelectedFollowerPlanId] = useState<string>('');
 
   // 1. Fetch user workouts
-  const { data: allWorkouts = [] } = useQuery({
-    queryKey: ['allWorkouts', profile?.uid],
-    queryFn: () => getUserWorkouts(profile!.uid, 500),
-    enabled: !!profile?.uid,
-  });
+  const { data: allWorkouts = [] } = useQuery(historyQuery('workouts', profile?.uid));
 
   // 2. Fetch user cardio activities
-  const { data: allCardio = [] } = useQuery({
-    queryKey: ['allCardioActivities', profile?.uid],
-    queryFn: () => getUserCardioActivities(profile!.uid, 500),
-    enabled: !!profile?.uid,
-  });
+  const { data: allCardio = [] } = useQuery(historyQuery('cardio', profile?.uid));
 
   // 3. Fetch user plans
   const { data: allPlans = [] } = useQuery({

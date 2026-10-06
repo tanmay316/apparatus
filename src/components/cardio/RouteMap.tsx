@@ -48,17 +48,37 @@ const getCurrentIcon = (type?: 'walk' | 'run' | 'cycle') => {
   });
 };
 
-// All available map themes with tile URLs (CORS-enabled, free, no API key required)
 // maxNativeZoom = deepest level the provider actually serves; beyond it Leaflet
 // upscales instead of fetching "Map data not yet available" placeholder tiles.
+// Esri layers run on the free ArcGIS Location Platform key when VITE_ARCGIS_API_KEY is set.
+const ARCGIS_KEY = ((import.meta.env.VITE_ARCGIS_API_KEY as string | undefined) || '').trim();
+const esri = (service: string) =>
+  `https://server.arcgisonline.com/ArcGIS/rest/services/${service}/MapServer/tile/{z}/{y}/{x}${ARCGIS_KEY ? `?token=${encodeURIComponent(ARCGIS_KEY)}` : ''}`;
+const OSM_CREDIT = '© OpenStreetMap contributors';
+const ESRI_CREDIT = 'Powered by Esri';
+
+export interface MapTheme { label: string; url: string; bg: string; maxNativeZoom: number; attribution: string }
+
+/** Keyless OpenStreetMap street map: the fallback when another provider's tiles fail. */
+export const OSM_STREET: MapTheme = { label: 'Street', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', bg: '#f5f5f5', maxNativeZoom: 19, attribution: OSM_CREDIT };
+
 export const MAP_THEMES = {
-  street: { label: 'Street', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', bg: '#f5f5f5', maxNativeZoom: 19 },
-  dark: { label: 'Dark', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', bg: '#121212', maxNativeZoom: 16 },
-  light: { label: 'Light', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', bg: '#f5f5f5', maxNativeZoom: 16 },
-  satellite: { label: 'Satellite', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', bg: '#0a0a0a', maxNativeZoom: 17 },
-  terrain: { label: 'Terrain', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', bg: '#e8e4d8', maxNativeZoom: 17 },
-  cyclosm: { label: 'CyclOSM', url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', bg: '#f5f5f5', maxNativeZoom: 18 },
-} as const;
+  street: ARCGIS_KEY ? { ...OSM_STREET, url: esri('World_Street_Map'), attribution: ESRI_CREDIT } : OSM_STREET,
+  dark: { label: 'Dark', url: esri('Canvas/World_Dark_Gray_Base'), bg: '#121212', maxNativeZoom: 16, attribution: ESRI_CREDIT },
+  light: { label: 'Light', url: esri('Canvas/World_Light_Gray_Base'), bg: '#f5f5f5', maxNativeZoom: 16, attribution: ESRI_CREDIT },
+  satellite: { label: 'Satellite', url: esri('World_Imagery'), bg: '#0a0a0a', maxNativeZoom: 17, attribution: ESRI_CREDIT },
+  terrain: { label: 'Terrain', url: esri('World_Topo_Map'), bg: '#e8e4d8', maxNativeZoom: 17, attribution: ESRI_CREDIT },
+  cyclosm: { label: 'CyclOSM', url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', bg: '#f5f5f5', maxNativeZoom: 18, attribution: `${OSM_CREDIT} · CyclOSM` },
+} satisfies Record<string, MapTheme>;
+
+/** Map data credit the tile licences require (OpenStreetMap ODbL, Esri terms). */
+export function MapAttribution({ text, className = '' }: { text: string; className?: string }) {
+  return (
+    <span className={`absolute z-[400] pointer-events-none select-none px-1.5 py-[1px] rounded text-[9px] leading-tight bg-black/35 text-white/85 ${className}`}>
+      {text}
+    </span>
+  );
+}
 
 export type MapThemeKey = keyof typeof MAP_THEMES;
 
@@ -810,7 +830,7 @@ export function RouteMap({
   const zoom = (positions.length > 0 || currentLocation) ? 16.5 : 5;
 
   const requestedThemeData = MAP_THEMES[theme] || MAP_THEMES.street;
-  const themeData = useStreetFallback ? MAP_THEMES.street : requestedThemeData;
+  const themeData: MapTheme = useStreetFallback ? OSM_STREET : requestedThemeData;
   const isDarkMap = !useStreetFallback && (theme === 'dark' || theme === 'satellite');
 
   const isGradient = highlightColor === 'url(#route-gradient)';
@@ -920,7 +940,7 @@ export function RouteMap({
               eventHandlers={{
                 tileerror: () => {
                   tileErrorCountRef.current += 1;
-                  if (theme !== 'street' && tileErrorCountRef.current >= 2) {
+                  if (themeData.url !== OSM_STREET.url && tileErrorCountRef.current >= 2) {
                     setUseStreetFallback(true);
                   }
                 },
@@ -996,6 +1016,12 @@ export function RouteMap({
           {!isLive && positions.length > 1 && <FitBounds positions={positions} recenterTrigger={recenterTrigger} paddingBottomRight={mapPaddingBottomRight} paddingTopLeft={mapPaddingTopLeft} />}
         </MapContainer>
       </div>
+      {!hideMap && (
+        <MapAttribution
+          text={themeData.attribution}
+          className={isFullScreen ? 'left-2 top-[calc(env(safe-area-inset-top,0px)+64px)]' : 'right-1.5 bottom-1.5'}
+        />
+      )}
     </div>
   );
 }

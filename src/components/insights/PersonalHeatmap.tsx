@@ -3,7 +3,7 @@ import { MapContainer, Polyline, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Hand, Lock } from 'lucide-react';
-import { MAP_THEMES } from '@/components/cardio/RouteMap';
+import { MAP_THEMES, MapAttribution } from '@/components/cardio/RouteMap';
 
 export type HeatRoute = [number, number][];
 
@@ -47,6 +47,7 @@ export default function PersonalHeatmap({ routes, dark, color, height = 360 }: {
           <Polyline key={i} positions={r} pathOptions={{ color, weight: 3, opacity: dark ? 0.38 : 0.32, lineCap: 'round', lineJoin: 'round' }} interactive={false} />
         ))}
       </MapContainer>
+      <MapAttribution text={theme.attribution} className="left-1.5 bottom-1.5" />
       <button
         type="button"
         onClick={() => setActive(a => !a)}
