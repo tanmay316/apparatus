@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  BarChart3, Bot, Camera, Check, Crown, Dumbbell, ImageIcon, Loader2, RotateCcw, Sparkles, Ticket, X,
+  BarChart3, Bot, Camera, Check, Crown, Dumbbell, ImageIcon, Loader2, RotateCcw, Sparkles, Swords, Target, Ticket, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -17,6 +17,8 @@ const FEATURES = [
   { icon: Camera, title: 'Unlimited food scans', body: 'Snap a meal, get calories and macros instantly.' },
   { icon: ImageIcon, title: 'Every share template', body: 'Overview, Poster, Photo and Sticker cards.' },
   { icon: BarChart3, title: 'Advanced analytics', body: 'Fitness & freshness, VO2 max, best efforts, muscle recovery, 1RM progress and your real calorie burn.' },
+  { icon: Target, title: 'Readiness, goals & heatmap', body: 'Daily readiness score, weekly to yearly goals, month-vs-month charts, a personal route heatmap and hill-adjusted pace.' },
+  { icon: Swords, title: 'Compare with friends', body: 'You vs athletes you follow: who is improving faster in training and nutrition, why, and what to do next.' },
 ];
 
 export function PaywallSheet() {

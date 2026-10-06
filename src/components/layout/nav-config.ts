@@ -77,6 +77,7 @@ const TITLES: [RegExp, string][] = [
   [/^\/explore/, 'Explore'],
   [/^\/nutrition/, 'Nutrition'],
   [/^\/profile/, 'Profile'],
+  [/^\/compare/, 'Compare'],
   [/^\/settings/, 'Settings'],
   [/^\/admin/, 'Admin'],
   [/^\/marketplace\/orders/, 'Your orders'],

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Area, Bar, BarChart, ComposedChart, Line, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, ComposedChart, Line, Tooltip, XAxis, YAxis } from 'recharts';
 import { format } from 'date-fns';
 import { Activity, Gauge, Medal, Route, Timer, TrendingUp } from 'lucide-react';
 import type { CardioActivity, CardioActivityType, Workout } from '@/types';
@@ -9,8 +9,10 @@ import { formatClock, formatPaceSec } from '@/lib/cardio-analysis';
 import { InsightList } from '@/components/analysis/AnalysisParts';
 import { ProBadge, ProLock } from './ProLock';
 import { AskAIButton } from './AICoach';
+import { Pills, ToolCard } from './TrainingTools';
 import { niceTicks, ScrollChart } from '@/components/ui/ScrollChart';
 import { BRAND } from '@/lib/brand';
+import { RANGE_LABEL, rangeDays, rangeStart, type TimeRange } from '@/lib/time-range';
 
 const TYPES: { value: CardioActivityType; label: string }[] = [
   { value: 'run', label: 'Run' }, { value: 'walk', label: 'Walk' }, { value: 'cycle', label: 'Ride' },
@@ -20,34 +22,24 @@ const tooltipStyle = { borderRadius: 12, border: '1px solid rgb(var(--color-bone
 const tick = { fontSize: 10.5, fill: 'rgb(var(--color-bone-dim))' };
 const today = () => format(new Date(), 'yyyy-MM-dd');
 
-function Card({ icon: Icon, title, subtitle, right, children }: { icon: typeof Activity; title: string; subtitle?: string; right?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-line/60 p-3.5 sm:p-4">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[13.5px] font-semibold text-bone"><Icon size={14} className="text-viz-cardio" /> {title}</div>
-          {subtitle && <div className="text-[11.5px] text-bone-dim mt-0.5">{subtitle}</div>}
-        </div>
-        {right}
-      </div>
-      {children}
-    </div>
-  );
+function Card(props: { icon: typeof Activity; title: string; subtitle?: string; right?: ReactNode; children: ReactNode }) {
+  return <ToolCard color="rgb(var(--viz-cardio))" {...props} />;
 }
 
 function Big({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color?: string }) {
   return (
     <div className="min-w-0">
-      <div className="text-[10.5px] uppercase tracking-wider text-bone-dim">{label}</div>
-      <div className="text-[22px] font-semibold tabular-nums leading-tight" style={{ color }}>{value}</div>
-      {sub && <div className="text-[11px] text-bone-dim truncate">{sub}</div>}
+      <div className="text-[11px] uppercase tracking-wider text-bone-dim">{label}</div>
+      <div className="text-[26px] font-bold tabular-nums leading-tight" style={{ color }}>{value}</div>
+      {sub && <div className="text-[11.5px] text-bone-dim truncate">{sub}</div>}
     </div>
   );
 }
 
 /** Fitness (42-day load), Fatigue (7-day) and Form across all cardio and strength training. */
-export function FitnessFreshnessCard({ cardio, workouts }: { cardio: CardioActivity[]; workouts: Workout[] }) {
-  const f = useMemo(() => fitnessFreshness(cardio, workouts, today(), 180), [cardio, workouts]);
+export function FitnessFreshnessCard({ cardio, workouts, days = 180 }: { cardio: CardioActivity[]; workouts: Workout[]; days?: number }) {
+  const shown = Math.max(14, Math.min(730, days));
+  const f = useMemo(() => fitnessFreshness(cardio, workouts, today(), shown), [cardio, workouts, shown]);
   const data = f.series.map(p => ({ ...p, label: p.date }));
   const ticks = useMemo(() => {
     const vals = f.series.flatMap(p => [p.load, p.fitness, p.fatigue, p.form]);
@@ -67,14 +59,14 @@ export function FitnessFreshnessCard({ cardio, workouts }: { cardio: CardioActiv
         <Big label="Form" value={f.form > 0 ? `+${f.form}` : f.form} sub={f.state.label} color={tone} />
       </div>
       <div className="mt-3">
-        <ScrollChart count={data.length} slot={6} height={176} ticks={ticks} top={6} bottom={24} tickStyle={{ color: 'rgb(var(--color-bone-dim))' }}>
+        <ScrollChart count={data.length} slot={shown <= 31 ? 10 : shown <= 120 ? 5 : 3} height={200} ticks={ticks} top={6} bottom={24} tickStyle={{ color: 'rgb(var(--color-bone-dim))' }}>
           {w => (
-            <ComposedChart width={w} height={176} data={data} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+            <ComposedChart width={w} height={200} data={data} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
               <XAxis dataKey="label" height={24} tickFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d')} tick={tick} axisLine={false} tickLine={false} minTickGap={36} />
               <YAxis hide domain={[ticks[0], ticks[ticks.length - 1]]} allowDataOverflow />
               <Tooltip contentStyle={tooltipStyle} labelFormatter={d => format(new Date(`${d}T12:00:00`), 'EEE, MMM d')} />
               <Area isAnimationActive={false} type="monotone" dataKey="form" name="Form" stroke="none" fill={tone} fillOpacity={0.14} />
-              <Bar isAnimationActive={false} dataKey="load" name="Load" fill="rgb(var(--color-bone-dim) / 0.35)" maxBarSize={4} />
+              <Bar isAnimationActive={false} dataKey="load" name="Load" fill="rgb(var(--color-bone-dim) / 0.35)" maxBarSize={shown <= 31 ? 10 : 4} />
               <Line isAnimationActive={false} type="monotone" dataKey="fitness" name="Fitness" stroke="rgb(var(--viz-cardio))" strokeWidth={2.4} dot={false} />
               <Line isAnimationActive={false} type="monotone" dataKey="fatigue" name="Fatigue" stroke="#a855f7" strokeWidth={1.6} strokeDasharray="4 3" dot={false} />
             </ComposedChart>
@@ -86,33 +78,25 @@ export function FitnessFreshnessCard({ cardio, workouts }: { cardio: CardioActiv
   );
 }
 
-function CardioInsightsBody({ activities, workouts }: { activities: CardioActivity[]; workouts: Workout[] }) {
+function CardioInsightsBody({ activities, workouts, range, earliest }: { activities: CardioActivity[]; workouts: Workout[]; range: TimeRange; earliest?: string | null }) {
   const available = TYPES.filter(t => activities.some(a => a.type === t.value));
   const [type, setType] = useState<CardioActivityType>(() => available.find(t => t.value === 'run')?.value || available[0]?.value || 'run');
-  const t = useMemo(() => analyzeCardioTrends(activities, type, today()), [activities, type]);
+  const from = rangeStart(range, today(), earliest);
+  const t = useMemo(() => analyzeCardioTrends(activities, type, today(), from), [activities, type, from]);
   const isRide = type === 'cycle';
   const rate = (sec: number, km: number) => (isRide ? `${Math.round((km / (sec / 3600)) * 10) / 10} km/h` : `${formatPaceSec(sec / km)} /km`);
-  const weeks = t.weeks.map(w => ({ ...w, label: format(new Date(`${w.start}T12:00:00`), 'MMM d') }));
-  const weekTicks = niceTicks(0, Math.max(1, ...t.weeks.map(w => w.km)));
 
   return (
     <div className="space-y-3">
-      {available.length > 1 && (
-        <div role="tablist" className="pro-track flex p-1 rounded-full w-fit">
-          {available.map(o => (
-            <button key={o.value} type="button" role="tab" aria-selected={type === o.value} onClick={() => setType(o.value)}
-              className={`px-3.5 h-8 rounded-full text-[12.5px] font-semibold ${type === o.value ? 'bg-ink text-bone shadow-sm' : 'text-bone-dim'}`}>{o.label}</button>
-          ))}
-        </div>
-      )}
+      {available.length > 1 && <Pills label="Activity type" value={type} onChange={setType} options={available} />}
 
-      <FitnessFreshnessCard cardio={activities} workouts={workouts} />
+      <FitnessFreshnessCard cardio={activities} workouts={workouts} days={rangeDays(range, today(), earliest)} />
 
       {t.bestEfforts.length > 0 && (
         <Card
           icon={Medal}
           title="Best efforts"
-          subtitle="Fastest time over each distance, from your GPS routes"
+          subtitle="All-time fastest over each distance, from your GPS routes"
           right={<AskAIButton prompt={() => `My ${TYPES.find(o => o.value === type)?.label.toLowerCase()} best efforts: ${t.bestEfforts.map(e => `${e.label} ${formatClock(e.sec)} (${e.date}${e.recentSec ? `, best in last 90 days ${formatClock(e.recentSec)}` : ''})`).join('; ')}. Which distance is my strength and which one should I target next?`} />}
         >
           <div className="divide-y divide-line/60">
@@ -163,10 +147,10 @@ function CardioInsightsBody({ activities, workouts }: { activities: CardioActivi
         <Card
           icon={Timer}
           title="Intensity zones"
-          subtitle={`Last 28 days · threshold ≈ ${isRide ? `${t.thresholdKmh} km/h` : `${formatPaceSec(3600 / t.thresholdKmh)} /km`}`}
-          right={<AskAIButton prompt={() => `My intensity zones over the last 28 days: ${t.zones.map((z, i) => `Z${z.zone} ${ZONE_LABELS[i]} ${Math.round(z.sec / 60)} min (${z.pct}%)`).join(', ')}. Is this a good balance of easy and hard training for me?`} />}
+          subtitle={`${RANGE_LABEL[range]} · threshold ≈ ${isRide ? `${t.thresholdKmh} km/h` : `${formatPaceSec(3600 / t.thresholdKmh)} /km`}`}
+          right={<AskAIButton prompt={() => `My intensity zones (${RANGE_LABEL[range].toLowerCase()}): ${t.zones.map((z, i) => `Z${z.zone} ${ZONE_LABELS[i]} ${Math.round(z.sec / 60)} min (${z.pct}%)`).join(', ')}. Is this a good balance of easy and hard training for me?`} />}
         >
-          <div className="flex h-3 rounded-full overflow-hidden bg-bone/[0.06]">
+          <div className="flex h-4 rounded-full overflow-hidden bg-bone/[0.06]">
             {t.zones.map((z, i) => z.pct > 0 && <div key={z.zone} style={{ width: `${z.pct}%`, background: ZONE_COLORS[i] }} title={`${z.label} ${z.pct}%`} />)}
           </div>
           <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-[11.5px]">
@@ -179,31 +163,6 @@ function CardioInsightsBody({ activities, workouts }: { activities: CardioActivi
           </div>
         </Card>
       )}
-
-      <Card
-        icon={Activity}
-        title="12-week trend"
-        subtitle={`${t.totals.last4wKm} km in the last 4 weeks · ${t.totals.yearKm} km this year`}
-        right={<AskAIButton prompt={() => `My weekly ${TYPES.find(o => o.value === type)?.label.toLowerCase()} distance for the last 12 weeks (km): ${t.weeks.map(w => w.km).join(', ')}. ${t.totals.last4wKm} km in the last 4 weeks, longest ${t.totals.longestKm} km. Am I building volume safely, and what should next week look like?`} />}
-      >
-        <div>
-          <ScrollChart count={weeks.length} slot={40} height={144} ticks={weekTicks} top={6} bottom={24} tickStyle={{ color: 'rgb(var(--color-bone-dim))' }}>
-            {w => (
-              <BarChart width={w} height={144} data={weeks} margin={{ top: 6, right: 6, bottom: 0, left: 0 }}>
-                <XAxis dataKey="label" height={24} tick={tick} axisLine={false} tickLine={false} minTickGap={20} />
-                <YAxis hide domain={[weekTicks[0], weekTicks[weekTicks.length - 1]]} allowDataOverflow />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v: number, k: string) => [k === 'km' ? `${v} km` : v, k === 'km' ? 'Distance' : k]} />
-                <Bar isAnimationActive={false} dataKey="km" fill="rgb(var(--viz-cardio))" radius={[5, 5, 0, 0]} maxBarSize={22} />
-              </BarChart>
-            )}
-          </ScrollChart>
-        </div>
-        <div className="mt-2 grid grid-cols-3 gap-2 text-[11.5px]">
-          <div><div className="text-bone-dim">Longest</div><div className="font-semibold text-bone tabular-nums">{t.totals.longestKm} km</div></div>
-          <div><div className="text-bone-dim">Week streak</div><div className="font-semibold text-bone tabular-nums">{t.totals.activeWeekStreak}</div></div>
-          <div><div className="text-bone-dim">Sessions</div><div className="font-semibold text-bone tabular-nums">{t.count}</div></div>
-        </div>
-      </Card>
 
       {t.matched && (
         <Card icon={Route} title="Your route over time" subtitle={`${t.matched.runs.length} efforts on the same ${t.matched.routeKm} km route`}>
@@ -231,18 +190,16 @@ function CardioInsightsBody({ activities, workouts }: { activities: CardioActivi
 }
 
 /** Pro: long-term cardio analytics on the Progress page. */
-export function CardioInsightsPanel({ activities, workouts }: { activities: CardioActivity[]; workouts: Workout[] }) {
+export function CardioInsightsPanel({ activities, workouts, range = '90d', earliest }: { activities: CardioActivity[]; workouts: Workout[]; range?: TimeRange; earliest?: string | null }) {
   if (activities.length < 2) return null;
   return (
-    <section className="pro-panel p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-2 mb-4">
-        <div>
-          <h3 className="text-[15px] font-semibold text-bone flex items-center gap-2">Performance insights <ProBadge /></h3>
-          <p className="text-xs text-bone-dim mt-0.5">Fitness, best efforts, VO2 max, zones and route history</p>
-        </div>
+    <section className="space-y-3">
+      <div className="px-1">
+        <h3 className="text-[17px] font-semibold text-bone flex items-center gap-2">Performance insights <ProBadge /></h3>
+        <p className="text-[12px] text-bone-dim mt-0.5">Fitness, best efforts, VO2 max, zones and route history</p>
       </div>
       <ProLock title="Performance insights" reason={`See your fitness & freshness, best efforts, VO2 max, race predictions, intensity zones and route history with ${BRAND.name} Pro.`} maxHeight={520}>
-        <CardioInsightsBody activities={activities} workouts={workouts} />
+        <CardioInsightsBody activities={activities} workouts={workouts} range={range} earliest={earliest} />
       </ProLock>
     </section>
   );

@@ -149,7 +149,7 @@ export function sessionEffort(a: CardioActivity, history: CardioActivity[]): Ses
   };
 }
 
-export function analyzeCardioTrends(all: CardioActivity[], type: CardioActivityType, asOf: string): CardioTrends {
+export function analyzeCardioTrends(all: CardioActivity[], type: CardioActivityType, asOf: string, zonesFrom = shiftDate(asOf, -28)): CardioTrends {
   const list = all.filter(a => a.type === type && a.date && a.date <= asOf && plausible(a)).sort((a, b) => a.date.localeCompare(b.date));
   const thr = thresholdKmh(all, type, asOf);
   const since90 = shiftDate(asOf, -90);
@@ -189,10 +189,10 @@ export function analyzeCardioTrends(all: CardioActivity[], type: CardioActivityT
     if (anchor?.recentSec) predictions = EFFORTS.cycle.map(([label, km]) => ({ label, km, sec: Math.round(riegel(anchor.recentSec!, anchor.km, km, 1.05)) }));
   }
 
-  // Time in zone over the last 28 days, from 1 km splits where the route allows.
+  // Time in zone over the chosen period (28 days by default), from 1 km splits where the route allows.
   const zoneSec = [0, 0, 0, 0, 0, 0];
   if (type !== 'walk') {
-    for (const a of list.filter(x => x.date >= shiftDate(asOf, -28))) {
+    for (const a of list.filter(x => x.date >= zonesFrom)) {
       const splits = computeSplits(a, 1);
       const parts = splits.length ? splits.map(s => ({ kmh: s.kmh, sec: s.sec })) : [{ kmh: gradeAdjustedKmh(a), sec: movingSec(a) }];
       for (const p of parts) {

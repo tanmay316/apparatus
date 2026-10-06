@@ -325,6 +325,7 @@ export async function deleteAccountData(uid: string, username?: string, onProgre
   refs.push(doc(db, 'users', uid));
   refs.push(doc(db, 'users', uid, 'private', 'push'));
   refs.push(doc(db, 'users', uid, 'private', 'api_keys'));
+  refs.push(doc(db, 'users', uid, 'private', 'goals'));
   if (username) refs.push(doc(db, 'usernames', username));
 
   // Decrement member counts before deleting

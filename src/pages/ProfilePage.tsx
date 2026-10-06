@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { doc, getDoc, query, collection, where, limit, getDocs } from 'firebase/firestore';
-import { ChevronLeft, ChevronRight, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus, Clock, Loader2, ImagePlus, Trophy, Crown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Grid, BarChart3, Settings, Edit3, Heart, Target, TrendingUp, Flame, Droplets, MapPin, Search, Calendar, UserPlus, Users, Link as LinkIcon, Camera, Key, MessageSquare, X, Shield, Lock, Unlock, LogOut, Check, Share2, Save, Flag, Activity, Dumbbell, Scale, Award, UserMinus, Clock, Loader2, ImagePlus, Trophy, Crown, Swords } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
@@ -32,6 +32,8 @@ import { getUserClans, getUserCommunityBadges } from '@/services/community';
 import { CommunityBadgeCard } from '@/components/community/CommunityBadgeCard';
 import { MedalShareModal } from '@/components/community/MedalShareModal';
 import { uploadAvatar, uploadProfileCover } from '@/services/account';
+import { openCompare, useCanCompare } from '@/lib/compare-nav';
+import { ProBadge } from '@/components/insights/ProLock';
 import { BRAND } from '@/lib/brand';
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -66,6 +68,8 @@ export function ProfilePage() {
   const { username } = useParams<{ username: string }>();
   const { user: currentUser, profile: myProfile, stats: myStats, updateProfile } = useAuthStore();
   const { showToast, units, theme } = useUIStore();
+  const navigate = useNavigate();
+  const canCompare = useCanCompare();
   const queryClient = useQueryClient();
 
   const [viewProfile, setViewProfile] = useState<UserProfile | null>(null);
@@ -714,6 +718,22 @@ export function ProfilePage() {
                 </>
               )}
             </div>
+
+            {!isOwnProfile && isFollowingProfile && canCompare && (
+              <button
+                type="button"
+                onClick={() => openCompare(navigate, viewProfile.uid, p.displayName || 'this athlete')}
+                className="mt-3 w-full flex items-center gap-3 p-3 rounded-2xl text-left transition-opacity hover:opacity-90"
+                style={{ background: 'var(--dx-accent-soft)' }}
+              >
+                <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--dx-accent)', color: '#fff' }}><Swords size={18} /></span>
+                <span className="flex-1 min-w-0">
+                  <span className="flex items-center gap-2 text-[14px] font-semibold" style={{ color: 'var(--dx-text)' }}>Compare with {(p.displayName || 'them').split(' ')[0]} <ProBadge /></span>
+                  <span className="block text-[12px] dx-muted leading-snug">Who is improving faster, why, and what to do next</span>
+                </span>
+                <ChevronRight size={18} className="dx-muted shrink-0" />
+              </button>
+            )}
           </div>
         </motion.section>
 

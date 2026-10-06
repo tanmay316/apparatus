@@ -61,11 +61,11 @@ export function sumTotals(meals: LoggedMeal[]): DayTotals {
 
 export const HISTORY_DAYS = 60;
 
-export function useMealHistory() {
+export function useMealHistory(days = HISTORY_DAYS) {
   const uid = useAuthStore(s => s.user?.uid);
   const q = useQuery({
-    queryKey: ['nutrition-history', uid, HISTORY_DAYS],
-    queryFn: async () => ((await getNutritionHistory(HISTORY_DAYS))?.history || []) as LoggedMeal[],
+    queryKey: ['nutrition-history', uid, days],
+    queryFn: async () => ((await getNutritionHistory(days))?.history || []) as LoggedMeal[],
     enabled: !!uid,
     staleTime: 20_000,
   });

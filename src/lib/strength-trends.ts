@@ -42,7 +42,8 @@ const weekStart = (key: string) => shiftDate(key, -((new Date(`${key}T12:00:00`)
 const sum = (groups: Partial<Record<MajorGroup, number>>, keys: MajorGroup[]) => keys.reduce((s, k) => s + (groups[k] || 0), 0);
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
-export function analyzeStrengthTrends(all: Workout[], asOf: string, nowMs = Date.now()): StrengthTrends {
+/** `weeks`: weekly buckets to return (min 8). `balanceFrom`: first day of the muscle-balance window (default last 4 weeks). */
+export function analyzeStrengthTrends(all: Workout[], asOf: string, nowMs = Date.now(), opts: { weeks?: number; balanceFrom?: string } = {}): StrengthTrends {
   const workouts = all.filter(w => w.date && w.date <= asOf && (w.exercises || []).some(isWorking)).sort((a, b) => startMs(a) - startMs(b));
   const since = shiftDate(asOf, -180);
 
@@ -97,20 +98,25 @@ export function analyzeStrengthTrends(all: Workout[], asOf: string, nowMs = Date
   lifts.sort((a, b) => b.sessions - a.sessions || b.best - a.best);
   prs.sort((a, b) => b.date.localeCompare(a.date));
 
-  // 8 weeks of sets per muscle group.
+  // Weekly sets per muscle group.
   const thisWeek = weekStart(asOf);
+  const weekCount = Math.max(8, Math.min(260, Math.round(opts.weeks || 8)));
   const weeks: StrengthTrends['weeks'] = [];
-  for (let i = 7; i >= 0; i--) weeks.push({ start: shiftDate(thisWeek, -7 * i), sets: {}, total: 0, volumeKg: 0, sessions: 0 });
+  for (let i = weekCount - 1; i >= 0; i--) weeks.push({ start: shiftDate(thisWeek, -7 * i), sets: {}, total: 0, volumeKg: 0, sessions: 0 });
+  const weekIndex = new Map(weeks.map((w, i) => [w.start, i]));
   const last28: Partial<Record<MajorGroup, number>> = {};
+  const balanceSets: Partial<Record<MajorGroup, number>> = {};
   const fatigue = new Map<MajorGroup, number>();
   const lastHit = new Map<MajorGroup, number>();
   const recentSets = new Map<MajorGroup, number>();
   const from28 = shiftDate(asOf, -27);
+  const balanceFrom = opts.balanceFrom || from28;
   const from7 = shiftDate(asOf, -6);
   let acute = 0;
   let chronic28 = 0;
   for (const w of workouts) {
-    const bucket = weeks.find(b => b.start === weekStart(w.date));
+    const wi = weekIndex.get(weekStart(w.date));
+    const bucket = wi === undefined ? undefined : weeks[wi];
     const at = startMs(w);
     const hours = Math.max(0, (nowMs - at) / 3_600_000);
     if (bucket) bucket.sessions += 1;
@@ -126,6 +132,7 @@ export function analyzeStrengthTrends(all: Workout[], asOf: string, nowMs = Date
         if (!credit) continue;
         if (bucket) bucket.sets[g] = r1((bucket.sets[g] || 0) + credit * n);
         if (w.date >= from28) last28[g] = (last28[g] || 0) + credit * n;
+        if (w.date >= balanceFrom) balanceSets[g] = (balanceSets[g] || 0) + credit * n;
         if (hours <= 24 * 7) {
           fatigue.set(g, (fatigue.get(g) || 0) + credit * n * Math.exp(-hours / 36));
           recentSets.set(g, (recentSets.get(g) || 0) + credit * n);
@@ -151,9 +158,9 @@ export function analyzeStrengthTrends(all: Workout[], asOf: string, nowMs = Date
   const upper: MajorGroup[] = ['Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps'];
   const lower: MajorGroup[] = ['Quads', 'Hamstrings', 'Glutes', 'Calves'];
   const balance: StrengthTrends['balance'] = [
-    { label: 'Push vs pull', left: 'Push', right: 'Pull', leftSets: r1(sum(last28, push)), rightSets: r1(sum(last28, pull)), ideal: [0.8, 1.25] as [number, number] },
-    { label: 'Upper vs lower', left: 'Upper', right: 'Lower', leftSets: r1(sum(last28, upper)), rightSets: r1(sum(last28, lower)), ideal: [0.7, 1.6] as [number, number] },
-    { label: 'Quads vs hamstrings', left: 'Quads', right: 'Hams', leftSets: r1(sum(last28, ['Quads'])), rightSets: r1(sum(last28, ['Hamstrings'])), ideal: [0.6, 1.6] as [number, number] },
+    { label: 'Push vs pull', left: 'Push', right: 'Pull', leftSets: r1(sum(balanceSets, push)), rightSets: r1(sum(balanceSets, pull)), ideal: [0.8, 1.25] as [number, number] },
+    { label: 'Upper vs lower', left: 'Upper', right: 'Lower', leftSets: r1(sum(balanceSets, upper)), rightSets: r1(sum(balanceSets, lower)), ideal: [0.7, 1.6] as [number, number] },
+    { label: 'Quads vs hamstrings', left: 'Quads', right: 'Hams', leftSets: r1(sum(balanceSets, ['Quads'])), rightSets: r1(sum(balanceSets, ['Hamstrings'])), ideal: [0.6, 1.6] as [number, number] },
   ].filter(b => b.leftSets + b.rightSets >= 6);
 
   let acwr: StrengthTrends['acwr'];
@@ -163,7 +170,8 @@ export function analyzeStrengthTrends(all: Workout[], asOf: string, nowMs = Date
     acwr = { acute, chronic: Math.round(chronicWeekly), ratio, zone: ratio < 0.8 ? 'low' : ratio <= 1.3 ? 'optimal' : ratio <= 1.5 ? 'caution' : 'high' };
   }
 
-  const active = weeks.slice(0, -1);
+  const recent = weeks.slice(-8);
+  const active = recent.slice(0, -1);
   const perWeek = r1(active.reduce((s, w) => s + w.sessions, 0) / Math.max(1, active.length));
   let weekStreak = 0;
   for (let i = weeks.length - 1; i >= 0; i--) {
@@ -176,13 +184,13 @@ export function analyzeStrengthTrends(all: Workout[], asOf: string, nowMs = Date
     workouts: workouts.length, lifts: lifts.slice(0, 12), prs: prs.slice(0, 20), weeks, balance, recovery, acwr,
     consistency: { perWeek, weekStreak }, insights: [],
   };
-  t.insights = strengthInsights(t, last28);
+  t.insights = strengthInsights(t, last28, opts.balanceFrom ? 'in this period' : 'in 4 weeks');
   return t;
 }
 
 const join = (xs: string[]) => (xs.length <= 2 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 
-function strengthInsights(t: StrengthTrends, last28: Partial<Record<MajorGroup, number>>): Insight[] {
+function strengthInsights(t: StrengthTrends, last28: Partial<Record<MajorGroup, number>>, balanceWhen: string): Insight[] {
   const out: Insight[] = [];
   const growing = t.lifts.filter(l => (l.changePct || 0) >= 5).sort((a, b) => (b.changePct || 0) - (a.changePct || 0));
   if (growing.length) out.push({ tone: 'good', title: 'Getting stronger', text: `${join(growing.slice(0, 3).map(l => `${l.name} +${l.changePct}%`))} over the last months.` });
@@ -202,8 +210,8 @@ function strengthInsights(t: StrengthTrends, last28: Partial<Record<MajorGroup, 
 
   for (const b of t.balance) {
     const ratio = b.rightSets > 0 ? b.leftSets / b.rightSets : Infinity;
-    if (ratio > b.ideal[1]) out.push({ tone: 'warn', title: `${b.left}-heavy`, text: `${b.leftSets} ${b.left.toLowerCase()} vs ${b.rightSets} ${b.right.toLowerCase()} sets in 4 weeks. Balance them to protect joints and posture.` });
-    else if (ratio < b.ideal[0]) out.push({ tone: 'warn', title: `${b.right}-heavy`, text: `${b.rightSets} ${b.right.toLowerCase()} vs ${b.leftSets} ${b.left.toLowerCase()} sets in 4 weeks. Add more ${b.left.toLowerCase()} work.` });
+    if (ratio > b.ideal[1]) out.push({ tone: 'warn', title: `${b.left}-heavy`, text: `${b.leftSets} ${b.left.toLowerCase()} vs ${b.rightSets} ${b.right.toLowerCase()} sets ${balanceWhen}. Balance them to protect joints and posture.` });
+    else if (ratio < b.ideal[0]) out.push({ tone: 'warn', title: `${b.right}-heavy`, text: `${b.rightSets} ${b.right.toLowerCase()} vs ${b.leftSets} ${b.left.toLowerCase()} sets ${balanceWhen}. Add more ${b.left.toLowerCase()} work.` });
   }
 
   const neglected = MAJOR_GROUPS.filter(g => g !== 'Forearms' && (last28[g] || 0) < 4);

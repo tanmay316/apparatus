@@ -50,6 +50,7 @@ const loadWorkout = () => import('@/pages/WorkoutSession');
 const AuthPage = lazy(() => import('@/pages/AuthPage').then(m => ({ default: m.AuthPage })));
 const Dashboard = lazy(() => loadDashboard().then(m => ({ default: m.Dashboard })));
 const ProfilePage = lazy(() => loadProfile().then(m => ({ default: m.ProfilePage })));
+const ComparePage = lazy(() => import('@/pages/ComparePage').then(m => ({ default: m.ComparePage })));
 const PlanList = lazy(() => loadPlanList().then(m => ({ default: m.PlanList })));
 const PlanDetail = lazy(() => import('@/pages/PlanDetail').then(m => ({ default: m.PlanDetail })));
 const DayView = lazy(() => import('@/pages/DayView').then(m => ({ default: m.DayView })));
@@ -430,6 +431,7 @@ export function App() {
               <Route path="nutrition" element={<NutritionDashboard />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="profile/:username" element={<ProfilePage />} />
+              <Route path="compare/:uid" element={<ComparePage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="admin" element={<AdminPage />} />
             <Route path="marketplace" element={<MarketplacePage />} />              <Route path="marketplace/orders" element={<OrdersPage />} />

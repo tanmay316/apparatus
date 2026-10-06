@@ -9,12 +9,15 @@ import { AISummaryCard } from '@/components/insights/AICoach';
 import { cardioFacts } from '@/lib/ai-facts';
 import { sessionKey } from '@/services/ai-insights';
 import { Compare, GatedInsights, Headline, SectionTitle, StatGrid, trendOf, type Trend } from './AnalysisParts';
+import { PaceElevationCard } from './PaceElevationCard';
+import { sessionProfile } from '@/lib/pro-insights';
 
 const NOUN = { run: 'run', walk: 'walk', cycle: 'ride' } as const;
 const ZONE_COLORS = ['#94a3b8', '#38bdf8', '#22c55e', '#f59e0b', '#f97316', '#ef4444'];
 
 export function CardioAnalysisView({ analysis: a, activity, history }: { analysis: CardioAnalysis; activity?: CardioActivity; history?: CardioActivity[] }) {
   const effort = useMemo(() => (activity ? sessionEffort(activity, history || []) : null), [activity, history]);
+  const profile = useMemo(() => (activity ? sessionProfile(activity) : null), [activity]);
   const isRide = a.type === 'cycle';
   const c = a.current;
   const p = a.previous;
@@ -178,6 +181,15 @@ export function CardioAnalysisView({ analysis: a, activity, history }: { analysi
             })}
           </ul>
           <div className="mt-1 text-[10.5px] text-bone-dim">{isRide ? 'km/h per split' : 'Pace per km'} · green fastest, red slowest{a.splits.some(s => s.partial) ? ' · last split partial' : ''}</div>
+        </>
+      )}
+
+      {activity && profile && (
+        <>
+          <SectionTitle right={<ProBadge />}>{isRide ? 'Speed' : 'Pace'} & elevation</SectionTitle>
+          <ProLock compact title={`${isRide ? 'Speed' : 'Pace'} & elevation chart`} maxHeight={260}>
+            <PaceElevationCard activity={activity} profile={profile} />
+          </ProLock>
         </>
       )}
 

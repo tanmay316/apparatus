@@ -25,7 +25,8 @@ export interface NutritionTrends {
   days: DayPoint[];
   loggedDays: number;
   avg7: { calories: number; protein: number; carbs: number; fat: number; fiber: number };
-  avg30: { calories: number; protein: number; carbs: number; fat: number; fiber: number };
+  /** Averages over the whole window (logged, completed days). */
+  avgRange: { calories: number; protein: number; carbs: number; fat: number; fiber: number };
   split: { protein: number; carbs: number; fat: number };
   adherence: { calories: number; protein: number; logging: number };
   proteinPerKg: number;
@@ -76,9 +77,12 @@ export function analyzeNutritionTrends(
   answers: PlanAnswers,
   weights: { date: string; weight: number }[],
   asOf: string,
+  windowDays = 30,
 ): NutritionTrends {
+  const span = Math.max(7, Math.min(800, Math.round(windowDays)));
+  const windowFrom = shiftDate(asOf, -(span - 1));
   const days: DayPoint[] = [];
-  for (let i = 29; i >= 0; i--) {
+  for (let i = span - 1; i >= 0; i--) {
     const date = shiftDate(asOf, -i);
     const meals = byDay.get(date) || [];
     const t = meals.reduce((s, m) => ({ calories: s.calories + (m.calories || 0), protein: s.protein + (m.protein || 0), carbs: s.carbs + (m.carbs || 0), fat: s.fat + (m.fat || 0) }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
@@ -95,11 +99,11 @@ export function analyzeNutritionTrends(
   };
   const avg = (list: DayPoint[], from: string) => ({ calories: avgOf(list, 'calories'), protein: avgOf(list, 'protein'), carbs: avgOf(list, 'carbs'), fat: avgOf(list, 'fat'), fiber: fiberAvg(from) });
   const avg7 = avg(last7, shiftDate(asOf, -7));
-  const avg30 = avg(complete, shiftDate(asOf, -30));
+  const avgRange = avg(complete, windowFrom);
 
-  const kcalFromMacros = avg30.protein * 4 + avg30.carbs * 4 + avg30.fat * 9;
+  const kcalFromMacros = avgRange.protein * 4 + avgRange.carbs * 4 + avgRange.fat * 9;
   const split = kcalFromMacros > 0
-    ? { protein: Math.round((avg30.protein * 4 * 100) / kcalFromMacros), carbs: Math.round((avg30.carbs * 4 * 100) / kcalFromMacros), fat: Math.round((avg30.fat * 9 * 100) / kcalFromMacros) }
+    ? { protein: Math.round((avgRange.protein * 4 * 100) / kcalFromMacros), carbs: Math.round((avgRange.carbs * 4 * 100) / kcalFromMacros), fat: Math.round((avgRange.fat * 9 * 100) / kcalFromMacros) }
     : { protein: 0, carbs: 0, fat: 0 };
 
   const within = complete.filter(d => Math.abs(d.calories - goals.calories) <= goals.calories * 0.1).length;
@@ -113,10 +117,11 @@ export function analyzeNutritionTrends(
   const mealAgg = new Map<string, { kcal: number; days: Set<string> }>();
   const foods = new Map<string, { name: string; count: number; calories: number }>();
   const healthByWeek = new Map<string, { s: number; n: number }>();
+  const healthFrom = shiftDate(asOf, -Math.max(42, span));
   for (const [date, meals] of byDay) {
-    if (date < shiftDate(asOf, -42) || date > asOf) continue;
+    if (date < healthFrom || date > asOf) continue;
     for (const m of meals) {
-      if (date >= shiftDate(asOf, -30)) {
+      if (date >= windowFrom) {
         const type = (m.meal_type || 'snack').toLowerCase();
         const e = mealAgg.get(type) || { kcal: 0, days: new Set<string>() };
         e.kcal += m.calories || 0;
@@ -149,7 +154,7 @@ export function analyzeNutritionTrends(
   const topFoods = [...foods.values()].sort((a, b) => b.count - a.count || b.calories - a.calories).slice(0, 6).map(f => ({ ...f, calories: Math.round(f.calories) }));
   const health = [...healthByWeek.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([week, h]) => ({ week, score: Math.round((h.s / h.n) * 10) / 100 }));
 
-  const series = weightTrend(weights.filter(w => w.date <= asOf && w.date >= shiftDate(asOf, -120)));
+  const series = weightTrend(weights.filter(w => w.date <= asOf && w.date >= shiftDate(asOf, -Math.max(120, span))));
   const recentWeights = series.filter(w => w.date >= shiftDate(asOf, -28));
   // Regression on raw weigh-ins already smooths noise; the EMA would lag and understate the rate.
   const slope = slopePerDay(recentWeights.map(w => ({ date: w.date, v: w.weight })));
@@ -188,8 +193,8 @@ export function analyzeNutritionTrends(
   }
 
   const t: NutritionTrends = {
-    days, loggedDays: complete.length, avg7, avg30, split, adherence,
-    proteinPerKg: trendKg || answers.weightKg ? Math.round((avg30.protein / (trendKg || answers.weightKg)) * 10) / 10 : 0,
+    days, loggedDays: complete.length, avg7, avgRange, split, adherence,
+    proteinPerKg: trendKg || answers.weightKg ? Math.round((avgRange.protein / (trendKg || answers.weightKg)) * 10) / 10 : 0,
     meals, topFoods, health, weight: { trendKg, ratePerWeek, series }, expenditure, projection, suggestedCalories, insights: [],
   };
   t.insights = nutritionInsights(t, goals, answers);
@@ -219,7 +224,7 @@ function nutritionInsights(t: NutritionTrends, goals: MacroGoals, a: PlanAnswers
     ? { tone: 'good', title: `${t.proteinPerKg} g protein per kg`, text: 'In the 1.6–2.2 g/kg range shown to maximise muscle retention and growth.' }
     : { tone: 'warn', title: `${t.proteinPerKg} g protein per kg`, text: `Below the 1.6 g/kg most research supports for building or keeping muscle. Aim for ${goals.protein} g a day - add eggs, dairy, legumes or lean meat.` });
 
-  if (t.avg30.fiber > 0 && t.avg30.fiber < 25) out.push({ tone: 'info', title: `${t.avg30.fiber} g fibre a day`, text: 'Most adults need 25–35 g. More vegetables, fruit, oats and beans also keep you fuller.' });
+  if (t.avgRange.fiber > 0 && t.avgRange.fiber < 25) out.push({ tone: 'info', title: `${t.avgRange.fiber} g fibre a day`, text: 'Most adults need 25–35 g. More vegetables, fruit, oats and beans also keep you fuller.' });
   const dinner = t.meals.find(m => m.type === 'dinner');
   if (dinner && dinner.share >= 45) out.push({ tone: 'info', title: `${dinner.share}% of calories at dinner`, text: 'A back-loaded day often leads to evening overeating. A bigger breakfast or lunch can make hunger easier to manage.' });
   if (t.adherence.logging < 60) out.push({ tone: 'info', title: `Logged ${t.adherence.logging}% of days`, text: 'Adaptive insights need regular logging. Snap a photo of each meal - it takes seconds.' });

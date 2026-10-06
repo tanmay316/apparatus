@@ -7,6 +7,8 @@ export interface PrivacySettings {
   showClansToFollowers: boolean;
   showStatsToFollowers: boolean;
   showBadgesToFollowers?: boolean;
+  /** Opt-in: followers with Pro can compare nutrition aggregates (never meals). */
+  shareNutritionWithFollowers?: boolean;
 }
 
 export interface FollowRequest {

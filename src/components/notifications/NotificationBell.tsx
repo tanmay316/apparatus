@@ -4,12 +4,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity, AlarmClock, BarChart3, Bell, BellOff, CalendarClock, CalendarX, CheckCheck, CheckCircle2, Footprints, Heart,
-  MapPin, Megaphone, MessageCircle, MessageSquare, Minus, Newspaper, Settings2, Shield, ShieldAlert, Ticket, TrendingDown, TrendingUp,
+  MapPin, Megaphone, MessageCircle, MessageSquare, Minus, Newspaper, Settings2, Shield, ShieldAlert, Swords, Ticket, TrendingDown, TrendingUp,
   Trophy, UserMinus, UserPlus, Users, X, type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { LiveSenderMessage } from '@/components/ui/LiveUser';
+import { openCompare, useCanCompare } from '@/lib/compare-nav';
 
 const WorkoutAnalysisSheet = lazy(() => import('@/components/analysis/AnalysisSheets').then(m => ({ default: m.WorkoutAnalysisSheet })));
 const CardioAnalysisSheet = lazy(() => import('@/components/analysis/AnalysisSheets').then(m => ({ default: m.CardioAnalysisSheet })));
@@ -89,6 +90,7 @@ export function NotificationBell() {
   const { showToast } = useUIStore();
   const uid = profile?.uid;
   const navigate = useNavigate();
+  const canCompare = useCanCompare();
   const queryClient = useQueryClient();
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -391,6 +393,17 @@ export function NotificationBell() {
                             </span>
                             {!n.read && <span className="absolute right-[18px] bottom-4 w-2 h-2 rounded-full bg-sienna" aria-label="Unread" />}
                           </button>
+                          {n.compare && canCompare && (
+                            <div className={`pl-[60px] pr-9 pb-2 -mt-1 ${!n.read ? 'bg-sienna/[0.06]' : ''}`}>
+                              <button
+                                type="button"
+                                onClick={() => { markRead(n); setOpen(false); openCompare(navigate, n.compare!.uid, n.compare!.name); }}
+                                className="h-7 px-2.5 rounded-full text-[11px] font-semibold inline-flex items-center gap-1 bg-sienna/10 text-sienna hover:bg-sienna/15"
+                              >
+                                <Swords size={12} /> Compare with {n.compare.name.split(' ')[0]}
+                              </button>
+                            </div>
+                          )}
                           <button
                             onClick={() => dismiss(n)}
                             className="absolute right-2 top-2 w-7 h-7 rounded-full flex items-center justify-center text-bone-dim hover:text-bone hover:bg-bone/[0.08] opacity-60 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 transition-opacity"

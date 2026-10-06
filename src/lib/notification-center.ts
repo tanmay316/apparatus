@@ -61,6 +61,8 @@ export interface UnifiedNotification {
   badge?: { text: string; tone: 'up' | 'down' | 'flat' };
   /** Session whose analysis this progress notification opens. */
   analysis?: { kind: 'workout' | 'cardio'; id: string };
+  /** A followed athlete logged training: offer "compare with them". */
+  compare?: { uid: string; name: string };
 }
 
 export function timestampMs(value: any): number {
@@ -120,6 +122,7 @@ export function fromSocial(n: SocialNotification, username?: string): UnifiedNot
     ...(extra.kind === 'progress' && n.targetId ? { analysis: { kind: 'workout' as const, id: n.targetId } } : {}),
     ...(extra.kind === 'cardio_progress' && n.targetId ? { analysis: { kind: 'cardio' as const, id: n.targetId } } : {}),
     ...(extra.kind === 'ai_summary' && n.targetId && (extra.session === 'cardio' || extra.session === 'workout') ? { analysis: { kind: extra.session as 'cardio' | 'workout', id: n.targetId } } : {}),
+    ...(n.type === 'activity' && !isSystem && n.senderId ? { compare: { uid: n.senderId, name: n.senderName || 'Athlete' } } : {}),
   };
 }
 

@@ -352,6 +352,7 @@ export async function postActivity(activity: Omit<Activity, 'id' | 'createdAt'>)
       message: `${activity.userName} ${activity.summary}`,
       targetId: docRef.id,
       read: false,
+      ...(['workout', 'walk', 'run', 'cycle'].includes(activity.type) ? { extra: { kind: 'athlete_activity', sport: activity.type } } : {}),
     })));
   }
   return docRef.id;

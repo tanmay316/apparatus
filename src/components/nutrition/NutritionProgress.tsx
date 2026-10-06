@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, ReferenceLine, Tooltip, BarChart, Bar, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, ReferenceLine, Tooltip, BarChart, Bar, Cell } from 'recharts';
 import { format } from 'date-fns';
 import { Flame, Scale, Target, Loader2, ChevronRight, RotateCcw } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
@@ -11,9 +11,10 @@ import { shiftDate } from '@/lib/analysis-common';
 import { bmiCategory, bmiOf, buildPlan, kgToLb, lbToKg, streakFrom, type MacroGoals } from '@/lib/nutrition-plan';
 import { dateKey, syncPlanToBackend, useUpdateNutritionSetup, waterGoalFor, type NutritionSetup } from '@/services/nutrition-setup';
 import { CalSheet, MACRO_META, NumberSheet, Ruler, type MacroKey } from './cal-ui';
-import { sumTotals, type LoggedMeal } from './use-nutrition-data';
+import { HISTORY_DAYS, sumTotals, useMealHistory, type LoggedMeal } from './use-nutrition-data';
 import { NutritionInsights } from '@/components/insights/NutritionInsights';
 import { niceTicks, ScrollChart } from '@/components/ui/ScrollChart';
+import { bucketIndex, bucketSize, RANGE_LABEL, RANGE_OPTIONS, rangeBuckets, rangeDays, rangeStart, type TimeRange } from '@/lib/time-range';
 
 export function useMeasurements() {
   const uid = useAuthStore(s => s.user?.uid);
@@ -55,10 +56,15 @@ export function LogWeightSheet({ currentKg, imperial, onClose }: { currentKg: nu
   );
 }
 
-export function NutritionProgress({ setup, byDay, goals }: { setup: NutritionSetup; byDay: Map<string, LoggedMeal[]>; goals: MacroGoals }) {
+export function NutritionProgress({ setup, byDay: recentByDay, goals }: { setup: NutritionSetup; byDay: Map<string, LoggedMeal[]>; goals: MacroGoals }) {
   const { data: measurements = [], isLoading } = useMeasurements();
   const [logWeight, setLogWeight] = useState(false);
-  const [range, setRange] = useState<30 | 90 | 365>(90);
+  const [range, setRange] = useState<TimeRange>('30d');
+  const today = dateKey();
+  // Longer ranges load more history; the dashboard's 60 days are reused for shorter ones.
+  const fetchDays = range === 'all' ? 730 : rangeDays(range, today);
+  const long = useMealHistory(Math.max(HISTORY_DAYS, fetchDays));
+  const byDay = fetchDays > HISTORY_DAYS && long.data ? long.byDay : recentByDay;
   const a = setup.answers;
   const imperial = a.units === 'imperial';
   const unit = imperial ? 'lb' : 'kg';
@@ -66,6 +72,12 @@ export function NutritionProgress({ setup, byDay, goals }: { setup: NutritionSet
 
   const weights = useMemo(() => measurements.filter(m => typeof m.weight === 'number' && m.weight > 0).sort((x, y) => x.date.localeCompare(y.date)), [measurements]);
   const trendWeights = useMemo(() => weights.map(w => ({ date: w.date, weight: w.weight! })), [weights]);
+  const earliest = useMemo(() => {
+    const dates = [...byDay.keys(), ...weights.map(w => w.date)].filter(d => d <= today).sort();
+    return dates[0] || null;
+  }, [byDay, weights, today]);
+  const from = rangeStart(range, today, earliest);
+  const windowDays = rangeDays(range, today, earliest);
   const current = weights.length ? weights[weights.length - 1].weight! : a.weightKg;
   const start = a.weightKg;
   const goal = a.goal === 'maintain' ? a.weightKg : a.targetWeightKg;
@@ -74,24 +86,46 @@ export function NutritionProgress({ setup, byDay, goals }: { setup: NutritionSet
   const bmi = bmiOf(current, a.heightCm);
   const cat = bmiCategory(bmi);
 
-  const since = shiftDate(dateKey(), -range);
-  const chart = weights.filter(w => w.date >= since).map(w => ({ d: w.date, v: show(w.weight!) }));
+  const chart = weights.filter(w => w.date >= from).map(w => ({ d: w.date, v: show(w.weight!) }));
   const chartVals = chart.map(p => p.v).concat(a.goal !== 'maintain' ? [show(goal)] : []);
   const chartTicks = niceTicks(Math.floor(Math.min(...chartVals) - 1), Math.ceil(Math.max(...chartVals) + 1));
-  const today = dateKey();
   const week = Array.from({ length: 7 }, (_, i) => {
     const k = shiftDate(today, i - 6);
-    const t = sumTotals(byDay.get(k) || []);
-    return { k, label: format(new Date(`${k}T12:00:00`), 'EEEEE'), v: Math.round(t.calories), over: t.calories > goals.calories * 1.05 };
+    const t = sumTotals(recentByDay.get(k) || []);
+    return { k, label: format(new Date(`${k}T12:00:00`), 'EEEEE'), v: Math.round(t.calories) };
   });
-  const logged = week.filter(d => d.v > 0);
-  const avg = logged.length ? Math.round(logged.reduce((s, d) => s + d.v, 0) / logged.length) : 0;
-  const streak = streakFrom(new Set(byDay.keys()), today, shiftDate);
+  // Calories per day, or the average logged day per week / month on longer ranges.
+  const cal = useMemo(() => {
+    const buckets = rangeBuckets(range, today, earliest);
+    const acc = buckets.map(() => ({ kcal: 0, days: 0 }));
+    for (const [k, meals] of byDay) {
+      const i = bucketIndex(buckets, k);
+      const kcal = sumTotals(meals).calories;
+      if (i < 0 || kcal <= 0) continue;
+      acc[i].kcal += kcal;
+      acc[i].days += 1;
+    }
+    const bars = buckets.map((b, i) => {
+      const v = acc[i].days ? Math.round(acc[i].kcal / acc[i].days) : 0;
+      return { k: b.start, label: b.label, v, days: acc[i].days, over: v > goals.calories * 1.05 };
+    });
+    const loggedDays = acc.reduce((s, x) => s + x.days, 0);
+    const avg = loggedDays ? Math.round(acc.reduce((s, x) => s + x.kcal, 0) / loggedDays) : 0;
+    return { bars, avg, loggedDays, size: bucketSize(range, today, earliest) };
+  }, [byDay, range, today, earliest, goals.calories]);
+  const calTicks = niceTicks(0, Math.max(goals.calories * 1.1, ...cal.bars.map(b => b.v)));
+  const streak = streakFrom(new Set(recentByDay.keys()), today, shiftDate);
 
   const scalePos = Math.max(0, Math.min(1, (bmi - 15) / (40 - 15)));
 
   return (
     <div style={{ display: 'grid', gap: 12 }}>
+      <div role="tablist" aria-label="Time range" className="cal-seg">
+        {RANGE_OPTIONS.map(o => (
+          <button key={o.value} type="button" role="tab" aria-selected={range === o.value} onClick={() => setRange(o.value)}>{o.label}</button>
+        ))}
+      </div>
+
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div className="cal-card" style={{ padding: 16 }}>
           <div className="cal-muted" style={{ fontSize: 13, fontWeight: 700 }}>Current weight</div>
@@ -119,23 +153,17 @@ export function NutritionProgress({ setup, byDay, goals }: { setup: NutritionSet
       </div>
 
       <div className="cal-card" style={{ padding: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 16, fontWeight: 800 }}>Weight progress</div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {([30, 90, 365] as const).map(r => (
-              <button key={r} type="button" onClick={() => setRange(r)} style={{ height: 28, padding: '0 10px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: range === r ? 'var(--cal-primary)' : 'var(--cal-card-2)', color: range === r ? 'var(--cal-on-primary)' : 'var(--cal-text)' }}>
-                {r === 365 ? '1Y' : `${r}D`}
-              </button>
-            ))}
-          </div>
+          <div className="cal-muted" style={{ fontSize: 12.5, fontWeight: 600 }}>{RANGE_LABEL[range]}</div>
         </div>
-        <div style={{ height: 180, marginTop: 12 }}>
+        <div style={{ height: 200, marginTop: 12 }}>
           {isLoading ? (
             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="animate-spin cal-muted" size={20} /></div>
           ) : chart.length >= 2 ? (
-            <ScrollChart count={chart.length} slot={26} height={180} ticks={chartTicks} top={8} bottom={24} tickStyle={{ color: 'var(--cal-muted)' }}>
+            <ScrollChart count={chart.length} slot={26} height={200} ticks={chartTicks} top={8} bottom={24} tickStyle={{ color: 'var(--cal-muted)' }}>
               {cw => (
-                <LineChart width={cw} height={180} data={chart} margin={{ top: 8, right: 12, bottom: 0, left: 6 }}>
+                <LineChart width={cw} height={200} data={chart} margin={{ top: 8, right: 12, bottom: 0, left: 6 }}>
                   <XAxis dataKey="d" height={24} tickFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d')} tick={{ fontSize: 11, fill: 'var(--cal-muted)' }} axisLine={false} tickLine={false} minTickGap={24} />
                   <YAxis hide domain={[chartTicks[0], chartTicks[chartTicks.length - 1]]} allowDataOverflow />
                   <Tooltip formatter={(v: number) => [`${v} ${unit}`, 'Weight']} labelFormatter={d => format(new Date(`${d}T12:00:00`), 'MMM d, yyyy')} contentStyle={{ borderRadius: 12, border: 'none', background: 'var(--cal-card)', color: 'var(--cal-text)' }} />
@@ -147,29 +175,43 @@ export function NutritionProgress({ setup, byDay, goals }: { setup: NutritionSet
           ) : (
             <div className="cal-card-2" style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 16 }}>
               <Scale size={24} className="cal-muted" />
-              <div style={{ fontSize: 14, fontWeight: 700, marginTop: 8 }}>Log your weight to see your trend</div>
-              <div className="cal-muted" style={{ fontSize: 12.5, marginTop: 2 }}>Weigh in once a week, same time of day.</div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginTop: 8 }}>{weights.length ? 'No weigh-ins in this period' : 'Log your weight to see your trend'}</div>
+              <div className="cal-muted" style={{ fontSize: 12.5, marginTop: 2 }}>{weights.length ? 'Pick a longer range or log today\'s weight.' : 'Weigh in once a week, same time of day.'}</div>
             </div>
           )}
         </div>
       </div>
 
       <div className="cal-card" style={{ padding: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>Calories this week</div>
-          <div className="cal-muted cal-tabular" style={{ fontSize: 12.5, fontWeight: 600 }}>Avg {avg.toLocaleString()} cal</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 800 }}>Calories</div>
+            <div className="cal-muted" style={{ fontSize: 12.5, fontWeight: 600 }}>{cal.size === 'day' ? 'Per day' : `Average logged day per ${cal.size}`} · {RANGE_LABEL[range]}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div className="cal-tabular" style={{ fontSize: 18, fontWeight: 800 }}>{cal.avg ? cal.avg.toLocaleString() : '—'}</div>
+            <div className="cal-muted" style={{ fontSize: 11.5, fontWeight: 600 }}>avg · {cal.loggedDays} day{cal.loggedDays === 1 ? '' : 's'} logged</div>
+          </div>
         </div>
-        <div style={{ height: 150, marginTop: 10 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={week} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--cal-muted)' }} axisLine={false} tickLine={false} />
-              <YAxis domain={[0, (hi: number) => Math.ceil(Math.max(hi, goals.calories * 1.1) / 100) * 100]} tick={{ fontSize: 11, fill: 'var(--cal-muted)' }} axisLine={false} tickLine={false} width={40} />
-              <ReferenceLine y={goals.calories} stroke="var(--cal-muted)" strokeDasharray="4 4" />
-              <Bar isAnimationActive={false} dataKey="v" radius={[6, 6, 6, 6]} maxBarSize={22}>
-                {week.map(d => <Cell key={d.k} fill={d.over ? 'var(--cal-bad)' : 'var(--cal-text)'} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+        <div style={{ marginTop: 10 }}>
+          {cal.loggedDays === 0 ? (
+            <div className="cal-card-2 cal-muted" style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600 }}>No meals logged in this period</div>
+          ) : (
+            <ScrollChart count={cal.bars.length} slot={cal.bars.length > 20 ? 20 : 34} height={180} ticks={calTicks} top={8} bottom={24} tickStyle={{ color: 'var(--cal-muted)' }}>
+              {cw => (
+                <BarChart width={cw} height={180} data={cal.bars} margin={{ top: 8, right: 4, bottom: 0, left: 0 }}>
+                  <XAxis dataKey="label" height={24} tick={{ fontSize: 11, fill: 'var(--cal-muted)' }} axisLine={false} tickLine={false} minTickGap={10} />
+                  <YAxis hide domain={[calTicks[0], calTicks[calTicks.length - 1]]} allowDataOverflow />
+                  <Tooltip cursor={{ fill: 'var(--cal-card-2)' }} contentStyle={{ borderRadius: 12, border: 'none', background: 'var(--cal-card)', color: 'var(--cal-text)', fontSize: 12 }}
+                    formatter={(v: number, _k, p) => [`${v.toLocaleString()} cal`, cal.size === 'day' ? 'Eaten' : `Avg of ${(p?.payload as { days: number }).days} days`]} />
+                  <ReferenceLine y={goals.calories} stroke="var(--cal-muted)" strokeDasharray="4 4" />
+                  <Bar isAnimationActive={false} dataKey="v" radius={[6, 6, 6, 6]} maxBarSize={22}>
+                    {cal.bars.map(d => <Cell key={d.k} fill={d.over ? 'var(--cal-bad)' : 'var(--cal-text)'} />)}
+                  </Bar>
+                </BarChart>
+              )}
+            </ScrollChart>
+          )}
         </div>
       </div>
 
@@ -193,7 +235,7 @@ export function NutritionProgress({ setup, byDay, goals }: { setup: NutritionSet
         </div>
       </div>
 
-      <NutritionInsights setup={setup} byDay={byDay} goals={goals} weights={trendWeights} />
+      <NutritionInsights setup={setup} byDay={byDay} goals={goals} weights={trendWeights} range={range} windowDays={windowDays} from={from} />
 
       <AnimatePresence>
         {logWeight && <LogWeightSheet currentKg={current} imperial={imperial} onClose={() => setLogWeight(false)} />}

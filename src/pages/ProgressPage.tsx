@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
+import { Capacitor } from '@capacitor/core';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { CustomSelect } from '@/components/ui/CustomSelect';
@@ -17,7 +18,10 @@ import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioSh
 import { CardioAnalysisPanel, InlineSessionAnalysis, StrengthAnalysisPanel } from '@/components/analysis/ProgressAnalysis';
 import { CardioInsightsPanel } from '@/components/insights/CardioInsights';
 import { StrengthInsightsPanel } from '@/components/insights/StrengthInsights';
+import { TrainingToolsPanel } from '@/components/insights/TrainingTools';
+import { HeatmapPanel } from '@/components/insights/HeatmapPanel';
 import { WeeklyReportCard } from '@/components/insights/AICoach';
+import { bucketIndex, bucketSize, earliestDate, RANGE_LABEL, RANGE_OPTIONS, rangeBuckets, rangeDays, rangeStart, type BucketSize, type TimeRange } from '@/lib/time-range';
 import { getUserWorkouts } from '@/services/workouts';
 import { getUserCardioActivities } from '@/services/cardio';
 import { getUserPlans, getPlan, getPlanDays, getPublicPlansForUser, clonePlan } from '@/services/plans';
@@ -432,8 +436,8 @@ function roundedTopRect(x: number, y: number, w: number, h: number, r: number) {
   return `M${x},${y + h} V${y + rr} Q${x},${y} ${x + rr},${y} H${x + w - rr} Q${x + w},${y} ${x + w},${y + rr} V${y + h} Z`;
 }
 
-function BarChart({ data, tone, unit, height = 188, fmt = formatNumber }: {
-  data: ChartPoint[]; tone: VizTone; unit: string; height?: number; fmt?: (v: number) => string;
+function BarChart({ data, tone, unit, height = 188, fmt = formatNumber, slotWidth = BAR_SLOT, lastLabel }: {
+  data: ChartPoint[]; tone: VizTone; unit: string; height?: number; fmt?: (v: number) => string; slotWidth?: number; lastLabel?: string;
 }) {
   const [ref, width] = useElementWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
@@ -443,7 +447,7 @@ function BarChart({ data, tone, unit, height = 188, fmt = formatNumber }: {
   const n = data.length;
   const viewW = Math.max(width, 200) - CHART_PAD.l;
   const padR = CHART_PAD.r;
-  const contentW = Math.max(viewW, n * BAR_SLOT + padR);
+  const contentW = Math.max(viewW, n * slotWidth + padR);
   const scrollRef = useScrollToLatest(contentW, n, width > 0);
   const plotW = contentW - padR;
   const plotH = height - CHART_PAD.t - CHART_PAD.b;
@@ -488,7 +492,7 @@ function BarChart({ data, tone, unit, height = 188, fmt = formatNumber }: {
                         fontWeight={isLast ? 600 : 400}
                         fontSize={10}
                       >
-                        {isLast ? 'This wk' : d.label}
+                        {isLast && lastLabel ? lastLabel : d.label}
                       </text>
                     )}
                     <rect
@@ -521,27 +525,43 @@ function BarChart({ data, tone, unit, height = 188, fmt = formatNumber }: {
   );
 }
 
-function CardioDistanceChart({ activities }: { activities: CardioActivity[] }) {
-  const data = useMemo<ChartPoint[]>(() => {
-    const byDay: Record<string, { dist: number; count: number }> = {};
-    for (const c of activities) {
-      const d = getCardioDateStr(c);
-      byDay[d] = byDay[d] || { dist: 0, count: 0 };
-      byDay[d].dist += c.distanceKm || 0;
-      byDay[d].count += 1;
-    }
-    return Object.keys(byDay).sort().slice(-120).map(k => ({
-      key: k,
-      label: format(parseDateKey(k), 'MMM d'),
-      value: +byDay[k].dist.toFixed(2),
-      sub: `${byDay[k].count} session${byDay[k].count === 1 ? '' : 's'}`,
-    }));
-  }, [activities]);
+const LAST_BUCKET: Record<BucketSize, string> = { day: 'Today', week: 'This wk', month: 'This mo' };
+const PER_BUCKET: Record<BucketSize, string> = { day: 'Daily', week: 'Weekly', month: 'Monthly' };
+/** Bars stay readable when a month of days is shown; longer ranges swipe. */
+const bucketSlot = (n: number) => (n > 20 ? 26 : n > 10 ? 34 : BAR_SLOT);
 
-  if (data.length === 0) {
+/** One bar per day, week or month of the selected range (sized to the range). */
+function rangeSeries<T>(items: T[], dateOf: (x: T) => string, valueOf: (x: T) => number, range: TimeRange, earliest: string | null) {
+  const today = toDateKey(new Date());
+  const buckets = rangeBuckets(range, today, earliest);
+  const vals = buckets.map(() => ({ v: 0, n: 0 }));
+  for (const x of items) {
+    const i = bucketIndex(buckets, dateOf(x));
+    if (i < 0) continue;
+    vals[i].v += valueOf(x);
+    vals[i].n += 1;
+  }
+  return { size: bucketSize(range, today, earliest), buckets, vals };
+}
+
+function CardioDistanceChart({ activities, range, earliest }: { activities: CardioActivity[]; range: TimeRange; earliest: string | null }) {
+  const { data, size } = useMemo(() => {
+    const s = rangeSeries(activities, getCardioDateStr, c => c.distanceKm || 0, range, earliest);
+    return {
+      size: s.size,
+      data: s.buckets.map((b, i) => ({
+        key: b.start,
+        label: b.label,
+        value: +s.vals[i].v.toFixed(2),
+        sub: `${s.vals[i].n} session${s.vals[i].n === 1 ? '' : 's'}`,
+      })),
+    };
+  }, [activities, range, earliest]);
+
+  if (!data.some(d => d.value > 0)) {
     return <EmptyState icon={Footprints} title="No cardio in this period" text="Record a walk, run or ride to see your distance trend." />;
   }
-  return <LineChart data={data} tone="cardio" unit="km" fmt={v => v.toFixed(2)} />;
+  return <BarChart data={data} tone="cardio" unit="km" fmt={v => v.toFixed(1)} slotWidth={bucketSlot(data.length)} lastLabel={LAST_BUCKET[size]} />;
 }
 
 function CardioSpeedChart({ activities }: { activities: CardioActivity[] }) {
@@ -566,80 +586,68 @@ function CardioSpeedChart({ activities }: { activities: CardioActivity[] }) {
   return <LineChart data={data} tone="speed" unit="km/h" yMin={yMin} />;
 }
 
-function WeeklyVolumeChart({
-  workouts,
-  metric = 'volume',
-}: {
+function VolumeChart({ workouts, metric = 'volume', range, earliest }: {
   workouts: Workout[];
   metric?: 'volume' | 'reps';
+  range: TimeRange;
+  earliest: string | null;
 }) {
-  const data = useMemo<ChartPoint[]>(() => {
-    const thisMonday = mondayOf(new Date());
-    const buckets: { key: string; label: string; value: number; sessions: number }[] = [];
-    for (let i = 25; i >= 0; i--) {
-      const m = new Date(thisMonday);
-      m.setDate(m.getDate() - i * 7);
-      buckets.push({ key: toDateKey(m), label: format(m, 'MMM d'), value: 0, sessions: 0 });
-    }
-    const index = new Map(buckets.map((b, i) => [b.key, i]));
-    for (const w of workouts) {
-      if (!w.date) continue;
-      const k = toDateKey(mondayOf(parseDateKey(w.date.slice(0, 10))));
-      const i = index.get(k);
-      if (i !== undefined) {
-        if (metric === 'reps') {
-          let reps = 0;
-          for (const ex of w.exercises || []) {
-            for (const s of ex.sets || []) {
-              if (s.completed !== false) {
-                reps += Number(s.reps) || 0;
-              }
-            }
-          }
-          buckets[i].value += reps;
-        } else {
-          buckets[i].value += w.volume || 0;
-        }
-        buckets[i].sessions += 1;
-      }
-    }
-    return buckets.map(b => ({
-      key: b.key,
-      label: b.label,
-      value: b.value,
-      sub: `${b.sessions} session${b.sessions === 1 ? '' : 's'}`,
-    }));
-  }, [workouts, metric]);
+  const { data, size } = useMemo(() => {
+    const reps = (w: Workout) => (w.exercises || []).reduce((es, ex) => es + (ex.sets || []).reduce((ss, s) => ss + (s.completed !== false ? Number(s.reps) || 0 : 0), 0), 0);
+    const s = rangeSeries(workouts, w => (w.date || '').slice(0, 10), w => (metric === 'reps' ? reps(w) : w.volume || 0), range, earliest);
+    return {
+      size: s.size,
+      data: s.buckets.map((b, i) => ({
+        key: b.start,
+        label: b.label,
+        value: Math.round(s.vals[i].v),
+        sub: `${s.vals[i].n} session${s.vals[i].n === 1 ? '' : 's'}`,
+      })),
+    };
+  }, [workouts, metric, range, earliest]);
 
-  return <BarChart data={data} tone="strength" unit={metric === 'reps' ? 'reps' : 'kg'} />;
+  return <BarChart data={data} tone="strength" unit={metric === 'reps' ? 'reps' : 'kg'} slotWidth={bucketSlot(data.length)} lastLabel={LAST_BUCKET[size]} />;
 }
 
-function ConsistencyHeatmap({ workouts, cardio }: { workouts: Workout[]; cardio: CardioActivity[] }) {
-  const WEEKS = 12;
-  const { cells, startDate, activeDays, strengthDays, cardioDays } = useMemo(() => {
+/** Weeks shown in the consistency grid for a range (at least 4 so short ranges still read as a calendar). */
+const heatmapWeeks = (range: TimeRange, earliest: string | null) => Math.max(4, Math.min(53, Math.ceil(rangeDays(range, toDateKey(new Date()), earliest) / 7)));
+
+function ConsistencyHeatmap({ workouts, cardio, range, earliest }: { workouts: Workout[]; cardio: CardioActivity[]; range: TimeRange; earliest: string | null }) {
+  const WEEKS = heatmapWeeks(range, earliest);
+  const scroller = useRef<HTMLDivElement>(null);
+  const { cells, startDate, activeDays, strengthDays, cardioDays, totalDays } = useMemo(() => {
     const strength = new Set(workouts.map(w => w.date));
     const cardioSet = new Set(cardio.map(getCardioDateStr));
     const today = new Date();
     const todayKey = toDateKey(today);
+    const from = rangeStart(range, todayKey, earliest);
     const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     start.setDate(start.getDate() - start.getDay() - (WEEKS - 1) * 7);
 
-    const out: { key: string; s: boolean; c: boolean; future: boolean; today: boolean }[] = [];
-    let a = 0, sd = 0, cd = 0;
+    const out: { key: string; s: boolean; c: boolean; future: boolean; today: boolean; out: boolean }[] = [];
+    let a = 0, sd = 0, cd = 0, total = 0;
     for (let i = 0; i < WEEKS * 7; i++) {
       const d = new Date(start);
       d.setDate(start.getDate() + i);
       const key = toDateKey(d);
       const future = key > todayKey;
+      const outside = key < from;
       const s = !future && strength.has(key);
       const c = !future && cardioSet.has(key);
-      if (s || c) a++;
-      if (s) sd++;
-      if (c) cd++;
-      out.push({ key, s, c, future, today: key === todayKey });
+      if (!future && !outside) {
+        total++;
+        if (s || c) a++;
+        if (s) sd++;
+        if (c) cd++;
+      }
+      out.push({ key, s, c, future, today: key === todayKey, out: outside });
     }
-    return { cells: out, startDate: start, activeDays: a, strengthDays: sd, cardioDays: cd };
-  }, [workouts, cardio]);
+    return { cells: out, startDate: start, activeDays: a, strengthDays: sd, cardioDays: cd, totalDays: total };
+  }, [workouts, cardio, WEEKS, range, earliest]);
+  const wide = WEEKS > 18;
+  useLayoutEffect(() => {
+    if (scroller.current) scroller.current.scrollLeft = scroller.current.scrollWidth;
+  }, [WEEKS]);
 
   const cellBg = (cell: (typeof cells)[number]) => {
     if (cell.s && cell.c) return 'linear-gradient(135deg, rgb(var(--viz-strength)) 50%, rgb(var(--viz-cardio)) 50%)';
@@ -655,9 +663,10 @@ function ConsistencyHeatmap({ workouts, cardio }: { workouts: Workout[]; cardio:
   ];
 
   return (
-    <div className="flex flex-col sm:flex-row gap-5 sm:gap-8 sm:items-center">
-      <div className="w-full sm:max-w-[400px]">
-        <div className="grid grid-rows-7 grid-flow-col auto-cols-fr gap-[3px] sm:gap-1">
+    <div className={`flex flex-col gap-5 ${wide ? '' : 'sm:flex-row sm:gap-8 sm:items-center'}`}>
+      <div className={`w-full ${wide ? '' : 'sm:max-w-[400px]'}`}>
+        <div ref={scroller} className={wide ? 'overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden' : ''}>
+        <div className={`grid grid-rows-7 grid-flow-col gap-[3px] sm:gap-1 ${wide ? '' : 'auto-cols-fr'}`} style={wide ? { gridAutoColumns: '15px', width: 'max-content' } : undefined}>
           {cells.map(cell => (
             <div
               key={cell.key}
@@ -665,28 +674,29 @@ function ConsistencyHeatmap({ workouts, cardio }: { workouts: Workout[]; cardio:
               className="aspect-square rounded-[4px]"
               style={{
                 background: cellBg(cell),
-                opacity: cell.future ? 0.35 : 1,
+                opacity: cell.future || cell.out ? 0.3 : 1,
                 outline: cell.today ? '1.5px solid rgb(var(--color-bone))' : undefined,
                 outlineOffset: cell.today ? 1 : undefined,
               }}
             />
           ))}
         </div>
+        </div>
         <div className="flex justify-between text-[10px] text-bone-dim mt-2">
           <span>{format(startDate, 'MMM d')}</span>
           <span>Today</span>
         </div>
       </div>
-      <div className="grid grid-cols-3 sm:grid-cols-1 gap-2 sm:gap-4 flex-1">
+      <div className={`grid grid-cols-3 gap-2 ${wide ? '' : 'sm:grid-cols-1 sm:gap-4'} flex-1`}>
         {side.map(s => (
-          <div key={s.label} className="pro-tile sm:bg-transparent p-3 sm:p-0">
+          <div key={s.label} className={`pro-tile p-3 ${wide ? '' : 'sm:bg-transparent sm:p-0'}`}>
             <div className="flex items-center gap-1.5 pro-label">
               <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
               {s.label}
             </div>
             <div className="text-xl font-semibold text-bone tabular-nums mt-1">
               {s.value}
-              <span className="text-xs font-medium text-bone-dim ml-1">/ {WEEKS * 7}</span>
+              <span className="text-xs font-medium text-bone-dim ml-1">/ {totalDays}</span>
             </div>
           </div>
         ))}
@@ -887,14 +897,7 @@ function buildCardioPrItems(prs: CardioPRSummary, type?: 'run' | 'walk' | 'cycle
    ════════════════════════════════════════════════════════════════ */
 
 type Category = 'overview' | 'cardio' | 'strength' | 'body';
-type Range = '7d' | '30d' | '90d' | 'all';
-
-const RANGE_LABEL: Record<Range, string> = {
-  '7d': 'Last 7 days',
-  '30d': 'Last 30 days',
-  '90d': 'Last 90 days',
-  all: 'All time',
-};
+type Range = TimeRange;
 
 export function ProgressPage({
   initialDate = null,
@@ -1050,21 +1053,16 @@ export function ProgressPage({
   }, [registeredEvents]);
 
   // ─── Time-range Filtered Activities ─────────────────────
+  const earliest = useMemo(() => earliestDate(allCardio.map(c => ({ date: getCardioDateStr(c) })), allWorkouts), [allCardio, allWorkouts]);
   const filteredCardio = useMemo(() => {
     if (timeRange === 'all') return allCardio;
-    const daysBack = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - daysBack);
-    const cutoffStr = toDateKey(cutoff);
+    const cutoffStr = rangeStart(timeRange, toDateKey(new Date()));
     return allCardio.filter(c => getCardioDateStr(c) >= cutoffStr);
   }, [allCardio, timeRange]);
 
   const filteredWorkouts = useMemo(() => {
     if (timeRange === 'all') return allWorkouts;
-    const daysBack = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - daysBack);
-    const cutoffStr = toDateKey(cutoff);
+    const cutoffStr = rangeStart(timeRange, toDateKey(new Date()));
     return allWorkouts.filter(w => w.date >= cutoffStr);
   }, [allWorkouts, timeRange]);
 
@@ -1287,17 +1285,6 @@ export function ProgressPage({
     (s, w) => s + (w.exercises || []).reduce((es, ex) => es + (ex.sets || []).reduce((ss, st) => ss + (st.completed !== false ? (Number(st.reps) || 0) : 0), 0), 0),
     0,
   );
-  const thisWeekVolume = allWorkouts
-    .filter(w => w.date >= toDateKey(mondayOf(new Date())))
-    .reduce((s, w) => s + (w.volume || 0), 0);
-
-  const thisWeekReps = allWorkouts
-    .filter(w => w.date >= toDateKey(mondayOf(new Date())))
-    .reduce((acc, w) => {
-      return acc + (w.exercises || []).reduce((es, ex) => {
-        return es + (ex.sets || []).reduce((ss, st) => ss + (st.completed !== false ? (Number(st.reps) || 0) : 0), 0);
-      }, 0);
-    }, 0);
 
   const totalAllVolume = allWorkouts.reduce((s, w) => s + (w.volume || 0), 0);
   const totalAllReps = allWorkouts.reduce((acc, w) => {
@@ -1794,32 +1781,31 @@ export function ProgressPage({
       ) : (
         /* ═══════════════ OVERVIEW ═══════════════ */
         <motion.div variants={item} className="space-y-5 sm:space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-            <Segmented<Category>
-              id="category"
-              value={activeCategory}
-              onChange={setActiveCategory}
-              className="w-full sm:w-auto"
-              options={[
-                { value: 'overview', label: 'Overview', icon: LayoutGrid },
-                { value: 'cardio', label: 'Cardio', icon: Footprints },
-                { value: 'strength', label: 'Strength', icon: Dumbbell },
-                { value: 'body', label: 'Body', icon: Scale },
-              ]}
-            />
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs text-bone-dim sm:hidden">{rangeLabel}</span>
+          <Segmented<Category>
+            id="category"
+            value={activeCategory}
+            onChange={setActiveCategory}
+            className="w-full sm:w-auto sm:inline-flex"
+            options={[
+              { value: 'overview', label: 'Overview', icon: LayoutGrid },
+              { value: 'cardio', label: 'Cardio', icon: Footprints },
+              { value: 'strength', label: 'Strength', icon: Dumbbell },
+              { value: 'body', label: 'Body', icon: Scale },
+            ]}
+          />
+          {/* Stays under the top bar so the period can be changed next to any chart. */}
+          <div
+            className="sticky z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 !mt-2 bg-ink-3/90 backdrop-blur-xl"
+            style={{ top: `calc((56px + ${Capacitor.getPlatform() === 'android' ? '0px' : 'env(safe-area-inset-top, 0px)'}) * var(--topbar-visible, 1))`, transition: 'top 0.3s ease-out' }}
+          >
+            <div className="flex items-center gap-3">
+              <span className="hidden sm:inline text-xs text-bone-dim shrink-0">{rangeLabel}</span>
               <Segmented<Range>
                 id="range"
-                size="sm"
                 value={timeRange}
                 onChange={setTimeRange}
-                options={[
-                  { value: '7d', label: '7D' },
-                  { value: '30d', label: '30D' },
-                  { value: '90d', label: '90D' },
-                  { value: 'all', label: 'All' },
-                ]}
+                className="w-full sm:w-auto sm:ml-auto"
+                options={RANGE_OPTIONS}
               />
             </div>
           </div>
@@ -1834,6 +1820,8 @@ export function ProgressPage({
           )}
 
           {isOverview && <WeeklyReportCard workouts={allWorkouts} cardio={allCardio} />}
+
+          {isOverview && <TrainingToolsPanel cardio={allCardio} workouts={allWorkouts} range={timeRange} earliest={earliest} />}
 
           {/* ─── Cardio ─── */}
           {showCardio && (
@@ -1856,8 +1844,9 @@ export function ProgressPage({
                 {!isOverview && <Stat label="Activities" value={cardioKPIs.totalSessions} icon={Activity} tone="cardio" />}
               </div>
 
-              {!isOverview && <CardioAnalysisPanel activities={allCardio} />}
-              {!isOverview && <CardioInsightsPanel activities={allCardio} workouts={allWorkouts} />}
+              {!isOverview && <CardioAnalysisPanel activities={allCardio} from={rangeStart(timeRange, todayKey, earliest)} />}
+              {!isOverview && <CardioInsightsPanel activities={allCardio} workouts={allWorkouts} range={timeRange} earliest={earliest} />}
+              {!isOverview && <HeatmapPanel activities={filteredCardio} range={timeRange} />}
 
               {!isOverview && mixTotal > 0 && (
                 <Panel className="p-4 sm:p-5">
@@ -1894,7 +1883,7 @@ export function ProgressPage({
               <Panel className="p-4 sm:p-5">
                 <CardTitle
                   title="Distance"
-                  subtitle="Daily totals · last 14 active days"
+                  subtitle={`${PER_BUCKET[bucketSize(timeRange, todayKey, earliest)]} totals · ${rangeLabel}`}
                   right={
                     <div className="text-right shrink-0">
                       <div className="text-lg font-semibold text-bone tabular-nums leading-tight">
@@ -1904,14 +1893,14 @@ export function ProgressPage({
                     </div>
                   }
                 />
-                <CardioDistanceChart activities={filteredCardio} />
+                <CardioDistanceChart activities={filteredCardio} range={timeRange} earliest={earliest} />
               </Panel>
 
               {!isOverview && filteredCardio.length >= 2 && (
                 <Panel className="p-4 sm:p-5">
                   <CardTitle
                     title="Speed trend"
-                    subtitle="Average speed · last 12 sessions"
+                    subtitle={`Average speed per session · ${rangeLabel}`}
                     right={
                       <div className="text-right shrink-0">
                         <div className="text-lg font-semibold text-bone tabular-nums leading-tight">
@@ -2188,17 +2177,17 @@ export function ProgressPage({
                 </div>
               )}
 
-              {!isOverview && <StrengthAnalysisPanel workouts={allWorkouts} imperial={imperial} />}
-              {!isOverview && <StrengthInsightsPanel workouts={allWorkouts} imperial={imperial} />}
+              {!isOverview && <StrengthAnalysisPanel workouts={allWorkouts} imperial={imperial} from={rangeStart(timeRange, todayKey, earliest)} />}
+              {!isOverview && <StrengthInsightsPanel workouts={allWorkouts} imperial={imperial} range={timeRange} earliest={earliest} />}
 
               <Panel className="p-4 sm:p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                   <div>
-                    <div className="text-sm font-semibold text-bone">Weekly volume</div>
+                    <div className="text-sm font-semibold text-bone">Training volume</div>
                     <div className="text-xs text-bone-dim">
                       {strengthMetric === 'volume'
-                        ? 'Total load lifted · last 26 weeks'
-                        : 'Total reps completed · last 26 weeks'}
+                        ? `${PER_BUCKET[bucketSize(timeRange, todayKey, earliest)]} load lifted · ${rangeLabel}`
+                        : `${PER_BUCKET[bucketSize(timeRange, todayKey, earliest)]} reps completed · ${rangeLabel}`}
                     </div>
                   </div>
 
@@ -2230,16 +2219,16 @@ export function ProgressPage({
 
                     <div className="text-right shrink-0">
                       <div className="text-lg font-semibold text-bone tabular-nums leading-tight">
-                        {formatNumber(strengthMetric === 'volume' ? thisWeekVolume : thisWeekReps)}{' '}
+                        {formatNumber(strengthMetric === 'volume' ? strengthVolume : strengthTotalReps)}{' '}
                         <span className="text-xs font-medium text-bone-dim">
                           {strengthMetric === 'volume' ? 'kg' : 'reps'}
                         </span>
                       </div>
-                      <div className="text-[11px] text-bone-dim">This week</div>
+                      <div className="text-[11px] text-bone-dim">Total</div>
                     </div>
                   </div>
                 </div>
-                <WeeklyVolumeChart workouts={allWorkouts} metric={strengthMetric} />
+                <VolumeChart workouts={allWorkouts} metric={strengthMetric} range={timeRange} earliest={earliest} />
               </Panel>
 
               <Panel className="p-4 sm:p-5">
@@ -2292,9 +2281,9 @@ export function ProgressPage({
           {/* ─── Consistency ─── */}
           {isOverview && (
             <div className="space-y-3">
-              <SectionHeader title="Consistency" subtitle="Last 12 weeks of training" dotClass="bg-bone" />
+              <SectionHeader title="Consistency" subtitle={`Training days · ${rangeLabel}`} dotClass="bg-bone" />
               <Panel className="p-4 sm:p-5">
-                <ConsistencyHeatmap workouts={allWorkouts} cardio={allCardio} />
+                <ConsistencyHeatmap workouts={allWorkouts} cardio={allCardio} range={timeRange} earliest={earliest} />
               </Panel>
             </div>
           )}

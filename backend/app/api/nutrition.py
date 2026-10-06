@@ -8,7 +8,7 @@ Nutrition & coaching API.
 import asyncio
 import json
 import logging
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -34,8 +34,11 @@ from app.schemas.nutrition import (
     RecipeGenerateRequest, TodayNutritionResponse,
 )
 from app.services.food_scan import scan_food, user_goals
+from app.core.config import settings
+from app.repositories.meal_repository import MealRepository
+from app.services import nutrition_compare
 from app.services.meal_service import MealService
-from app.services.subscription import enforce_quota, refund_quota
+from app.services.subscription import enforce_quota, is_pro, refund_quota, verified_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/nutrition", tags=["nutrition"])
@@ -550,8 +553,56 @@ async def get_nutrition_history(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    days = max(1, min(days, 90))
+    days = max(1, min(days, 730))
     return {"history": MealService(db).get_history(current_user["uid"], days)}
+
+
+def _compare_summary(db: Session, uid: str, days: int, tz: int) -> dict:
+    today = nutrition_compare.local_day(datetime.now(timezone.utc), tz)
+    # One extra day either side covers the UTC date shift of the user's time zone.
+    start = (today - timedelta(days=days)).isoformat()
+    end = (today + timedelta(days=1)).isoformat()
+    repo = MealRepository(db)
+    meals = repo.get_user_meals_range(uid, start, end)
+    goals = nutrition_compare.nutrition_goals(uid)
+    if not goals:
+        g = UserRepository(db).get_goals(uid)
+        goals = {"calories": g.calorie_goal, "protein": g.protein_goal} if g else {}
+    summary = nutrition_compare.summarize(meals, goals, days, today, tz)
+    if summary["lastLogged"] is None:
+        # Stopped logging: still say when the last meal was.
+        last = repo.get_recent_meals(uid, 1)
+        day = nutrition_compare.local_day(last[0].logged_at, tz) if last else None
+        summary["lastLogged"] = day.isoformat() if day else None
+    return summary
+
+
+@router.get("/compare/{target_uid}")
+async def compare_nutrition(
+    target_uid: str,
+    days: int = 30,
+    tz: int = 0,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Pro: your nutrition next to a followed athlete's (aggregates only, and only if they opted in)."""
+    uid = current_user["uid"]
+    if not nutrition_compare.UID_RE.match(target_uid) or target_uid == uid:
+        raise HTTPException(status_code=400, detail="Invalid athlete")
+    rate = check_rate_limit(f"{uid}:nutrition-compare", limit=30, window_seconds=600)
+    if not rate.allowed:
+        raise HTTPException(status_code=429, detail=rate.message)
+    if settings.billing_enabled and not await asyncio.to_thread(is_pro, uid, verified_email(current_user)):
+        raise HTTPException(status_code=402, detail={
+            "code": "pro_required", "kind": "compare", "limit": 0, "period": "day",
+            "message": f"Comparing with athletes you follow is part of {settings.APP_NAME} Pro.",
+        })
+    days = nutrition_compare.clamp_days(days)
+    tz = max(-14 * 60, min(14 * 60, int(tz)))
+    me = _compare_summary(db, uid, days, tz)
+    status = await asyncio.to_thread(nutrition_compare.access_status, uid, target_uid)
+    them = _compare_summary(db, target_uid, days, tz) if status == "ok" else None
+    return {"days": days, "status": status, "me": me, "them": them}
 
 
 class UpdateMealTypeRequest(BaseModel):

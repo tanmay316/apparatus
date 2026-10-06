@@ -1,11 +1,12 @@
 import { useMemo, type ReactNode } from 'react';
-import { Bar, BarChart, Cell, Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts';
+import { Line, LineChart, ReferenceLine, Tooltip, XAxis, YAxis } from 'recharts';
 import { format } from 'date-fns';
 import { AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 import { analyzeNutritionTrends, type NutritionMeal } from '@/lib/nutrition-trends';
 import { kgToLb, type MacroGoals } from '@/lib/nutrition-plan';
 import type { NutritionSetup } from '@/services/nutrition-setup';
 import { dateKey } from '@/services/nutrition-setup';
+import { RANGE_LABEL, type TimeRange } from '@/lib/time-range';
 import { Ring } from '@/components/nutrition/cal-ui';
 import { ProBadge, ProLock } from './ProLock';
 import { AskAIButton } from './AICoach';
@@ -34,17 +35,18 @@ function Card({ title, sub, right, ask, children }: { title: string; sub?: strin
   );
 }
 
-function Body({ setup, byDay, goals, weights }: { setup: NutritionSetup; byDay: Map<string, NutritionMeal[]>; goals: MacroGoals; weights: { date: string; weight: number }[] }) {
+interface Props { setup: NutritionSetup; byDay: Map<string, NutritionMeal[]>; goals: MacroGoals; weights: { date: string; weight: number }[]; range: TimeRange; windowDays: number; from: string }
+
+function Body({ setup, byDay, goals, weights, range, windowDays, from }: Props) {
   const a = setup.answers;
   const imperial = a.units === 'imperial';
   const show = (kg: number) => (imperial ? Math.round(kgToLb(kg) * 10) / 10 : Math.round(kg * 10) / 10);
   const unit = imperial ? 'lb' : 'kg';
-  const t = useMemo(() => analyzeNutritionTrends(byDay, goals, a, weights, dateKey()), [byDay, goals, a, weights]);
-  const days = t.days.map(d => ({ ...d, label: format(new Date(`${d.date}T12:00:00`), 'd') }));
-  const weightData = t.weight.series.map(p => ({ d: p.date, w: show(p.weight), tr: show(p.trend) }));
+  const t = useMemo(() => analyzeNutritionTrends(byDay, goals, a, weights, dateKey(), windowDays), [byDay, goals, a, weights, windowDays]);
+  const period = RANGE_LABEL[range];
+  const weightData = t.weight.series.filter(p => p.date >= from).map(p => ({ d: p.date, w: show(p.weight), tr: show(p.trend) }));
   const weightVals = weightData.flatMap(p => [p.w, p.tr]).concat(a.goal !== 'maintain' ? [show(a.targetWeightKg)] : []);
   const weightTicks = niceTicks(Math.floor(Math.min(...weightVals) - 1), Math.ceil(Math.max(...weightVals) + 1));
-  const intakeTicks = niceTicks(0, Math.max(goals.calories * 1.1, ...t.days.map(d => d.calories)));
   const calTick = { color: 'var(--cal-muted)' };
 
   return (
@@ -99,8 +101,8 @@ function Body({ setup, byDay, goals, weights }: { setup: NutritionSetup; byDay: 
 
       <Card
         title="Consistency"
-        sub="Last 30 days"
-        ask={() => `In the last 30 days I was on my calorie target ${t.adherence.calories}% of days, hit my protein goal ${t.adherence.protein}% of days and logged food on ${t.adherence.logging}% of days. How can I be more consistent?`}
+        sub={period}
+        ask={() => `Over the ${period.toLowerCase()} I was on my calorie target ${t.adherence.calories}% of days, hit my protein goal ${t.adherence.protein}% of days and logged food on ${t.adherence.logging}% of days. How can I be more consistent?`}
       >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, textAlign: 'center' }}>
           {[
@@ -117,29 +119,9 @@ function Body({ setup, byDay, goals, weights }: { setup: NutritionSetup; byDay: 
       </Card>
 
       <Card
-        title="30-day intake"
-        right={<span className="cal-muted cal-tabular" style={{ fontSize: 12.5, fontWeight: 700 }}>Avg {t.avg30.calories.toLocaleString()} cal</span>}
-        ask={() => `My daily calories over the last 30 days (logged days only): ${t.days.filter(d => d.logged).map(d => `${d.date.slice(5)} ${d.calories}`).join(', ')}. Average ${t.avg30.calories}, target ${goals.calories}. What patterns do you see?`}
-      >
-        <ScrollChart count={days.length} slot={18} height={150} ticks={intakeTicks} top={6} bottom={24} tickStyle={calTick}>
-          {w => (
-            <BarChart width={w} height={150} data={days} margin={{ top: 6, right: 4, bottom: 0, left: 0 }}>
-              <XAxis dataKey="label" height={24} tick={tick} axisLine={false} tickLine={false} interval={2} />
-              <YAxis hide domain={[intakeTicks[0], intakeTicks[intakeTicks.length - 1]]} allowDataOverflow />
-              <Tooltip contentStyle={tooltipStyle} labelFormatter={(_, p) => (p?.[0] ? format(new Date(`${(p[0].payload as { date: string }).date}T12:00:00`), 'EEE, MMM d') : '')} formatter={(v: number) => [`${v} cal`, 'Eaten']} />
-              <ReferenceLine y={goals.calories} stroke="var(--cal-muted)" strokeDasharray="4 4" />
-              <Bar isAnimationActive={false} dataKey="calories" radius={[4, 4, 4, 4]} maxBarSize={10}>
-                {days.map(d => <Cell key={d.date} fill={!d.logged ? 'transparent' : Math.abs(d.calories - goals.calories) <= goals.calories * 0.1 ? 'var(--cal-good)' : d.calories > goals.calories ? 'var(--cal-bad)' : 'var(--cal-text)'} />)}
-              </Bar>
-            </BarChart>
-          )}
-        </ScrollChart>
-      </Card>
-
-      <Card
         title="Macros"
-        sub={`Average per logged day · ${t.proteinPerKg} g protein per kg`}
-        ask={() => `My average macros per logged day over 30 days: protein ${t.avg30.protein}g (goal ${goals.protein}g, ${t.proteinPerKg} g/kg), carbs ${t.avg30.carbs}g (goal ${goals.carbs}g), fat ${t.avg30.fat}g (goal ${goals.fat}g). Split ${t.split.protein}% protein / ${t.split.carbs}% carbs / ${t.split.fat}% fat. How should I adjust my diet?`}
+        sub={`Average per logged day · ${period} · ${t.proteinPerKg} g protein per kg`}
+        ask={() => `My average macros per logged day (${period.toLowerCase()}): protein ${t.avgRange.protein}g (goal ${goals.protein}g, ${t.proteinPerKg} g/kg), carbs ${t.avgRange.carbs}g (goal ${goals.carbs}g), fat ${t.avgRange.fat}g (goal ${goals.fat}g). Split ${t.split.protein}% protein / ${t.split.carbs}% carbs / ${t.split.fat}% fat. How should I adjust my diet?`}
       >
         <div style={{ display: 'flex', height: 10, borderRadius: 10, overflow: 'hidden', gap: 2 }}>
           <div style={{ width: `${t.split.protein}%`, background: 'var(--cal-protein)' }} />
@@ -150,15 +132,15 @@ function Body({ setup, byDay, goals, weights }: { setup: NutritionSetup; byDay: 
           {([['Protein', 'protein', 'var(--cal-protein)'], ['Carbs', 'carbs', 'var(--cal-carbs)'], ['Fat', 'fat', 'var(--cal-fat)']] as const).map(([label, k, color]) => (
             <div key={k}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700 }} className="cal-muted"><span style={{ width: 8, height: 8, borderRadius: 8, background: color }} />{label} {t.split[k]}%</div>
-              <div className="cal-tabular" style={{ fontSize: 18, fontWeight: 800 }}>{t.avg7[k] || t.avg30[k]}g</div>
-              <div className="cal-muted cal-tabular" style={{ fontSize: 11.5, fontWeight: 600 }}>30d {t.avg30[k]}g · goal {goals[k]}g</div>
+              <div className="cal-tabular" style={{ fontSize: 18, fontWeight: 800 }}>{t.avgRange[k]}g</div>
+              <div className="cal-muted cal-tabular" style={{ fontSize: 11.5, fontWeight: 600 }}>{range === '7d' ? '' : `Last 7 days ${t.avg7[k]}g · `}goal {goals[k]}g</div>
             </div>
           ))}
         </div>
       </Card>
 
       {(t.meals.length > 0 || t.topFoods.length > 0) && (
-        <Card title="Eating patterns" sub="Last 30 days">
+        <Card title="Eating patterns" sub={period}>
           {t.meals.map(m => (
             <div key={m.type} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
               <span style={{ width: 76, textTransform: 'capitalize' }}>{m.type}</span>
@@ -202,7 +184,7 @@ function Body({ setup, byDay, goals, weights }: { setup: NutritionSetup; byDay: 
 }
 
 /** Pro: adaptive expenditure, trend weight, adherence, macros and eating patterns. */
-export function NutritionInsights(props: { setup: NutritionSetup; byDay: Map<string, NutritionMeal[]>; goals: MacroGoals; weights: { date: string; weight: number }[] }) {
+export function NutritionInsights(props: Props) {
   return (
     <div style={{ display: 'grid', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 2px 0' }}>

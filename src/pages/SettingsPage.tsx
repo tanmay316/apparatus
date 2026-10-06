@@ -3,7 +3,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell, ChevronRight, Download, Footprints, Globe2, KeyRound, Lock, LogOut, Palette, Scale, Trash2, Upload, User, UserCheck, Users,
-  Trophy, BarChart3, AlarmClock, Crown,
+  Trophy, BarChart3, AlarmClock, Crown, Salad,
 } from 'lucide-react';
 import { deleteUser } from 'firebase/auth';
 import { CustomSelect } from '@/components/ui/CustomSelect';
@@ -130,6 +130,7 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
   const [showEvents, setShowEvents] = useState(profile.privacySettings?.showEventsToFollowers !== false);
   const [showClans, setShowClans] = useState(profile.privacySettings?.showClansToFollowers !== false);
   const [showStats, setShowStats] = useState(profile.privacySettings?.showStatsToFollowers !== false);
+  const [shareNutrition, setShareNutrition] = useState(profile.privacySettings?.shareNutritionWithFollowers === true);
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -198,6 +199,7 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
       showEventsToFollowers: showEvents,
       showClansToFollowers: showClans,
       showStatsToFollowers: showStats,
+      shareNutritionWithFollowers: shareNutrition,
       ...patch,
     },
   });
@@ -214,6 +216,7 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
         showEventsToFollowers: showEvents,
         showClansToFollowers: showClans,
         showStatsToFollowers: showStats,
+        shareNutritionWithFollowers: shareNutrition,
       },
     });
     if (!user) return;
@@ -652,7 +655,14 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
               checked={showStats}
               onChange={checked => { setShowStats(checked); savePrivacy({ showStatsToFollowers: checked }); }}
               label="Show stats"
-              description="Workouts, calories and streaks"
+              description="Workouts, calories and streaks. Off also stops followers comparing with you."
+            />
+            <Toggle
+              icon={<Salad size={16} />}
+              checked={shareNutrition}
+              onChange={checked => { setShareNutrition(checked); savePrivacy({ shareNutritionWithFollowers: checked }); }}
+              label="Share nutrition summary"
+              description="Followers who compare with you see days logged and how often you hit your goals. Never your meals."
             />
           </SettingsSection>
 

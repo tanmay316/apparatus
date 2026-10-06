@@ -53,8 +53,8 @@ export function InlineSessionAnalysis({ kind, session, workouts, cardio, imperia
 }
 
 /** Strength tab: pick any recent workout and see its analysis. */
-export function StrengthAnalysisPanel({ workouts, imperial }: { workouts: Workout[]; imperial: boolean }) {
-  const recent = useMemo(() => [...workouts].filter(w => w.id).sort((a, b) => startMs(b) - startMs(a)).slice(0, RECENT), [workouts]);
+export function StrengthAnalysisPanel({ workouts, imperial, from = '' }: { workouts: Workout[]; imperial: boolean; from?: string }) {
+  const recent = useMemo(() => [...workouts].filter(w => w.id && w.date >= from).sort((a, b) => startMs(b) - startMs(a)).slice(0, RECENT), [workouts, from]);
   const [selected, setSelected] = useState('');
   const workout = recent.find(w => w.id === selected) || recent[0];
   const analysis = useMemo(
@@ -84,8 +84,8 @@ export function StrengthAnalysisPanel({ workouts, imperial }: { workouts: Workou
 }
 
 /** Cardio tab: pick any recent run, walk or ride and see its analysis. */
-export function CardioAnalysisPanel({ activities }: { activities: CardioActivity[] }) {
-  const recent = useMemo(() => [...activities].filter(a => a.id).sort((a, b) => startMs(b) - startMs(a)).slice(0, RECENT), [activities]);
+export function CardioAnalysisPanel({ activities, from = '' }: { activities: CardioActivity[]; from?: string }) {
+  const recent = useMemo(() => [...activities].filter(a => a.id && a.date >= from).sort((a, b) => startMs(b) - startMs(a)).slice(0, RECENT), [activities, from]);
   const [selected, setSelected] = useState('');
   const activity = recent.find(a => a.id === selected) || recent[0];
   const analysis = useMemo(() => (activity ? analyzeCardio(activity, activities) : null), [activity, activities]);
