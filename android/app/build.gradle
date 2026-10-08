@@ -48,6 +48,8 @@ android {
             }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // Bundles native crash symbols into the .aab for Play Console.
+            ndk { debugSymbolLevel 'SYMBOL_TABLE' }
         }
     }
 }

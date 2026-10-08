@@ -1,10 +1,15 @@
 import { create } from 'zustand';
+import { Capacitor } from '@capacitor/core';
 import type { BillingStatus, QuotaUsage } from '@/services/billing';
 import { useUIStore } from '@/stores/ui-store';
 import { PLAY_BILLING } from '@/lib/play-billing';
 
 /** Pro is sold through Google Play only; Pro bought there unlocks the web and iPhone apps too. */
 export const CAN_PURCHASE = PLAY_BILLING;
+/** Pro locks, badges and the paywall (codes on web) are shown everywhere except the iPhone app (App Store rules). */
+export const CAN_UPSELL = Capacitor.getPlatform() !== 'ios';
+/** Shown before Google Play has returned the localised price. */
+export const PRO_PRICE_LABEL = '₹99/month';
 const FREE_LIMIT_MESSAGE = "You've reached the free limit for now. It resets soon.";
 
 export interface Entitlement {
@@ -17,8 +22,10 @@ export interface Entitlement {
 }
 
 interface SubscriptionState {
-  /** Billing is live on the backend; until then nothing is locked. Assumed live until the server says otherwise. */
+  /** Pro features are locked for free users. Assumed on until the server says otherwise. */
   enabled: boolean;
+  /** The server can verify Google Play purchases. */
+  purchasable: boolean;
   loaded: boolean;
   /** Live from users/{uid}/private/entitlement (written by the backend). */
   entitlement: Entitlement;
@@ -39,7 +46,8 @@ interface SubscriptionState {
 }
 
 const EMPTY: Entitlement = { pro: false };
-const STORE_KEY = 'apparatus.billing';
+// v2: older builds stored enabled=false while Play billing wasn't configured; that must not unlock Pro.
+const STORE_KEY = 'apparatus.billing.v2';
 
 /** Last answer from /billing/status. Unknown = billing live, so blocking the request can't unlock Pro. */
 function remembered(): { enabled: boolean; compedUid: string | null } {
@@ -56,6 +64,7 @@ function remember(enabled: boolean, compedUid: string | null) {
 
 export const useSubscriptionStore = create<SubscriptionState>((set) => ({
   enabled: remembered().enabled,
+  purchasable: true,
   loaded: false,
   entitlement: EMPTY,
   comped: false,
@@ -64,7 +73,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
   setStatus: (status, uid) => {
     const comped = status.entitlement?.plan === 'comp' && !!status.entitlement.pro;
     remember(status.enabled, comped && uid ? uid : null);
-    set({ enabled: status.enabled, loaded: true, usage: status.usage || {}, comped });
+    set({ enabled: status.enabled, purchasable: status.purchasable ?? status.enabled, loaded: true, usage: status.usage || {}, comped });
   },
   restore: (uid) => set({ enabled: remembered().enabled, comped: remembered().compedUid === uid }),
   setEntitlement: (entitlement) => set({ entitlement }),
@@ -73,14 +82,14 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
     return u ? { usage: { ...state.usage, [kind]: { ...u, used: u.used + 1 } } } : {};
   }),
   openPaywall: (reason, opts) => {
-    if (!CAN_PURCHASE && !opts?.redeem) {
+    if (!CAN_UPSELL && !opts?.redeem) {
       useUIStore.getState().showToast(FREE_LIMIT_MESSAGE, 'info');
       return;
     }
     set({ paywall: { open: true, reason } });
   },
   closePaywall: () => set({ paywall: { open: false } }),
-  reset: () => set({ enabled: remembered().enabled, loaded: false, entitlement: EMPTY, comped: false, usage: {}, paywall: { open: false } }),
+  reset: () => set({ enabled: remembered().enabled, purchasable: true, loaded: false, entitlement: EMPTY, comped: false, usage: {}, paywall: { open: false } }),
 }));
 
 const hasProState = (s: SubscriptionState) => s.entitlement.pro || s.comped;
@@ -91,13 +100,13 @@ export const useIsPro = () => useSubscriptionStore(hasProState);
 /** True when Pro features are usable (Pro, or billing not live yet). */
 export const useHasPro = () => useSubscriptionStore(s => !s.enabled || hasProState(s));
 
-/** Pro teasers and "Go Pro" prompts are only shown where Pro can be bought. */
-export const useShowProUpsell = () => useSubscriptionStore(s => CAN_PURCHASE && s.enabled && !hasProState(s));
+/** Pro teasers and "Go Pro" prompts are only shown where Pro can be bought or redeemed. */
+export const useShowProUpsell = () => useSubscriptionStore(s => CAN_UPSELL && s.enabled && !hasProState(s));
 
 /** Opens the paywall and returns false when a Pro feature is not available. */
 export function requirePro(reason?: string): boolean {
   const s = useSubscriptionStore.getState();
   if (!s.enabled || hasProState(s)) return true;
-  if (CAN_PURCHASE) s.openPaywall(reason);
+  if (CAN_UPSELL) s.openPaywall(reason);
   return false;
 }

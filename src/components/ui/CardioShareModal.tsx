@@ -12,7 +12,7 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import { useUIStore } from '@/stores/ui-store';
-import { CAN_PURCHASE, requirePro, useHasPro } from '@/stores/subscription-store';
+import { CAN_UPSELL, requirePro, useHasPro } from '@/stores/subscription-store';
 import { RouteMap, MAP_THEMES, type MapThemeKey } from '@/components/cardio/RouteMap';
 import { computeSplits } from '@/lib/cardio-analysis';
 import { compressImageFile } from '@/utils/image-compression';
@@ -1188,7 +1188,7 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
               <section className={tabVisibility('layout')}>
                 <ControlHeading>Template</ControlHeading>
                 <div className={`${hScroll} md:grid-cols-4`}>
-                  {LAYOUT_OPTIONS.filter(opt => CAN_PURCHASE || hasPro || !PRO_LAYOUTS.has(opt.id)).map(opt => {
+                  {LAYOUT_OPTIONS.filter(opt => CAN_UPSELL || hasPro || !PRO_LAYOUTS.has(opt.id)).map(opt => {
                     const selected = layout === opt.id;
                     return (
                       <button key={opt.id} type="button" onClick={() => setLayout(opt.id)} aria-pressed={selected} className="shrink-0 w-[62px] md:w-auto flex flex-col items-center gap-1.5 group">

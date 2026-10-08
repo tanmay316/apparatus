@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.core.config import settings  # noqa: E402
+from app.core.config import Settings, settings  # noqa: E402
 from app.services import subscription as subs  # noqa: E402
 
 failed = 0
@@ -65,9 +65,11 @@ check("push needs a bearer token", not play.verify_push(""))
 settings.PRO_EMAILS = "vip@example.com"
 check("comped email is pro", subs.get_entitlement("u1", "VIP@example.com")["pro"])
 
-# Quotas are off while billing is not configured.
-settings.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = ""
-check("no billing -> unlimited", subs.consume_quota("u1", "a@b.c", "coach_chat").allowed)
+# Quotas can be switched off entirely; otherwise they apply even before Play purchases are configured.
+settings.PRO_ENFORCED = False
+check("enforcement off -> unlimited", subs.consume_quota("u1", "a@b.c", "coach_chat").allowed)
+settings.PRO_ENFORCED = True
+check("enforced by default, independent of Play setup", Settings().pro_enforced and not Settings(GOOGLE_PLAY_SERVICE_ACCOUNT_JSON="").billing_enabled)
 
 detail = subs.QuotaResult(False, "food_scan", 3, 3, "day").detail()
 check("402 detail is machine readable", detail["code"] == "pro_required" and detail["kind"] == "food_scan")
@@ -99,7 +101,19 @@ check("unlimited coupon (max 0)", coupon_error({**free, "maxRedemptions": 0, "re
 check("expired coupon", "expired" in (coupon_error({**free, "expiresAt": now - 1}) or ""))
 check("one redemption per user", "already used" in (coupon_error(free, used=True) or ""))
 check("free coupon needs sane days", coupon_error({**free, "days": 0}) is not None)
-check("discount coupons are no longer ours (Play promo codes)", coupon_error({"type": "discount", "offerId": "offer_ABC123", "active": True}) is not None)
+check("Play offer-id coupons are not accepted", coupon_error({"type": "discount", "offerId": "offer_ABC123", "active": True}) is not None)
+disc = {"type": "discount", "basePlanId": "monthly-49", "active": True, "maxRedemptions": 5, "redeemedCount": 0}
+check("valid discount coupon", coupon_error(disc) is None)
+check("discount can't point at the regular plans", coupon_error({**disc, "basePlanId": "monthly"}) is not None)
+check("discount needs a Play-shaped plan id", coupon_error({**disc, "basePlanId": "Monthly 49"}) is not None)
+check("discount already applied can be bought again", coupon_error({**disc, "redeemedCount": 5}, used=True) is None)
+check("discount still capped for new users", "fully claimed" in (coupon_error({**disc, "redeemedCount": 5}) or ""))
+check("expired discount refused even if applied", "expired" in (coupon_error({**disc, "expiresAt": now - 1}, used=True) or ""))
+try:
+    subs.redeem_coupon("u1", None, "FREE30")
+    check("redeeming needs a verified email", False)
+except subs.CouponError as exc:
+    check("redeeming needs a verified email", "Verify" in str(exc))
 check("unknown coupon type", coupon_error({**free, "type": "lifetime"}) is not None)
 for code, ok in (("free30", True), ("  WELCOME-2026 ", True), ("ab", False), ("../x", False), ("A" * 40, False)):
     try:
@@ -117,7 +131,7 @@ if os.environ.get("FIRESTORE_EMULATOR_HOST"):
     subs.get_firestore_client = lambda: fs
 
 if fs:
-    settings.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = "{}"  # billing on
+    settings.PRO_ENFORCED = True
     uid = "fairuse1"
     fs.document(f"users/{uid}/private/entitlement").set({"status": "active", "currentPeriodEnd": None, "provider": "google_play"})
     fs.document(f"users/{uid}/private/usage").delete()
@@ -134,7 +148,6 @@ if fs:
     subs.consume_quota(free_uid, None, "food_scan")
     third = subs.consume_quota(free_uid, None, "food_scan")
     check("free user still capped at 2 with a 402-style result", not third.allowed and not third.pro)
-    settings.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = ""
 else:
     print("skip fair-use checks (no emulator)")
 

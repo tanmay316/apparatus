@@ -1,6 +1,6 @@
 import { Capacitor } from '@capacitor/core';
 import { NativePurchases, PURCHASE_TYPE } from '@capgo/native-purchases';
-import { verifyPlayPurchase, type ProPlan } from '@/services/billing';
+import { verifyPlayPurchase } from '@/services/billing';
 
 /** Pro is sold only through Google Play, so only the Android app can buy it. */
 export const PLAY_BILLING = Capacitor.getPlatform() === 'android';
@@ -12,16 +12,15 @@ export async function playAccountId(uid: string): Promise<string> {
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Localised prices from Google Play, keyed by base plan. */
-export async function loadPlayPrices(): Promise<Partial<Record<ProPlan, string>>> {
+/** Localised prices from Google Play, keyed by base plan id (monthly, yearly and any coupon plans). */
+export async function loadPlayPrices(): Promise<Record<string, string>> {
   const { isBillingSupported } = await NativePurchases.isBillingSupported();
   if (!isBillingSupported) return {};
   const { products } = await NativePurchases.getProducts({ productIdentifiers: [PRO_PRODUCT_ID], productType: PURCHASE_TYPE.SUBS });
-  const prices: Partial<Record<ProPlan, string>> = {};
+  const prices: Record<string, string> = {};
   // One entry per offer; the base offer (no offerId) carries the regular price.
   for (const p of [...products].sort((a, b) => Number(!!a.offerId) - Number(!!b.offerId))) {
-    const plan = p.identifier as ProPlan;
-    if ((plan === 'monthly' || plan === 'yearly') && !prices[plan]) prices[plan] = p.priceString;
+    if (p.identifier && !prices[p.identifier]) prices[p.identifier] = p.priceString;
   }
   return prices;
 }
@@ -31,11 +30,11 @@ export function isPurchaseCancelled(err: unknown): boolean {
   return msg.includes('cancel');
 }
 
-/** Opens the Google Play purchase sheet and unlocks Pro on the server. Returns whether Pro is active. */
-export async function buyPro(plan: ProPlan, uid: string): Promise<boolean> {
+/** Opens the Google Play purchase sheet for a base plan and unlocks Pro on the server. Returns whether Pro is active. */
+export async function buyPro(basePlan: string, uid: string): Promise<boolean> {
   const tx = await NativePurchases.purchaseProduct({
     productIdentifier: PRO_PRODUCT_ID,
-    planIdentifier: plan,
+    planIdentifier: basePlan,
     productType: PURCHASE_TYPE.SUBS,
     appAccountToken: await playAccountId(uid),
   });

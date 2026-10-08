@@ -1,10 +1,10 @@
-import { CAN_PURCHASE, requirePro, useHasPro } from '@/stores/subscription-store';
+import { CAN_UPSELL, requirePro, useHasPro } from '@/stores/subscription-store';
 import { BRAND } from '@/lib/brand';
 
 /** Compare is shown where it can be used or bought (hidden in store builds without Pro). */
 export const useCanCompare = () => {
   const hasPro = useHasPro();
-  return hasPro || CAN_PURCHASE;
+  return hasPro || CAN_UPSELL;
 };
 
 /** Opens the comparison, or the paywall for free users. */

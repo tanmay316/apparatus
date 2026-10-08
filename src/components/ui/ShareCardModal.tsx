@@ -12,7 +12,7 @@ import { Share } from '@capacitor/share';
 import { Capacitor } from '@capacitor/core';
 import { useUIStore } from '@/stores/ui-store';
 import { useAuthStore } from '@/stores/auth-store';
-import { CAN_PURCHASE, requirePro, useHasPro } from '@/stores/subscription-store';
+import { CAN_UPSELL, requirePro, useHasPro } from '@/stores/subscription-store';
 import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
 import {
   calculateShareVolume, getActiveMuscleScores, getActiveMusclesFromLogs, isWarmupOrCooldown, muscleFocus,
@@ -1027,7 +1027,7 @@ export function ShareCardModal({ data, onClose }: Props) {
               <section className={tabVisibility('layout')}>
                 <ControlHeading>Template</ControlHeading>
                 <div className={`${hScroll} md:grid-cols-4`}>
-                  {LAYOUT_OPTIONS.filter(opt => CAN_PURCHASE || hasPro || !PRO_LAYOUTS.has(opt.id)).map(opt => {
+                  {LAYOUT_OPTIONS.filter(opt => CAN_UPSELL || hasPro || !PRO_LAYOUTS.has(opt.id)).map(opt => {
                     const selected = layout === opt.id;
                     return (
                       <button key={opt.id} type="button" onClick={() => setLayout(opt.id)} aria-pressed={selected} className="shrink-0 w-[62px] md:w-auto flex flex-col items-center gap-1.5 group">

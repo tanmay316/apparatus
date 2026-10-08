@@ -8,6 +8,8 @@ export interface QuotaUsage { used: number; limit: number; period: 'day' | 'week
 
 export interface BillingStatus {
   enabled: boolean;
+  /** Google Play purchases can be verified by the server. */
+  purchasable?: boolean;
   plans: ProPlan[];
   play?: { productId: string; package: string };
   entitlement: { pro: boolean; plan?: string; status?: string; currentPeriodEnd?: number | null; subscriptionId?: string; provider?: string };
@@ -39,10 +41,13 @@ export const getBillingStatus = () => request<BillingStatus>('/status');
 export const verifyPlayPurchase = (purchaseToken: string) =>
   request<{ ok: boolean; pro: boolean }>('/play/verify', { method: 'POST', body: JSON.stringify({ purchase_token: purchaseToken }) });
 
-export interface CouponInfo { code: string; type: 'free'; label: string; days: number }
+/** `free` grants Pro days; `discount` unlocks a cheaper Google Play base plan for this account. */
+export interface CouponInfo { code: string; type: 'free' | 'discount'; label: string; days: number; plan: ProPlan | 'any'; basePlanId: string | null }
 
 export const checkCoupon = (code: string) =>
   request<CouponInfo>('/coupon/check', { method: 'POST', body: JSON.stringify({ code }) });
 
+export type RedeemResult = { ok: boolean } & ({ type: 'free'; days: number; until: number } | { type: 'discount'; basePlanId: string });
+
 export const redeemCoupon = (code: string) =>
-  request<{ ok: boolean; days: number; until: number }>('/coupon/redeem', { method: 'POST', body: JSON.stringify({ code }) });
+  request<RedeemResult>('/coupon/redeem', { method: 'POST', body: JSON.stringify({ code }) });

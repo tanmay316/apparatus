@@ -4,7 +4,7 @@ import { Send, Loader2, Bot, User, Sparkles, X, Camera, Paperclip, CheckCircle2,
 import { streamChatMessage, analyzeFood, logMeal, getChatSessions, getChatSessionMessages, deleteChatSession, wakeUpServer, getNutritionImage, hasTrackableNutrition, ApiError, type FoodAnalyzeResponse, type ChatSessionItem } from '@/services/nutrition-api';
 import { compressImageFile } from '@/utils/image-compression';
 import { useUIStore } from '@/stores/ui-store';
-import { CAN_PURCHASE, useHasPro, useSubscriptionStore } from '@/stores/subscription-store';
+import { CAN_UPSELL, useHasPro, useSubscriptionStore } from '@/stores/subscription-store';
 import NutritionResultCard from './NutritionResultCard';
 import CameraScanner from './CameraScanner';
 import { ChatMarkdown } from './ChatMarkdown';
@@ -93,7 +93,7 @@ function FreeAllowanceHint({ kind }: { kind: 'ai_call' | 'food_scan' }) {
   return (
     <div className="mb-1.5 px-2 flex items-center justify-between gap-2 text-[11.5px] dx-muted">
       <span className="tabular">{left} of {usage.limit} free {noun} left{usage.period === 'day' ? ' today' : usage.period === 'month' ? ' this month' : ''}</span>
-      {CAN_PURCHASE && <button type="button" onClick={() => openPaywall()} className="font-semibold" style={{ color: 'var(--dx-accent)' }}>Go Pro</button>}
+      {CAN_UPSELL && <button type="button" onClick={() => openPaywall()} className="font-semibold" style={{ color: 'var(--dx-accent)' }}>Go Pro</button>}
     </div>
   );
 }

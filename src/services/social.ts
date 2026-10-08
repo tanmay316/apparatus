@@ -241,6 +241,17 @@ export function subscribeFollowRequests(uid: string, onChange: (uids: string[]) 
   );
 }
 
+/** Live "do I follow them / is my request pending", so an accepted request shows without a refresh. */
+export function subscribeFollowState(
+  myUid: string,
+  targetUid: string,
+  on: { following: (v: boolean) => void; requested: (v: boolean) => void },
+): () => void {
+  const offFollowing = onSnapshot(doc(db, `followers/${myUid}/following`, targetUid), s => on.following(s.exists()), () => {});
+  const offRequest = onSnapshot(doc(db, `followers/${targetUid}/requests`, myUid), s => on.requested(s.exists()), () => {});
+  return () => { offFollowing(); offRequest(); };
+}
+
 export async function getFollowers(uid: string): Promise<string[]> {
   const snap = await getDocs(collection(db, `followers/${uid}/followers`));
   return snap.docs.map(d => d.id);

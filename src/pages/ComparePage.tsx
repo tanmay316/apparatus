@@ -9,7 +9,7 @@ import {
 import type { CardioActivityType } from '@/types';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { CAN_PURCHASE, useHasPro } from '@/stores/subscription-store';
+import { CAN_UPSELL, useHasPro } from '@/stores/subscription-store';
 import { historyQuery } from '@/services/history';
 import { CompareProRequiredError, loadCompareTarget, loadNutritionCompare } from '@/services/compare';
 import { compareAthletes, nutritionEdges, type Comparison, type Momentum, type NutritionSide } from '@/lib/athlete-compare';
@@ -357,7 +357,7 @@ export function ComparePage() {
     );
   } else if (target.access === 'stats_hidden') {
     content = <Notice icon={Lock} title={`${first} keeps their stats private`} text="They turned off “Show stats” in their privacy settings, so their training can't be compared." />;
-  } else if (!hasPro && !CAN_PURCHASE) {
+  } else if (!hasPro && !CAN_UPSELL) {
     content = <Notice icon={Crown} title={`Compare is part of ${BRAND.name} Pro`} text={`Get ${BRAND.name} Pro in the Android app to compare yourself with athletes you follow.`} />;
   } else if (comparison) {
     const noShared = target.workouts.length + target.cardio.length === 0;

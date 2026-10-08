@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
-import { CAN_PURCHASE, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
+import { CAN_PURCHASE, PRO_PRICE_LABEL, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
 import { checkCoupon, getBillingStatus, redeemCoupon, type CouponInfo, type ProPlan } from '@/services/billing';
 import { buyPro, isPurchaseCancelled, loadPlayPrices, restorePro } from '@/lib/play-billing';
 import { BRAND } from '@/lib/brand';
@@ -24,14 +24,14 @@ const FEATURES = [
 export function PaywallSheet() {
   const { open, reason } = useSubscriptionStore(s => s.paywall);
   const close = useSubscriptionStore(s => s.closePaywall);
-  const plans = useSubscriptionStore(s => s.enabled);
+  const plans = useSubscriptionStore(s => s.enabled && s.purchasable);
   const isPro = useIsPro();
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
-  const [plan, setPlan] = useState<ProPlan>('yearly');
+  const [plan, setPlan] = useState<ProPlan>('monthly');
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [prices, setPrices] = useState<Partial<Record<ProPlan, string>> | null>(null);
+  const [prices, setPrices] = useState<Record<string, string> | null>(null);
   const [showCoupon, setShowCoupon] = useState(false);
   const [code, setCode] = useState('');
   const [coupon, setCoupon] = useState<CouponInfo | null>(null);
@@ -42,12 +42,23 @@ export function PaywallSheet() {
     if (CAN_PURCHASE && plans && !prices) loadPlayPrices().then(setPrices).catch(() => setPrices({}));
   }, [open, plans, prices]);
 
+  // Only plans Google Play actually sells are offered (yearly is optional in Play Console).
+  const planOptions = (['monthly', 'yearly'] as ProPlan[]).filter(p => prices === null ? p === 'monthly' : !!prices[p]);
+  useEffect(() => {
+    if (prices && !prices[plan] && prices.monthly) setPlan('monthly');
+  }, [prices, plan]);
+
   const applyCoupon = async () => {
     const trimmed = code.trim().toUpperCase();
     if (trimmed.length < 3) return;
     setCouponBusy(true);
     try {
-      setCoupon(await checkCoupon(trimmed));
+      const info = await checkCoupon(trimmed);
+      if (info.type === 'discount' && !(CAN_PURCHASE && plans)) {
+        showToast('This discount works in the Android app from Google Play.', 'info');
+        return;
+      }
+      setCoupon(info);
     } catch (err: any) {
       setCoupon(null);
       showToast(err?.message || 'That code isn\'t valid.', 'error');
@@ -58,9 +69,19 @@ export function PaywallSheet() {
 
   const redeemFree = async () => {
     if (!coupon) return;
+    // Play would silently fall back to the full-price plan if the discounted one isn't live.
+    if (coupon.type === 'discount' && !couponPrice) {
+      showToast('This discount isn\'t available on Google Play yet. Please try again later.', 'error');
+      return;
+    }
     setCouponBusy(true);
     try {
       const res = await redeemCoupon(coupon.code);
+      if (res.type === 'discount') {
+        setCouponBusy(false);
+        await checkout(res.basePlanId);
+        return;
+      }
       const until = new Date(res.until * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
       showToast(`Pro unlocked until ${until}. Enjoy!`, 'success');
       getBillingStatus().then(useSubscriptionStore.getState().setStatus).catch(() => {});
@@ -74,11 +95,11 @@ export function PaywallSheet() {
 
   const refreshStatus = () => getBillingStatus().then(useSubscriptionStore.getState().setStatus).catch(() => {});
 
-  const checkout = async () => {
+  const checkout = async (basePlan: string = plan) => {
     if (!user) return;
     setBusy(true);
     try {
-      const pro = await buyPro(plan, user.uid);
+      const pro = await buyPro(basePlan, user.uid);
       refreshStatus();
       if (pro) {
         showToast(`Welcome to ${BRAND.name} Pro!`, 'success');
@@ -108,6 +129,7 @@ export function PaywallSheet() {
   };
 
   const price = prices?.[plan];
+  const couponPrice = coupon?.basePlanId ? prices?.[coupon.basePlanId] : undefined;
 
   return createPortal(
     <AnimatePresence>
@@ -166,8 +188,8 @@ export function PaywallSheet() {
               ) : (
                 <>
                   {CAN_PURCHASE && plans && (
-                  <div className="mt-5 grid grid-cols-2 gap-2.5" role="radiogroup" aria-label="Plan">
-                    {(['yearly', 'monthly'] as ProPlan[]).map(p => {
+                  <div className={`mt-5 grid gap-2.5 ${planOptions.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`} role="radiogroup" aria-label="Plan">
+                    {planOptions.map(p => {
                       const selected = plan === p;
                       const amount = prices?.[p];
                       return (
@@ -184,7 +206,7 @@ export function PaywallSheet() {
                             background: selected ? 'var(--dx-accent-soft)' : 'var(--dx-card-2)',
                           }}
                         >
-                          {p === 'yearly' && (
+                          {p === 'yearly' && planOptions.length > 1 && (
                             <span className="dx-pill dx-pill--accent absolute -top-2.5 right-3 !h-5 !text-[10px]">Best value</span>
                           )}
                           <span className="block text-[12px] dx-muted font-semibold uppercase tracking-wide">{p === 'yearly' ? 'Yearly' : 'Monthly'}</span>
@@ -209,7 +231,7 @@ export function PaywallSheet() {
                         <div className="min-w-0 flex-1">
                           <div className="text-[13px] font-semibold font-mono">{coupon.code}</div>
                           <div className="text-[12px] dx-muted leading-snug">
-                            {coupon.label || `${coupon.days} days of Pro, free`}
+                            {coupon.label || (coupon.type === 'discount' ? `Discounted Pro${couponPrice ? ` · ${couponPrice}/${coupon.plan === 'yearly' ? 'year' : 'month'}` : ''}` : `${coupon.days} days of Pro, free`)}
                           </div>
                         </div>
                         <button type="button" onClick={() => { setCoupon(null); setCode(''); }} aria-label="Remove coupon" className="dx-icon-btn dx-icon-btn--sm !w-8 !h-8">
@@ -237,16 +259,24 @@ export function PaywallSheet() {
                   </div>
 
                   {coupon ? (
-                    <button type="button" onClick={redeemFree} disabled={couponBusy} className="dx-btn w-full mt-4 !h-12 !text-[15px]">
-                      {couponBusy ? <Loader2 size={18} className="animate-spin" /> : <Crown size={17} />}
-                      {couponBusy ? 'Unlocking…' : `Redeem · ${coupon.days} days of Pro free`}
+                    <button type="button" onClick={redeemFree} disabled={couponBusy || busy} className="dx-btn w-full mt-4 !h-12 !text-[15px]">
+                      {couponBusy || busy ? <Loader2 size={18} className="animate-spin" /> : <Crown size={17} />}
+                      {coupon.type === 'discount'
+                        ? (busy ? 'Opening Google Play…' : `Get Pro${couponPrice ? ` · ${couponPrice}/${coupon.plan === 'yearly' ? 'year' : 'month'}` : ' with this discount'}`)
+                        : (couponBusy ? 'Unlocking…' : `Redeem · ${coupon.days} days of Pro free`)}
                     </button>
                   ) : CAN_PURCHASE && plans ? (
-                    <button type="button" onClick={checkout} disabled={busy || !price} className="dx-btn w-full mt-4 !h-12 !text-[15px]">
+                    <button type="button" onClick={() => checkout()} disabled={busy || !price} className="dx-btn w-full mt-4 !h-12 !text-[15px]">
                       {busy ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={17} />}
                       {busy ? 'Opening Google Play…' : price ? `Get Pro · ${price}/${plan === 'yearly' ? 'year' : 'month'}` : 'Get Pro'}
                     </button>
-                  ) : null}
+                  ) : (
+                    <p className="mt-4 dx-inset p-3 text-[12.5px] dx-muted leading-snug">
+                      {CAN_PURCHASE
+                        ? `Subscriptions (${PRO_PRICE_LABEL}) open very soon. Have a code? Redeem it above.`
+                        : `Get ${BRAND.name} Pro for ${PRO_PRICE_LABEL} in our Android app on Google Play. It unlocks Pro here too. Have a code? Redeem it above.`}
+                    </p>
+                  )}
                   {CAN_PURCHASE && plans && (
                     <>
                       <p className="mt-3 text-center text-[11.5px] dx-muted leading-snug">

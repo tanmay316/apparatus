@@ -12,6 +12,7 @@ import { getPublicActivities, searchUsers } from '@/services/social';
 import { getPublicPlans, getSamplePlans } from '@/services/plans';
 import { COMPACT_LIBRARY } from '@/services/library';
 import { getAvatarUrl } from '@/lib/avatar';
+import { ProRing } from '@/components/subscription/ProEntry';
 import {
   QUICK_LINKS, addRecentSearch, clearRecentSearches, createSearchIndex, getRecentSearches, highlightParts, normalizeQuery, removeRecentSearch, searchQuickLinks,
   type Hit, type QuickLink,
@@ -165,7 +166,7 @@ export function SearchPage() {
       to={`/profile/${u.username || u.uid}`}
       onClick={remember}
       query={query}
-      leading={<img src={u.photoURL || getAvatarUrl(u.displayName, theme)} alt="" className="w-11 h-11 rounded-full object-cover" referrerPolicy="no-referrer" />}
+      leading={<ProRing pro={!!u.proBadge} crown={11}><img src={u.photoURL || getAvatarUrl(u.displayName, theme)} alt="" className="w-11 h-11 rounded-full object-cover" referrerPolicy="no-referrer" /></ProRing>}
       title={u.displayName || 'Athlete'}
       subtitle={`@${u.username || 'athlete'}${u.athleteRank?.label ? ` · ${u.athleteRank.label}` : ''}`}
     />

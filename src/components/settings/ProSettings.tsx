@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Crown, ExternalLink, Loader2, RotateCcw, Sparkles, Ticket } from 'lucide-react';
 import { SettingRow, SettingsSection } from '@/components/settings/SettingsLayout';
-import { CAN_PURCHASE, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
+import { CAN_PURCHASE, CAN_UPSELL, PRO_PRICE_LABEL, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getBillingStatus } from '@/services/billing';
 import { manageProSubscription, restorePro } from '@/lib/play-billing';
@@ -44,13 +44,13 @@ export function ProSettings() {
   };
 
   return (
-    <SettingsSection id="pro" title={`${BRAND.name} Pro`} description={isPro || CAN_PURCHASE ? 'Unlimited AI coaching, plans, food scans and every share template.' : 'Your plan and free AI allowance.'}>
+    <SettingsSection id="pro" title={`${BRAND.name} Pro`} description={isPro || CAN_UPSELL ? 'Unlimited AI coaching, plans, food scans and every share template.' : 'Your plan and free AI allowance.'}>
       <SettingRow
         label={isPro ? `${planLabel} plan` : 'Free plan'}
         description={isPro
           ? comped ? 'Pro is on the house for this account.'
             : renews ? (viaCoupon ? `Free Pro until ${renews}` : cancelled ? `Cancelled · Pro until ${renews}` : `Renews on ${renews}`) : 'Active'
-          : CAN_PURCHASE ? 'Monthly or yearly, billed through Google Play.' : 'Have a code? Redeem it here.'}
+          : CAN_PURCHASE ? `${PRO_PRICE_LABEL}, billed through Google Play. Cancel anytime.` : CAN_UPSELL ? `${PRO_PRICE_LABEL} in the Android app, or redeem a code.` : 'Have a code? Redeem it here.'}
       >
         {isPro ? (
           <span className="dx-pill dx-pill--accent !h-7 !px-3"><Crown size={12} /> Pro</span>
@@ -59,7 +59,7 @@ export function ProSettings() {
             <button type="button" onClick={() => openPaywall(undefined, { redeem: true })} className="dx-btn-secondary !h-9 !px-3.5 !text-[13px]">
               <Ticket size={14} /> Redeem code
             </button>
-            {CAN_PURCHASE && (
+            {CAN_UPSELL && (
               <button type="button" onClick={() => openPaywall()} className="dx-btn !h-9 !px-4 !text-[13px]">
                 <Sparkles size={15} /> Upgrade
               </button>

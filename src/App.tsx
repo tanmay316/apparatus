@@ -11,6 +11,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { safeInternalPath } from '@/lib/validation';
 import { subscribeToNotifications } from '@/services/social';
+import { refreshForNotification } from '@/lib/notification-sync';
 import { 
   requestNotificationPermission, 
   scheduleWorkoutReminders,
@@ -294,6 +295,7 @@ function PreferencesSync() {
         queryClient.setQueryData(['notifications', user.uid], notes);
       },
       (newNote) => {
+        refreshForNotification(queryClient, newNote, user.uid);
         if (!newNote.read) {
           // Suppress notification if user is actively looking at this clan's chat page
           if (newNote.type === 'clan_message' && newNote.extra?.clanId) {
@@ -341,6 +343,7 @@ function PreferencesSync() {
       snap.docChanges().forEach((change) => {
         if (change.type === 'added') {
           const notif = change.doc.data() as AppNotificationItem;
+          refreshForNotification(queryClient, notif as any, user.uid);
           const createdAtMillis = notif.createdAt && typeof (notif.createdAt as any).toMillis === 'function'
             ? (notif.createdAt as any).toMillis()
             : ((notif.createdAt as any)?.seconds ? (notif.createdAt as any).seconds * 1000 : 0);

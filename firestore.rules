@@ -641,6 +641,10 @@ service cloud.firestore {
       allow create, update: if isAdmin()
         && code.matches('[A-Z0-9][A-Z0-9_-]{2,31}')
         && request.resource.data.type in ['free', 'discount']
+        && (request.resource.data.type == 'free'
+          || (request.resource.data.get('basePlanId', '') is string
+            && request.resource.data.get('basePlanId', '').matches('[a-z0-9][a-z0-9-]{0,62}')
+            && !(request.resource.data.get('basePlanId', '') in ['monthly', 'yearly'])))
         && request.resource.data.get('label', '') is string
         && request.resource.data.get('label', '').size() <= 120;
       match /redemptions/{uid} {

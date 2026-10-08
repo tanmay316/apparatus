@@ -51,7 +51,8 @@ async def billing_status(current_user: dict = Depends(get_current_user)):
     for private in ("couponCode", "checkedAt"):
         entitlement.pop(private, None)
     return {
-        "enabled": settings.billing_enabled,
+        "enabled": settings.pro_enforced,
+        "purchasable": settings.billing_enabled,
         "plans": list(subs.PLANS) if settings.billing_enabled else [],
         "play": {"productId": settings.GOOGLE_PLAY_PRO_PRODUCT_ID, "package": settings.GOOGLE_PLAY_PACKAGE},
         "entitlement": entitlement,
@@ -113,7 +114,7 @@ async def redeem_coupon(req: CouponRequest, current_user: dict = Depends(get_cur
     uid = current_user["uid"]
     _limit(uid, "coupon", 10, 600)
     try:
-        result = await asyncio.to_thread(subs.redeem_free_coupon, uid, subs.verified_email(current_user), req.code)
+        result = await asyncio.to_thread(subs.redeem_coupon, uid, subs.verified_email(current_user), req.code)
     except subs.CouponError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception:

@@ -113,6 +113,12 @@ def cancel(token: str) -> None:
     _api("POST", f"/purchases/subscriptions/{product}/tokens/{quote(token, safe='')}:cancel", {})
 
 
+def revoke(token: str) -> None:
+    """Refunds the purchase and ends it immediately."""
+    product = quote(settings.GOOGLE_PLAY_PRO_PRODUCT_ID, safe="")
+    _api("POST", f"/purchases/subscriptions/{product}/tokens/{quote(token, safe='')}:revoke", {})
+
+
 def _epoch(value) -> Optional[float]:
     if not value or not isinstance(value, str):
         return None
@@ -131,6 +137,7 @@ def parse(sub: dict) -> dict:
     return {
         "status": STATES.get(str(sub.get("subscriptionState")), "expired"),
         "plan": base_plan if base_plan in subs.PLANS else "monthly",
+        "base_plan": base_plan,
         "end": _epoch(line.get("expiryTime")),
         "acknowledged": sub.get("acknowledgementState") == "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED",
         "account": str(((sub.get("externalAccountIdentifiers") or {}).get("obfuscatedExternalAccountId")) or ""),
@@ -198,10 +205,32 @@ def save(uid: str, token: str, sub: dict) -> dict:
     return entitlement
 
 
+def _bound_to(token: str) -> Optional[str]:
+    db = get_firestore_client()
+    snap = db.collection("play_purchases").document(token_key(token)).get() if db else None
+    return (snap.to_dict() or {}).get("uid") if snap and snap.exists else None
+
+
 def verify_purchase(uid: str, token: str) -> dict:
     if not TOKEN_RE.match(token or ""):
         raise PlayError(400, "This purchase could not be verified.")
-    return save(uid, token, fetch(token))
+    sub = fetch(token)
+    info = parse(sub)
+    # Discounted base plans are only for accounts that redeemed the matching coupon. The plan is
+    # visible to every client, so a purchase of it without the coupon is refunded, never honoured.
+    if info["base_plan"] not in subs.PLANS:
+        if info["account"] and info["account"] != account_id(uid):
+            raise PlayError(403, "This purchase belongs to a different account.")
+        owner = _bound_to(token)
+        if owner and owner != uid:
+            raise PlayError(403, "This purchase belongs to a different account.")
+        if not owner and not subs.coupon_allows_plan(uid, info["base_plan"]):
+            try:
+                revoke(token)
+            except PlayError as exc:
+                logger.error("Revoking an unentitled discount purchase failed for %s: %s", uid, exc.message)
+            raise PlayError(403, "That price needs a coupon on your account, so the purchase was refunded.")
+    return save(uid, token, sub)
 
 
 def refresh_if_stale(uid: str) -> None:
@@ -267,6 +296,9 @@ def handle_notification(envelope: dict) -> None:
         linked = str(sub.get("linkedPurchaseToken") or "")
         prev = db.collection("play_purchases").document(token_key(linked)).get() if linked else None
         uid = (prev.to_dict() or {}).get("uid") if prev and prev.exists else None
+        if uid and parse(sub)["base_plan"] not in subs.PLANS and not subs.coupon_allows_plan(uid, parse(sub)["base_plan"]):
+            logger.warning("Plan change to a coupon-only plan without a coupon for %s; left for /play/verify", uid)
+            return
     if not uid:
         logger.info("Play notification for an unknown purchase; the app will verify it")
         return

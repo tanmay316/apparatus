@@ -115,11 +115,23 @@ public final class WorkoutLocationService extends Service {
     /** Rises steeper than this over the horizontal run are GPS jumps, not terrain. */
     private static final double ELEVATION_MAX_GRADE = 0.35;
     private static final float MAX_VERTICAL_ACCURACY_M = 12f;
-    private long lastMovementTimeMs = 0L;
+    private volatile long lastMovementTimeMs = 0L;
     private final GpsKalmanFilter gpsKalman = new GpsKalmanFilter();
 
     private HandlerThread locationThread;
     private Handler locationHandler;
+    private HandlerThread liveSyncThread;
+    private Handler liveSyncHandler;
+
+    private final Runnable liveSyncTicker = new Runnable() {
+        @Override
+        public void run() {
+            long sinceMovement = System.currentTimeMillis() - lastMovementTimeMs;
+            LiveSessionSync.tick(getSharedPreferences(PREFS, MODE_PRIVATE),
+                    lastMovementTimeMs > 0L && sinceMovement >= AUTO_PAUSE_TIMEOUT_MS);
+            if (liveSyncHandler != null) liveSyncHandler.postDelayed(this, LiveSessionSync.TICK_MS);
+        }
+    };
 
     private final Runnable notificationTicker = new Runnable() {
         @Override
@@ -141,6 +153,11 @@ public final class WorkoutLocationService extends Service {
         locationThread = new HandlerThread("WorkoutLocationThread", Process.THREAD_PRIORITY_BACKGROUND);
         locationThread.start();
         locationHandler = new Handler(locationThread.getLooper());
+
+        liveSyncThread = new HandlerThread("WorkoutLiveSyncThread", Process.THREAD_PRIORITY_BACKGROUND);
+        liveSyncThread.start();
+        liveSyncHandler = new Handler(liveSyncThread.getLooper());
+        liveSyncHandler.postDelayed(liveSyncTicker, LiveSessionSync.TICK_MS);
 
         fusedClient = LocationServices.getFusedLocationProviderClient(this);
         database = new WorkoutLocationDatabase(this);
@@ -363,6 +380,7 @@ public final class WorkoutLocationService extends Service {
         getSharedPreferences(PREFS, MODE_PRIVATE).edit()
                 .putString(KEY_STATE, "STOPPED")
                 .apply();
+        LiveSessionSync.clear();
         removeFusedLocationUpdates();
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         stopForeground(STOP_FOREGROUND_REMOVE);
@@ -854,6 +872,13 @@ public final class WorkoutLocationService extends Service {
         if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
         if (locationThread != null) {
             locationThread.quitSafely();
+        }
+        if (liveSyncHandler != null) {
+            liveSyncHandler.removeCallbacks(liveSyncTicker);
+            liveSyncHandler = null;
+        }
+        if (liveSyncThread != null) {
+            liveSyncThread.quitSafely();
         }
         super.onDestroy();
     }

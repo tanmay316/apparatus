@@ -37,12 +37,20 @@ def raises(fn, status=None):
         return status is None or exc.status == status
 
 
+def _ok(fn):
+    try:
+        fn()
+        return True
+    except subs.CouponError:
+        return False
+
+
 db = firestore.Client(project="demo-apparatus", credentials=AnonymousCredentials())
 for mod in (play, subs):
     mod.get_firestore_client = lambda: db
 settings.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = "{}"
 settings.GOOGLE_PLAY_PRO_PRODUCT_ID = "pro"
-for coll in ("play_purchases", "users"):
+for coll in ("play_purchases", "users", "coupons"):
     for d in db.collection(coll).stream():
         for sub in d.reference.collections():
             for x in sub.stream():
@@ -54,6 +62,7 @@ iso = lambda t: datetime.fromtimestamp(t, tz=timezone.utc).isoformat().replace("
 purchases: dict[str, dict] = {}
 acks: list[str] = []
 cancels: list[str] = []
+revokes: list[str] = []
 
 
 def fake_api(method, path, body=None):
@@ -67,6 +76,9 @@ def fake_api(method, path, body=None):
         purchases[token]["acknowledgementState"] = "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED"
     if path.endswith(":cancel"):
         cancels.append(token)
+    if path.endswith(":revoke"):
+        revokes.append(token)
+        purchases[token]["subscriptionState"] = "SUBSCRIPTION_STATE_EXPIRED"
     return {}
 
 
@@ -149,5 +161,24 @@ T5 = "tok_dan_pending_payment_000000"
 make(T5, "dan", state="SUBSCRIPTION_STATE_PENDING")
 check("pending payment is not Pro", not play.verify_purchase("dan", T5)["pro"])
 check("pending purchase not acknowledged", T5 not in acks)
+
+# Discount coupons: a cheaper base plan only for accounts that redeemed the code
+db.collection("coupons").document("HALF").set({
+    "type": "discount", "basePlanId": "monthly-49", "plan": "monthly", "label": "Half price",
+    "active": True, "maxRedemptions": 1, "redeemedCount": 0})
+T6 = "tok_frank_discount_no_coupon_00"
+make(T6, "frank", plan="monthly-49")
+check("discount plan without coupon is refused", raises(lambda: play.verify_purchase("frank", T6), 403))
+check("...and refunded", T6 in revokes and not ent("frank").get("pro"))
+check("unverified email can't redeem", not _ok(lambda: subs.redeem_coupon("erin", None, "HALF")))
+res = subs.redeem_coupon("erin", "erin@example.com", "HALF")
+check("redeeming a discount reserves the plan", res == {"type": "discount", "basePlanId": "monthly-49"})
+check("reserving doesn't grant Pro by itself", not ent("erin").get("pro"))
+check("redeeming again is fine (retry purchase)", subs.redeem_coupon("erin", "erin@example.com", "HALF")["basePlanId"] == "monthly-49")
+check("single-use code is now claimed for others", not _ok(lambda: subs.redeem_coupon("gina", "gina@example.com", "HALF")))
+T7 = "tok_erin_discount_with_coupon_0"
+make(T7, "erin", plan="monthly-49")
+check("discount plan with coupon grants Pro", play.verify_purchase("erin", T7)["pro"] and T7 not in revokes)
+check("someone else can't claim erin's discount token", raises(lambda: play.verify_purchase("frank", T7), 403) and T7 not in revokes)
 
 sys.exit(1 if failed else 0)

@@ -593,7 +593,7 @@ async def compare_nutrition(
     rate = check_rate_limit(f"{uid}:nutrition-compare", limit=30, window_seconds=600)
     if not rate.allowed:
         raise HTTPException(status_code=429, detail=rate.message)
-    if settings.billing_enabled and not await asyncio.to_thread(is_pro, uid, verified_email(current_user)):
+    if settings.pro_enforced and not await asyncio.to_thread(is_pro, uid, verified_email(current_user)):
         raise HTTPException(status_code=402, detail={
             "code": "pro_required", "kind": "compare", "limit": 0, "period": "day",
             "message": f"Comparing with athletes you follow is part of {settings.APP_NAME} Pro.",

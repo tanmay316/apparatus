@@ -11,7 +11,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
 import { useUserWeight } from '@/hooks/use-user-weight';
-import { followUser, unfollowUser, isFollowing, hasRequestedFollow, removeFollower, acceptFollowRequest, declineFollowRequest, subscribeFollowRequests, getFollowCounts, getFollowers, getFollowing, getUsersByUids, getBookmarkedActivities, getUserFeedActivities } from '@/services/social';
+import { followUser, unfollowUser, isFollowing, hasRequestedFollow, removeFollower, acceptFollowRequest, declineFollowRequest, subscribeFollowRequests, subscribeFollowState, getFollowCounts, getFollowers, getFollowing, getUsersByUids, getBookmarkedActivities, getUserFeedActivities } from '@/services/social';
 import type { Activity as ActivityType, UserProfile, UserStats } from '@/types';
 import { createReport } from '@/services/admin';
 import { getPublicWorkoutsForUser, getUserWorkouts } from '@/services/workouts';
@@ -34,6 +34,8 @@ import { MedalShareModal } from '@/components/community/MedalShareModal';
 import { uploadAvatar, uploadProfileCover } from '@/services/account';
 import { openCompare, useCanCompare } from '@/lib/compare-nav';
 import { ProBadge } from '@/components/insights/ProLock';
+import { ProProfileCard, ProRing } from '@/components/subscription/ProEntry';
+import { useIsPro } from '@/stores/subscription-store';
 import { BRAND } from '@/lib/brand';
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -62,6 +64,29 @@ function AnimatedCounter({ value, suffix = '' }: { value: number; suffix?: strin
   }, [value]);
 
   return <span>{displayed.toLocaleString()}{suffix}</span>;
+}
+
+/** Mirrors the follow edge and pending request into the query cache live; reloads follower-only content once accepted. */
+function useLiveFollowState(myUid?: string, targetUid?: string) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!myUid || !targetUid || myUid === targetUid) return;
+    return subscribeFollowState(myUid, targetUid, {
+      following: v => {
+        const key = ['isFollowing', myUid, targetUid];
+        const prev = queryClient.getQueryData<boolean>(key);
+        queryClient.setQueryData(key, v);
+        if (prev === undefined || prev === v) return;
+        for (const k of ['followCounts', 'userClans', 'userEvents', 'userSkills', 'userCommunityBadges', 'followList']) {
+          queryClient.invalidateQueries({ queryKey: [k, targetUid] });
+        }
+        queryClient.invalidateQueries({ queryKey: ['followCounts', myUid] });
+        queryClient.invalidateQueries({ queryKey: ['following'] });
+        queryClient.invalidateQueries({ queryKey: ['feed'] });
+      },
+      requested: v => queryClient.setQueryData(['hasRequestedFollow', myUid, targetUid], v),
+    });
+  }, [myUid, targetUid, queryClient]);
 }
 
 export function ProfilePage() {
@@ -162,6 +187,17 @@ export function ProfilePage() {
     queryFn: () => isFollowing(myProfile!.uid, viewProfile!.uid),
     enabled: !!myProfile?.uid && !!viewProfile?.uid && !isOwnProfile,
   });
+  useLiveFollowState(myProfile?.uid, isOwnProfile ? undefined : viewProfile?.uid);
+  const isProMember = useIsPro();
+
+  // Stats are follower-only on private profiles; load them as soon as a request is accepted.
+  useEffect(() => {
+    const uid = viewProfile?.uid;
+    if (!isFollowingProfile || isOwnProfile || !uid || viewStats) return;
+    getDoc(doc(db, 'users', uid, 'stats', 'current'))
+      .then(s => { if (s.exists()) setViewStats(s.data() as UserStats); })
+      .catch(() => {});
+  }, [isFollowingProfile, isOwnProfile, viewProfile?.uid, viewStats]);
 
   const { data: activePlan } = useQuery({
     queryKey: ['plan', viewProfile?.activePlanId],
@@ -529,6 +565,7 @@ export function ProfilePage() {
 
   const isPrivateAccount = getProfileVisibility(viewProfile) !== 'public';
   const isLocked = !isOwnProfile && isPrivateAccount && !isFollowingProfile;
+  const showProRing = isOwnProfile ? isProMember : !!p.proBadge;
   const showClans = (isOwnProfile || viewProfile.privacySettings?.showClansToFollowers !== false) && userClans.length > 0;
   const showEvents = (isOwnProfile || viewProfile.privacySettings?.showEventsToFollowers !== false) && userEvents.length > 0;
   const mobileSections = [
@@ -605,7 +642,7 @@ export function ProfilePage() {
                   <motion.circle
                     cx="52" cy="52" r={radius + 10}
                     strokeWidth="3.5" fill="transparent" strokeLinecap="round"
-                    style={{ stroke: 'var(--dx-accent)' }}
+                    style={{ stroke: showProRing ? '#f5b544' : 'var(--dx-accent)' }}
                     strokeDasharray={2 * Math.PI * (radius + 10)}
                     initial={{ strokeDashoffset: 2 * Math.PI * (radius + 10) }}
                     animate={{ strokeDashoffset: 2 * Math.PI * (radius + 10) * (1 - completionPercent / 100) }}
@@ -615,12 +652,17 @@ export function ProfilePage() {
                 <img
                   src={p.photoURL || (isOwnProfile ? currentUser?.photoURL : '') || getAvatarUrl(p.displayName, theme, 96)}
                   alt={p.displayName}
-                  className="absolute inset-[9px] w-[86px] h-[86px] rounded-full object-cover"
+                  className={`absolute inset-[9px] w-[86px] h-[86px] rounded-full object-cover ${showProRing ? 'pro-avatar-glow' : ''}`}
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     (e.target as HTMLImageElement).src = getAvatarUrl(p.displayName, theme, 96);
                   }}
                 />
+                {showProRing && (
+                  <span className="pro-ring-crown !right-1 !bottom-auto top-1" style={{ width: 26, height: 26 }} title={`${BRAND.name} Pro member`}>
+                    <Crown size={14} strokeWidth={2.6} />
+                  </span>
+                )}
                 <span
                   className="absolute -bottom-1 left-1/2 -translate-x-1/2 dx-pill !h-6 !px-2.5 tabular"
                   style={{ background: 'var(--dx-accent)', color: 'var(--dx-on-accent)', boxShadow: '0 0 0 3px var(--dx-card)' }}
@@ -672,7 +714,7 @@ export function ProfilePage() {
                   <span>{athleteRank?.label || p.athleteRank?.label || 'Beginner'}</span>
                   <ChevronRight size={11} className="opacity-70 group-hover:translate-x-0.5 transition-transform" />
                 </Link>
-                {p.proBadge && (
+                {showProRing && (
                   <span className="dx-pill" style={{ background: 'rgba(245, 179, 1, 0.14)', color: '#c98a1f' }} title={`${BRAND.name} Pro member`}>
                     <Crown size={11} /> Pro
                   </span>
@@ -718,6 +760,8 @@ export function ProfilePage() {
                 </>
               )}
             </div>
+
+            {isOwnProfile && <ProProfileCard />}
 
             {!isOwnProfile && isFollowingProfile && canCompare && (
               <button
@@ -1680,15 +1724,17 @@ function FollowListModal({ uid, requestIds, type, isOpen, onClose }: { uid: stri
                   {users.map(u => (
                     <div key={u.uid} className="flex items-center justify-between p-2 rounded-2xl hover:bg-[var(--card)] transition-colors group">
                       <Link to={`/profile/${u.username || u.uid}`} onClick={onClose} className="flex items-center gap-3 flex-1 min-w-0 pr-4">
-                        <img
-                          src={u.photoURL || getAvatarUrl(u.displayName, theme)}
-                          alt={u.displayName}
-                          className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm"
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = getAvatarUrl(u.displayName, theme);
-                          }}
-                        />
+                        <ProRing pro={!!u.proBadge} crown={12}>
+                          <img
+                            src={u.photoURL || getAvatarUrl(u.displayName, theme)}
+                            alt={u.displayName}
+                            className="w-12 h-12 rounded-full object-cover border border-[var(--border)] shadow-sm"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = getAvatarUrl(u.displayName, theme);
+                            }}
+                          />
+                        </ProRing>
                         <div className="flex-1 min-w-0">
                           <div className="font-bold text-[14px] truncate text-[var(--text)] group-hover:underline">{u.displayName}</div>
                           <div className="text-xs text-[var(--muted)] font-mono truncate">@{u.username}</div>

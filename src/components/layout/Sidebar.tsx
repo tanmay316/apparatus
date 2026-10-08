@@ -16,6 +16,8 @@ import { usePayoutAccount } from '@/components/market/CheckoutButton';
 import { useMarketPartner } from '@/components/market/use-market-partner';
 import { lockBodyScroll } from '@/lib/scroll-lock';
 import { BRAND } from '@/lib/brand';
+import { ProRing, ProSidebarItem } from '@/components/subscription/ProEntry';
+import { useIsPro } from '@/stores/subscription-store';
 
 export const SIDEBAR_WIDTH = 256;
 
@@ -55,6 +57,7 @@ function SidebarContent({ onClose, docked }: { onClose?: () => void; docked?: bo
   const adminUnread = useUnreadAdminAlerts();
   const hasPayout = !!usePayoutAccount(user?.uid);
   const isSeller = !!useMarketPartner() || hasPayout;
+  const isPro = useIsPro();
 
   const go = (path: string) => { onClose?.(); navigate(path); };
 
@@ -91,13 +94,15 @@ function SidebarContent({ onClose, docked }: { onClose?: () => void; docked?: bo
           onClick={onClose}
           className="mx-3 mb-3 flex items-center gap-3 p-3 rounded-2xl bg-bone/[0.04] border border-line/60 hover:border-sienna/30 transition-colors shrink-0"
         >
-          <img
-            src={profile.photoURL || user?.photoURL || getAvatarUrl(profile.displayName, theme)}
-            alt=""
-            className="w-10 h-10 rounded-full object-cover shrink-0"
-            referrerPolicy="no-referrer"
-            onError={e => { (e.target as HTMLImageElement).src = getAvatarUrl(profile.displayName, theme); }}
-          />
+          <ProRing pro={isPro} crown={12}>
+            <img
+              src={profile.photoURL || user?.photoURL || getAvatarUrl(profile.displayName, theme)}
+              alt=""
+              className="w-10 h-10 rounded-full object-cover shrink-0"
+              referrerPolicy="no-referrer"
+              onError={e => { (e.target as HTMLImageElement).src = getAvatarUrl(profile.displayName, theme); }}
+            />
+          </ProRing>
           <div className="min-w-0 flex-1">
             <div className="text-sm font-semibold text-bone truncate">{profile.displayName}</div>
             <div className="text-[11px] text-bone-dim truncate">
@@ -135,6 +140,7 @@ function SidebarContent({ onClose, docked }: { onClose?: () => void; docked?: bo
       </nav>
 
       <div className="border-t border-line/60 p-3 space-y-0.5 shrink-0">
+        <ProSidebarItem onNavigate={onClose} />
         <NavLink item={SETTINGS_ITEM} active={isNavItemActive(SETTINGS_ITEM, pathname)} onNavigate={onClose} />
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}

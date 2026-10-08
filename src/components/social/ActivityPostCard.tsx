@@ -16,6 +16,7 @@ import { calculateWorkoutCalories } from '@/lib/calories';
 import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { getAvatarUrl } from '@/lib/avatar';
+import { ProRing } from '@/components/subscription/ProEntry';
 import { RouteMap } from '@/components/cardio/RouteMap';
 import { CelebrationPodiumCard } from '@/components/community/CelebrationPodiumCard';
 import { getAppShareUrl, shareContent } from '@/lib/share';
@@ -425,7 +426,7 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
   const activityWeight = details.bodyweight || (isOwnActivity ? profile?.weight : undefined);
   // Resolve the author's current name/photo live instead of trusting the copy stored on
   // the activity at post time, so a later name/photo change shows up immediately here.
-  const { displayName: liveUserName, photoURL: liveUserPhoto } = useLiveDisplayName(activity.userId, activity.userName, activity.userPhoto);
+  const { displayName: liveUserName, photoURL: liveUserPhoto, isPro: authorIsPro } = useLiveDisplayName(activity.userId, activity.userName, activity.userPhoto);
 
   // Detect competition celebration post
   const isCelebration =
@@ -523,13 +524,15 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
       {/* ─── SECTION 1: HEADER ────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-3 mb-4 sm:mb-5 relative z-20">
         <div className="flex items-start md:items-center gap-2.5 sm:gap-3 min-w-0">
-          <Link to={`/profile/${activity.username || activity.userId}`} className="shrink-0 mt-0.5 md:mt-0">
-            <img
-              src={liveUserPhoto || getAvatarUrl(liveUserName, theme)}
-              alt={liveUserName}
-              className="w-10 h-10 md:w-11 md:h-11 rounded-full shadow-[3px_3px_6px_rgba(0,0,0,0.1),-3px_-3px_6px_rgba(255,255,255,1)] object-cover"
-              referrerPolicy="no-referrer"
-            />
+          <Link to={`/profile/${activity.username || activity.userId}`} className="shrink-0 mt-0.5 md:mt-0 flex">
+            <ProRing pro={authorIsPro} crown={11}>
+              <img
+                src={liveUserPhoto || getAvatarUrl(liveUserName, theme)}
+                alt={liveUserName}
+                className="w-10 h-10 md:w-11 md:h-11 rounded-full shadow-[3px_3px_6px_rgba(0,0,0,0.1),-3px_-3px_6px_rgba(255,255,255,1)] object-cover"
+                referrerPolicy="no-referrer"
+              />
+            </ProRing>
           </Link>
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-1.5 md:gap-2">

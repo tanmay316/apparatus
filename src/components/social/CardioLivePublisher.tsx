@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Timestamp } from 'firebase/firestore';
+import { auth } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { useCardioStore, getCardioActiveSec } from '@/stores/cardio-store';
 import { usePedometerStore } from '@/stores/pedometer-store';
@@ -7,9 +9,24 @@ import { useUserWeight } from '@/hooks/use-user-weight';
 import { upsertActiveSession, type LiveSessionStatus } from '@/services/social';
 import { calculateCardioCalories } from '@/lib/calories';
 import { getLiveSteps } from '@/lib/cardio-steps';
+import { NativeWorkoutLocation } from '@/utils/native-workout-location';
 
 const HEARTBEAT_MS = 15_000;
 const TITLES = { walk: 'Walking', run: 'Running', cycle: 'Cycling' } as const;
+const hasNativeLiveSync = () => Capacitor.getPlatform() === 'android' && Capacitor.isPluginAvailable('WorkoutLocation');
+
+async function handOffToNative(uid: string, activeSec: number, distanceKm: number, calories: number, steps?: number) {
+  const user = auth.currentUser;
+  if (!user || user.uid !== uid) return;
+  const { token, expirationTime } = await user.getIdTokenResult();
+  const { projectId, apiKey } = auth.app.options;
+  if (!projectId || !apiKey) return;
+  await NativeWorkoutLocation.setLiveSync({
+    projectId, apiKey, origin: window.location.origin, uid,
+    refreshToken: user.refreshToken, idToken: token, idTokenExpiresAt: Date.parse(expirationTime),
+    activeSec, distanceKm, calories, steps: steps ?? -1,
+  });
+}
 
 /**
  * Keeps the cardio live session fresh app-wide (including while paused) so followers'
@@ -40,6 +57,8 @@ export function CardioLivePublisher() {
         movingSec, profile: { heightCm: profile?.height, gender: profile?.gender },
       });
 
+      const caloriesBurned = calculateCardioCalories({ type, distanceKm: st.distanceKm, movingMin: movingSec / 60, bodyWeightKg: weightKg, elevationGainM: st.elevationGainM });
+
       upsertActiveSession(uid, {
         planId: 'cardio',
         dayId: type,
@@ -55,9 +74,11 @@ export function CardioLivePublisher() {
         avgSpeedKmh: Math.round(avgSpeedKmh * 10) / 10,
         paceSecPerKm: st.distanceKm >= 0.05 && movingSec > 0 ? Math.round(movingSec / st.distanceKm) : 0,
         elevationGainM: Math.round(st.elevationGainM),
-        caloriesBurned: calculateCardioCalories({ type, distanceKm: st.distanceKm, movingMin: movingSec / 60, bodyWeightKg: weightKg, elevationGainM: st.elevationGainM }),
+        caloriesBurned,
         ...(steps !== undefined ? { steps } : {}),
-      }, 'cardio').catch((err) => console.warn('[CardioLivePublisher] heartbeat failed', err));
+      }, 'cardio')
+        .then(() => hasNativeLiveSync() ? handOffToNative(uid, activeSec, st.distanceKm, caloriesBurned, steps) : undefined)
+        .catch((err) => console.warn('[CardioLivePublisher] heartbeat failed', err));
     };
 
     // Small delay so the tracker's initial create (which may reset chat) lands first.
@@ -68,6 +89,11 @@ export function CardioLivePublisher() {
       window.clearInterval(interval);
     };
   }, [uid, isTracking, isPaused, isAutoPaused, weightKg]);
+
+  useEffect(() => {
+    if (!uid || !isTracking || !hasNativeLiveSync()) return;
+    return () => { NativeWorkoutLocation.clearLiveSync().catch(() => {}); };
+  }, [uid, isTracking]);
 
   return null;
 }

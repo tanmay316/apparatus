@@ -53,6 +53,13 @@ interface WorkoutLocationPlugin {
   getDownsampledPoints(options: { maxPoints: number }): Promise<{ points: NativeWorkoutPoint[] }>;
   getLocationsAfter(options: { timestamp: number }): Promise<{ points: NativeWorkoutPoint[] }>;
   requestBatteryOptimizationExemption(): Promise<{ isExempt: boolean }>;
+  /** Android: lets the service keep the Live Training heartbeat going while the WebView is frozen. */
+  setLiveSync(options: {
+    projectId: string; apiKey: string; origin: string; uid: string;
+    refreshToken: string; idToken: string; idTokenExpiresAt: number;
+    activeSec: number; distanceKm: number; calories: number; steps: number;
+  }): Promise<void>;
+  clearLiveSync(): Promise<void>;
   addListener(eventName: 'location', listenerFunc: (point: NativeWorkoutPoint) => void): Promise<PluginListenerHandle>;
   addListener(eventName: 'stateChange', listenerFunc: (event: { state: string }) => void): Promise<PluginListenerHandle>;
 }

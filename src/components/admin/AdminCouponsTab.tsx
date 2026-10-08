@@ -4,8 +4,8 @@ import { Timestamp } from 'firebase/firestore';
 import { Copy, RefreshCw, Ticket, Trash2 } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
 import {
-  COUPON_CODE_RE, createCoupon, deleteCoupon, generateCouponCode, listCoupons, setCouponActive,
-  type Coupon,
+  COUPON_CODE_RE, createCoupon, deleteCoupon, generateCouponCode, isDiscountPlanId, listCoupons, setCouponActive,
+  type Coupon, type CouponType,
 } from '@/services/coupons';
 import { EmptyState, ErrorState, LoadingState, RefreshButton, SectionHeader, formatWhen } from './AdminShared';
 
@@ -15,7 +15,10 @@ export function AdminCouponsTab() {
   const coupons = useQuery({ queryKey: ['adminCoupons'], queryFn: listCoupons });
 
   const [code, setCode] = useState(() => generateCouponCode());
+  const [type, setType] = useState<CouponType>('free');
   const [days, setDays] = useState(30);
+  const [basePlanId, setBasePlanId] = useState('');
+  const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [label, setLabel] = useState('');
   const [maxRedemptions, setMaxRedemptions] = useState(1);
   const [expires, setExpires] = useState('');
@@ -27,7 +30,7 @@ export function AdminCouponsTab() {
 
   const create = useMutation({
     mutationFn: () => createCoupon({
-      code, days, label, maxRedemptions, active: true,
+      code, type, days, basePlanId, plan: type === 'discount' ? period : 'any', label, maxRedemptions, active: true,
       expiresAt: expires ? Timestamp.fromDate(new Date(`${expires}T23:59:59`)) : null,
     }),
     onSuccess: () => {
@@ -52,12 +55,12 @@ export function AdminCouponsTab() {
   });
 
   const validCode = COUPON_CODE_RE.test(code);
-  const canCreate = validCode && days >= 1;
+  const canCreate = validCode && (type === 'discount' ? isDiscountPlanId(basePlanId) : days >= 1);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] gap-5">
       <section className="card p-5">
-        <SectionHeader icon={Ticket} title="New coupon" description="Give free Pro days. For discounts on the paid plan, create a promo code in Play Console → Monetize → Promo codes." />
+        <SectionHeader icon={Ticket} title="New coupon" description="Free Pro days, or a discount that unlocks a cheaper Google Play plan for whoever redeems the code." />
         <div className="space-y-4">
           <div>
             <label htmlFor="cp-code" className="label">Code</label>
@@ -76,13 +79,46 @@ export function AdminCouponsTab() {
           </div>
 
           <div>
-            <label htmlFor="cp-days" className="label">Days of Pro</label>
-            <input id="cp-days" type="number" min={1} max={3660} value={days} onChange={e => setDays(Math.max(1, Math.min(3660, Number(e.target.value) || 1)))} className="input-field" />
+            <span className="label">Type</span>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Coupon type">
+              {(['free', 'discount'] as CouponType[]).map(t => (
+                <button key={t} type="button" role="radio" aria-checked={type === t} onClick={() => setType(t)}
+                  className={type === t ? 'btn-primary py-2 text-sm' : 'btn-secondary py-2 text-sm'}>
+                  {t === 'free' ? 'Free Pro days' : 'Discount'}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {type === 'free' ? (
+            <div>
+              <label htmlFor="cp-days" className="label">Days of Pro</label>
+              <input id="cp-days" type="number" min={1} max={3660} value={days} onChange={e => setDays(Math.max(1, Math.min(3660, Number(e.target.value) || 1)))} className="input-field" />
+            </div>
+          ) : (
+            <>
+              <div>
+                <label htmlFor="cp-plan" className="label">Play base plan id</label>
+                <input id="cp-plan" value={basePlanId} onChange={e => setBasePlanId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 63))} placeholder="monthly-49" className="input-field font-mono" />
+                <p className="text-[11px] text-bone-dim mt-1">
+                  First add this base plan (with the lower price) to the "pro" subscription in Play Console → Monetize → Subscriptions and activate it.
+                  Only accounts that redeemed this code can keep a purchase of it; anyone else is refunded automatically.
+                </p>
+                {basePlanId && !isDiscountPlanId(basePlanId) && <p className="text-[11px] text-danger mt-1">Use a separate plan id, not monthly or yearly.</p>}
+              </div>
+              <div>
+                <label htmlFor="cp-period" className="label">Billing period</label>
+                <select id="cp-period" value={period} onChange={e => setPeriod(e.target.value as 'monthly' | 'yearly')} className="input-field">
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </div>
+            </>
+          )}
 
           <div>
             <label htmlFor="cp-label" className="label">Shown to user</label>
-            <input id="cp-label" value={label} maxLength={120} onChange={e => setLabel(e.target.value)} placeholder="1 month of Pro on us" className="input-field" />
+            <input id="cp-label" value={label} maxLength={120} onChange={e => setLabel(e.target.value)} placeholder={type === 'discount' ? 'Pro for ₹49/month' : '1 month of Pro on us'} className="input-field" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -130,7 +166,7 @@ export function AdminCouponsTab() {
                       </span>
                     </div>
                     <div className="text-xs text-bone-dim mt-0.5">
-                      {c.type === 'free' ? `${c.days} days free` : `Discount · ${c.offerId}${c.plan !== 'any' ? ` · ${c.plan}` : ''}`}
+                      {c.type === 'free' ? `${c.days} days free` : `Discount · ${c.basePlanId || c.offerId || '?'}${c.plan !== 'any' ? ` · ${c.plan}` : ''}`}
                       {' · '}{c.redeemedCount}/{c.maxRedemptions || '∞'} used
                       {c.expiresAt ? ` · until ${formatWhen(c.expiresAt)}` : ''}
                     </div>

@@ -1019,3 +1019,53 @@
 .cardio-kpi-rows > .cardio-kpi-row + .cardio-kpi-row {
   border-top: 1px dashed var(--border);
 }
+
+/* ─── Pro member avatar ring ─── */
+.pro-ring {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  padding: 2px;
+  isolation: isolate;
+}
+.pro-ring > img { border-color: transparent !important; }
+.pro-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(#f5b544, #fff1c2, #d97706, #f5b544);
+  z-index: -1;
+  animation: pro-ring-spin 6s linear infinite;
+}
+.pro-ring::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  box-shadow: 0 0 12px 2px rgba(245, 181, 68, 0.45);
+  z-index: -2;
+  animation: pro-ring-glow 2.8s ease-in-out infinite;
+}
+.pro-ring-crown {
+  position: absolute;
+  right: -3px;
+  bottom: -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #f5b544, #d97706);
+  color: #1a1206;
+  box-shadow: 0 0 0 2px rgb(var(--color-ink));
+  z-index: 1;
+}
+@keyframes pro-ring-spin { to { transform: rotate(1turn); } }
+@keyframes pro-ring-glow { 50% { opacity: 0.45; } }
+/* Profile header: the gold progress ring is already drawn, so the photo only glows. */
+.pro-avatar-glow { box-shadow: 0 0 0 2px #f5b544, 0 0 18px 3px rgba(245, 181, 68, 0.55); animation: pro-avatar-pulse 2.8s ease-in-out infinite; }
+@keyframes pro-avatar-pulse { 50% { box-shadow: 0 0 0 2px #f5b544, 0 0 8px 1px rgba(245, 181, 68, 0.3); } }
+@media (prefers-reduced-motion: reduce) {
+  .pro-ring::before, .pro-ring::after, .pro-avatar-glow { animation: none; }
+}

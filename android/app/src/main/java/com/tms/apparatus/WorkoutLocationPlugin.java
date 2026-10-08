@@ -207,6 +207,30 @@ public class WorkoutLocationPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void setLiveSync(PluginCall call) {
+        String projectId = call.getString("projectId");
+        String apiKey = call.getString("apiKey");
+        String uid = call.getString("uid");
+        String refreshToken = call.getString("refreshToken");
+        if (projectId == null || apiKey == null || uid == null || refreshToken == null) {
+            call.reject("projectId, apiKey, uid and refreshToken are required");
+            return;
+        }
+        Long expiresAt = call.getLong("idTokenExpiresAt", 0L);
+        LiveSessionSync.configure(projectId, apiKey, call.getString("origin"), uid, refreshToken,
+                call.getString("idToken"), expiresAt == null ? 0L : expiresAt,
+                call.getDouble("activeSec", 0d), call.getDouble("distanceKm", 0d),
+                call.getDouble("calories", 0d), call.getDouble("steps", -1d));
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void clearLiveSync(PluginCall call) {
+        LiveSessionSync.clear();
+        call.resolve();
+    }
+
+    @PluginMethod
     public void requestBatteryOptimizationExemption(PluginCall call) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

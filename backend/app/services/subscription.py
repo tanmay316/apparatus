@@ -48,6 +48,8 @@ _ACTIVE_STATUSES = {"active", "grace"}
 _GRACE_SEC = 3 * 24 * 3600
 
 COUPON_RE = re.compile(r"^[A-Z0-9][A-Z0-9_-]{2,31}$")
+# Play Console base plan ids: lowercase letters, digits and hyphens.
+BASE_PLAN_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 
 
 def verified_email(user: dict) -> Optional[str]:
@@ -152,7 +154,7 @@ def _fresh_counts(data: dict, day: str, month: str, week: str) -> dict:
 def consume_quota(uid: str, email: Optional[str], kind: str) -> QuotaResult:
     """Counts one use of a limited AI feature; denies free users past their allowance."""
     limit, period = FREE_LIMITS.get(kind, (0, "day"))
-    if not settings.billing_enabled or kind not in FREE_LIMITS:
+    if not settings.pro_enforced or kind not in FREE_LIMITS:
         return QuotaResult(True, kind, limit, 0, period)
     pro = is_pro(uid, email)
     if pro:
@@ -189,7 +191,7 @@ def consume_quota(uid: str, email: Optional[str], kind: str) -> QuotaResult:
 
 def refund_quota(uid: str, kind: str) -> None:
     """Gives a use back when the AI call itself failed."""
-    if not settings.billing_enabled:
+    if not settings.pro_enforced:
         return
     ref = _private(uid, "usage")
     if not ref:
@@ -243,8 +245,10 @@ def _set_badge(uid: str, pro: bool) -> None:
 
 
 # ─── Coupons ──────────────────────────────────────────────────────────────
-# coupons/{CODE}: { type: 'free', days, label, maxRedemptions (0 = unlimited), redeemedCount, expiresAt, active }
-# Discounts on the paid plan are Google Play promo codes (Play Console), not ours.
+# coupons/{CODE}: { type, label, maxRedemptions (0 = unlimited), redeemedCount, expiresAt, active }
+#   type 'free':     days -> Pro for that long, no payment.
+#   type 'discount': basePlanId -> a cheaper Play base plan (e.g. "monthly-49") that only accounts
+#                    holding a redemption of this code may buy; other purchases of it are refunded.
 
 class CouponError(Exception):
     """User-facing reason a coupon can't be used."""
@@ -262,19 +266,34 @@ def _coupon_ref(code: str):
     return db.collection("coupons").document(code) if db else None
 
 
+def _discount_plan(data: dict) -> Optional[str]:
+    base = str(data.get("basePlanId") or "")
+    return base if BASE_PLAN_RE.match(base) and base not in PLANS else None
+
+
 def _check_coupon(data: dict, redeemed_by_user: bool, plan: Optional[str]) -> None:
     if not data or not data.get("active"):
         raise CouponError("That code isn't valid.")
     expires = _to_epoch(data.get("expiresAt"))
     if expires is not None and expires < time.time():
         raise CouponError("This code has expired.")
+    kind = data.get("type")
+    if kind == "free":
+        if not (1 <= int(data.get("days") or 0) <= 3660):
+            raise CouponError("That code isn't valid.")
+    elif kind == "discount":
+        if not _discount_plan(data):
+            raise CouponError("That code isn't valid.")
+        # Already applied to this account: buying the discounted plan is still allowed.
+        if redeemed_by_user:
+            return
+    else:
+        raise CouponError("That code isn't valid.")
+    if redeemed_by_user:
+        raise CouponError("You've already used this code.")
     max_uses = int(data.get("maxRedemptions") or 0)
     if max_uses and int(data.get("redeemedCount") or 0) >= max_uses:
         raise CouponError("This code has been fully claimed.")
-    if redeemed_by_user:
-        raise CouponError("You've already used this code.")
-    if data.get("type") != "free" or not (1 <= int(data.get("days") or 0) <= 3660):
-        raise CouponError("That code isn't valid.")
 
 
 def load_coupon(code: str, uid: str, plan: Optional[str] = None) -> dict:
@@ -286,17 +305,19 @@ def load_coupon(code: str, uid: str, plan: Optional[str] = None) -> dict:
     data = (snap.to_dict() or {}) if snap.exists else {}
     used = ref.collection("redemptions").document(uid).get().exists if data else False
     _check_coupon(data, used, plan)
+    discount = data["type"] == "discount"
     return {
         "code": code,
         "type": data["type"],
         "label": str(data.get("label") or "")[:120],
-        "days": int(data.get("days") or 0),
-        "plan": "any",
+        "days": 0 if discount else int(data.get("days") or 0),
+        "plan": (data.get("plan") if data.get("plan") in PLANS else "monthly") if discount else "any",
+        "basePlanId": _discount_plan(data) if discount else None,
     }
 
 
 def public_coupon(coupon: dict) -> dict:
-    return {k: coupon[k] for k in ("code", "type", "label", "days", "plan")}
+    return {k: coupon[k] for k in ("code", "type", "label", "days", "plan", "basePlanId")}
 
 
 def _record_redemption(code: str, uid: str, kind: str) -> None:
@@ -320,8 +341,11 @@ def _record_redemption(code: str, uid: str, kind: str) -> None:
         logger.warning("Coupon redemption record failed for %s/%s: %s", code, uid, exc)
 
 
-def redeem_free_coupon(uid: str, email: Optional[str], code: str) -> dict:
-    """Grants Pro for the coupon's days (stacks on an earlier coupon grant)."""
+def redeem_coupon(uid: str, email: Optional[str], code: str) -> dict:
+    """Free coupons grant Pro days; discount coupons reserve the discounted Play plan for this account.
+    `email` must be the verified address (verified_email) so one person can't farm codes with throwaway sign-ups."""
+    if not email:
+        raise CouponError("Verify your email address to use coupon codes.")
     code = normalize_coupon(code)
     ref = _coupon_ref(code)
     ent_ref = _private(uid, "entitlement")
@@ -340,6 +364,12 @@ def redeem_free_coupon(uid: str, email: Optional[str], code: str) -> dict:
         data = (snap.to_dict() or {}) if snap.exists else {}
         used = red_ref.get(transaction=transaction).exists if data else False
         _check_coupon(data, used, None)
+        if data["type"] == "discount":
+            base_plan = _discount_plan(data)
+            if not used:
+                transaction.set(red_ref, {"uid": uid, "type": "discount", "basePlanId": base_plan, "at": gcf.SERVER_TIMESTAMP})
+                transaction.update(ref, {"redeemedCount": gcf.Increment(1)})
+            return {"type": "discount", "basePlanId": base_plan}
         ent_snap = ent_ref.get(transaction=transaction)
         ent = (ent_snap.to_dict() or {}) if ent_snap.exists else {}
         start = time.time()
@@ -355,8 +385,20 @@ def redeem_free_coupon(uid: str, email: Optional[str], code: str) -> dict:
         transaction.set(ent_ref, entitlement)
         transaction.set(red_ref, {"uid": uid, "type": "free", "at": gcf.SERVER_TIMESTAMP})
         transaction.update(ref, {"redeemedCount": gcf.Increment(1)})
-        return {"days": int(data["days"]), "until": end}
+        return {"type": "free", "days": int(data["days"]), "until": end}
 
     result = _txn(get_firestore_client().transaction())
-    _set_badge(uid, True)
+    if result["type"] == "free":
+        _set_badge(uid, True)
     return result
+
+
+def coupon_allows_plan(uid: str, base_plan: str) -> bool:
+    """Whether this account redeemed a discount coupon for `base_plan` (needed to keep a purchase of it)."""
+    db = get_firestore_client()
+    if not db or not BASE_PLAN_RE.match(base_plan or ""):
+        return False
+    for snap in db.collection("coupons").where("basePlanId", "==", base_plan).limit(50).stream():
+        if snap.reference.collection("redemptions").document(uid).get().exists:
+            return True
+    return False

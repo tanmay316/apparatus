@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Crown, Lock } from 'lucide-react';
-import { CAN_PURCHASE, requirePro, useHasPro } from '@/stores/subscription-store';
+import { CAN_UPSELL, requirePro, useHasPro } from '@/stores/subscription-store';
 import { BRAND } from '@/lib/brand';
 
 /** Small "PRO" pill for section titles. */
@@ -27,8 +27,8 @@ export function ProLock({ children, title, reason, compact, maxHeight = 320, var
 }) {
   const hasPro = useHasPro();
   if (hasPro) return <>{children}</>;
-  // Store builds have no way to buy Pro, so locked content is left out instead of teased.
-  if (!CAN_PURCHASE) return null;
+  // The iPhone app can't sell Pro, so locked content is left out there instead of teased.
+  if (!CAN_UPSELL) return null;
   const cal = variant === 'cal';
   const shade = cal
     ? 'linear-gradient(180deg, transparent, color-mix(in srgb, var(--cal-bg) 60%, transparent) 40%, color-mix(in srgb, var(--cal-bg) 88%, transparent))'

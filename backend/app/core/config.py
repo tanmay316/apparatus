@@ -72,9 +72,10 @@ class Settings(BaseSettings):
     AGENT_TOTAL_BUDGET: float = 55.0
     AGENT_MAX_STEPS: int = 4
 
-    # Pro subscriptions (Google Play Billing). Billing and free-tier AI limits stay off until the
-    # service account is set. Play Console: subscription product GOOGLE_PLAY_PRO_PRODUCT_ID with
-    # base plans "monthly" and "yearly".
+    # Pro subscriptions (Google Play Billing). Pro features and free-tier AI limits are enforced
+    # whenever PRO_ENFORCED is on; buying needs the service account. Play Console: subscription
+    # product GOOGLE_PLAY_PRO_PRODUCT_ID with base plans "monthly" and "yearly".
+    PRO_ENFORCED: bool = True
     GOOGLE_PLAY_PACKAGE: str = _BRAND.get("appId", "com.tms.apparatus")
     GOOGLE_PLAY_PRO_PRODUCT_ID: str = "pro"
     # Service-account key JSON (raw or base64) with "View financial data" + "Manage orders" in Play Console.
@@ -109,7 +110,12 @@ class Settings(BaseSettings):
 
     @property
     def billing_enabled(self) -> bool:
+        """Play purchases can be verified (service account configured)."""
         return bool(self.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON)
+
+    @property
+    def pro_enforced(self) -> bool:
+        return self.PRO_ENFORCED
 
     @property
     def market_enabled(self) -> bool:

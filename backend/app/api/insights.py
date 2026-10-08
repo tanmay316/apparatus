@@ -53,7 +53,7 @@ async def summary(req: SummaryRequest, current_user: dict = Depends(get_current_
         raise HTTPException(status_code=400, detail=str(exc))
 
     if req.kind == "weekly":
-        if settings.billing_enabled and not await asyncio.to_thread(is_pro, uid, verified_email(current_user)):
+        if settings.pro_enforced and not await asyncio.to_thread(is_pro, uid, verified_email(current_user)):
             raise HTTPException(status_code=402, detail={
                 "code": "pro_required", "kind": "ai_weekly", "limit": 0, "period": "week",
                 "message": f"The weekly AI coach report is part of {settings.APP_NAME} Pro.",

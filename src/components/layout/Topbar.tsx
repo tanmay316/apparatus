@@ -9,6 +9,8 @@ import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { useUnreadAdminAlerts } from '@/services/admin-alerts';
 import { ROOT_PATHS, getRouteTitle } from './nav-config';
 import { BRAND } from '@/lib/brand';
+import { ProRing, ProTopbarButton } from '@/components/subscription/ProEntry';
+import { useIsPro } from '@/stores/subscription-store';
 
 const iconBtn = 'w-10 h-10 rounded-full text-bone-dim hover:text-bone hover:bg-bone/5 active:bg-bone/10 flex items-center justify-center transition-colors shrink-0';
 
@@ -19,6 +21,7 @@ export function Topbar() {
   const { pathname } = useLocation();
   // Zero for non-admins: the alert store is only filled for admin accounts.
   const adminUnread = useUnreadAdminAlerts();
+  const isPro = useIsPro();
 
   const isRoot = ROOT_PATHS.includes(pathname) || (!!profile && pathname === `/profile/${profile.username}`);
   const title = getRouteTitle(pathname);
@@ -124,18 +127,21 @@ export function Topbar() {
           </Link>
           {profile && (
             <>
+              <ProTopbarButton className={iconBtn} />
               <NotificationBell />
               <Link to="/settings" className={`${iconBtn} hidden lg:flex`} aria-label="Settings" title="Settings">
                 <Settings size={18} />
               </Link>
-              <Link to={`/profile/${profile.username}`} className="ml-1 shrink-0" aria-label="Your profile">
-                <img
-                  src={profile.photoURL || user?.photoURL || getAvatarUrl(profile.displayName, theme)}
-                  alt=""
-                  className="w-9 h-9 rounded-full border border-line object-cover hover:border-bone/40 transition-colors"
-                  referrerPolicy="no-referrer"
-                  onError={e => { (e.target as HTMLImageElement).src = getAvatarUrl(profile.displayName, theme); }}
-                />
+              <Link to={`/profile/${profile.username}`} className="ml-1 shrink-0 flex" aria-label="Your profile">
+                <ProRing pro={isPro} crown={0}>
+                  <img
+                    src={profile.photoURL || user?.photoURL || getAvatarUrl(profile.displayName, theme)}
+                    alt=""
+                    className="w-9 h-9 rounded-full border border-line object-cover hover:border-bone/40 transition-colors"
+                    referrerPolicy="no-referrer"
+                    onError={e => { (e.target as HTMLImageElement).src = getAvatarUrl(profile.displayName, theme); }}
+                  />
+                </ProRing>
               </Link>
             </>
           )}

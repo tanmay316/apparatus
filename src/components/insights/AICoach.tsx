@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, Loader2, MessageCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
-import { CAN_PURCHASE, requirePro, useHasPro, useSubscriptionStore } from '@/stores/subscription-store';
+import { CAN_UPSELL, requirePro, useHasPro, useSubscriptionStore } from '@/stores/subscription-store';
 import {
   askCoach, buildWeeklyFacts, getCachedSummary, lastWeekRange, ProRequiredError, requestSummary, type AISummary, type SummaryKind,
 } from '@/services/ai-insights';
@@ -22,7 +22,7 @@ const SAMPLE: AISummary = {
 /** Opens the AI coach with a question about what's on screen (Pro). */
 export function AskAIButton({ prompt, variant = 'app', label = 'Ask AI' }: { prompt: string | (() => string); variant?: 'app' | 'cal'; label?: string }) {
   const hasPro = useHasPro();
-  if (!hasPro && !CAN_PURCHASE) return null;
+  if (!hasPro && !CAN_UPSELL) return null;
   const onClick = () => {
     if (!requirePro(`Ask the AI coach about your charts and sessions with ${BRAND.name} Pro.`)) return;
     askCoach(typeof prompt === 'function' ? prompt() : prompt);
