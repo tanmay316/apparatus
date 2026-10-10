@@ -18,7 +18,16 @@ const BRAND_TOKENS: Record<string, string> = {
   '{{WEB_URL}}': brand.webUrl.replace(/\/$/, ''),
 };
 // Static files in public/ that contain brand tokens.
-const BRANDED_PUBLIC = ['manifest.json', 'sw.js', 'privacy.html', 'terms.html', 'delete-account.html'];
+const BRANDED_PUBLIC = [
+  'manifest.json',
+  'sw.js',
+  'privacy.html',
+  'privacy-policy.html',
+  'terms.html',
+  'delete-account.html',
+  'privacy/index.html',
+  'privacy-policy/index.html'
+];
 const fillBrand = (text: string) => Object.entries(BRAND_TOKENS).reduce((t, [k, v]) => t.split(k).join(v), text);
 
 function brandPlugin(): Plugin {
