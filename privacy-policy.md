@@ -1,4 +1,4 @@
-# Privacy Policy for Apparatus / Swasth
+# Privacy Policy for Apparatus Swasth
 
 **Effective date:** October 10, 2026
 
