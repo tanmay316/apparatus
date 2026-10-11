@@ -6,6 +6,10 @@
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
+  /* Safe-area insets. --app-sa* = measured overlap on Android (lib/safe-area.ts); env() elsewhere. */
+  --sat: var(--app-sat, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+  --sab: var(--app-sab, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+
   /* ─── Steep Palette Tokens ───────────────────────────────── */
   --color-ink-black:    #17191c;
   --color-paper-white:  #ffffff;

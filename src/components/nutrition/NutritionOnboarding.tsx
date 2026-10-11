@@ -657,7 +657,7 @@ export default function NutritionOnboarding({ existing, onDone, onClose }: Props
 
   return createPortal(
     <div className="cal cal-screen" style={{ position: 'fixed', inset: 0, zIndex: 10005, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '0 20px', paddingTop: 'max(14px, env(safe-area-inset-top))', height: 'calc(max(14px, env(safe-area-inset-top)) + 48px)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '0 20px', paddingTop: 'max(14px, var(--sat))', height: 'calc(max(14px, var(--sat)) + 48px)', flexShrink: 0 }}>
         {showChrome ? (
           <button type="button" className="cal-icon-btn" onClick={() => go(-1)} aria-label="Back"><ArrowLeft size={19} /></button>
         ) : onClose && step !== 'generating' ? (
@@ -688,7 +688,7 @@ export default function NutritionOnboarding({ existing, onDone, onClose }: Props
       </div>
 
       {step !== 'generating' && (
-        <div style={{ flexShrink: 0, padding: '12px 24px', paddingBottom: 'max(18px, env(safe-area-inset-bottom))', maxWidth: 520, width: '100%', margin: '0 auto' }}>
+        <div style={{ flexShrink: 0, padding: '12px 24px', paddingBottom: 'max(18px, var(--sab))', maxWidth: 520, width: '100%', margin: '0 auto' }}>
           <button
             type="button"
             className="cal-btn"

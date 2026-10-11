@@ -683,7 +683,7 @@ export function CardioTracker() {
           <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[var(--bg)] via-[var(--bg)]/70 to-transparent z-[1] pointer-events-none" />
         </div>
 
-        <div className="relative z-10 flex items-center justify-between gap-2 px-4 pointer-events-none" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)' }}>
+        <div className="relative z-10 flex items-center justify-between gap-2 px-4 pointer-events-none" style={{ paddingTop: 'calc(var(--sat) + 16px)' }}>
           <button onClick={() => { setSearchParams({}); setScreen('select'); }} className={`${chip} w-11`} aria-label="Back to cardio hub">
             <ArrowLeft size={20} />
           </button>
@@ -699,7 +699,7 @@ export function CardioTracker() {
           </button>
         </div>
 
-        <div className="relative z-10 mt-auto px-4 pointer-events-none" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}>
+        <div className="relative z-10 mt-auto px-4 pointer-events-none" style={{ paddingBottom: 'calc(var(--sab) + 20px)' }}>
           <div className="pointer-events-auto rounded-[28px] bg-[var(--card)]/95 backdrop-blur-xl border border-[var(--border)] shadow-2xl p-4 max-w-md mx-auto">
             <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-[var(--card-2)]" role="radiogroup" aria-label="Activity type">
               {(Object.keys(CARDIO_TYPES) as CardioActivityType[]).map(t => {
@@ -917,7 +917,7 @@ export function CardioTracker() {
         <div ref={setSheetEl} className="absolute bottom-0 left-0 right-0 z-20 pointer-events-auto">
           <div 
             className="cardio-live-panel pro-scope relative text-[var(--text)] border-t border-[var(--border)] rounded-t-[32px] flex flex-col overflow-hidden max-h-[82vh]"
-            style={{ background: 'var(--card)', boxShadow: '0 -15px 50px rgba(0,0,0,0.35)', paddingBottom: 'max(14px, env(safe-area-inset-bottom))' }}
+            style={{ background: 'var(--card)', boxShadow: '0 -15px 50px rgba(0,0,0,0.35)', paddingBottom: 'max(14px, var(--sab))' }}
           >
             {/* Drag Handle & Toggle */}
             <button 

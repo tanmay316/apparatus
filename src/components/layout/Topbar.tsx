@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Capacitor } from '@capacitor/core';
 import { ArrowLeft, Menu, Search, Settings, Store } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -78,7 +77,7 @@ export function Topbar() {
   return (
     <header
       className={`sticky top-0 z-50 border-b border-line/70 bg-ink/85 backdrop-blur-xl transition-transform duration-300 ease-out will-change-transform ${hidden ? '-translate-y-full' : 'translate-y-0'}`}
-      style={{ paddingTop: Capacitor.getPlatform() === 'android' ? '0px' : 'env(safe-area-inset-top, 0px)' }}
+      style={{ paddingTop: 'var(--sat)' }}
     >
       <div className="h-14 px-2 sm:px-4 lg:px-6 flex items-center gap-1 sm:gap-2">
         {/* Left: menu/back (mobile) — the sidebar is docked on desktop */}

@@ -618,7 +618,7 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
           style={{ background: 'var(--dx-canvas)', border: '1px solid var(--dx-border)' }}
         >
       {/* Header */}
-      <div className="flex items-center justify-between gap-2 px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] sm:pt-3 relative z-10 border-b" style={{ background: 'var(--dx-card)', borderColor: 'var(--dx-border)' }}>
+      <div className="flex items-center justify-between gap-2 px-4 pb-3 pt-[max(12px,var(--sat))] sm:pt-3 relative z-10 border-b" style={{ background: 'var(--dx-card)', borderColor: 'var(--dx-border)' }}>
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' }}>
             <Sparkles size={17} />
@@ -900,7 +900,7 @@ export default function NutritionChat({ isOpen, onClose, initialPrompt, onPrompt
       )}
 
       {/* Input Area */}
-      <div className="px-3 pt-2.5 pb-[max(12px,env(safe-area-inset-bottom))] sm:pb-3 relative z-10">
+      <div className="px-3 pt-2.5 pb-[max(12px,var(--sab))] sm:pb-3 relative z-10">
 
         {/* Image Preview Area */}
         <AnimatePresence>

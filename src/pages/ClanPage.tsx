@@ -1040,7 +1040,7 @@ export function ClanPage() {
           animate={{ scale: 1 }}
           onClick={() => setCreatePostOpen(true)}
           aria-label="New post"
-          className="fixed right-5 bottom-[calc(1.5rem+env(safe-area-inset-bottom,0px))] w-14 h-14 bg-sienna rounded-2xl flex items-center justify-center shadow-lg z-[100] active:scale-95 transition-transform"
+          className="fixed right-5 bottom-[calc(1.5rem+var(--sab))] w-14 h-14 bg-sienna rounded-2xl flex items-center justify-center shadow-lg z-[100] active:scale-95 transition-transform"
         >
           <Plus size={24} />
         </motion.button>

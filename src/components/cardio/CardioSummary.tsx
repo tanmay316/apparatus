@@ -159,7 +159,7 @@ export function CardioSummary({ data, saveState, effort, onEffort, notes, onNote
         )}
       </section>
 
-      <div className="sticky z-10 -mx-4 px-4 pt-3 pb-3 bg-gradient-to-t from-[rgb(var(--color-ink-3))] via-[rgb(var(--color-ink-3))] to-transparent" style={{ bottom: 0, paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
+      <div className="sticky z-10 -mx-4 px-4 pt-3 pb-3 bg-gradient-to-t from-[rgb(var(--color-ink-3))] via-[rgb(var(--color-ink-3))] to-transparent" style={{ bottom: 0, paddingBottom: 'calc(var(--sab) + 12px)' }}>
         <div className="flex gap-2">
           <button onClick={onShare} className="dx-btn-secondary flex-1 !h-12 !rounded-2xl gap-2"><Share2 size={17} /> Share</button>
           <button onClick={onDone} disabled={saveState === 'saving'} className="dx-btn flex-[1.4] !h-12 !rounded-2xl gap-2">

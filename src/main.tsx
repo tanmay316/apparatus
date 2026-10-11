@@ -9,6 +9,9 @@ import { SocialLogin } from '@capgo/capacitor-social-login';
 import { Capacitor } from '@capacitor/core';
 import { readSessionCache } from '@/lib/session-cache';
 import { restoreQueryCache, startQueryPersistence } from '@/lib/query-client';
+import { initSafeArea } from '@/lib/safe-area';
+
+initSafeArea();
 
 // Initialize Firebase auth listener
 useAuthStore.getState().init();

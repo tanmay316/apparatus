@@ -111,7 +111,7 @@ export default function CameraScanner({ onCapture, onClose, isAnalyzing }: Camer
         onChange={event => acceptFile(event.target.files?.[0])}
       />
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] border-b z-10" style={{ borderColor: 'var(--dx-border)', background: 'var(--dx-card)' }}>
+      <div className="flex items-center justify-between px-4 pb-3 pt-[max(12px,var(--sat))] border-b z-10" style={{ borderColor: 'var(--dx-border)', background: 'var(--dx-card)' }}>
         <button onClick={onClose} className="dx-icon-btn dx-icon-btn--sm" aria-label="Close scanner">
           <X size={18} />
         </button>
@@ -172,7 +172,7 @@ export default function CameraScanner({ onCapture, onClose, isAnalyzing }: Camer
 
       {/* Bottom Controls */}
       {preview && !isAnalyzing && (
-        <div className="px-4 pt-4 pb-[max(16px,env(safe-area-inset-bottom))] border-t flex items-center justify-center" style={{ borderColor: 'var(--dx-border)', background: 'var(--dx-card)' }}>
+        <div className="px-4 pt-4 pb-[max(16px,var(--sab))] border-t flex items-center justify-center" style={{ borderColor: 'var(--dx-border)', background: 'var(--dx-card)' }}>
           <button onClick={retake} className="dx-btn-secondary h-11 px-6">
             <RotateCcw size={16} /> Retake
           </button>

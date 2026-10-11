@@ -216,7 +216,7 @@ function AddMenu({ onPick, onClose }: { onPick: (id: 'exercise' | 'saved' | 'dat
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 20, scale: 0.97 }}
         transition={{ type: 'spring', damping: 26, stiffness: 380 }}
-        style={{ position: 'absolute', left: 20, right: 20, bottom: 'calc(env(safe-area-inset-bottom) + 170px)', maxWidth: 420, margin: '0 auto' }}
+        style={{ position: 'absolute', left: 20, right: 20, bottom: 'calc(var(--sab) + 170px)', maxWidth: 420, margin: '0 auto' }}
       >
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           {tiles.map(t => (
@@ -730,7 +730,7 @@ export default function NutritionDashboard() {
         onClick={() => setMenu(m => !m)}
         whileTap={{ scale: 0.92 }}
         aria-label={menu ? 'Close menu' : 'Add'}
-        className="fixed right-5 lg:right-10 bottom-[calc(env(safe-area-inset-bottom)+92px)] lg:bottom-10"
+        className="fixed right-5 lg:right-10 bottom-[calc(var(--sab)+92px)] lg:bottom-10"
         style={{ zIndex: menu ? 10001 : 200, width: 60, height: 60, borderRadius: 60, background: 'var(--cal-primary)', color: 'var(--cal-on-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}
       >
         <motion.span animate={{ rotate: menu ? 45 : 0 }} style={{ display: 'flex' }}><Plus size={28} /></motion.span>

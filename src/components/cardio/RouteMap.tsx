@@ -1019,7 +1019,7 @@ export function RouteMap({
       {!hideMap && (
         <MapAttribution
           text={themeData.attribution}
-          className={isFullScreen ? 'left-2 top-[calc(env(safe-area-inset-top,0px)+64px)]' : 'right-1.5 bottom-1.5'}
+          className={isFullScreen ? 'left-2 top-[calc(var(--sat)+64px)]' : 'right-1.5 bottom-1.5'}
         />
       )}
     </div>

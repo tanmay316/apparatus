@@ -85,7 +85,7 @@ export function PaymentWaitSheet({ order, onClose, onPaid }: { order: OrderView;
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 40, opacity: 0 }}
         className="relative w-full sm:max-w-sm dx-card !rounded-b-none sm:!rounded-[28px] rounded-t-[28px] p-5"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }}
+        style={{ paddingBottom: 'max(var(--sab), 20px)' }}
       >
         <button type="button" onClick={onClose} aria-label="Close" className="dx-icon-btn absolute right-4 top-4"><X size={16} /></button>
         <div className="flex flex-col items-center text-center pt-2">

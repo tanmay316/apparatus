@@ -151,7 +151,7 @@ export function PaywallSheet() {
             exit={{ y: 40, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 34 }}
             className="relative w-full sm:max-w-md max-h-[92dvh] overflow-y-auto rounded-t-[28px] sm:rounded-[28px] dx-card !rounded-b-none sm:!rounded-[28px]"
-            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }}
+            style={{ paddingBottom: 'max(var(--sab), 20px)' }}
           >
             <div className="dx-hero !rounded-none sm:!rounded-t-[28px] px-5 pt-6 pb-5">
               <button type="button" onClick={close} aria-label="Close" className="dx-hero-icon !w-9 !h-9 absolute right-4 top-4">

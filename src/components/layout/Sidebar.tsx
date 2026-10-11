@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Capacitor } from '@capacitor/core';
 import { LogOut, Moon, ShieldCheck, Sun, X } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -75,7 +74,7 @@ function SidebarContent({ onClose, docked }: { onClose?: () => void; docked?: bo
 
   return (
     // Android's WebView already sits below the status bar, so the inset would double the gap.
-    <div className="flex flex-col h-full" style={{ paddingTop: Capacitor.getPlatform() === 'android' ? '0px' : 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+    <div className="flex flex-col h-full" style={{ paddingTop: 'var(--sat)', paddingBottom: 'var(--sab)' }}>
       <div className="flex items-center justify-between h-12 px-4 shrink-0">
         <Link to="/" onClick={onClose} className="flex items-center gap-2.5">
           <img src="/logo.png" alt="" className="h-6 w-auto brand-logo-img" />

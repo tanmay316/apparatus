@@ -331,7 +331,7 @@ export function LiveSessionModal({ groupedSession, isOpen, onClose }: Props) {
         </div>
 
         {/* Composer */}
-        <div className="shrink-0 border-t border-line bg-ink px-4 pt-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+        <div className="shrink-0 border-t border-line bg-ink px-4 pt-3" style={{ paddingBottom: 'max(12px, var(--sab))' }}>
           <div className="flex gap-2 mb-2.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {presets.map((preset) => (
               <button

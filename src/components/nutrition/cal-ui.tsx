@@ -172,7 +172,7 @@ export function CalSheet({ title, onClose, children, footer, z = 10020 }: {
           </div>
         )}
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', padding: '8px 18px 18px', overscrollBehavior: 'contain' }}>{children}</div>
-        {footer && <div style={{ padding: '10px 18px', paddingBottom: 'max(16px, env(safe-area-inset-bottom))', borderTop: '1px solid var(--cal-border)' }}>{footer}</div>}
+        {footer && <div style={{ padding: '10px 18px', paddingBottom: 'max(16px, var(--sab))', borderTop: '1px solid var(--cal-border)' }}>{footer}</div>}
       </motion.div>
     </div>,
     document.body,

@@ -938,7 +938,7 @@ export function ShareCardModal({ data, onClose }: Props) {
         >
           {/* ═════ Preview column ═════ */}
           <div className="flex-1 min-h-0 min-w-0 flex flex-col bg-[rgb(var(--color-ink-2))]">
-            <div className="md:hidden flex items-center gap-2 px-3 pb-2" style={{ paddingTop: 'max(env(safe-area-inset-top), 12px)' }}>
+            <div className="md:hidden flex items-center gap-2 px-3 pb-2" style={{ paddingTop: 'max(var(--sat), 12px)' }}>
               <RoundButton onClick={onClose} label="Close"><X size={18} /></RoundButton>
               <div className="flex-1 min-w-0 text-center">
                 <div className="text-[15px] font-semibold text-bone leading-tight">Share workout</div>
@@ -1127,7 +1127,7 @@ export function ShareCardModal({ data, onClose }: Props) {
               </section>
             </div>
 
-            <div className="flex items-center gap-2.5 px-4 md:px-6 pt-3 md:pt-4 md:pb-6 border-t border-line" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
+            <div className="flex items-center gap-2.5 px-4 md:px-6 pt-3 md:pt-4 md:pb-6 border-t border-line" style={{ paddingBottom: 'max(var(--sab), 16px)' }}>
               <button
                 type="button"
                 onClick={handleSave}

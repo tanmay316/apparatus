@@ -1379,7 +1379,7 @@ export function ProfilePage() {
             </div>
 
             {isOwnProfile && (
-              <div className="px-4 pb-[max(16px,env(safe-area-inset-bottom))] flex gap-2.5">
+              <div className="px-4 pb-[max(16px,var(--sab))] flex gap-2.5">
                 <input
                   ref={mediaInputRef}
                   type="file"

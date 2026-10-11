@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Capacitor } from '@capacitor/core';
 import { ChevronLeft, Shield, Megaphone, Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
@@ -89,7 +88,7 @@ export function ClanChatPage() {
     else navigate(`/clan/${clanId}`);
   };
 
-  const headerTopPadding = Capacitor.getPlatform() === 'android' ? '0px' : 'env(safe-area-inset-top, 0px)';
+  const headerTopPadding = 'var(--sat)';
 
   if (loadingClan) {
     return (

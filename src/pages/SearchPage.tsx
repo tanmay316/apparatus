@@ -281,7 +281,7 @@ export function SearchPage() {
 
   return (
     <div className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-4 min-h-[100dvh]">
-      <header className="sticky top-0 z-50 bg-ink/90 backdrop-blur-xl border-b border-line/70" style={{ paddingTop: Capacitor.getPlatform() === 'android' ? 0 : 'env(safe-area-inset-top, 0px)' }}>
+      <header className="sticky top-0 z-50 bg-ink/90 backdrop-blur-xl border-b border-line/70" style={{ paddingTop: 'var(--sat)' }}>
         <div className="max-w-3xl mx-auto px-2 sm:px-4 h-14 flex items-center gap-1.5">
           <button onClick={goBack} className="w-10 h-10 rounded-full flex items-center justify-center text-bone hover:bg-bone/5 shrink-0" aria-label="Go back">
             <ArrowLeft size={20} />

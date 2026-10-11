@@ -115,7 +115,7 @@ export default function MealDetailSheet({ meal, isSaved, onToggleSave, onChanged
             </div>
           )}
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 110, background: image.data ? 'linear-gradient(180deg, rgba(0,0,0,0.5), transparent)' : undefined }} />
-          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', paddingTop: 'max(14px, env(safe-area-inset-top))', color: image.data ? '#fff' : 'var(--cal-text)' }}>
+          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 16px', paddingTop: 'max(14px, var(--sat))', color: image.data ? '#fff' : 'var(--cal-text)' }}>
             <button type="button" onClick={onClose} aria-label="Back" style={{ width: 40, height: 40, borderRadius: 40, background: image.data ? 'rgba(0,0,0,0.35)' : 'var(--cal-card)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowLeft size={19} /></button>
             <div style={{ flex: 1, textAlign: 'center', fontSize: 17, fontWeight: 700 }}>Nutrition</div>
             <button type="button" onClick={remove} disabled={!!busy} aria-label="Delete meal" style={{ width: 40, height: 40, borderRadius: 40, background: image.data ? 'rgba(0,0,0,0.35)' : 'var(--cal-card)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -190,7 +190,7 @@ export default function MealDetailSheet({ meal, isSaved, onToggleSave, onChanged
         </div>
       </div>
 
-      <div style={{ flexShrink: 0, display: 'flex', gap: 10, padding: '12px 18px', paddingBottom: 'max(16px, env(safe-area-inset-bottom))', borderTop: '1px solid var(--cal-border)', maxWidth: 560, width: '100%', margin: '0 auto' }}>
+      <div style={{ flexShrink: 0, display: 'flex', gap: 10, padding: '12px 18px', paddingBottom: 'max(16px, var(--sab))', borderTop: '1px solid var(--cal-border)', maxWidth: 560, width: '100%', margin: '0 auto' }}>
         <button type="button" className="cal-btn-ghost" style={{ flex: 1 }} onClick={() => setFixing(f => !f)} disabled={!!busy}>
           <Wand2 size={17} /> {fixing ? 'Editing…' : 'Fix results'}
         </button>

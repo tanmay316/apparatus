@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
-import { Capacitor } from '@capacitor/core';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { CustomSelect } from '@/components/ui/CustomSelect';
@@ -1787,7 +1786,7 @@ export function ProgressPage({
           {/* Stays under the top bar so the period can be changed next to any chart. */}
           <div
             className="sticky z-30 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-2 !mt-2 bg-ink-3/90 backdrop-blur-xl"
-            style={{ top: `calc((56px + ${Capacitor.getPlatform() === 'android' ? '0px' : 'env(safe-area-inset-top, 0px)'}) * var(--topbar-visible, 1))`, transition: 'top 0.3s ease-out' }}
+            style={{ top: 'calc(var(--sat) + 56px * var(--topbar-visible, 1))', transition: 'top 0.3s ease-out' }}
           >
             <div className="flex items-center gap-3">
               <span className="hidden sm:inline text-xs text-bone-dim shrink-0">{rangeLabel}</span>

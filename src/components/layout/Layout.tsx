@@ -40,6 +40,8 @@ export function Layout() {
       <div className="ambient-glow-1 fixed top-[-20%] left-[-10%] w-[80vw] h-[80vw] max-w-[650px] max-h-[650px] rounded-full bg-[radial-gradient(circle_at_center,_#dbeafe80_0%,_#e0e7ff40_40%,_transparent_70%)] pointer-events-none -z-10 opacity-50 md:opacity-70" />
       <div className="ambient-glow-2 fixed top-[-10%] right-[-10%] w-[80vw] h-[80vw] max-w-[700px] max-h-[700px] rounded-full bg-[radial-gradient(circle_at_center,_#fde8dc80_0%,_#fbe1d140_45%,_transparent_70%)] pointer-events-none -z-10 opacity-50 md:opacity-75" />
 
+      {/* Keeps content from scrolling under the phone's status icons while the topbar is hidden. */}
+      {!isChat && <div aria-hidden className="fixed inset-x-0 top-0 z-40 bg-ink pointer-events-none" style={{ height: 'var(--sat)' }} />}
       {!isChat && <Sidebar />}
       <ReminderManager />
       <AdminAlertsSync />

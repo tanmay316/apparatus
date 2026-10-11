@@ -130,7 +130,7 @@ export function BottomNav() {
         .bn-live-glow { animation: bnLiveGlow 2s infinite ease-in-out; }
       `}</style>
 
-      <div className="bottom-nav-shell lg:hidden fixed left-1/2 -translate-x-1/2 w-[calc(100%-20px)] max-w-[440px] z-[500]" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}>
+      <div className="bottom-nav-shell lg:hidden fixed left-1/2 -translate-x-1/2 w-[calc(100%-20px)] max-w-[440px] z-[500]" style={{ bottom: 'calc(var(--sab) + 10px)' }}>
         <nav className="bottom-app-nav rounded-[26px] px-1.5 py-1.5" aria-label="Primary">
           <div className="flex items-center h-[60px]">
             {TABS.slice(0, 2).map(renderTab)}
@@ -175,7 +175,7 @@ export function BottomNav() {
               dragElastic={{ top: 0, bottom: 0.6 }}
               onDragEnd={(_, info) => { if (info.offset.y > 100 || info.velocity.y > 500) setSheetOpen(false); }}
               className="fixed bottom-0 left-0 right-0 z-[520] bg-ink rounded-t-[28px] max-w-[600px] mx-auto shadow-[0_-10px_40px_rgba(0,0,0,0.2)] max-h-[88dvh] overflow-y-auto"
-              style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)' }}
+              style={{ paddingBottom: 'calc(var(--sab) + 20px)' }}
             >
               <div className="flex justify-center pt-2.5 pb-1 touch-none cursor-grab" onPointerDown={e => dragControls.start(e)}>
                 <span className="w-10 h-1 rounded-full bg-bone/20" />

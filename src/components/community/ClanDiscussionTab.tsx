@@ -900,7 +900,7 @@ export function ClanDiscussionTab({
       <form
         onSubmit={handleSendMessage}
         className="cx-composer px-2 pt-2 sm:px-3 flex items-end gap-2 z-20 shrink-0"
-        style={{ paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))' }}
+        style={{ paddingBottom: 'calc(0.5rem + var(--sab))' }}
       >
         {/* Attachment Button (images can't be added while editing) */}
         {!editingMessage && (
@@ -973,7 +973,7 @@ export function ClanDiscussionTab({
               onClick={() => setLightboxImage(null)}
               aria-label="Close image"
               className="absolute right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors !shadow-none"
-              style={{ top: 'calc(1rem + env(safe-area-inset-top, 0px))' }}
+              style={{ top: 'calc(1rem + var(--sat))' }}
             >
               <X size={24} />
             </button>

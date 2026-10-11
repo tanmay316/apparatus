@@ -34,7 +34,7 @@ function AnalysisSheet({ title, subtitle, onClose, footer, children }: {
         transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
         onClick={e => e.stopPropagation()}
         className="w-full sm:max-w-lg max-h-[90vh] flex flex-col rounded-t-3xl sm:rounded-3xl border border-line bg-ink-2 text-bone shadow-2xl overflow-hidden"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        style={{ paddingBottom: 'var(--sab)' }}
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-line">
           <div className="min-w-0">

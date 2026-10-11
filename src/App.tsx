@@ -10,6 +10,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { safeInternalPath } from '@/lib/validation';
+import { refreshSafeArea } from '@/lib/safe-area';
 import { subscribeToNotifications } from '@/services/social';
 import { refreshForNotification } from '@/lib/notification-sync';
 import { 
@@ -190,7 +191,7 @@ function PreferencesSync() {
         // setOverlaysWebView / setBackgroundColor are Android-only; on iOS the
         // status bar sits over the webview and is spaced via safe-area insets.
         if (Capacitor.getPlatform() === 'android') {
-          StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+          StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {}).finally(refreshSafeArea);
           StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#050505' : '#FFFFFF' }).catch(() => {});
         }
         StatusBar.setStyle({ style: theme === 'dark' ? Style.Dark : Style.Light }).catch(() => {});

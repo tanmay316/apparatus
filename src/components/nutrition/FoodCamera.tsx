@@ -250,7 +250,7 @@ export default function FoodCamera({ initialMode = 'food', onPhoto, onBarcode, o
       </div>
 
       {/* Top bar */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px', paddingTop: 'max(14px, env(safe-area-inset-top))' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 18px', paddingTop: 'max(14px, var(--sat))' }}>
         <button type="button" onClick={onClose} aria-label="Close" style={{ width: 42, height: 42, borderRadius: 42, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
         <div style={{ fontSize: 17, fontWeight: 700, textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>Scanner</div>
         {live === 'on' ? (
@@ -286,7 +286,7 @@ export default function FoodCamera({ initialMode = 'food', onPhoto, onBarcode, o
       </div>
 
       {/* Modes + shutter */}
-      <div style={{ position: 'relative', padding: '10px 14px', paddingBottom: 'max(22px, env(safe-area-inset-bottom))' }}>
+      <div style={{ position: 'relative', padding: '10px 14px', paddingBottom: 'max(22px, var(--sab))' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
           {modes.map(m => {
             const active = m.id === mode;
