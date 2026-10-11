@@ -730,7 +730,7 @@ export default function NutritionDashboard() {
         onClick={() => setMenu(m => !m)}
         whileTap={{ scale: 0.92 }}
         aria-label={menu ? 'Close menu' : 'Add'}
-        className="fixed right-5 lg:right-10 bottom-[calc(var(--sab)+92px)] lg:bottom-10"
+        className="fixed right-5 lg:right-10 bottom-[calc(var(--bottom-nav-space)+12px)] lg:bottom-10"
         style={{ zIndex: menu ? 10001 : 200, width: 60, height: 60, borderRadius: 60, background: 'var(--cal-primary)', color: 'var(--cal-on-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}
       >
         <motion.span animate={{ rotate: menu ? 45 : 0 }} style={{ display: 'flex' }}><Plus size={28} /></motion.span>

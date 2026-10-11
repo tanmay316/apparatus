@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, Play, Pause, Square, Navigation, Layers, RotateCcw, ChevronUp, ChevronDown, LocateFixed, Loader2,
+  ArrowLeft, Play, Pause, Square, Navigation, Layers, RotateCcw, ChevronUp, ChevronDown, LocateFixed, Loader2, Trash2,
 } from 'lucide-react';
 import { useCompassHeading } from '@/hooks/useCompassHeading';
 import { Timestamp } from 'firebase/firestore';
@@ -1058,35 +1058,52 @@ export function CardioTracker() {
             </AnimatePresence>
             </div>
 
-            {/* Controls: Discard · Pause/Resume · Finish */}
-            <div className="px-6 pt-2 pb-1 flex items-center justify-center gap-7 shrink-0">
-              <button
-                onClick={handleDiscard}
-                className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] hover:text-red-500 active:scale-95 transition-all"
-                title="Discard Session"
-                aria-label="Discard session"
-              >
-                <RotateCcw size={22} />
-              </button>
-
-              <button
-                onClick={store.isPaused ? handleResume : handlePause}
-                className="relative w-[76px] h-[76px] rounded-full flex items-center justify-center text-white active:scale-95 transition-transform"
-                style={{ background: 'var(--sienna)', boxShadow: '0 10px 26px rgba(235, 89, 60, 0.42)' }}
-                title={store.isPaused ? 'Resume' : 'Pause'}
-                aria-label={store.isPaused ? 'Resume' : 'Pause'}
-              >
-                {store.isPaused ? <Play size={32} fill="currentColor" className="ml-1" /> : <Pause size={32} fill="currentColor" />}
-              </button>
+            {/* Controls: Discard · Finish (centre) · Pause/Resume */}
+            <div className="px-5 pt-3 pb-1 grid grid-cols-[1fr_auto_1fr] items-center gap-3 shrink-0">
+              <div className="flex justify-start">
+                <button
+                  onClick={handleDiscard}
+                  className="group flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
+                  title="Discard session"
+                  aria-label="Discard session"
+                >
+                  <span className="w-12 h-12 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] group-hover:text-red-500 transition-colors">
+                    <Trash2 size={19} />
+                  </span>
+                  <span className="text-[10.5px] font-semibold tracking-wide uppercase text-[var(--muted)]">Discard</span>
+                </button>
+              </div>
 
               <button
                 onClick={handleStop}
-                className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] active:scale-95 transition-all"
-                title="Finish & Save"
+                className="h-[60px] min-w-[150px] px-7 rounded-full flex items-center justify-center gap-2.5 font-bold text-[15px] tracking-[0.06em] uppercase active:scale-[0.97] transition-transform"
+                style={{ background: 'var(--text)', color: 'var(--bg)', boxShadow: '0 10px 24px -8px rgba(0, 0, 0, 0.45)' }}
+                title="Finish & save"
                 aria-label="Finish and save"
               >
-                <Square size={20} fill="currentColor" className="rounded-[3px]" />
+                <Square size={15} fill="currentColor" className="rounded-[2px]" />
+                Finish
               </button>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={store.isPaused ? handleResume : handlePause}
+                  className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
+                  title={store.isPaused ? 'Resume' : 'Pause'}
+                  aria-label={store.isPaused ? 'Resume' : 'Pause'}
+                >
+                  <span
+                    className={`relative w-[60px] h-[60px] rounded-full flex items-center justify-center text-white transition-colors ${store.isPaused ? 'bg-emerald-600' : ''}`}
+                    style={store.isPaused
+                      ? { boxShadow: '0 10px 24px -8px rgba(5, 150, 105, 0.6)' }
+                      : { background: 'var(--sienna)', boxShadow: '0 10px 24px -8px rgba(217, 83, 47, 0.6)' }}
+                  >
+                    {store.isPaused && <span className="absolute inset-0 rounded-full bg-emerald-500/40 animate-ping" aria-hidden />}
+                    {store.isPaused ? <Play size={24} fill="currentColor" className="relative ml-0.5" /> : <Pause size={24} fill="currentColor" />}
+                  </span>
+                  <span className="text-[10.5px] font-semibold tracking-wide uppercase text-[var(--muted)]">{store.isPaused ? 'Resume' : 'Pause'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

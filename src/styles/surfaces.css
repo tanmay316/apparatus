@@ -440,6 +440,16 @@ textarea.dx-input { min-height: 84px; line-height: 1.45; resize: vertical; }
   -webkit-backdrop-filter: blur(6px);
 }
 
+/* Phones: a full-screen backdrop blur flashes for a frame on open (and drops frames), so tint only. */
+@media (hover: none), (pointer: coarse) {
+  .dx-backdrop,
+  .inset-0[class*='backdrop-blur'] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  .dx-backdrop { background: rgba(12, 8, 6, 0.58); }
+}
+
 .dx-sheet {
   position: relative;
   display: flex;

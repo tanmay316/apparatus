@@ -97,7 +97,7 @@ export function AiPlanGeneratorModal({ isOpen, onClose }: Props) {
       setExpandedDay(null);
     } catch (e: any) {
       console.error(e);
-      showToast(e.message || 'Failed to generate plan. Please check your API keys or try again.', 'error');
+      showToast(e.message || 'Failed to generate plan. Please try again.', 'error');
       setStep('custom');
     }
   };

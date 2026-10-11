@@ -39,8 +39,9 @@ interface SubscriptionState {
   setEntitlement: (e: Entitlement) => void;
   /** Counts a successful AI use locally so the remaining allowance updates without a round trip. */
   bumpUsage: (kind: string) => void;
-  /** `redeem` opens it just to enter a code (the only paywall action in store builds). */
-  openPaywall: (reason?: string, opts?: { redeem?: boolean }) => void;
+  /** `redeem` opens it just to enter a code (the only paywall action in store builds).
+   *  `auto` = opened by a 402 response, ignored shortly after the user closed it (retries/parallel calls). */
+  openPaywall: (reason?: string, opts?: { redeem?: boolean; auto?: boolean }) => void;
   closePaywall: () => void;
   reset: () => void;
 }
@@ -62,7 +63,10 @@ function remember(enabled: boolean, compedUid: string | null) {
   try { localStorage.setItem(STORE_KEY, JSON.stringify({ enabled, compedUid })); } catch { /* storage full or blocked */ }
 }
 
-export const useSubscriptionStore = create<SubscriptionState>((set) => ({
+let paywallClosedAt = 0;
+const AUTO_REOPEN_QUIET_MS = 15_000;
+
+export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   enabled: remembered().enabled,
   purchasable: true,
   loaded: false,
@@ -86,9 +90,13 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
       useUIStore.getState().showToast(FREE_LIMIT_MESSAGE, 'info');
       return;
     }
+    if (opts?.auto && (get().paywall.open || Date.now() - paywallClosedAt < AUTO_REOPEN_QUIET_MS)) return;
     set({ paywall: { open: true, reason } });
   },
-  closePaywall: () => set({ paywall: { open: false } }),
+  closePaywall: () => {
+    paywallClosedAt = Date.now();
+    set({ paywall: { open: false } });
+  },
   reset: () => set({ enabled: remembered().enabled, purchasable: true, loaded: false, entitlement: EMPTY, comped: false, usage: {}, paywall: { open: false } }),
 }));
 

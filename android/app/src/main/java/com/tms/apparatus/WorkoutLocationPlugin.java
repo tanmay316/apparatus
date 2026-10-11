@@ -25,6 +25,19 @@ import org.json.JSONObject;
 @CapacitorPlugin(name = "WorkoutLocation")
 public class WorkoutLocationPlugin extends Plugin {
     private BroadcastReceiver locationReceiver;
+    private volatile boolean appActive = true;
+
+    @Override
+    protected void handleOnPause() {
+        appActive = false;
+        super.handleOnPause();
+    }
+
+    @Override
+    protected void handleOnResume() {
+        appActive = true;
+        super.handleOnResume();
+    }
 
     @Override
     public void load() {
@@ -37,6 +50,9 @@ public class WorkoutLocationPlugin extends Plugin {
                 String action = intent.getAction();
 
                 if (WorkoutLocationService.ACTION_LOCATION.equals(action)) {
+                    // While backgrounded the WebView can't render; JS re-reads the journal on resume
+                    // instead of replaying hundreds of queued events at once.
+                    if (!appActive) return;
                     try {
                         String pointStr = intent.getStringExtra("point");
                         if (pointStr != null) {
@@ -182,6 +198,17 @@ public class WorkoutLocationPlugin extends Plugin {
             call.resolve(toResult(points));
         } catch (Exception error) {
             call.reject("Could not read downsampled workout points", error);
+        }
+    }
+
+    @PluginMethod
+    public void getSimplifiedPoints(PluginCall call) {
+        try {
+            int maxPoints = call.getInt("maxPoints", 2000);
+            JSONArray points = new WorkoutLocationDatabase(getContext()).getSimplifiedPoints(maxPoints);
+            call.resolve(toResult(points));
+        } catch (Exception error) {
+            call.reject("Could not read workout route", error);
         }
     }
 

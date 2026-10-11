@@ -34,7 +34,7 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     if (res.status === 402 && isProRequired(err.detail)) {
-      useSubscriptionStore.getState().openPaywall(err.detail.message);
+      useSubscriptionStore.getState().openPaywall(err.detail.message, { auto: true });
       throw new ApiError(err.detail.message, 402);
     }
     throw new ApiError(typeof err.detail === 'string' ? err.detail : `API Error ${res.status}`, res.status);
@@ -181,7 +181,7 @@ export async function streamChatMessage(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     if (res.status === 402 && isProRequired(err.detail)) {
-      useSubscriptionStore.getState().openPaywall(err.detail.message);
+      useSubscriptionStore.getState().openPaywall(err.detail.message, { auto: true });
       throw new ApiError(err.detail.message, 402);
     }
     throw new ApiError(typeof err.detail === 'string' ? err.detail : `API Error ${res.status}`, res.status);

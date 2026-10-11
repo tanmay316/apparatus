@@ -9,6 +9,8 @@
   /* Safe-area insets. --app-sa* = measured overlap on Android (lib/safe-area.ts); env() elsewhere. */
   --sat: var(--app-sat, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
   --sab: var(--app-sab, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+  /* Floating bottom nav: 74px bar + 10px gap above the system bar. */
+  --bottom-nav-space: calc(var(--sab) + 84px);
 
   /* ─── Steep Palette Tokens ───────────────────────────────── */
   --color-ink-black:    #17191c;
@@ -102,8 +104,8 @@
   --surface-elevated-white: #ffffff;
 
   /* ─── Selection & Scrollbar ──────────────────────────────── */
-  --color-selection-bg: #17191c;
-  --color-selection-fg: #ffffff;
+  --color-selection-bg: rgba(93, 42, 26, 0.18);
+  --color-selection-fg: #17191c;
 
   --scrollbar-track:  #ffffff;
   --scrollbar-thumb:  #a3a6af;
@@ -197,8 +199,8 @@
   --scrollbar-thumb: #26262b;
   --scrollbar-hover: #3a3a41;
 
-  --color-selection-bg: #5d2a1a;
-  --color-selection-fg: #fbe1d1;
+  --color-selection-bg: rgba(176, 116, 88, 0.35);
+  --color-selection-fg: #f4f4f6;
 
   --shadow-subtle: var(--dk-neo-raised-sm);
   --shadow-subtle-2: -3px -3px 9px rgba(255, 255, 255, 0.025), 8px 8px 22px rgba(0, 0, 0, 0.9);

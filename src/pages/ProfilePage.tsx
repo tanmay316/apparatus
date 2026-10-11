@@ -746,7 +746,7 @@ export function ProfilePage() {
               className={`mt-5 grid ${isLocked ? 'grid-cols-2' : 'grid-cols-4'} rounded-2xl overflow-hidden`}
               style={{ background: 'var(--dx-card-2)' }}
             >
-              <FollowCountDisplay uid={viewProfile.uid} />
+              <FollowCountDisplay uid={viewProfile.uid} locked={isLocked} />
               {!isLocked && (
                 <>
                   <div className="py-3 text-center border-l" style={{ borderColor: 'var(--dx-border)' }}>
@@ -1531,12 +1531,19 @@ function useLiveFollowRequests(uid?: string): string[] {
   return ids;
 }
 
-function FollowCountDisplay({ uid }: { uid: string }) {
+function FollowCountDisplay({ uid, locked = false }: { uid: string; locked?: boolean }) {
   const [modalType, setModalType] = useState<'followers' | 'following' | null>(null);
   const { user } = useAuthStore();
   const { search } = useLocation();
   const queryClient = useQueryClient();
   const isOwnProfile = user?.uid === uid;
+  const openList = (type: 'followers' | 'following') => {
+    if (locked) {
+      useUIStore.getState().showToast(`This account is private. Follow to see their ${type}.`, 'info');
+      return;
+    }
+    setModalType(type);
+  };
 
   const { data: counts } = useQuery({
     queryKey: ['followCounts', uid],
@@ -1560,7 +1567,7 @@ function FollowCountDisplay({ uid }: { uid: string }) {
   return (
     <>
       <button 
-        onClick={() => setModalType('followers')} 
+        onClick={() => openList('followers')} 
         className="relative py-3 text-center active:opacity-70 transition-opacity"
       >
         <div className="text-[18px] font-semibold tabular leading-none">{counts?.followers || 0}</div>
@@ -1569,7 +1576,7 @@ function FollowCountDisplay({ uid }: { uid: string }) {
           <span className="absolute top-2 right-3 w-2 h-2 rounded-full" style={{ background: 'var(--dx-accent)' }} aria-label="Pending follow requests" />
         )}
       </button>
-      <button onClick={() => setModalType('following')} className="py-3 text-center border-l active:opacity-70 transition-opacity" style={{ borderColor: 'var(--dx-border)' }}>
+      <button onClick={() => openList('following')} className="py-3 text-center border-l active:opacity-70 transition-opacity" style={{ borderColor: 'var(--dx-border)' }}>
         <div className="text-[18px] font-semibold tabular leading-none">{counts?.following || 0}</div>
         <div className="text-[11px] dx-muted mt-1">Following</div>
       </button>
@@ -1578,7 +1585,7 @@ function FollowCountDisplay({ uid }: { uid: string }) {
         uid={uid}
         requestIds={requests}
         type={modalType}
-        isOpen={modalType !== null}
+        isOpen={modalType !== null && !locked}
         onClose={() => setModalType(null)}
       />
     </>

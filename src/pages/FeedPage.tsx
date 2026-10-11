@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users } from 'lucide-react';
+import { Loader2, Users } from 'lucide-react';
 import { ActivityPostCard, ActivityPostCardSkeleton } from '@/components/social/ActivityPostCard';
 import { ClanPostItem } from '@/components/community/ClanPostItem';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
@@ -10,8 +10,10 @@ import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioSh
 import { SinglePostSheet } from '@/components/community/SinglePostSheet';
 import { SingleActivitySheet } from '@/components/social/SingleActivitySheet';
 import { useAuthStore } from '@/stores/auth-store';
-import { getActivity, getFeed, getFollowing, getPublicFeed, getBookmarkedActivities } from '@/services/social';
+import { getActivity, getFeedPage, feedItemMillis, getFollowing, getPublicFeed, getBookmarkedActivities, type FeedItem } from '@/services/social';
 import type { Activity, CommunityPost } from '@/types';
+
+const PAGE_SIZE = 10;
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.06 } } };
 const item = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0 } };
@@ -26,21 +28,47 @@ export function FeedPage() {
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
   const [selectedPost, setSelectedPost] = useState<CommunityPost | null>(null);
 
-  const { data: followingUids = [] } = useQuery({
+  const { data: followingUids = [], isSuccess: followingReady } = useQuery({
     queryKey: ['following', user?.uid],
     queryFn: () => getFollowing(user!.uid),
     enabled: !!user,
   });
 
-  const { data: feedItems = [], isLoading } = useQuery({
-    queryKey: ['feed', tab, user?.uid, followingUids, profile?.bookmarks],
-    queryFn: () => {
-      if (tab === 'following') return getFeed(user!.uid, followingUids);
-      if (tab === 'global') return getPublicFeed();
-      return getBookmarkedActivities(profile?.bookmarks || []);
+  // Following tab: fetched 10 at a time from the server.
+  const queryClient = useQueryClient();
+  const followingFeed = useInfiniteQuery({
+    queryKey: ['feed', 'following', user?.uid, followingUids],
+    queryFn: ({ pageParam }) => getFeedPage(user!.uid, followingUids, pageParam, PAGE_SIZE),
+    initialPageParam: null as number | null,
+    getNextPageParam: (last: FeedItem[]) => (last.length === PAGE_SIZE ? feedItemMillis(last[last.length - 1]) : undefined),
+    enabled: !!user && tab === 'following' && followingReady,
+    // The dashboard already holds the newest posts: show them while the first page loads.
+    placeholderData: (): InfiniteData<FeedItem[], number | null> | undefined => {
+      const preview = queryClient.getQueryData<FeedItem[]>(['feed', 'dashboard', user?.uid, followingUids]);
+      return preview?.length ? { pages: [preview], pageParams: [null] } : undefined;
     },
-    enabled: !!user,
   });
+
+  // Global / bookmarks are small lists: loaded once, shown 10 at a time.
+  const otherFeed = useQuery({
+    queryKey: ['feed', tab, user?.uid, profile?.bookmarks],
+    queryFn: () => (tab === 'global' ? getPublicFeed() : getBookmarkedActivities(profile?.bookmarks || [])),
+    enabled: !!user && tab !== 'following',
+  });
+  const [shownCount, setShownCount] = useState(PAGE_SIZE);
+  useEffect(() => { setShownCount(PAGE_SIZE); }, [tab]);
+
+  const isFollowingTab = tab === 'following';
+  const feedItems: FeedItem[] = isFollowingTab
+    ? (followingFeed.data?.pages.flat() ?? [])
+    : (otherFeed.data ?? []).slice(0, shownCount);
+  const isLoading = isFollowingTab ? (followingFeed.isLoading || !followingReady) : otherFeed.isLoading;
+  const hasMore = isFollowingTab ? !!followingFeed.hasNextPage && !followingFeed.isPlaceholderData : (otherFeed.data?.length ?? 0) > shownCount;
+  const loadingMore = isFollowingTab && followingFeed.isFetchingNextPage;
+  const showMore = () => {
+    if (isFollowingTab) void followingFeed.fetchNextPage();
+    else setShownCount(n => n + PAGE_SIZE);
+  };
 
   const { data: linkedActivity } = useQuery({
     queryKey: ['activity', activityId],
@@ -163,6 +191,16 @@ export function FeedPage() {
               </div>
             );
           })}
+          {hasMore && (
+            <button
+              type="button"
+              onClick={showMore}
+              disabled={loadingMore}
+              className="dx dx-btn-secondary w-full !h-11"
+            >
+              {loadingMore ? <><Loader2 size={16} className="animate-spin" /> Loading…</> : 'Show more'}
+            </button>
+          )}
         </div>
       )}
 

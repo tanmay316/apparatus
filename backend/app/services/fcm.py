@@ -142,15 +142,18 @@ def process_notification(doc_data, doc_id, is_app_notification=False, is_initial
         link = _safe_link(extra.get("link", ""))
         clan_id = _clip(extra.get("clanId", ""), 128)
         extra_type = _clip(doc_data.get("type", "general"), 40)
+        if extra_type == "live_cheer":
+            title = f"🔥 {sender_name or 'Someone'} cheered you on"
 
     send_push_notification(receiver_id, title, body, {
         "link": link,
         "clanId": clan_id,
         "type": extra_type
-    }, channel_id="clan_chat_messages" if extra_type == "clan_message" else "general_notifications")
+    }, channel_id="clan_chat_messages" if extra_type == "clan_message" else "general_notifications",
+        tag="live_cheer" if extra_type == "live_cheer" else None)
 
 
-def send_push_notification(user_id: str, title: str, body: str, data_payload: dict, channel_id: str = "general_notifications"):
+def send_push_notification(user_id: str, title: str, body: str, data_payload: dict, channel_id: str = "general_notifications", tag: str | None = None):
     db = get_firestore_client()
     messaging = get_messaging_client()
     if not db or not messaging:
@@ -203,6 +206,8 @@ def send_push_notification(user_id: str, title: str, body: str, data_payload: di
                 notification=messaging.AndroidNotification(
                     channel_id=channel_id,
                     priority="high",
+                    # Same tag = a newer cheer replaces the older one in the tray.
+                    tag=tag,
                 ),
             ),
             # iOS: without an explicit sound/priority APNs delivers silently or late.

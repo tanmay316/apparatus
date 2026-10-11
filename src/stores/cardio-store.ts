@@ -5,6 +5,7 @@ import { Geolocation } from '@capacitor/geolocation';
 import { Capacitor } from '@capacitor/core';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { NativeWorkoutLocation, type NativeWorkoutPoint, type NativeWorkoutSessionSummary } from '@/utils/native-workout-location';
+import { simplifyRoute } from '@/lib/route-simplify';
 
 /**
  * The native GPS engine is an app-target plugin (Android service / iOS MainViewController).
@@ -92,17 +93,28 @@ function pushSpeed(raw: number): number {
 }
 
 
-function resampleRoute(points: RoutePoint[], maxPoints: number): RoutePoint[] {
-  if (!points || points.length <= maxPoints) return points || [];
-  if (maxPoints <= 1) return [points[0]];
+const toRoutePoint = (p: NativeWorkoutPoint): RoutePoint => ({
+  lat: p.lat,
+  lng: p.lng,
+  ts: p.timestamp,
+  alt: p.altitude ?? undefined,
+  speed: p.speed ?? undefined,
+});
 
-  const result: RoutePoint[] = [];
-  const step = (points.length - 1) / (maxPoints - 1);
-  for (let i = 0; i < maxPoints; i++) {
-    result.push(points[Math.round(i * step)]);
+/** Stored native route reduced without cutting corners (even sampling only on builds without it). */
+async function readNativeRoute(maxPoints: number): Promise<RoutePoint[]> {
+  let points: NativeWorkoutPoint[];
+  try {
+    if (!NativeWorkoutLocation.getSimplifiedPoints) throw new Error('unavailable');
+    points = (await NativeWorkoutLocation.getSimplifiedPoints({ maxPoints })).points;
+  } catch {
+    points = (await NativeWorkoutLocation.getDownsampledPoints({ maxPoints })).points;
   }
-  return result;
+  return points.sort((a, b) => a.timestamp - b.timestamp).map(toRoutePoint);
 }
+
+/** Most fixes a resume may append one by one; longer gaps reload the whole simplified route. */
+const MAX_RESUME_GAP_POINTS = 4000;
 
 function resetWebGpsEngine() {
   rawSpeedBuffer = [];
@@ -184,27 +196,29 @@ function attachVisibilityListener() {
 /**
  * Replays or syncs the native service's state directly into the store.
  */
-export const syncWithNativeSession = async (): Promise<boolean> => {
+let syncInFlight: Promise<boolean> | null = null;
+/** routePoints currently hold the coarse restart snapshot, not live/native data. */
+let routeFromSnapshot = false;
+
+export const syncWithNativeSession = (): Promise<boolean> => {
+  // Resume fires visibilitychange, appStateChange and the screen effect together; run one sync.
+  if (!syncInFlight) syncInFlight = runNativeSync().finally(() => { syncInFlight = null; });
+  return syncInFlight;
+};
+
+const runNativeSync = async (): Promise<boolean> => {
   if (!hasNativeEngine()) return false;
 
   try {
     const summary: NativeWorkoutSessionSummary = await NativeWorkoutLocation.getSessionSummary();
     if (summary.state === 'TRACKING' || summary.state === 'PAUSED') {
-      // Use native SQLite downsampling (max 500 points) for instant UI hydration without bridge freezing
-      const stored = await NativeWorkoutLocation.getDownsampledPoints({ maxPoints: 500 });
-      const displayRoute: RoutePoint[] = stored.points
-        .sort((a, b) => a.timestamp - b.timestamp)
-        .map(p => ({
-          lat: p.lat,
-          lng: p.lng,
-          ts: p.timestamp,
-          alt: p.altitude ?? undefined,
-          speed: p.speed ?? undefined,
-        }));
-
       const currentStore = useCardioStore.getState();
+      const known = currentStore.routePoints;
+      const lastKnown = known.length > 0 ? known[known.length - 1] : null;
+      const sameSession = !!lastKnown && !!summary.startedAt && (lastKnown.ts ?? 0) >= summary.startedAt - 60_000;
       const nativeDistKm = Math.max(0, summary.distanceMeters / 1000);
 
+      // Stats and position first (one cheap read), so the screen is correct before the route loads.
       useCardioStore.setState({
         isTracking: true,
         isPaused: summary.state === 'PAUSED',
@@ -225,9 +239,26 @@ export const syncWithNativeSession = async (): Promise<boolean> => {
         gpsAccuracy: summary.lastAccuracy,
         gpsStatus: 'active',
         lastGpsTimestamp: summary.lastTimestamp,
-        routePoints: displayRoute.length > 0 ? displayRoute : currentStore.routePoints,
         isRecovering: false,
       });
+
+      // Same session: add only the exact fixes recorded while we were away (keeps every curve).
+      // A restored snapshot is only a coarse placeholder, so it is always replaced in full.
+      let displayRoute: RoutePoint[] | null = null;
+      if (sameSession && !routeFromSnapshot && summary.pointCount - known.length <= MAX_RESUME_GAP_POINTS) {
+        try {
+          const gap = await NativeWorkoutLocation.getLocationsAfter({ timestamp: lastKnown!.ts ?? 0 });
+          // Live fixes may have arrived meanwhile, so merge by timestamp.
+          const byTs = new Map<number, RoutePoint>();
+          for (const p of useCardioStore.getState().routePoints) byTs.set(p.ts ?? 0, p);
+          for (const p of gap.points) byTs.set(p.timestamp, toRoutePoint(p));
+          const merged = [...byTs.values()].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+          displayRoute = merged.length > MAX_DISPLAY_POINTS ? simplifyRoute(merged, SIMPLIFY_TO_POINTS) : merged;
+        } catch { /* fall back to the full route below */ }
+      }
+      if (!displayRoute) displayRoute = await readNativeRoute(MAX_DISPLAY_POINTS);
+      if (displayRoute.length > 0) useCardioStore.setState({ routePoints: displayRoute });
+      routeFromSnapshot = false;
       return true;
     }
   } catch (error) {
@@ -241,16 +272,7 @@ export const finishTracking = async () => {
   if (hasNativeEngine()) {
     try {
       const summary = await NativeWorkoutLocation.getSessionSummary();
-      const allPoints = await NativeWorkoutLocation.getDownsampledPoints({ maxPoints: 1500 });
-      const fullRoute: RoutePoint[] = allPoints.points
-        .sort((a, b) => a.timestamp - b.timestamp)
-        .map(p => ({
-          lat: p.lat,
-          lng: p.lng,
-          ts: p.timestamp,
-          alt: p.altitude ?? undefined,
-          speed: p.speed ?? undefined,
-        }));
+      const fullRoute = await readNativeRoute(4000);
 
       useCardioStore.setState({
         distanceKm: summary.distanceMeters / 1000,
@@ -368,7 +390,7 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
     nextRoutePoints = [...store.routePoints, acceptedPt];
 
     if (nextRoutePoints.length > MAX_DISPLAY_POINTS) {
-      nextRoutePoints = resampleRoute(nextRoutePoints, MAX_DISPLAY_POINTS);
+      nextRoutePoints = simplifyRoute(nextRoutePoints, SIMPLIFY_TO_POINTS);
     }
   }
 
@@ -603,6 +625,8 @@ interface CardioState {
 }
 
 const MAX_DISPLAY_POINTS = 2000;
+/** Simplify with headroom so the (cheap) RDP pass runs rarely, not on every fix. */
+const SIMPLIFY_TO_POINTS = 1500;
 
 const IDLE: Partial<CardioState> = {
   isTracking: false,
@@ -886,3 +910,47 @@ export const useCardioStore = create<CardioState>()(
     }
   )
 );
+
+// A small copy of the live route survives an app restart, so a reopened session paints its
+// map immediately; the native journal then fills in everything recorded since.
+const ROUTE_SNAPSHOT_KEY = 'apparatus.cardio-route.v1';
+const ROUTE_SNAPSHOT_POINTS = 400;
+
+function saveRouteSnapshot() {
+  const st = useCardioStore.getState();
+  try {
+    if (!st.isTracking || st.routePoints.length === 0) {
+      localStorage.removeItem(ROUTE_SNAPSHOT_KEY);
+      return;
+    }
+    localStorage.setItem(ROUTE_SNAPSHOT_KEY, JSON.stringify({
+      startedAt: st.startedAt,
+      points: simplifyRoute(st.routePoints, ROUTE_SNAPSHOT_POINTS),
+    }));
+  } catch { /* storage full or unavailable */ }
+}
+
+(() => {
+  const st = useCardioStore.getState();
+  if (!st.isTracking) return;
+  try {
+    const snap = JSON.parse(localStorage.getItem(ROUTE_SNAPSHOT_KEY) || 'null');
+    if (snap && snap.startedAt === st.startedAt && Array.isArray(snap.points) && snap.points.length > 0 && st.routePoints.length === 0) {
+      routeFromSnapshot = true;
+      useCardioStore.setState({ routePoints: snap.points });
+    }
+  } catch { /* corrupt snapshot: the native sync rebuilds the route */ }
+})();
+
+let snapshotTimer: ReturnType<typeof setTimeout> | null = null;
+useCardioStore.subscribe((state, prev) => {
+  if (state.routePoints === prev.routePoints && state.isTracking === prev.isTracking) return;
+  if (!state.isTracking) { saveRouteSnapshot(); return; }
+  if (snapshotTimer) return;
+  snapshotTimer = setTimeout(() => { snapshotTimer = null; saveRouteSnapshot(); }, 15_000);
+});
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') saveRouteSnapshot();
+  });
+}

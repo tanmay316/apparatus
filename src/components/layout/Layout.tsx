@@ -32,7 +32,6 @@ export function Layout() {
   // Chat owns the whole viewport; search and cardio draw their own header / full-screen overlays.
   const isChat = pathname.includes('/chat');
   const ownHeader = pathname.startsWith('/search');
-  const isCardio = pathname.startsWith('/cardio');
   const contentOffset = isDesktop && !isChat ? { paddingLeft: SIDEBAR_WIDTH } : undefined;
 
   return (
@@ -47,7 +46,7 @@ export function Layout() {
       <AdminAlertsSync />
       {/* On cardio the bot only appears when opened from an "Ask AI" button. */}
       {!isChat && <FloatingAIBot />}
-      {!isChat && !isCardio && <LiveChatOverlay />}
+      {!isChat && <LiveChatOverlay />}
       {!isChat && <BottomNav />}
 
       <div style={contentOffset} className={isChat ? 'h-full' : undefined}>
@@ -55,7 +54,7 @@ export function Layout() {
         <main
           className={isChat
             ? 'h-full w-full overflow-y-auto overscroll-contain'
-            : `max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-4 ${hasBottomNav ? 'pb-28 lg:pb-10' : 'pb-10'} relative`}
+            : `app-main ${hasBottomNav ? 'app-main--nav' : ''} max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 pt-4 relative`}
         >
           <Outlet />
         </main>

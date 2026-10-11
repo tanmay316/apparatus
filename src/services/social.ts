@@ -422,51 +422,78 @@ export async function getUserFeedActivities(userId: string, isOwn = false, isFol
 /** Newest `n` docs of a query (needs a createdAt index); falls back to the full query if the index is missing. */
 const newest = (base: Query, n: number) => getDocs(query(base, orderBy('createdAt', 'desc'), limit(n))).catch(() => getDocs(base));
 
-export async function getFeed(userId: string, followingUids: string[]): Promise<FeedItem[]> {
-  // 1. Fetch activities (include user, following athletes, and system celebration posts)
-  const ownerIds = [...new Set([userId, 'system', ...followingUids])].slice(0, 31);
+export const feedItemMillis = (item: FeedItem): number => {
+  const c = item.createdAt as any;
+  return c?.toMillis ? c.toMillis() : c?.seconds ? c.seconds * 1000 : 0;
+};
+
+const clanIdsCache = new Map<string, { at: number; ids: string[] }>();
+
+async function myClanIds(userId: string): Promise<string[]> {
+  const hit = clanIdsCache.get(userId);
+  if (hit && Date.now() - hit.at < 5 * 60_000) return hit.ids;
+  const snap = await getDocs(query(collection(db, 'clan_memberships'), where('userId', '==', userId), where('status', '==', 'active')));
+  const ids = snap.docs.map(d => d.data().clanId as string).filter(Boolean);
+  clanIdsCache.set(userId, { at: Date.now(), ids });
+  return ids;
+}
+
+/**
+ * One page of the home feed, newest first: `pageSize` items older than `before` (ms).
+ * Each source only returns its newest `pageSize`, so a page costs a few small reads instead of
+ * every recent post of every followed athlete.
+ */
+export async function getFeedPage(userId: string, followingUids: string[], before: number | null = null, pageSize = 10): Promise<FeedItem[]> {
+  const page = (base: Query) => getDocs(query(
+    base,
+    ...(before ? [where('createdAt', '<', Timestamp.fromMillis(before))] : []),
+    orderBy('createdAt', 'desc'),
+    limit(pageSize),
+  ));
   const activitiesRef = collection(db, 'activities');
-  const activitySnapshots = await Promise.all(ownerIds.flatMap(uid => {
-    if (uid === userId || uid === 'system') {
-      return [newest(query(activitiesRef, where('userId', '==', uid)), 50)];
-    }
-    return [
-      newest(query(activitiesRef, where('userId', '==', uid), where('visibility', '==', 'public')), 20),
-      newest(query(activitiesRef, where('userId', '==', uid), where('visibility', '==', 'followers')), 20),
-    ];
-  }));
-  
-  let activities = activitySnapshots.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as Activity)));
+  const toActivities = (snaps: { docs: { id: string; data: () => any }[] }[]) =>
+    snaps.flatMap(s => s.docs.map(d => ({ id: d.id, ...d.data() } as Activity)));
 
-  // 2. Fetch user's clan posts
-  let clanPosts: (CommunityPost & { feedType: 'clan_post' })[] = [];
-  try {
-    const memSnap = await getDocs(query(collection(db, 'clan_memberships'), where('userId', '==', userId), where('status', '==', 'active')));
-    const clanIds = memSnap.docs.map(d => d.data().clanId);
-    
-    if (clanIds.length > 0) {
-      // split into chunks of 10 for 'in' query
-      const chunks = [];
-      for (let i = 0; i < clanIds.length; i += 10) chunks.push(clanIds.slice(i, i + 10));
-      
-      const postSnaps = await Promise.all(
-        chunks.map(chunk => newest(query(collection(db, 'community_posts'), where('communityId', 'in', chunk)), 50))
-      );
-      clanPosts = postSnaps.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data(), feedType: 'clan_post' } as CommunityPost & { feedType: 'clan_post' })));
-    }
-  } catch (err) {
-    console.error('Error fetching clan posts for feed:', err);
-  }
+  const others = [...new Set(followingUids)].filter(uid => uid && uid !== userId && uid !== 'system');
+  const chunks: string[][] = [];
+  for (let i = 0; i < others.length; i += 10) chunks.push(others.slice(i, i + 10));
 
-  // 3. Merge and sort
-  const allDocs: FeedItem[] = [...activities, ...clanPosts];
-  return allDocs
-    .sort((a, b) => {
-      const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : ((a.createdAt as any)?.seconds ? (a.createdAt as any).seconds * 1000 : 0);
-      const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : ((b.createdAt as any)?.seconds ? (b.createdAt as any).seconds * 1000 : 0);
-      return timeB - timeA;
-    })
-    .slice(0, 50);
+  // One query per 10 athletes; if rules reject a chunk (e.g. a stale follow), query them one by one.
+  const followed = async (): Promise<Activity[]> => {
+    const single = (uid: string) => Promise.all([
+      page(query(activitiesRef, where('userId', '==', uid), where('visibility', '==', 'public'))).catch(() => null),
+      page(query(activitiesRef, where('userId', '==', uid), where('visibility', '==', 'followers'))).catch(() => null),
+    ]);
+    const snaps = await Promise.all(chunks.map(chunk =>
+      page(query(activitiesRef, where('userId', 'in', chunk), where('visibility', 'in', ['public', 'followers'])))
+        .then(s => [s])
+        .catch(() => Promise.all(chunk.map(single)).then(r => r.flat()))));
+    return toActivities(snaps.flat().filter((s): s is NonNullable<typeof s> => !!s));
+  };
+
+  const clanPosts = async (): Promise<FeedItem[]> => {
+    try {
+      const ids = await myClanIds(userId);
+      const clanChunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += 10) clanChunks.push(ids.slice(i, i + 10));
+      const snaps = await Promise.all(clanChunks.map(c => page(query(collection(db, 'community_posts'), where('communityId', 'in', c)))));
+      return snaps.flatMap(s => s.docs.map(d => ({ id: d.id, ...d.data(), feedType: 'clan_post' } as FeedItem)));
+    } catch (err) {
+      console.error('Error fetching clan posts for feed:', err);
+      return [];
+    }
+  };
+
+  const [own, system, fromFollowed, fromClans] = await Promise.all([
+    page(query(activitiesRef, where('userId', '==', userId))).then(s => toActivities([s])),
+    page(query(activitiesRef, where('userId', '==', 'system'))).then(s => toActivities([s])).catch(() => [] as Activity[]),
+    followed(),
+    clanPosts(),
+  ]);
+
+  const byId = new Map<string, FeedItem>();
+  for (const item of [...own, ...system, ...fromFollowed, ...fromClans]) if (item.id) byId.set(item.id, item);
+  return [...byId.values()].sort((a, b) => feedItemMillis(b) - feedItemMillis(a)).slice(0, pageSize);
 }
 
 export async function getPublicFeed(): Promise<FeedItem[]> {
@@ -860,6 +887,7 @@ export async function endActiveSession(uid: string, sessionType: 'workout' | 'ca
   // Only clear chat if no other active sessions remain for this user
   const remainingSessions = await getDocs(query(collection(db, 'activeSessions'), where('uid', '==', uid)));
   if (remainingSessions.empty) {
+    void clearLiveCheers(uid);
     const chatRef = collection(db, 'activeSessions', uid, 'chat');
     const snap = await getDocs(chatRef).catch(() => null);
     if (snap && snap.docs.length > 0) {
@@ -879,4 +907,33 @@ export async function sendLiveMessage(sessionUid: string, senderUid: string, sen
     text,
     createdAt: serverTimestamp(),
   });
+  // Push to the athlete's phone too (their app may be in the background mid-run).
+  if (sessionUid !== senderUid) {
+    await notify(sessionUid, {
+      type: 'live_cheer',
+      senderId: senderUid,
+      senderName: senderName.slice(0, 80),
+      senderPhoto,
+      message: text.slice(0, 1000),
+      targetId: sessionUid,
+      read: false,
+      extra: { kind: 'live_cheer' },
+    }).catch(() => {});
+  }
+}
+
+/** Cheers only matter during the session: drop their notifications (list + phone tray) afterwards. */
+export async function clearLiveCheers(uid: string) {
+  try {
+    const snap = await getDocs(query(collection(db, 'notifications'), where('receiverId', '==', uid), where('type', '==', 'live_cheer')));
+    if (!snap.empty) {
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+  } catch (err) {
+    console.warn('Could not clear cheer notifications', err);
+  }
+  const { clearLiveCheerAlerts } = await import('@/utils/notifications');
+  await clearLiveCheerAlerts();
 }

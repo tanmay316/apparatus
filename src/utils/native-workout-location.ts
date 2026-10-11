@@ -51,6 +51,8 @@ interface WorkoutLocationPlugin {
   stop(): Promise<void>;
   getSessionSummary(): Promise<NativeWorkoutSessionSummary>;
   getDownsampledPoints(options: { maxPoints: number }): Promise<{ points: NativeWorkoutPoint[] }>;
+  /** Android: shape-preserving (RDP) reduction of the stored route. */
+  getSimplifiedPoints?(options: { maxPoints: number }): Promise<{ points: NativeWorkoutPoint[] }>;
   getLocationsAfter(options: { timestamp: number }): Promise<{ points: NativeWorkoutPoint[] }>;
   requestBatteryOptimizationExemption(): Promise<{ isExempt: boolean }>;
   /** Android: lets the service keep the Live Training heartbeat going while the WebView is frozen. */

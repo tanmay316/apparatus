@@ -28,9 +28,9 @@ import { useNotificationPrefs } from '@/stores/notification-prefs-store';
 import { UpdatePopup } from '@/components/ui/UpdatePopup';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
-import { useCardioStore } from '@/stores/cardio-store';
+import { useCardioStore, syncWithNativeSession } from '@/stores/cardio-store';
 import { CardioLivePublisher } from '@/components/social/CardioLivePublisher';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { OtaKit } from '@otakit/capacitor-updater';
 import { SplashScreen } from '@capacitor/splash-screen';
@@ -40,6 +40,8 @@ import { SubscriptionSync } from '@/components/subscription/SubscriptionSync';
 import { PaywallSheet } from '@/components/subscription/PaywallSheet';
 import type { AppNotificationItem } from '@/types';
 import { BRAND } from '@/lib/brand';
+
+const AppWindow = registerPlugin<{ setBackgroundColor(o: { color: string }): Promise<void> }>('AppWindow');
 
 const loadDashboard = () => import('@/pages/Dashboard');
 const loadProfile = () => import('@/pages/ProfilePage');
@@ -82,7 +84,12 @@ const PartnerPage = lazy(() => import('@/pages/PartnerPage').then(m => ({ defaul
 const PurchaseReturnPage = lazy(() => import('@/pages/PurchaseReturnPage').then(m => ({ default: m.PurchaseReturnPage })));
 
 // A live session reopens straight into the tracker, so fetch it before anything else.
-if (useCardioStore.getState().isTracking) void loadCardio();
+const cardioLiveAtLaunch = useCardioStore.getState().isTracking;
+if (cardioLiveAtLaunch) {
+  void loadCardio();
+  // Start on the tracker itself instead of painting the dashboard first and redirecting.
+  if (window.location.pathname === '/') window.history.replaceState(window.history.state, '', '/cardio');
+}
 if (useWorkoutStore.getState().planId) void loadWorkout();
 
 /** Warms the main tab chunks once the first screen is up, so tab switches never show a spinner. */
@@ -164,8 +171,17 @@ function PreferencesSync() {
   // Keep the native splash up until the first real screen can paint (no loader flash in between).
   useEffect(() => {
     if (initialized) {
-      SplashScreen.hide({ fadeOutDuration: 150 }).catch(() => {});
-      prefetchMainRoutes();
+      // With a live session, lift the splash only once the tracker and its native stats are ready.
+      const ready = cardioLiveAtLaunch && Capacitor.isNativePlatform()
+        ? Promise.race([
+          Promise.all([loadCardio(), syncWithNativeSession()]),
+          new Promise(resolve => setTimeout(resolve, 1500)),
+        ])
+        : Promise.resolve();
+      ready.catch(() => {}).finally(() => {
+        SplashScreen.hide({ fadeOutDuration: 150 }).catch(() => {});
+        prefetchMainRoutes();
+      });
       return;
     }
     const fallback = setTimeout(() => SplashScreen.hide().catch(() => {}), 4000);
@@ -196,6 +212,10 @@ function PreferencesSync() {
         }
         StatusBar.setStyle({ style: theme === 'dark' ? Style.Dark : Style.Light }).catch(() => {});
       }).catch(() => {});
+      // Native canvas shown while the WebView repaints after returning from another app.
+      if (Capacitor.isPluginAvailable('AppWindow')) {
+        AppWindow.setBackgroundColor({ color: theme === 'dark' ? '#050505' : '#FFFFFF' }).catch(() => {});
+      }
     }
 
     // Keep the browser/PWA chrome colour in sync with the active theme.
@@ -308,6 +328,8 @@ function PreferencesSync() {
           if (newNote.type === 'reminder' && newNote.extra?.kind === 'workout_reminder' && Capacitor.isNativePlatform()) return;
           // The workout-complete banner already carries the volume change; cardio shows it on the summary.
           if (newNote.extra?.kind === 'progress' || newNote.extra?.kind === 'cardio_progress') return;
+          // LiveChatOverlay shows cheers on the session screen and posts their phone banner.
+          if (newNote.type === 'live_cheer') return;
           const createdAtMillis = newNote.createdAt && typeof (newNote.createdAt as any).toMillis === 'function'
             ? (newNote.createdAt as any).toMillis()
             : ((newNote.createdAt as any)?.seconds ? (newNote.createdAt as any).seconds * 1000 : 0);

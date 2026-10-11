@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Music2, Pause, Play, SkipBack, SkipForward, X } from 'lucide-react';
 import { positionAt, useNowPlaying } from '@/hooks/useNowPlaying';
 
-const HINT_KEY = 'apparatus_music_spotify_hint_dismissed';
+const HINT_KEY = 'apparatus_music_access_hint_dismissed';
 // Keep the card up briefly after pausing so playback can be resumed from here.
 const PAUSE_GRACE_MS = 60_000;
 
@@ -19,7 +19,7 @@ function formatMs(ms: number) {
  * Styled with the CardioTracker theme variables (--text, --muted, --border, --bg, --sienna).
  */
 export function NowPlayingCard({ className = '' }: { className?: string }) {
-  const { supported, state, togglePlayPause, next, previous, seekTo, openApp } = useNowPlaying(true);
+  const { supported, state, togglePlayPause, next, previous, seekTo, openApp, openSettings } = useNowPlaying(true);
   const [now, setNow] = useState(() => Date.now());
   const [hintDismissed, setHintDismissed] = useState(() => localStorage.getItem(HINT_KEY) === '1');
   const [artFailed, setArtFailed] = useState(false);
@@ -89,14 +89,21 @@ export function NowPlayingCard({ className = '' }: { className?: string }) {
           </span>
           {controls('sm')}
         </div>
-        {!hintDismissed && (
-          <div className="flex items-start gap-2 pr-1.5 pb-1 pt-0.5">
+        {!hintDismissed && state.granted === false && (
+          <div className="flex items-start gap-2 pr-1.5 pb-1 pt-1">
             <p className="flex-1 text-[11px] text-[var(--muted)] leading-snug">
-              Using Spotify? Turn on <b>Device Broadcast Status</b> in Spotify settings to see the song, cover and progress here.
+              See the song, cover and progress from YouTube, Spotify or any music app. Android asks you to allow <b>notification access</b> for this; we only read what's playing.
             </p>
             <button
+              onClick={openSettings}
+              className="h-7 px-3 rounded-full text-[11.5px] font-bold shrink-0 active:scale-95 transition-transform"
+              style={{ background: 'var(--text)', color: 'var(--bg)' }}
+            >
+              Allow
+            </button>
+            <button
               onClick={() => { localStorage.setItem(HINT_KEY, '1'); setHintDismissed(true); }}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-[var(--muted)] shrink-0"
+              className="w-7 h-7 rounded-full flex items-center justify-center text-[var(--muted)] shrink-0"
               aria-label="Dismiss"
             >
               <X size={13} />

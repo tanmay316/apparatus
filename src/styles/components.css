@@ -614,9 +614,7 @@
   }
 
   [data-theme='dark'] .bottom-app-nav {
-    background: linear-gradient(145deg, rgba(20, 20, 22, 0.96), rgba(8, 8, 9, 0.97)) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
+    background: linear-gradient(145deg, #141416, #08080a) !important;
     border-color: var(--dk-border) !important;
     box-shadow: -3px -3px 10px rgba(255, 255, 255, 0.025), 8px 8px 24px rgba(0, 0, 0, 0.95), inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
   }
@@ -763,7 +761,23 @@
   }
 
   body.community-create-open .bottom-nav-shell {
-    display: none !important;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s ease, visibility 0s linear 0.18s;
+  }
+
+  /* Page bottom padding clears the floating nav plus the phone's own button/gesture bar. */
+  .app-main { padding-bottom: calc(var(--sab) + 40px); }
+  .app-main--nav { padding-bottom: calc(var(--bottom-nav-space) + 24px); }
+  @media (min-width: 1024px) {
+    .app-main--nav { padding-bottom: calc(var(--sab) + 40px); }
+  }
+
+  /* Floating action buttons sit just above the bottom nav (no nav on desktop). */
+  .fab-above-nav { bottom: calc(var(--bottom-nav-space) + 14px); }
+  @media (min-width: 1024px) {
+    .fab-above-nav { bottom: calc(var(--sab) + 32px); }
   }
 
   /* Weekly cards retain depth with dark-only shadows—never light casts. */

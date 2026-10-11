@@ -15,6 +15,7 @@ import {
 import { compressImageFile, shareablePhotoURL } from '@/utils/image-compression';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import type { Activity, Comment } from '@/types';
+import { patchCachedItem } from '@/lib/live-deletions';
 import { ActivityPostCard } from '@/components/social/ActivityPostCard';
 import { LiveUserAvatar, LiveUserName } from '@/components/ui/LiveUser';
 
@@ -97,7 +98,7 @@ export function SingleActivitySheet({ activity, isOpen, onClose }: SingleActivit
       setCommentImages([]);
       setReplyingTo(null);
       queryClient.invalidateQueries({ queryKey: ['activityComments', activity?.id] });
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      if (activity?.id) patchCachedItem<Activity>(queryClient, ['feed'], activity.id, a => ({ ...a, commentsCount: (a.commentsCount || 0) + 1 }));
     },
     onError: (err: any) => showToast(err?.message || 'Failed to post comment', 'error')
   });

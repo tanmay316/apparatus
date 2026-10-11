@@ -100,7 +100,7 @@ export default function AdminNutritionSettings() {
       <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-ink-2 border border-line/40">
         <div>
           <div className="text-sm font-medium text-bone">Use global admin keys</div>
-          <div className="text-xs text-bone-dim mt-0.5">When on, every user's AI requests are billed to these keys instead of their personal ones.</div>
+          <div className="text-xs text-bone-dim mt-0.5">When on, every user's AI requests use these keys. When off, the server's environment keys are used.</div>
         </div>
         <Switch checked={useAdminKeys} onChange={setUseAdminKeys} label="Use global admin keys" />
       </div>

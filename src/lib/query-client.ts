@@ -37,11 +37,14 @@ export async function restoreQueryCache(uid: string | undefined) {
 
 let currentUid: string | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let dirty = false;
 
 async function saveNow() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
   const uid = currentUid;
-  if (!uid) return;
+  // Unchanged cache: re-serializing it on every app switch blocks the first frame on return.
+  if (!uid || !dirty) return;
+  dirty = false;
   try {
     const state = dehydrate(queryClient, {
       shouldDehydrateQuery: q => q.queryKey[0] !== 'nutrition-image' && q.state.status === 'success' && q.state.data !== undefined && isPersistable(q.state.data),
@@ -54,6 +57,7 @@ async function saveNow() {
     await idbSet(CACHE_KEY, { uid, savedAt: Date.now(), queries } satisfies PersistedCache);
   } catch (err) {
     console.warn('Query cache save failed:', err);
+    dirty = true;
   }
 }
 
@@ -65,6 +69,7 @@ export function startQueryPersistence() {
   persisting = true;
   queryClient.getQueryCache().subscribe(event => {
     if (event.type !== 'updated' || event.action.type !== 'success' || !currentUid) return;
+    dirty = true;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { void saveNow(); }, 4000);
   });

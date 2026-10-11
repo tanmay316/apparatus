@@ -38,13 +38,13 @@ function without(data: unknown, id: string, depth = 0): unknown {
     let changed = false;
     const next = data.flatMap(item => {
       if (hasId(item, id)) { changed = true; return []; }
-      const inner = depth < 2 ? without(item, id, depth + 1) : item;
+      const inner = depth < 4 ? without(item, id, depth + 1) : item;
       if (inner !== item) changed = true;
       return [inner];
     });
     return changed ? next : data;
   }
-  if (data && typeof data === 'object' && depth < 2 && Object.getPrototypeOf(data) === Object.prototype) {
+  if (data && typeof data === 'object' && depth < 4 && Object.getPrototypeOf(data) === Object.prototype) {
     let changed = false;
     const next: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(data)) {
@@ -67,6 +67,41 @@ export function purgeDeleted(queryClient: QueryClient, id: string) {
       continue;
     }
     const next = without(data, id);
+    if (next !== data) queryClient.setQueryData(q.queryKey, next);
+  }
+}
+
+function patched(data: unknown, id: string, fn: (item: any) => any, depth = 0): unknown {
+  if (hasId(data, id)) return fn(data);
+  if (depth >= 4) return data;
+  if (Array.isArray(data)) {
+    let changed = false;
+    const next = data.map(item => {
+      const inner = patched(item, id, fn, depth + 1);
+      if (inner !== item) changed = true;
+      return inner;
+    });
+    return changed ? next : data;
+  }
+  if (data && typeof data === 'object' && Object.getPrototypeOf(data) === Object.prototype) {
+    let changed = false;
+    const next: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data)) {
+      const inner = v && typeof v === 'object' ? patched(v, id, fn, depth + 1) : v;
+      if (inner !== v) changed = true;
+      next[k] = inner;
+    }
+    return changed ? next : data;
+  }
+  return data;
+}
+
+/** Updates one item (by id) wherever it is cached under `prefix`, without refetching the lists. */
+export function patchCachedItem<T>(queryClient: QueryClient, prefix: unknown[], id: string, fn: (item: T) => T) {
+  for (const q of queryClient.getQueryCache().findAll({ queryKey: prefix })) {
+    const data = q.state.data;
+    if (data === undefined) continue;
+    const next = patched(data, id, fn);
     if (next !== data) queryClient.setQueryData(q.queryKey, next);
   }
 }

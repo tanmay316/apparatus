@@ -10,6 +10,11 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(WorkoutLocationPlugin.class);
         registerPlugin(MediaControlPlugin.class);
         registerPlugin(DailyStepsPlugin.class);
+        registerPlugin(AppWindowPlugin.class);
         super.onCreate(savedInstanceState);
+        if (getBridge() != null) {
+            AppWindowPlugin.applySaved(this, getBridge().getWebView());
+            AppWindowPlugin.keepRendererWarm(getBridge().getWebView());
+        }
     }
 }

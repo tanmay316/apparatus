@@ -2,7 +2,7 @@ import { collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
 import { db } from '@/lib/firebase';
 import type { Plan, PlanDay, Exercise } from '@/types';
 
-export async function getUserPlans(uid: string): Promise<Plan[]> {
+export async function getUserPlans(uid: string, opts?: { includeArchived?: boolean }): Promise<Plan[]> {
   const q = query(
     collection(db, 'plans'),
     where('ownerId', '==', uid)
@@ -11,7 +11,7 @@ export async function getUserPlans(uid: string): Promise<Plan[]> {
   const snap = await getDocs(q);
   return snap.docs
     .map(d => ({ id: d.id, ...d.data() } as Plan))
-    .filter(p => p.isArchived !== true)
+    .filter(p => opts?.includeArchived || p.isArchived !== true)
     .sort((a, b) => {
       const valA = a.updatedAt?.seconds || 0;
       const valB = b.updatedAt?.seconds || 0;
@@ -77,6 +77,13 @@ export async function updatePlan(planId: string, data: Partial<Plan>): Promise<v
 export async function archivePlan(planId: string): Promise<void> {
   await updateDoc(doc(db, 'plans', planId), {
     isArchived: true,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function restorePlan(planId: string): Promise<void> {
+  await updateDoc(doc(db, 'plans', planId), {
+    isArchived: false,
     updatedAt: serverTimestamp(),
   });
 }

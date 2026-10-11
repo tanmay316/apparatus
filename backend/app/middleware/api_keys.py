@@ -1,5 +1,5 @@
 """
-Middleware for resolving API keys from admin settings (Firestore) or user's personal keys.
+Middleware for resolving API keys from admin settings (Firestore) or server env.
 """
 import asyncio
 import logging
@@ -45,14 +45,13 @@ async def resolve_api_keys(user: dict) -> dict:
     """
     Resolve API keys with priority:
     1. Admin global keys (if admin_settings/ai_mode.use_admin_keys is on)
-    2. User's personal keys from users/{uid}/private/api_keys
-    3. Environment variable fallback
+    2. Environment variable fallback
+    Users cannot supply their own keys (AI is part of the subscription).
     Secrets are never logged.
     """
     keys = _env_keys()
-    user_id = user.get("uid", "")
     token = user.get("_token")
-    if not token or not user_id:
+    if not token or not user.get("uid"):
         return keys
 
     project_id = "apparatus-46b1b"
@@ -74,12 +73,6 @@ async def resolve_api_keys(user: dict) -> dict:
                 except Exception as exc:
                     logger.warning("Could not read admin API keys: %s", type(exc).__name__)
                     return keys
-
-            user_resp = await client.get(f"{base_url}/users/{user_id}/private/api_keys", headers=headers)
-            if user_resp.status_code == 200:
-                fields = user_resp.json().get("fields", {})
-                personal = {f: fields.get(f, {}).get("stringValue", "") for f in _KEY_FIELDS}
-                keys = _merge(keys, personal)
     except Exception as exc:
         logger.warning("Could not resolve API keys from Firestore: %s", type(exc).__name__)
 

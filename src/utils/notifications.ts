@@ -249,7 +249,37 @@ export async function notifyDevice(category: NotificationCategory, title: string
   await showNotification(Math.floor(Math.random() * 2147483647), title, body, extraData, channel);
 }
 
-// Local notification id ranges: 100–799 workout reminders (incl. legacy 3-a-day ids), 2000–2010 inactivity nudges.
+// Local notification id ranges: 100–799 workout reminders (incl. legacy 3-a-day ids), 2000–2010 inactivity nudges,
+// 3000–3049 live-training cheers.
+const LIVE_CHEER_ID_BASE = 3000;
+const LIVE_CHEER_IDS = 50;
+let liveCheerSeq = 0;
+
+/** A cheer banner on the phone (foreground only; FCM delivers it while the app is in the background). */
+export async function showLiveCheerNotification(senderName: string, text: string) {
+  if (!allowsBanner(getNotificationPrefs(), 'social')) return;
+  const id = LIVE_CHEER_ID_BASE + (liveCheerSeq++ % LIVE_CHEER_IDS);
+  await showNotification(id, `🔥 ${senderName} cheered you on`, text, { type: 'live_cheer' }, 'general_notifications');
+}
+
+/** Removes every cheer from the notification tray (local banners and delivered pushes). */
+export async function clearLiveCheerAlerts() {
+  if (!Capacitor.isNativePlatform()) return;
+  try {
+    await LocalNotifications.cancel({
+      notifications: Array.from({ length: LIVE_CHEER_IDS }, (_, i) => ({ id: LIVE_CHEER_ID_BASE + i })),
+    });
+    const delivered = await LocalNotifications.getDeliveredNotifications();
+    const localCheers = delivered.notifications.filter(n => n.id >= LIVE_CHEER_ID_BASE && n.id < LIVE_CHEER_ID_BASE + LIVE_CHEER_IDS);
+    if (localCheers.length) await LocalNotifications.removeDeliveredNotifications({ notifications: localCheers });
+  } catch { /* nothing to clear */ }
+  try {
+    const { notifications } = await PushNotifications.getDeliveredNotifications();
+    const pushCheers = notifications.filter(n => n.tag === 'live_cheer' || (n.data as any)?.type === 'live_cheer');
+    if (pushCheers.length) await PushNotifications.removeDeliveredNotifications({ notifications: pushCheers });
+  } catch { /* push plugin unavailable */ }
+}
+
 const isWorkoutReminderId = (id: number) => id >= 100 && id <= 799;
 const isInactivityId = (id: number) => id >= 2000 && id <= 2010;
 

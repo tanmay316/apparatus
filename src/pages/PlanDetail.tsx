@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, ArrowLeft, Trash2, Edit3, Lock, Eye, Play, Copy, GripVertical } from 'lucide-react';
+import { Plus, ArrowLeft, Trash2, Edit3, Lock, Eye, Play, Copy, GripVertical, Archive } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { getPlan, getPlanDays, updatePlan, deletePlanDay, savePlanDay, archivePlan, reorderPlanDays, clonePlan } from '@/services/plans';
 import { useAuthStore } from '@/stores/auth-store';
@@ -220,11 +220,12 @@ export function PlanDetail() {
                   <Copy size={15} /> Duplicate
                 </button>
                 <button 
-                  onClick={() => { if(confirm('Delete this plan forever?')) archiveMutation.mutate() }}
-                  className="btn-secondary hover:text-danger hover:border-danger"
+                  onClick={() => { if(confirm('Archive this plan? You can restore it from "Archived plans" at the bottom of My Plans.')) archiveMutation.mutate() }}
+                  className="btn-secondary"
                   title="Archive plan"
+                  aria-label="Archive plan"
                 >
-                  <Trash2 size={16} />
+                  <Archive size={16} />
                 </button>
               </>
             )}

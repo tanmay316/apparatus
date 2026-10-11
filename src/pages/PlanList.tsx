@@ -2,8 +2,8 @@ import { useState, type FormEvent, type MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Archive, ArrowRight, Check, Clock, Compass, Copy, FolderPlus, Plus, Star, Trash2, X } from 'lucide-react';
-import { getUserPlans, createPlan, archivePlan, deletePlan, clonePlan } from '@/services/plans';
+import { Archive, ArchiveRestore, ArrowRight, Check, ChevronDown, Clock, Compass, Copy, FolderPlus, Plus, Star, Trash2, X } from 'lucide-react';
+import { getUserPlans, createPlan, archivePlan, restorePlan, deletePlan, clonePlan } from '@/services/plans';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { DaysPerWeek, PlanBadge, planCategory } from '@/components/plans/plan-meta';
@@ -20,12 +20,15 @@ export function PlanList() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
 
-  const { data: plans = [], isLoading } = useQuery({
-    queryKey: ['plans', user?.uid],
-    queryFn: () => getUserPlans(user!.uid),
+  const { data: allPlans = [], isLoading } = useQuery({
+    queryKey: ['plans', user?.uid, 'with-archived'],
+    queryFn: () => getUserPlans(user!.uid, { includeArchived: true }),
     enabled: !!user,
   });
+  const plans = allPlans.filter(p => !p.isArchived);
+  const archivedPlans = allPlans.filter(p => p.isArchived);
 
   const createMutation = useMutation({
     mutationFn: (title: string) => createPlan({
@@ -57,6 +60,15 @@ export function PlanList() {
       showToast('Plan archived');
     },
     onError: () => showToast('Could not archive plan', 'error'),
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (planId: string) => restorePlan(planId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plans', user?.uid] });
+      showToast('Plan restored');
+    },
+    onError: () => showToast('Could not restore plan', 'error'),
   });
 
   const deleteMutation = useMutation({
@@ -100,7 +112,7 @@ export function PlanList() {
 
   const onArchive = async (e: MouseEvent, plan: Plan) => {
     stop(e);
-    const ok = await confirm({ title: 'Archive plan', message: `Archive "${plan.title}"? It will be hidden from your plans.`, confirmText: 'Archive', type: 'warning', icon: 'alert' });
+    const ok = await confirm({ title: 'Archive plan', message: `Archive "${plan.title}"? You can restore it anytime from Archived plans at the bottom of this page.`, confirmText: 'Archive', type: 'warning', icon: 'alert' });
     if (ok && plan.id) archiveMutation.mutate(plan.id);
   };
 
@@ -269,6 +281,41 @@ export function PlanList() {
             </Link>
           </motion.div>
         </>
+      )}
+
+      {!isLoading && archivedPlans.length > 0 && (
+        <motion.section variants={item} className="dx-card overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowArchived(v => !v)}
+            aria-expanded={showArchived}
+            className="w-full p-4 flex items-center gap-3 text-left"
+          >
+            <span className="dx-badge-icon"><Archive size={18} /></span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[14px] font-semibold">Archived plans</div>
+              <div className="text-[12px] dx-muted">{archivedPlans.length} hidden plan{archivedPlans.length === 1 ? '' : 's'} · restore or delete</div>
+            </div>
+            <ChevronDown size={18} className={`dx-muted transition-transform ${showArchived ? 'rotate-180' : ''}`} />
+          </button>
+          {showArchived && (
+            <ul className="px-4 pb-3">
+              {archivedPlans.map(plan => (
+                <li key={plan.id} className="flex items-center gap-3 py-2.5" style={{ borderTop: '1px solid var(--dx-border)' }}>
+                  <PlanBadge plan={plan} size={34} />
+                  <Link to={`/plans/${plan.id}`} className="flex-1 min-w-0">
+                    <div className="text-[14px] font-semibold truncate">{plan.title}</div>
+                    <div className="text-[11.5px] dx-muted">{planCategory(plan).label}</div>
+                  </Link>
+                  <button type="button" onClick={() => restoreMutation.mutate(plan.id!)} disabled={restoreMutation.isPending} className="dx-btn-secondary !h-9 !px-3 !text-[12.5px]">
+                    <ArchiveRestore size={14} /> Restore
+                  </button>
+                  <button type="button" onClick={e => onDelete(e, plan)} className="dx-icon-btn dx-icon-btn--sm" title="Delete" aria-label={`Delete ${plan.title}`} style={{ color: '#dc2626' }}><Trash2 size={15} /></button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </motion.section>
       )}
     </motion.div>
   );

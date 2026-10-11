@@ -31,6 +31,17 @@ import { ExerciseIllustration } from '@/components/ui/ExerciseIllustration';
 import { getBadge } from '@/lib/badges';
 import { effectiveStreak } from '@/lib/stats';
 import { BRAND } from '@/lib/brand';
+import { NowPlayingCard } from '@/components/cardio/NowPlayingCard';
+
+// NowPlayingCard is styled with the cardio tracker's variables; point them at the dx palette.
+const MUSIC_CARD_VARS = {
+  '--text': 'var(--dx-text)',
+  '--muted': 'var(--dx-muted)',
+  '--border': 'var(--dx-border)',
+  '--bg': 'var(--dx-card)',
+  '--card': 'var(--dx-card-2)',
+  '--sienna': 'var(--dx-accent)',
+} as React.CSSProperties;
 
 function localDateKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -850,6 +861,13 @@ export function WorkoutSession() {
           </div>
         ))}
       </div>
+
+      {/* Music (shown only while something is playing on the phone) */}
+      {store.isActive && !isViewingHistory && (
+        <div style={MUSIC_CARD_VARS}>
+          <NowPlayingCard className="mt-3 shadow-sm" />
+        </div>
+      )}
 
       <div className="space-y-4 mt-5">
         {renderSection('Warm-up', currentDay.time || 'Get moving', store.isActive ? store.warmup : displayWarmup, 'warmup', Activity)}

@@ -5,7 +5,7 @@ import { useWorkoutStore } from '@/stores/workout-store';
 import { useUserWeight } from '@/hooks/use-user-weight';
 import { getPlan, getPlanDays } from '@/services/plans';
 import { getWorkoutsByDateRange } from '@/services/workouts';
-import { getFollowing, getFeed } from '@/services/social';
+import { getFollowing, getFeedPage } from '@/services/social';
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { effectiveStreak } from '@/lib/stats';
 import { computeAthleteRank } from '@/lib/rank';
@@ -113,20 +113,19 @@ export function Dashboard() {
     }
   });
 
-  const { data: following = [] } = useQuery({
+  const { data: following = [], isSuccess: followingReady } = useQuery({
     queryKey: ['following', profile?.uid],
     queryFn: () => getFollowing(profile!.uid),
     enabled: !!profile?.uid,
-    staleTime: 0,
-    refetchOnMount: 'always',
+    staleTime: 60_000,
   });
 
+  // Only the 5 newest posts are shown here, so only those are fetched.
   const { data: feed = [] } = useQuery({
-    queryKey: ['feed', profile?.uid, following],
-    queryFn: () => getFeed(profile!.uid, following),
-    enabled: !!profile?.uid,
-    staleTime: 0,
-    refetchOnMount: 'always',
+    queryKey: ['feed', 'dashboard', profile?.uid, following],
+    queryFn: () => getFeedPage(profile!.uid, following, null, 5),
+    enabled: !!profile?.uid && followingReady,
+    staleTime: 60_000,
   });
 
   if (!profile) return null;

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, useRef, type ReactNode } from 'react'
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  Bell, ChevronRight, Download, Footprints, Globe2, KeyRound, Lock, LogOut, Palette, Scale, Trash2, Upload, User, UserCheck, Users,
+  Bell, ChevronRight, Download, Footprints, Globe2, Lock, LogOut, Palette, Scale, Trash2, Upload, User, UserCheck, Users,
   Trophy, BarChart3, AlarmClock, Crown, Salad,
 } from 'lucide-react';
 import { deleteUser } from 'firebase/auth';
@@ -10,7 +10,6 @@ import { CustomSelect } from '@/components/ui/CustomSelect';
 import { Toggle } from '@/components/ui/Toggle';
 import { NotificationSettings } from '@/components/settings/NotificationSettings';
 import { Segmented, SettingRow, SettingsSection } from '@/components/settings/SettingsLayout';
-import PersonalAISettings from '@/components/settings/PersonalAISettings';
 import { ProSettings } from '@/components/settings/ProSettings';
 import { useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
 import { useAuthStore } from '@/stores/auth-store';
@@ -36,7 +35,6 @@ const SECTIONS = [
   { id: 'notifications', label: 'Notifications', icon: Bell },
   { id: 'reminders', label: 'Reminders', icon: AlarmClock },
   { id: 'appearance', label: 'Appearance', icon: Palette },
-  { id: 'ai', label: 'AI keys', icon: KeyRound },
   { id: 'data', label: 'Your data', icon: Download },
   { id: 'account', label: 'Account', icon: LogOut },
 ];
@@ -678,10 +676,6 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
             <SettingRow label="Language">
               <Segmented label="Language" value={language} onChange={setLanguage} options={[{ value: 'en', label: 'English' }, { value: 'hi', label: 'हिन्दी' }]} />
             </SettingRow>
-          </SettingsSection>
-
-          <SettingsSection id="ai" title="AI keys" description="For AI nutrition features.">
-            <PersonalAISettings />
           </SettingsSection>
 
           <SettingsSection id="data" title="Your data">

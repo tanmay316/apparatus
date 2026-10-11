@@ -71,12 +71,31 @@ export const MAP_THEMES = {
   cyclosm: { label: 'CyclOSM', url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', bg: '#f5f5f5', maxNativeZoom: 18, attribution: `${OSM_CREDIT} · CyclOSM` },
 } satisfies Record<string, MapTheme>;
 
-/** Map data credit the tile licences require (OpenStreetMap ODbL, Esri terms). */
-export function MapAttribution({ text, className = '' }: { text: string; className?: string }) {
+/** Map data credit the tile licences require (OpenStreetMap ODbL, Esri terms), collapsed behind an ⓘ tap. */
+export function MapAttribution({ text, className = '', expanded = false }: { text: string; className?: string; expanded?: boolean }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(() => setOpen(false), 4000);
+    return () => clearTimeout(t);
+  }, [open]);
+
+  if (expanded) {
+    return (
+      <span className={`absolute z-[400] pointer-events-none select-none px-1.5 py-[1px] rounded text-[9px] leading-tight bg-black/35 text-white/85 ${className}`}>
+        {text}
+      </span>
+    );
+  }
   return (
-    <span className={`absolute z-[400] pointer-events-none select-none px-1.5 py-[1px] rounded text-[9px] leading-tight bg-black/35 text-white/85 ${className}`}>
-      {text}
-    </span>
+    <button
+      type="button"
+      aria-label={open ? text : 'Map data credits'}
+      onClick={e => { e.preventDefault(); e.stopPropagation(); setOpen(v => !v); }}
+      className={`absolute z-[400] select-none flex items-center gap-1 h-[18px] rounded-full bg-black/30 text-white/85 text-[9px] leading-none ${open ? 'px-1.5' : 'w-[18px] justify-center'} ${className}`}
+    >
+      {open ? text : <span className="font-serif italic font-semibold text-[10px]" aria-hidden>i</span>}
+    </button>
   );
 }
 
@@ -165,6 +184,10 @@ function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive, mapRot
       }
       // If map is rotating, stay centered without animation (keeps user zoom)
       else if (mapRotationMode) {
+        map.setView(target, map.getZoom(), { animate: false });
+      }
+      // Back from the background after moving far: snap, don't glide across unloaded tiles.
+      else if (dist > 150) {
         map.setView(target, map.getZoom(), { animate: false });
       }
       // Smooth follow if moved more than 12m - keep whatever zoom the user chose
@@ -935,7 +958,7 @@ export function RouteMap({
               crossOrigin={fitToContainer || isCapturing ? 'anonymous' : undefined}
               maxNativeZoom={themeData.maxNativeZoom}
               maxZoom={19}
-              keepBuffer={isFullScreen ? 1 : 2}
+              keepBuffer={2}
               updateWhenZooming={false}
               eventHandlers={{
                 tileerror: () => {
@@ -1019,6 +1042,7 @@ export function RouteMap({
       {!hideMap && (
         <MapAttribution
           text={themeData.attribution}
+          expanded={isCapturing}
           className={isFullScreen ? 'left-2 top-[calc(var(--sat)+64px)]' : 'right-1.5 bottom-1.5'}
         />
       )}

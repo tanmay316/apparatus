@@ -11,6 +11,7 @@ import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { addComment, getComments, hasLiked, toggleLike, deleteActivity } from '@/services/social';
 import type { Activity, Comment } from '@/types';
+import { patchCachedItem } from '@/lib/live-deletions';
 import { calculateBodyweightReps, calculateShareVolume, getActiveMuscleScores, getActiveMusclesFromLogs, isWarmupOrCooldown, muscleFocus, type MuscleScore } from '@/lib/muscle-map';
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
@@ -469,16 +470,18 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
     mutationFn: () => toggleLike(activity.id!, user!.uid),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ['liked', activity.id, user?.uid] });
-      const previousLiked = queryClient.getQueryData(['liked', activity.id, user?.uid]);
+      const previousLiked = queryClient.getQueryData<boolean>(['liked', activity.id, user?.uid]);
       queryClient.setQueryData(['liked', activity.id, user?.uid], (old: boolean) => !old);
-      return { previousLiked };
+      const delta = previousLiked ? -1 : 1;
+      patchCachedItem<Activity>(queryClient, ['feed'], activity.id!, a => ({ ...a, likesCount: Math.max(0, (a.likesCount || 0) + delta) }));
+      return { previousLiked, delta };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['liked', activity.id] });
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
     onError: (_err, _newVal, context) => {
       queryClient.setQueryData(['liked', activity.id, user?.uid], context?.previousLiked);
+      if (context) patchCachedItem<Activity>(queryClient, ['feed'], activity.id!, a => ({ ...a, likesCount: Math.max(0, (a.likesCount || 0) - context.delta) }));
       showToast('Could not update like', 'error');
     },
   });
@@ -768,7 +771,6 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
 
               await useAuthStore.getState().updateProfile({ bookmarks: newBookmarks });
               showToast(isCurrentlySaved ? 'Removed from bookmarks' : 'Saved to bookmarks', 'info');
-              queryClient.invalidateQueries({ queryKey: ['feed'] });
             } catch (err) {
               showToast('Could not save bookmark', 'error');
             }

@@ -37,7 +37,7 @@ export async function generateWorkoutPlan(payload: WorkoutPlanPayload) {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     if (response.status === 402 && isProRequired(errorData.detail)) {
-      useSubscriptionStore.getState().openPaywall(errorData.detail.message);
+      useSubscriptionStore.getState().openPaywall(errorData.detail.message, { auto: true });
       throw new Error(errorData.detail.message);
     }
     throw new Error(errorData.detail || 'Failed to generate workout plan');

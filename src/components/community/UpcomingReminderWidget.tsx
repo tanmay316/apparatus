@@ -165,8 +165,8 @@ export function UpcomingReminderWidget() {
 
   return (
     <>
-      {/* Floating Animated Pill Widget on Bottom-Left - horizontally aligned with AI Chatbot button (bottom-[110px]) */}
-      <div className="fixed bottom-[110px] left-4 sm:left-6 z-[210]">
+      {/* Floating pill on the bottom-left, level with the AI button. */}
+      <div className="fab-above-nav fixed left-4 sm:left-6 z-[210]">
         <motion.button
           initial={{ scale: 0, y: 20 }}
           animate={{ scale: 1, y: 0 }}

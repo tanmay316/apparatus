@@ -150,17 +150,25 @@ export function PaywallSheet() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 40, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 380, damping: 34 }}
-            className="relative w-full sm:max-w-md max-h-[92dvh] overflow-y-auto rounded-t-[28px] sm:rounded-[28px] dx-card !rounded-b-none sm:!rounded-[28px]"
-            style={{ paddingBottom: 'max(var(--sab), 20px)' }}
+            className="relative w-full sm:max-w-md flex flex-col overflow-hidden rounded-t-[28px] sm:rounded-[28px] dx-card !rounded-b-none sm:!rounded-[28px]"
+            style={{ maxHeight: 'min(92dvh, calc(100dvh - var(--sat) - 24px))' }}
           >
+            {/* Outside the scroller: a tap that only stops momentum scrolling would otherwise be lost. */}
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); close(); }}
+              aria-label="Close"
+              className="absolute right-2 top-2 z-10 w-12 h-12 flex items-center justify-center"
+              style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+            >
+              <span className="dx-hero-icon !w-9 !h-9 pointer-events-none"><X size={16} /></span>
+            </button>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain" style={{ paddingBottom: 'max(var(--sab), 20px)' }}>
             <div className="dx-hero !rounded-none sm:!rounded-t-[28px] px-5 pt-6 pb-5">
-              <button type="button" onClick={close} aria-label="Close" className="dx-hero-icon !w-9 !h-9 absolute right-4 top-4">
-                <X size={16} />
-              </button>
-              <div className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.14em] opacity-80">
+              <div className="flex items-center gap-2 pr-10 text-[12px] font-semibold uppercase tracking-[0.14em] opacity-80">
                 <Crown size={14} /> {BRAND.name} Pro
               </div>
-              <h2 className="mt-2 text-[24px] leading-tight font-semibold">
+              <h2 className="mt-2 pr-10 text-[24px] leading-tight font-semibold">
                 {isPro ? "You're on Pro" : 'Train smarter, without limits'}
               </h2>
               {reason && !isPro && <p className="mt-2 text-[13px] opacity-85 leading-snug">{reason}</p>}
@@ -289,6 +297,7 @@ export function PaywallSheet() {
                   )}
                 </>
               )}
+            </div>
             </div>
           </motion.div>
         </motion.div>

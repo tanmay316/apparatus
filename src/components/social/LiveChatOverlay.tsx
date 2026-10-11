@@ -7,7 +7,7 @@ import { useCardioStore } from '@/stores/cardio-store';
 import { sendLiveMessage } from '@/services/social';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, MessageCircle, Flame } from 'lucide-react';
-import { notifyDevice } from '@/utils/notifications';
+import { showLiveCheerNotification } from '@/utils/notifications';
 import { createPortal } from 'react-dom';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
@@ -78,12 +78,10 @@ export function LiveChatOverlay() {
               return [...prev, data];
             });
 
-            // Trigger sound / system push notification
-            notifyDevice(
-              'social',
-              `🔥 Cheer from ${data.senderName}`, 
-              data.text
-            ).catch(() => {});
+            // In the background the push notification covers it; in the app, show a banner too.
+            if (document.visibilityState === 'visible') {
+              showLiveCheerNotification(data.senderName || 'An athlete', data.text).catch(() => {});
+            }
           }
         }
       });
@@ -137,7 +135,9 @@ export function LiveChatOverlay() {
 
   return (
     <>
-      <div className="fixed top-20 right-4 z-[9999] flex flex-col gap-3 max-w-[290px] pointer-events-none" style={themeStyles}>
+      {/* Portaled above the full-screen cardio tracker, just under its header. */}
+      {createPortal(
+      <div className="fixed right-4 z-[10020] flex flex-col gap-3 max-w-[290px] pointer-events-none" style={{ ...themeStyles, top: 'calc(var(--sat) + 84px)' }}>
         <AnimatePresence>
           {messages.map(msg => (
             <motion.div
@@ -191,7 +191,9 @@ export function LiveChatOverlay() {
             </motion.div>
           ))}
         </AnimatePresence>
-      </div>
+      </div>,
+      document.body,
+      )}
 
       {/* Reply Modal */}
       {replyingTo && createPortal(
