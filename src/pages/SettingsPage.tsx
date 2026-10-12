@@ -3,7 +3,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell, ChevronRight, Download, Footprints, Globe2, Lock, LogOut, Palette, Scale, Trash2, Upload, User, UserCheck, Users,
-  Trophy, BarChart3, AlarmClock, Crown, Salad,
+  Trophy, BarChart3, AlarmClock, Crown, Salad, Radar,
 } from 'lucide-react';
 import { deleteUser } from 'firebase/auth';
 import { CustomSelect } from '@/components/ui/CustomSelect';
@@ -25,6 +25,8 @@ import { acceptAllFollowRequests, restrictPublicContent } from '@/services/socia
 import { computeAthleteRank } from '@/lib/rank';
 import type { UserProfile } from '@/types';
 import { BRAND } from '@/lib/brand';
+import { NearbySettingsSheet } from '@/components/nearby/NearbySettingsSheet';
+import { nearbyVisibilityOf } from '@/services/nearby';
 
 const SECTIONS = [
   { id: 'pro', label: `${BRAND.name} Pro`, icon: Crown },
@@ -129,6 +131,7 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
   const [showClans, setShowClans] = useState(profile.privacySettings?.showClansToFollowers !== false);
   const [showStats, setShowStats] = useState(profile.privacySettings?.showStatsToFollowers !== false);
   const [shareNutrition, setShareNutrition] = useState(profile.privacySettings?.shareNutritionWithFollowers === true);
+  const [nearbyOpen, setNearbyOpen] = useState(false);
 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -662,7 +665,18 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
               label="Share nutrition summary"
               description="Followers who compare with you see days logged and how often you hit your goals. Never your meals."
             />
+            <button type="button" onClick={() => setNearbyOpen(true)} className="w-full py-3.5 flex items-center gap-3 text-left group">
+              <span className="dx-badge-icon !w-9 !h-9 !rounded-xl"><Radar size={16} /></span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[14px] font-medium">Nearby</div>
+                <div className="text-[12.5px] dx-muted leading-snug">
+                  {{ off: 'Off. Others training near you can’t see you.', followers: 'Followers see your approximate area while you train.', everyone: 'Everyone nearby sees your approximate area while you train.' }[nearbyVisibilityOf(profile)]}
+                </div>
+              </div>
+              <ChevronRight size={16} className="dx-muted group-hover:translate-x-0.5 transition-transform" />
+            </button>
           </SettingsSection>
+          {nearbyOpen && <NearbySettingsSheet onClose={() => setNearbyOpen(false)} />}
 
           <NotificationSettings />
 

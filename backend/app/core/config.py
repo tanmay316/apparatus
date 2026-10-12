@@ -107,6 +107,10 @@ class Settings(BaseSettings):
     MARKET_TRUSTED_AFTER_SALES: int = 10
     # Web checkouts return here after paying (/purchase/<order id>).
     PUBLIC_APP_URL: str = _BRAND.get("webUrl", "https://apparatus-46b1b.web.app")
+    # Routes (Pro): OSRM-compatible routers per profile and an OpenTopoData-style elevation API.
+    ROUTING_FOOT_URL: str = "https://routing.openstreetmap.de/routed-foot/route/v1/foot"
+    ROUTING_BIKE_URL: str = "https://routing.openstreetmap.de/routed-bike/route/v1/bike"
+    ELEVATION_URL: str = "https://api.opentopodata.org/v1/srtm90m"
 
     @property
     def billing_enabled(self) -> bool:

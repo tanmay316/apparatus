@@ -9,6 +9,8 @@ export interface PrivacySettings {
   showBadgesToFollowers?: boolean;
   /** Opt-in: followers with Pro can compare nutrition aggregates (never meals). */
   shareNutritionWithFollowers?: boolean;
+  /** Opt-in: appear on Nearby (approximate area only) while recording. */
+  nearbyVisibility?: 'off' | 'followers' | 'everyone';
 }
 
 export interface FollowRequest {

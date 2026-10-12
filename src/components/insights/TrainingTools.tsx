@@ -15,6 +15,7 @@ import { niceTicks, ScrollChart } from '@/components/ui/ScrollChart';
 import { ChipGroup, Field, FormSection, FormSheet } from '@/components/ui/FormSheet';
 import { ProBadge, ProLock } from './ProLock';
 import { AskAIButton } from './AICoach';
+import { FitnessScoreCard, RelativeEffortCard } from './EffortFitness';
 import { BRAND } from '@/lib/brand';
 
 const today = () => format(new Date(), 'yyyy-MM-dd');
@@ -378,8 +379,10 @@ export function TrainingToolsPanel({ cardio, workouts, range, earliest }: { card
         <h2 className="text-[17px] font-semibold text-bone">Your training</h2>
         <ProBadge />
       </div>
-      <ProLock title="Readiness, goals & trends" reason={`See how ready you are to train today, set goals, compare months and balance cardio with strength with ${BRAND.name} Pro.`} maxHeight={560}>
+      <ProLock title="Fitness, effort, readiness & goals" reason={`Track your fitness score over time, measure effort across every activity, see how ready you are today and set goals with ${BRAND.name} Pro.`} maxHeight={560}>
         <div className="space-y-3">
+          <FitnessScoreCard cardio={cardio} workouts={workouts} />
+          <RelativeEffortCard cardio={cardio} workouts={workouts} />
           <ReadinessCard cardio={cardio} workouts={workouts} />
           <GoalsCard cardio={cardio} workouts={workouts} />
           <CumulativeCard cardio={cardio} workouts={workouts} />

@@ -16,8 +16,10 @@
     </style>
 
 
+    <!-- No android:background here: a theme background is painted behind every view the theme
+         inflates, including the text-selection toolbar (it showed the splash logo behind Copy/Paste). -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <item name="android:background">@drawable/splash</item>
         <item name="windowSplashScreenBackground">@color/splash_bg</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
 </resources>

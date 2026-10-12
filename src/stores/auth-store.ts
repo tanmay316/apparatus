@@ -381,6 +381,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     try {
+      // Must happen while still signed in: rules only let the owner delete their Nearby presence.
+      const signingOut = auth.currentUser?.uid;
+      if (signingOut) {
+        await import('@/services/nearby').then(m => m.clearPresence(signingOut)).catch(() => {});
+      }
       if (Capacitor.isNativePlatform()) {
         const current = auth.currentUser;
         const provider = current && hasProvider(current, 'apple.com') ? 'apple' : 'google';

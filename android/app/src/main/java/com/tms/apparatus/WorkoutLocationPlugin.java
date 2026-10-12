@@ -248,6 +248,8 @@ public class WorkoutLocationPlugin extends Plugin {
                 call.getString("idToken"), expiresAt == null ? 0L : expiresAt,
                 call.getDouble("activeSec", 0d), call.getDouble("distanceKm", 0d),
                 call.getDouble("calories", 0d), call.getDouble("steps", -1d));
+        LiveSessionSync.configureNearby(call.getString("nearbyCell", ""),
+                call.getDouble("zoneLat"), call.getDouble("zoneLng"), call.getDouble("zoneRadiusM"));
         call.resolve();
     }
 

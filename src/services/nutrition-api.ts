@@ -24,7 +24,7 @@ export class ApiError extends Error {
   }
 }
 
-async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+export async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = await getAuthHeaders();
   const res = await fetch(`${API_BASE}${path}`, {
     cache: 'no-store', // Prevent browser caching of GET requests

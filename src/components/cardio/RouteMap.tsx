@@ -88,14 +88,17 @@ export function MapAttribution({ text, className = '', expanded = false }: { tex
     );
   }
   return (
-    <button
-      type="button"
+    // A span, not a <button>: previews sit inside clickable cards/links where buttons can't nest.
+    <span
+      role="button"
+      tabIndex={0}
       aria-label={open ? text : 'Map data credits'}
       onClick={e => { e.preventDefault(); e.stopPropagation(); setOpen(v => !v); }}
-      className={`absolute z-[400] select-none flex items-center gap-1 h-[18px] rounded-full bg-black/30 text-white/85 text-[9px] leading-none ${open ? 'px-1.5' : 'w-[18px] justify-center'} ${className}`}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setOpen(v => !v); } }}
+      className={`absolute z-[400] select-none cursor-pointer flex items-center gap-1 h-[18px] rounded-full bg-black/30 text-white/85 text-[9px] leading-none ${open ? 'px-1.5' : 'w-[18px] justify-center'} ${className}`}
     >
       {open ? text : <span className="font-serif italic font-semibold text-[10px]" aria-hidden>i</span>}
-    </button>
+    </span>
   );
 }
 
@@ -128,6 +131,8 @@ interface Props {
   interactive?: boolean;
   /** `card` = compact feed preview with start/finish pins. */
   variant?: 'default' | 'card';
+  /** A route being followed, drawn dashed under the recorded track. */
+  plannedRoute?: [number, number][] | null;
 }
 
 function MapAutoCenter({ route, recenterTrigger, currentLocation, isLive, mapRotationMode }: { route: RoutePoint[], recenterTrigger?: number, currentLocation?: { lat: number, lng: number } | null, isLive?: boolean, mapRotationMode?: boolean }) {
@@ -716,6 +721,7 @@ export function RouteMap({
   visualHeadingRef,
   interactive = true,
   variant = 'default',
+  plannedRoute = null,
 }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -969,6 +975,13 @@ export function RouteMap({
                 },
               }}
             />
+          )}
+
+          {plannedRoute && plannedRoute.length > 1 && (
+            <>
+              <Polyline positions={plannedRoute} pathOptions={{ color: '#ffffff', weight: 9, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }} interactive={false} />
+              <Polyline positions={plannedRoute} pathOptions={{ color: '#2563eb', weight: 5, opacity: 0.9, dashArray: '2 9', lineCap: 'round', lineJoin: 'round' }} interactive={false} />
+            </>
           )}
 
           {positions.length > 1 && (

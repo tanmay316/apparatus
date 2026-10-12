@@ -39,7 +39,23 @@ final class LiveSessionSync {
     private static double jsCalories;
     private static double jsSteps = -1;
 
+    // Nearby: the ~1 km cell the app shares ('' = not shared) and its on-device privacy zone.
+    private static final long NEARBY_EVERY_MS = 3 * 60_000L;
+    private static final long NEARBY_TTL_MS = 10 * 60_000L;
+    private static String nearbyCell = "";
+    private static double zoneLat = Double.NaN;
+    private static double zoneLng = Double.NaN;
+    private static double zoneRadiusM = 0;
+    private static long nearbyWrittenAt;
+
     private LiveSessionSync() {}
+
+    static synchronized void configureNearby(String cell, Double lat, Double lng, Double radiusM) {
+        nearbyCell = cell == null ? "" : cell;
+        zoneLat = lat == null ? Double.NaN : lat;
+        zoneLng = lng == null ? Double.NaN : lng;
+        zoneRadiusM = radiusM == null ? 0 : radiusM;
+    }
 
     static synchronized void configure(String projectId, String apiKey, String origin, String uid,
                                        String refreshToken, String idToken, long idTokenExpiresAt,
@@ -67,6 +83,10 @@ final class LiveSessionSync {
         idTokenExpiresAt = jsPublishedAt = activeAt = 0L;
         activeSec = jsDistanceKm = jsCalories = 0d;
         jsSteps = -1;
+        nearbyCell = "";
+        zoneLat = zoneLng = Double.NaN;
+        zoneRadiusM = 0;
+        nearbyWrittenAt = 0L;
     }
 
     /** Runs on the service's live-sync thread every {@link #TICK_MS}. */
@@ -138,8 +158,106 @@ final class LiveSessionSync {
                 synchronized (LiveSessionSync.class) { idToken = null; idTokenExpiresAt = 0L; }
             }
             conn.disconnect();
+            tickNearby(prefs, token, commitUrl);
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * Moves the shared Nearby cell with the runner (only coarse geohash, never coordinates) and
+     * removes it on entering the privacy zone. Only updates a presence the app created.
+     */
+    private static void tickNearby(SharedPreferences prefs, String token, String commitUrl) throws Exception {
+        String sharedCell;
+        double zLat;
+        double zLng;
+        double zRadius;
+        String docPath;
+        synchronized (LiveSessionSync.class) {
+            long now = System.currentTimeMillis();
+            if (uid == null || nearbyCell.isEmpty() || now - nearbyWrittenAt < NEARBY_EVERY_MS) return;
+            nearbyWrittenAt = now;
+            sharedCell = nearbyCell;
+            zLat = zoneLat;
+            zLng = zoneLng;
+            zRadius = zoneRadiusM;
+            docPath = "projects/" + projectId + "/databases/(default)/documents/nearby_presence/" + uid;
+        }
+        if (!prefs.contains(WorkoutLocationService.KEY_LAST_LAT) || !prefs.contains(WorkoutLocationService.KEY_LAST_LNG)) return;
+        double lat = Double.longBitsToDouble(prefs.getLong(WorkoutLocationService.KEY_LAST_LAT, 0L));
+        double lng = Double.longBitsToDouble(prefs.getLong(WorkoutLocationService.KEY_LAST_LNG, 0L));
+
+        JSONObject write;
+        // Paused (a stop, often a café or home) or inside the privacy zone: stop sharing.
+        boolean paused = "PAUSED".equals(prefs.getString(WorkoutLocationService.KEY_STATE, ""));
+        boolean hide = paused || (!Double.isNaN(zLat) && distanceM(lat, lng, zLat, zLng) <= zRadius + 800d);
+        if (hide) {
+            write = new JSONObject().put("delete", docPath);
+        } else {
+            String cell = geohash(lat, lng, 6);
+            JSONObject fields = new JSONObject();
+            JSONArray mask = new JSONArray();
+            putString(fields, mask, "geohash4", cell.substring(0, 4));
+            putString(fields, mask, "geohash5", cell.substring(0, 5));
+            putString(fields, mask, "geohash6", cell);
+            fields.put("expiresAt", new JSONObject().put("timestampValue", isoUtc(System.currentTimeMillis() + NEARBY_TTL_MS)));
+            mask.put("expiresAt");
+            // The landmark name belonged to the old cell; drop it rather than mislabel the area.
+            if (!cell.equals(sharedCell)) mask.put("place");
+            write = new JSONObject()
+                    .put("update", new JSONObject().put("name", docPath).put("fields", fields))
+                    .put("updateMask", new JSONObject().put("fieldPaths", mask))
+                    .put("updateTransforms", new JSONArray().put(new JSONObject()
+                            .put("fieldPath", "updatedAt").put("setToServerValue", "REQUEST_TIME")))
+                    .put("currentDocument", new JSONObject().put("exists", true));
+        }
+        HttpURLConnection conn = open(commitUrl, "application/json");
+        conn.setRequestProperty("Authorization", "Bearer " + token);
+        int code = send(conn, new JSONObject().put("writes", new JSONArray().put(write)).toString());
+        conn.disconnect();
+        if (hide && code == 200) {
+            synchronized (LiveSessionSync.class) { nearbyCell = ""; }
+        }
+    }
+
+    private static final String GEOHASH_BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+
+    static String geohash(double lat, double lng, int precision) {
+        double latMin = -90, latMax = 90, lngMin = -180, lngMax = 180;
+        StringBuilder hash = new StringBuilder();
+        int bit = 0;
+        int ch = 0;
+        boolean even = true;
+        while (hash.length() < precision) {
+            if (even) {
+                double mid = (lngMin + lngMax) / 2;
+                if (lng >= mid) { ch = (ch << 1) | 1; lngMin = mid; } else { ch <<= 1; lngMax = mid; }
+            } else {
+                double mid = (latMin + latMax) / 2;
+                if (lat >= mid) { ch = (ch << 1) | 1; latMin = mid; } else { ch <<= 1; latMax = mid; }
+            }
+            even = !even;
+            if (++bit == 5) {
+                hash.append(GEOHASH_BASE32.charAt(ch));
+                bit = 0;
+                ch = 0;
+            }
+        }
+        return hash.toString();
+    }
+
+    private static double distanceM(double aLat, double aLng, double bLat, double bLng) {
+        double dLat = Math.toRadians(bLat - aLat);
+        double dLng = Math.toRadians(bLng - aLng);
+        double h = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(aLat)) * Math.cos(Math.toRadians(bLat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 6371000d * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+    }
+
+    private static String isoUtc(long ms) {
+        java.text.SimpleDateFormat f = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+        f.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        return f.format(new java.util.Date(ms));
     }
 
     private static String currentIdToken() throws Exception {

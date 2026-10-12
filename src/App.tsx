@@ -30,6 +30,7 @@ import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import { useCardioStore, syncWithNativeSession } from '@/stores/cardio-store';
 import { CardioLivePublisher } from '@/components/social/CardioLivePublisher';
+import { NearbyPresencePublisher } from '@/components/social/NearbyPresencePublisher';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { OtaKit } from '@otakit/capacitor-updater';
@@ -80,6 +81,8 @@ const AthleteRanksPage = lazy(() => import('@/pages/AthleteRanksPage').then(m =>
 const MarketplacePage = lazy(() => import('@/pages/MarketplacePage').then(m => ({ default: m.MarketplacePage })));
 const OrdersPage = lazy(() => import('@/pages/OrdersPage').then(m => ({ default: m.OrdersPage })));
 const SellerDashboardPage = lazy(() => import('@/pages/SellerDashboardPage').then(m => ({ default: m.SellerDashboardPage })));
+const RoutesPage = lazy(() => import('@/pages/RoutesPage').then(m => ({ default: m.RoutesPage })));
+const NearbyPage = lazy(() => import('@/pages/NearbyPage').then(m => ({ default: m.NearbyPage })));
 const PartnerPage = lazy(() => import('@/pages/PartnerPage').then(m => ({ default: m.PartnerPage })));
 const PurchaseReturnPage = lazy(() => import('@/pages/PurchaseReturnPage').then(m => ({ default: m.PurchaseReturnPage })));
 
@@ -439,6 +442,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <PreferencesSync />
       <CardioLivePublisher />
+      <NearbyPresencePublisher />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ActiveSessionRestorer />
         <Suspense fallback={<PageLoader />}>
@@ -460,6 +464,8 @@ export function App() {
               <Route path="explore" element={<ExplorePage />} />
               <Route path="search" element={<SearchPage />} />
               <Route path="cardio" element={<CardioTracker />} />
+              <Route path="routes" element={<RoutesPage />} />
+              <Route path="nearby" element={<NearbyPage />} />
               <Route path="feed" element={<FeedPage />} />
               <Route path="post/:id" element={<SinglePostPage />} />
               <Route path="community" element={<CommunityPage />} />

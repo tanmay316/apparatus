@@ -396,6 +396,20 @@ service cloud.firestore {
         allow write: if isOwner(uid);
       }
 
+      // Saved routes (Pro planner); geometry is an encoded polyline string.
+      match /routes/{routeId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid)
+          && request.resource.data.get('name', '') is string
+          && request.resource.data.get('name', '').size() <= 80
+          && request.resource.data.get('type', '') in ['run', 'walk', 'cycle']
+          && request.resource.data.get('path', '') is string
+          && request.resource.data.get('path', '').size() <= 60000
+          && request.resource.data.get('distanceKm', 0) is number
+          && (request.resource.data.get('elevationProfile', null) == null
+            || (request.resource.data.elevationProfile is list && request.resource.data.elevationProfile.size() <= 120));
+      }
+
       // AI coach summaries are generated and cached by the backend only.
       match /ai_insights/{insightId} {
         allow read: if isOwner(uid);
@@ -613,6 +627,39 @@ service cloud.firestore {
         && textOk(request.resource.data, 'userAgent', 1000);
       allow read, delete: if isAdmin();
       allow update: if false;
+    }
+
+    // ─── Nearby (opt-in presence while recording) ───────────────
+    // Only a ~1 km geohash cell is ever stored: no coordinates, no route.
+    // The audience can never exceed the owner's saved setting, and private profiles are followers-only.
+    function nearbyAudienceOk(uid, audience) {
+      let vis = profileOf(uid).get('privacySettings', {}).get('nearbyVisibility', 'off');
+      return vis in ['followers', 'everyone']
+        && (audience == 'followers' || (vis == 'everyone' && !followNeedsApproval(uid)));
+    }
+    function nearbyPresenceOk(uid) {
+      let d = request.resource.data;
+      return d.uid == uid
+        && d.keys().hasOnly(['uid', 'displayName', 'username', 'photoURL', 'activity', 'audience', 'geohash4', 'geohash5', 'geohash6', 'place', 'startedAt', 'updatedAt', 'expiresAt'])
+        && d.activity in ['run', 'walk', 'cycle', 'workout']
+        && d.audience in ['followers', 'everyone']
+        && nearbyAudienceOk(uid, d.audience)
+        && d.geohash4 is string && d.geohash4.matches('[0-9b-hjkmnp-z]{4}')
+        && d.geohash5 is string && d.geohash5.matches(d.geohash4 + '[0-9b-hjkmnp-z]')
+        && d.geohash6 is string && d.geohash6.matches(d.geohash5 + '[0-9b-hjkmnp-z]')
+        && textOk(d, 'displayName', 80) && textOk(d, 'username', 40) && textOk(d, 'place', 60)
+        && (!('photoURL' in d) || (d.photoURL is string && d.photoURL.size() <= 1000 && !d.photoURL.matches('data:.*')))
+        && d.updatedAt == request.time
+        && d.expiresAt is timestamp && d.expiresAt <= request.time + duration.value(3, 'h');
+    }
+    match /nearby_presence/{uid} {
+      allow read: if isAuthenticated() && (
+        resource.data.uid == request.auth.uid
+        || resource.data.audience == 'everyone'
+        || (resource.data.audience == 'followers' && isFollowerOf(resource.data.uid))
+      );
+      allow create, update: if isOwner(uid) && canPost() && nearbyPresenceOk(uid);
+      allow delete: if isOwner(uid);
     }
 
     // ─── Active Sessions (Live Training) ────────────────────────

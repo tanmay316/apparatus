@@ -60,6 +60,8 @@ interface WorkoutLocationPlugin {
     projectId: string; apiKey: string; origin: string; uid: string;
     refreshToken: string; idToken: string; idTokenExpiresAt: number;
     activeSec: number; distanceKm: number; calories: number; steps: number;
+    /** Nearby cell being shared ('' = not shared) and the on-device privacy zone. */
+    nearbyCell?: string; zoneLat?: number; zoneLng?: number; zoneRadiusM?: number;
   }): Promise<void>;
   clearLiveSync(): Promise<void>;
   addListener(eventName: 'location', listenerFunc: (point: NativeWorkoutPoint) => void): Promise<PluginListenerHandle>;

@@ -613,8 +613,11 @@ interface CardioState {
   currentLocation: { lat: number, lng: number, heading?: number } | null;
   lastGpsTimestamp: number;
   isRecovering: boolean;
+  /** Route picked on the Routes page, drawn on the tracker map to follow. */
+  plannedRoute: { name: string; distanceKm: number; points: [number, number][] } | null;
 
   // Actions
+  setPlannedRoute: (route: CardioState['plannedRoute']) => void;
   startTracking: (type: CardioActivityType) => void;
   pauseTracking: () => void;
   resumeTracking: () => void;
@@ -650,12 +653,15 @@ const IDLE: Partial<CardioState> = {
   currentLocation: null,
   lastGpsTimestamp: 0,
   isRecovering: false,
+  plannedRoute: null,
 };
 
 export const useCardioStore = create<CardioState>()(
   persist(
     (set, get) => ({
       ...(IDLE as CardioState),
+
+      setPlannedRoute: (plannedRoute) => set({ plannedRoute }),
 
       syncWithNativeSession: async () => {
         return await syncWithNativeSession();

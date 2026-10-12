@@ -1,7 +1,8 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { BarChart3, ChevronDown, ChevronRight, Clock, Dumbbell, Flame, Navigation, Play, Share2, Timer, Trash2, TrendingUp, Trophy } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronRight, Clock, Dumbbell, Flame, Map as MapIcon, Navigation, Play, Share2, Timer, Trash2, TrendingUp, Trophy } from 'lucide-react';
+import { ProBadge } from '@/components/insights/ProLock';
 import { useUIStore } from '@/stores/ui-store';
 import { RouteMap } from '@/components/cardio/RouteMap';
 import type { CardioActivity, CardioActivityType } from '@/types';
@@ -319,6 +320,15 @@ export function CardioHub({ activities, loading, gpsStatus, onStart, onShare, on
         <StartCard gpsStatus={gpsStatus} onStart={onStart} />
         <WeekCard activities={activities} />
       </div>
+
+      <Link to="/routes" className="dx-card p-4 flex items-center gap-3 hover:border-[var(--dx-border-strong)]">
+        <span className="w-11 h-11 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0"><MapIcon size={19} /></span>
+        <span className="flex-1 min-w-0">
+          <span className="flex items-center gap-2 font-semibold text-[14.5px]">Routes <ProBadge /></span>
+          <span className="block text-xs text-[var(--dx-muted)]">Routes made for you, saved for offline, or draw your own</span>
+        </span>
+        <ChevronRight size={17} className="text-[var(--dx-muted)]" />
+      </Link>
 
       <BestsCard activities={activities} />
 

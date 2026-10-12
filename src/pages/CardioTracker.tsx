@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, Play, Pause, Square, Navigation, Layers, RotateCcw, ChevronUp, ChevronDown, LocateFixed, Loader2, Trash2,
+  ArrowLeft, Play, Pause, Square, Navigation, Layers, RotateCcw, ChevronUp, ChevronDown, LocateFixed, Loader2, Trash2, Route as RouteIcon, X, Radar,
 } from 'lucide-react';
 import { useCompassHeading } from '@/hooks/useCompassHeading';
 import { Timestamp } from 'firebase/firestore';
@@ -23,6 +23,8 @@ import { NowPlayingCard } from '@/components/cardio/NowPlayingCard';
 import { CardioHub } from '@/components/cardio/CardioHub';
 import { CardioSummary, EFFORT_LEVELS, type SaveState } from '@/components/cardio/CardioSummary';
 import { CardioVisibilityPicker, loadCardioVisibility, storeCardioVisibility, type CardioVisibility } from '@/components/cardio/CardioVisibilityPicker';
+import { NearbySettingsSheet } from '@/components/nearby/NearbySettingsSheet';
+import { nearbyVisibilityOf } from '@/services/nearby';
 import { CARDIO_TYPES, formatDuration, formatPace, formatPaceMs, localDateKey } from '@/components/cardio/cardio-format';
 import { getLiveSteps } from '@/lib/cardio-steps';
 import { updateUserChallengeProgress } from '@/services/community';
@@ -52,6 +54,8 @@ function toShareData(a: Partial<CardioActivity>, extra: Partial<CardioShareData>
 export function CardioTracker() {
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
+  const nearbyVisibility = nearbyVisibilityOf(profile);
+  const [nearbyOpen, setNearbyOpen] = useState(false);
   const { showToast, theme, confirm } = useUIStore();
   const userWeight = useUserWeight();
   const store = useCardioStore();
@@ -679,7 +683,7 @@ export function CardioTracker() {
     return createPortal(
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="cardio-ready-screen fixed inset-0 z-[9999] bg-[var(--bg)] text-[var(--text)] flex flex-col h-[100dvh] overflow-hidden" style={themeStyles}>
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive={false} height="100%" theme={mapLayer} cardioType={urlType} />
+          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive={false} height="100%" theme={mapLayer} cardioType={urlType} plannedRoute={store.plannedRoute?.points} />
           <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[var(--bg)] via-[var(--bg)]/70 to-transparent z-[1] pointer-events-none" />
         </div>
 
@@ -701,6 +705,18 @@ export function CardioTracker() {
 
         <div className="relative z-10 mt-auto px-4 pointer-events-none" style={{ paddingBottom: 'calc(var(--sab) + 20px)' }}>
           <div className="pointer-events-auto rounded-[28px] bg-[var(--card)]/95 backdrop-blur-xl border border-[var(--border)] shadow-2xl p-4 max-w-md mx-auto">
+            {store.plannedRoute && (
+              <div className="flex items-center gap-2.5 mb-3 p-2.5 rounded-2xl bg-blue-500/10 text-[var(--text)]">
+                <span className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0"><RouteIcon size={16} /></span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-semibold text-blue-600 uppercase tracking-wide">Following route</div>
+                  <div className="text-[13px] font-semibold truncate">{store.plannedRoute.name} · {store.plannedRoute.distanceKm.toFixed(1)} km</div>
+                </div>
+                <button onClick={() => store.setPlannedRoute(null)} className="w-8 h-8 rounded-full flex items-center justify-center text-[var(--muted)]" aria-label="Stop following this route">
+                  <X size={16} />
+                </button>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-[var(--card-2)]" role="radiogroup" aria-label="Activity type">
               {(Object.keys(CARDIO_TYPES) as CardioActivityType[]).map(t => {
                 const m = CARDIO_TYPES[t];
@@ -735,6 +751,19 @@ export function CardioTracker() {
               <CardioVisibilityPicker value={visibility} onChange={setVisibility} />
             </div>
 
+            <button
+              type="button"
+              onClick={() => setNearbyOpen(true)}
+              className="mt-3 w-full flex items-center gap-2.5 px-3 h-10 rounded-xl text-left bg-[var(--card-2)]"
+            >
+              <Radar size={15} className={nearbyVisibility === 'off' ? 'text-[var(--muted)]' : 'text-emerald-500'} />
+              <span className="flex-1 text-[12.5px] font-semibold text-[var(--text)]">
+                Nearby: {nearbyVisibility === 'off' ? 'hidden' : nearbyVisibility === 'everyone' ? 'visible to everyone' : 'visible to followers'}
+              </span>
+              <span className="text-[11px] text-[var(--muted)]">{nearbyVisibility === 'off' ? 'Turn on' : 'Change'}</span>
+            </button>
+            {nearbyOpen && <NearbySettingsSheet onClose={() => setNearbyOpen(false)} />}
+
             <div className="mt-4">
               <SwipeToStart onComplete={handleStartTracking} />
             </div>
@@ -757,7 +786,7 @@ export function CardioTracker() {
         
         {/* Full Screen Map Background */}
         <div className="absolute inset-0 z-0">
-          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} cardioType={store.activityType as any} heading={heading} mapRotationMode={mapRotationMode} visualHeadingRef={visualHeadingRef} />
+          <RouteMap route={store.routePoints} currentLocation={store.currentLocation} isLive height="100%" theme={mapLayer} recenterTrigger={recenterTrigger} cardioType={store.activityType as any} heading={heading} mapRotationMode={mapRotationMode} visualHeadingRef={visualHeadingRef} plannedRoute={store.plannedRoute?.points} />
         </div>
 
         {/* Recovery Overlay - shows when replaying native buffer after background */}

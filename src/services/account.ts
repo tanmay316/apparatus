@@ -245,6 +245,8 @@ async function gatherUserRefs(uid: string, onProgress?: (msg: string, pct: numbe
       refs.push(sessionDoc.ref);
     }
   } catch { /* skip if no active session */ }
+  // Nearby presence (deleting a missing doc is a no-op).
+  refs.push(doc(db, 'nearby_presence', uid));
 
   // Phase 13: User stats subcollection (39-40%)
   onProgress?.('Fetching user stats...', 39);

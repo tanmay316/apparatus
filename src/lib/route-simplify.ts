@@ -1,5 +1,3 @@
-import type { RoutePoint } from '@/types';
-
 /** Indices kept by Ramer-Douglas-Peucker at `toleranceM` (metres, local equirectangular projection). */
 function rdpKeep(xs: Float64Array, ys: Float64Array, toleranceM: number): Uint8Array {
   const n = xs.length;
@@ -38,7 +36,7 @@ function rdpKeep(xs: Float64Array, ys: Float64Array, toleranceM: number): Uint8A
  * Shrinks a route to at most `maxPoints` while keeping its shape: corners and curves always keep
  * their points (RDP from 0.5 m), and the remaining budget is spread evenly over time.
  */
-export function simplifyRoute(points: RoutePoint[], maxPoints = 1000): RoutePoint[] {
+export function simplifyRoute<T extends { lat: number; lng: number }>(points: T[], maxPoints = 1000): T[] {
   if (!points || points.length <= maxPoints) return points || [];
   const n = points.length;
   const lat0 = points[0].lat * Math.PI / 180;
@@ -68,7 +66,7 @@ export function simplifyRoute(points: RoutePoint[], maxPoints = 1000): RoutePoin
     const step = n / spare;
     for (let j = 0; j < spare; j++) best[Math.min(n - 1, Math.floor(j * step))] = 1;
   }
-  const out: RoutePoint[] = [];
+  const out: T[] = [];
   for (let i = 0; i < n; i++) if (best[i]) out.push(points[i]);
   return out.length <= maxPoints ? out : out.filter((_, i) => i % Math.ceil(out.length / maxPoints) === 0 || i === out.length - 1);
 }

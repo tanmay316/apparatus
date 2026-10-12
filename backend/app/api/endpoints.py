@@ -8,6 +8,7 @@ from app.api.billing import router as billing_router
 from app.api.market import router as market_router
 from app.api.insights import router as insights_router
 from app.api.account import router as account_router
+from app.api.routes import router as routes_router
 
 api_router = APIRouter()
 
@@ -18,6 +19,7 @@ api_router.include_router(billing_router)
 api_router.include_router(market_router)
 api_router.include_router(insights_router)
 api_router.include_router(account_router)
+api_router.include_router(routes_router)
 
 
 @api_router.get("/health")

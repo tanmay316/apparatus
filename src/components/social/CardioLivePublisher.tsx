@@ -10,6 +10,7 @@ import { upsertActiveSession, type LiveSessionStatus } from '@/services/social';
 import { calculateCardioCalories } from '@/lib/calories';
 import { getLiveSteps } from '@/lib/cardio-steps';
 import { NativeWorkoutLocation } from '@/utils/native-workout-location';
+import { getPrivacyZone, getSharedCell } from '@/services/nearby';
 
 const HEARTBEAT_MS = 15_000;
 const TITLES = { walk: 'Walking', run: 'Running', cycle: 'Cycling' } as const;
@@ -21,10 +22,14 @@ async function handOffToNative(uid: string, activeSec: number, distanceKm: numbe
   const { token, expirationTime } = await user.getIdTokenResult();
   const { projectId, apiKey } = auth.app.options;
   if (!projectId || !apiKey) return;
+  const zone = getPrivacyZone();
   await NativeWorkoutLocation.setLiveSync({
     projectId, apiKey, origin: window.location.origin, uid,
     refreshToken: user.refreshToken, idToken: token, idTokenExpiresAt: Date.parse(expirationTime),
     activeSec, distanceKm, calories, steps: steps ?? -1,
+    // Nearby: keep the shared ~1 km cell fresh while the WebView is frozen (phone locked).
+    nearbyCell: getSharedCell() ?? '',
+    ...(zone ? { zoneLat: zone.lat, zoneLng: zone.lng, zoneRadiusM: zone.radiusM } : {}),
   });
 }
 
