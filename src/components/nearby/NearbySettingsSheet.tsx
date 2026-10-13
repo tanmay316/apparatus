@@ -18,9 +18,9 @@ const OPTIONS: { value: NearbyVisibility; label: string; description: string; ic
 ];
 
 const PROMISES: { icon: LucideIcon; title: string; body: string }[] = [
-  { icon: Timer, title: 'Only while you record', body: 'You appear during a run, walk, ride or workout and disappear the moment you finish.' },
-  { icon: MapPin, title: 'Approximate area only', body: 'Others see a ~1 km area, never your exact spot, route or pace.' },
-  { icon: ShieldCheck, title: 'Your start stays private', body: 'Runs show up only after your first 400 m.' },
+  { icon: Timer, title: 'Only while you train', body: 'You appear live during a run, walk, ride or workout, then as a finished session for a few hours.' },
+  { icon: MapPin, title: 'Your live position, not your route', body: 'Others see where you are right now. Finished runs are pinned mid-route, never at your start or finish.' },
+  { icon: ShieldCheck, title: 'Private sessions stay private', body: 'A session you save as private never shows up on Nearby.' },
 ];
 
 const ZONE_SIZES = [500, 1000];
@@ -30,7 +30,6 @@ export function NearbySettingsSheet({ onClose }: { onClose: () => void }) {
   useBodyScrollLock();
   const { profile, updateProfile } = useAuthStore();
   const { showToast } = useUIStore();
-  const isPrivate = profile?.privacySettings?.profileVisibility === 'private';
   const [value, setValue] = useState<NearbyVisibility>(nearbyVisibilityOf(profile));
   const [zone, setZone] = useState<PrivacyZone | null>(getPrivacyZone);
   const [locating, setLocating] = useState(false);
@@ -109,7 +108,6 @@ export function NearbySettingsSheet({ onClose }: { onClose: () => void }) {
         <div className="dx-sheet-body space-y-5">
           <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Who can see you">
             {OPTIONS.map(o => {
-              const disabled = o.value === 'everyone' && isPrivate;
               const on = value === o.value;
               return (
                 <button
@@ -117,9 +115,8 @@ export function NearbySettingsSheet({ onClose }: { onClose: () => void }) {
                   type="button"
                   role="radio"
                   aria-checked={on}
-                  disabled={disabled}
                   onClick={() => setValue(o.value)}
-                  className="text-left p-3 rounded-2xl transition-colors disabled:opacity-40"
+                  className="text-left p-3 rounded-2xl transition-colors"
                   style={{ background: on ? 'var(--dx-accent-soft)' : 'var(--dx-card-2)', boxShadow: on ? 'inset 0 0 0 1.5px var(--dx-accent)' : undefined }}
                 >
                   <o.icon size={17} style={{ color: on ? 'var(--dx-accent)' : 'var(--dx-muted)' }} />
@@ -129,7 +126,6 @@ export function NearbySettingsSheet({ onClose }: { onClose: () => void }) {
               );
             })}
           </div>
-          {isPrivate && <p className="text-[12px] dx-muted -mt-2">Your profile is private, so only followers can see you nearby.</p>}
 
           <ul className="dx-inset p-3.5 space-y-3">
             {PROMISES.map(p => (

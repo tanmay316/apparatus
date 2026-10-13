@@ -629,28 +629,41 @@ service cloud.firestore {
       allow update: if false;
     }
 
-    // ─── Nearby (opt-in presence while recording) ───────────────
-    // Only a ~1 km geohash cell is ever stored: no coordinates, no route.
-    // The audience can never exceed the owner's saved setting, and private profiles are followers-only.
+    // ─── Nearby (opt-in presence while recording + a few hours after) ───
+    // Live position only (never the route). The audience can never exceed the owner's saved setting.
     function nearbyAudienceOk(uid, audience) {
       let vis = profileOf(uid).get('privacySettings', {}).get('nearbyVisibility', 'off');
       return vis in ['followers', 'everyone']
-        && (audience == 'followers' || (vis == 'everyone' && !followNeedsApproval(uid)));
+        && (audience == 'followers' || vis == 'everyone');
+    }
+    function nearbySessionOk(d) {
+      return !('session' in d) || (
+        d.session is map
+        && d.session.keys().hasOnly(['kind', 'title', 'durationSec', 'distanceKm', 'volumeKg', 'sets', 'activityId'])
+        && d.session.get('kind', '') in ['cardio', 'workout']
+        && textOk(d.session, 'title', 80) && textOk(d.session, 'activityId', 64)
+        && d.session.get('durationSec', 0) is number && d.session.get('distanceKm', 0) is number
+        && d.session.get('volumeKg', 0) is number && d.session.get('sets', 0) is number
+      );
     }
     function nearbyPresenceOk(uid) {
       let d = request.resource.data;
       return d.uid == uid
-        && d.keys().hasOnly(['uid', 'displayName', 'username', 'photoURL', 'activity', 'audience', 'geohash4', 'geohash5', 'geohash6', 'place', 'startedAt', 'updatedAt', 'expiresAt'])
+        && d.keys().hasOnly(['uid', 'displayName', 'username', 'photoURL', 'activity', 'audience', 'status', 'lat', 'lng', 'geohash4', 'geohash5', 'geohash6', 'place', 'session', 'trail', 'startedAt', 'updatedAt', 'expiresAt'])
         && d.activity in ['run', 'walk', 'cycle', 'workout']
         && d.audience in ['followers', 'everyone']
+        && d.get('status', 'live') in ['live', 'finished']
+        && (!('lat' in d) || (d.lat is number && d.lat >= -90 && d.lat <= 90))
+        && (!('lng' in d) || (d.lng is number && d.lng >= -180 && d.lng <= 180))
         && nearbyAudienceOk(uid, d.audience)
         && d.geohash4 is string && d.geohash4.matches('[0-9b-hjkmnp-z]{4}')
         && d.geohash5 is string && d.geohash5.matches(d.geohash4 + '[0-9b-hjkmnp-z]')
         && d.geohash6 is string && d.geohash6.matches(d.geohash5 + '[0-9b-hjkmnp-z]')
-        && textOk(d, 'displayName', 80) && textOk(d, 'username', 40) && textOk(d, 'place', 60)
+        && textOk(d, 'displayName', 80) && textOk(d, 'username', 40) && textOk(d, 'place', 60) && textOk(d, 'trail', 20000)
+        && nearbySessionOk(d)
         && (!('photoURL' in d) || (d.photoURL is string && d.photoURL.size() <= 1000 && !d.photoURL.matches('data:.*')))
         && d.updatedAt == request.time
-        && d.expiresAt is timestamp && d.expiresAt <= request.time + duration.value(3, 'h');
+        && d.expiresAt is timestamp && d.expiresAt <= request.time + duration.value(8, 'h');
     }
     match /nearby_presence/{uid} {
       allow read: if isAuthenticated() && (

@@ -26,6 +26,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: 'home', path: '/', label: 'Home', icon: Dumbbell, match: ['/workout'] },
       { id: 'plans', path: '/plans', label: 'Plans', icon: BookOpen },
       { id: 'routes', path: '/routes', label: 'Routes', icon: MapIcon },
+      { id: 'nearby', path: '/nearby', label: 'Nearby athletes', icon: Radar },
       { id: 'nutrition', path: '/nutrition', label: 'Nutrition', icon: Apple },
     ],
   },
@@ -43,7 +44,6 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Community',
     items: [
       { id: 'feed', path: '/feed', label: 'Activity feed', icon: Users, match: ['/post'] },
-      { id: 'nearby', path: '/nearby', label: 'Nearby', icon: Radar },
       { id: 'community', path: '/community', label: 'Clans & events', icon: Globe, match: ['/clan'] },
       { id: 'marketplace', path: '/marketplace', label: 'Marketplace', icon: Store, match: ['/purchase'] },
       { id: 'seller', path: '/seller', label: 'My listings', icon: Wallet, sellerOnly: true },

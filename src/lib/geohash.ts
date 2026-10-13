@@ -1,4 +1,4 @@
-// Geohash cells: the only location form the Nearby feature ever stores or shares.
+// Geohash cells: used to query Nearby presence by area.
 const BASE32 = '0123456789bcdefghjkmnpqrstuvwxyz';
 
 export function encodeGeohash(lat: number, lng: number, precision: number): string {

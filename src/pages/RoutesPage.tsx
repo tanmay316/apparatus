@@ -3,11 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AnimatePresence } from 'framer-motion';
 import { Geolocation } from '@capacitor/geolocation';
-import { Bike, Bookmark, ChevronRight, Download, Footprints, Loader2, LocateFixed, Map as MapIcon, Mountain, PenLine, RefreshCw, Sparkles, Timer, Zap } from 'lucide-react';
+import { Bike, Bookmark, ChevronRight, Download, Footprints, Loader2, LocateFixed, Map as MapIcon, Mountain, Navigation, PenLine, RefreshCw, Sparkles, Timer, Zap } from 'lucide-react';
 import type { CardioActivity, CardioActivityType } from '@/types';
 import { RouteMap } from '@/components/cardio/RouteMap';
 import { ProBadge, ProLock } from '@/components/insights/ProLock';
 import { RouteBuilder } from '@/components/routes/RouteBuilder';
+import { DirectionsPlanner } from '@/components/routes/DirectionsPlanner';
 import { RouteDetailSheet } from '@/components/routes/RouteDetailSheet';
 import { formatDuration } from '@/components/routes/route-format';
 import type { LatLng } from '@/lib/polyline';
@@ -22,7 +23,7 @@ import { useCardioStore } from '@/stores/cardio-store';
 import { requirePro, useHasPro } from '@/stores/subscription-store';
 import { useUIStore } from '@/stores/ui-store';
 
-type Tab = 'suggested' | 'saved' | 'create';
+type Tab = 'suggested' | 'directions' | 'saved' | 'create';
 type Hills = 'any' | 'flat' | 'hilly';
 
 const SPORTS: { value: CardioActivityType; label: string; icon: typeof Zap }[] = [
@@ -84,8 +85,9 @@ export function RoutesPage() {
   const queryClient = useQueryClient();
   const hasPro = useHasPro();
   const [params, setParams] = useSearchParams();
-  const tab = (['suggested', 'saved', 'create'].includes(params.get('tab') || '') ? params.get('tab') : 'suggested') as Tab;
+  const tab = (['suggested', 'directions', 'saved', 'create'].includes(params.get('tab') || '') ? params.get('tab') : 'suggested') as Tab;
   const setTab = (t: Tab) => setParams({ tab: t }, { replace: true });
+  const [draft, setDraft] = useState<{ type: CardioActivityType; waypoints: LatLng[]; legs: LatLng[][]; name: string; key: number } | null>(null);
 
   const [here, setHere] = useState<LatLng | null>(() => {
     const loc = useCardioStore.getState().currentLocation;
@@ -262,12 +264,26 @@ export function RoutesPage() {
         )
       )}
 
+      {tab === 'directions' && (
+        <DirectionsPlanner
+          here={here}
+          darkMap={darkMap}
+          pace={type => usualPace(cardio, type)}
+          onStart={route => { if (requirePro(`Routes are part of ${BRAND.name} Pro.`)) startRoute(route); }}
+          onSave={route => void save(route)}
+          onEdit={d => { setDraft({ ...d, key: Date.now() }); setTab('create'); }}
+        />
+      )}
+
       {tab === 'create' && (
         <RouteBuilder
+          key={draft?.key ?? 'blank'}
           start={here}
           darkMap={darkMap}
+          initial={draft}
           onSave={async (route) => {
             await save(route);
+            setDraft(null);
             setTab('saved');
           }}
         />
@@ -284,8 +300,9 @@ export function RoutesPage() {
 
       <div className="dx-segment w-full" role="tablist" aria-label="Routes">
         <button role="tab" aria-selected={tab === 'suggested'} onClick={() => setTab('suggested')}><Sparkles size={14} className="inline -mt-0.5 mr-1" />For you</button>
+        <button role="tab" aria-selected={tab === 'directions'} onClick={() => setTab('directions')}><Navigation size={14} className="inline -mt-0.5 mr-1" />A to B</button>
         <button role="tab" aria-selected={tab === 'saved'} onClick={() => setTab('saved')}><Bookmark size={14} className="inline -mt-0.5 mr-1" />Saved{saved.length ? ` ${saved.length}` : ''}</button>
-        <button role="tab" aria-selected={tab === 'create'} onClick={() => setTab('create')}><PenLine size={14} className="inline -mt-0.5 mr-1" />Create</button>
+        <button role="tab" aria-selected={tab === 'create'} onClick={() => { setDraft(null); setTab('create'); }}><PenLine size={14} className="inline -mt-0.5 mr-1" />Draw</button>
       </div>
 
       {hasPro ? content : (

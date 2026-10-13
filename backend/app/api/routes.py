@@ -50,6 +50,23 @@ class ElevationRequest(BaseModel):
         return _check_points(v)
 
 
+class DirectionsRequest(BaseModel):
+    type: str = Field("run", pattern="^(run|walk|cycle)$")
+    start: list[float] = Field(..., min_length=2, max_length=2)
+    end: list[float] = Field(..., min_length=2, max_length=2)
+    via: list[list[float]] = Field(default_factory=list, max_length=20)
+
+    @field_validator("start", "end")
+    @classmethod
+    def valid_point(cls, v):
+        return _check_points([v])[0]
+
+    @field_validator("via")
+    @classmethod
+    def valid_via(cls, v):
+        return _check_points(v)
+
+
 async def _require_pro(user: dict) -> None:
     if settings.pro_enforced and not await asyncio.to_thread(is_pro, user["uid"], verified_email(user)):
         raise HTTPException(status_code=402, detail={
@@ -83,6 +100,21 @@ async def snap(req: PointsRequest, current_user: dict = Depends(get_current_user
     if not route:
         raise HTTPException(status_code=502, detail="Couldn't follow paths between these points. Try placing them closer to a road or trail.")
     return route
+
+
+@router.post("/directions")
+async def get_directions(req: DirectionsRequest, current_user: dict = Depends(get_current_user)):
+    await _require_pro(current_user)
+    _rate(current_user, "directions", 60)
+    found = await planner.directions(
+        (req.start[0], req.start[1]), (req.end[0], req.end[1]), req.type, [(p[0], p[1]) for p in req.via],
+    )
+    if not found:
+        raise HTTPException(status_code=502, detail="Couldn't find a path between these places. Try points closer to a road or trail.")
+    longest = MAX_KM[req.type] * 4
+    if found[0]["distanceKm"] > longest:
+        raise HTTPException(status_code=422, detail=f"That's over {longest:g} km. Pick a closer destination.")
+    return {"routes": found}
 
 
 @router.post("/elevation")

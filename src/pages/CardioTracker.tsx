@@ -24,7 +24,9 @@ import { CardioHub } from '@/components/cardio/CardioHub';
 import { CardioSummary, EFFORT_LEVELS, type SaveState } from '@/components/cardio/CardioSummary';
 import { CardioVisibilityPicker, loadCardioVisibility, storeCardioVisibility, type CardioVisibility } from '@/components/cardio/CardioVisibilityPicker';
 import { NearbySettingsSheet } from '@/components/nearby/NearbySettingsSheet';
+import { NearbyNowBanner } from '@/components/nearby/NearbyNowBanner';
 import { nearbyVisibilityOf } from '@/services/nearby';
+import { cardioSessionKey, trainedWithFor } from '@/stores/encounter-store';
 import { CARDIO_TYPES, formatDuration, formatPace, formatPaceMs, localDateKey } from '@/components/cardio/cardio-format';
 import { getLiveSteps } from '@/lib/cardio-steps';
 import { updateUserChallengeProgress } from '@/services/community';
@@ -511,6 +513,7 @@ export function CardioTracker() {
 
       try {
         const typeLabel = CARDIO_TYPES[data.type!]?.label ?? 'Cardio';
+        const trainedWith = finalStore.startedAt ? trainedWithFor(cardioSessionKey(finalStore.startedAt), 'cardio') : [];
         feedPostIdRef.current = await postActivity({
           userId: user.uid,
           userName: user.displayName || 'Athlete',
@@ -533,6 +536,7 @@ export function CardioTracker() {
             movingDurationSec,
             elapsedDurationSec,
             pausedDurationSec,
+            ...(trainedWith.length ? { trainedWith } : {}),
           },
           visibility: chosenVisibility,
           likesCount: 0,
@@ -806,7 +810,7 @@ export function CardioTracker() {
         </AnimatePresence>
 
         {/* Top Header */}
-        <div className="absolute top-6 left-4 right-4 z-20 safe-top pointer-events-none flex justify-between items-start">
+        <div className="absolute left-4 right-4 z-20 pointer-events-none flex justify-between items-start" style={{ top: 'calc(var(--sat) + 16px)' }}>
           <div className="flex items-center gap-3">
             {/* Back Button - safe navigation with confirmation during active tracking */}
             <button 
@@ -872,6 +876,11 @@ export function CardioTracker() {
         </div>
 
         {/* Dynamic Island Style Floating Auto-Pause Notification Banner */}
+        {store.autoPauseStatus !== 'PAUSED' && (
+          <div className="absolute left-4 right-[72px] z-20 pointer-events-auto max-w-sm" style={{ top: 'calc(var(--sat) + 72px)' }}>
+            <NearbyNowBanner id="cardio-live" tone="glass" />
+          </div>
+        )}
         <AnimatePresence>
           {store.autoPauseStatus === 'PAUSED' && (
             <motion.div
@@ -879,7 +888,8 @@ export function CardioTracker() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: -20, scale: 0.95 }}
               transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-              className="absolute top-20 left-4 right-4 z-20 pointer-events-auto flex justify-center"
+              className="absolute left-4 right-4 z-20 pointer-events-auto flex justify-center"
+              style={{ top: 'calc(var(--sat) + 72px)' }}
             >
               <div className="flex items-center gap-3 px-4 py-2.5 rounded-full bg-[#1c120c]/95 backdrop-blur-xl border border-amber-500/40 shadow-[0_8px_30px_rgba(245,158,11,0.25)] text-white">
                 <div className="relative flex items-center justify-center w-6 h-6 rounded-full bg-amber-500/20 text-amber-400">

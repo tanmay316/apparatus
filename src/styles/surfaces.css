@@ -610,3 +610,67 @@ textarea.dx-input { min-height: 84px; line-height: 1.45; resize: vertical; }
   animation: chat-caret 1s steps(2, start) infinite;
 }
 @keyframes chat-caret { to { visibility: hidden; } }
+
+/* Horizontal scrollers without a visible bar (mobile WebViews still draw one otherwise). */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+/* ─── Nearby ─────────────────────────────────────────────────── */
+.nb-glass {
+  background: rgba(255, 255, 255, 0.86);
+  color: #17191c;
+  border: 1px solid rgba(23, 25, 28, 0.08);
+  box-shadow: 0 8px 24px -10px rgba(23, 25, 28, 0.35);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+[data-theme='dark'] .nb-glass {
+  background: rgba(14, 14, 16, 0.8);
+  color: #f4f1ee;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.nb-seg { display: flex; gap: 2px; padding: 3px; border-radius: 9999px; }
+.nb-seg > button {
+  flex: 1;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 9999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: inherit;
+  opacity: 0.7;
+  transition: background-color .2s ease, opacity .2s ease, color .2s ease;
+}
+.nb-seg > button[aria-selected='true'], .nb-seg > button[aria-pressed='true'] {
+  opacity: 1;
+  background: var(--dx-ink, #17191c);
+  color: var(--dx-on-ink, #fff);
+}
+.nb-sport {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  height: 64px;
+  border-radius: 18px;
+  background: var(--dx-card);
+  border: 1px solid var(--dx-border);
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: transform .15s ease, background-color .2s ease, color .2s ease, border-color .2s ease;
+}
+.nb-sport:active { transform: scale(0.96); }
+.nb-sport[aria-pressed='true'] { color: #fff; border-color: transparent; }
+.nb-sport .nb-count { font-size: 10.5px; font-weight: 700; opacity: 0.6; font-variant-numeric: tabular-nums; }
+.nb-sport[aria-pressed='true'] .nb-count { opacity: 0.9; }
+.nb-card {
+  border-radius: 22px;
+  background: var(--dx-card);
+  border: 1px solid var(--dx-border);
+  box-shadow: 0 6px 20px -14px rgba(23, 25, 28, 0.35);
+}
+.nb-card[data-selected='true'] { border-color: var(--dx-accent); box-shadow: 0 0 0 3px var(--dx-accent-soft); }
+.nb-kpi { border-radius: 14px; background: var(--dx-card-2); padding: 8px 10px; min-width: 0; }

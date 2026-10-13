@@ -8,6 +8,7 @@ import { workoutMetrics } from '@/lib/performance';
 import { isFollowing, visibilityForUser } from '@/services/social';
 import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@/services/stats';
 import { forgetSession, getMyHistory, isMe, rememberSession } from '@/services/history';
+import { trainedWithFor, workoutSessionKey } from '@/stores/encounter-store';
 
 function removeUndefined(obj: any): any {
   if (Array.isArray(obj)) {
@@ -83,7 +84,10 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>):
       metrics: workoutMetrics(workout),
     });
 
+    const startedMs = workout.startedAt?.toMillis?.();
+    const trainedWith = workout.trainedWith ?? (startedMs ? trainedWithFor(workoutSessionKey(startedMs), 'workout') : []);
     const workoutData: any = { ...workout, exercises, visibility, date: dateKey, id: newWorkoutId, finishedAt: Timestamp.now() };
+    if (trainedWith.length) workoutData.trainedWith = trainedWith;
     if (progressiveOverload !== undefined) {
       workoutData.progressiveOverload = progressiveOverload;
     }

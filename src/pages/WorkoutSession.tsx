@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, Plus, X, Share2, ChevronRight, Check, Flame, Dumbbell, Weight, Activity, Play, Target, Wind, Trophy, Flag } from 'lucide-react';
+import { ArrowLeft, Clock, Plus, X, Share2, ChevronRight, Check, Flame, Dumbbell, Weight, Activity, Play, Target, Wind, Trophy, Flag, Radar } from 'lucide-react';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { useUserWeight } from '@/hooks/use-user-weight';
@@ -12,6 +12,10 @@ import { startActiveSession, updateActiveSession, endActiveSession, createSelfNo
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { useWorkoutStore } from '@/stores/workout-store';
+import { trainedWithFor, workoutSessionKey } from '@/stores/encounter-store';
+import { nearbyVisibilityOf } from '@/services/nearby';
+import { NearbyNowBanner } from '@/components/nearby/NearbyNowBanner';
+import { NearbySettingsSheet } from '@/components/nearby/NearbySettingsSheet';
 import { ExerciseLogModal } from '@/components/ui/ExerciseLogModal';
 import { collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -260,6 +264,8 @@ export function WorkoutSession() {
 
   const [activeExercise, setActiveExercise] = useState<{ name: string, mode: 'reps' | 'hold' | 'freeform', index: number, section: 'warmup' | 'skillWork' | 'strength' | 'cooldown' } | null>(null);
   const [privacy, setPrivacy] = useState<'public' | 'followers' | 'private'>('followers');
+  const [nearbyOpen, setNearbyOpen] = useState(false);
+  const nearbyVisibility = nearbyVisibilityOf(profile);
 
   // Add exercise state
   const [addSection, setAddSection] = useState<'warmup' | 'skillWork' | 'strength' | 'cooldown' | null>(null);
@@ -460,6 +466,7 @@ export function WorkoutSession() {
       });
 
       const overload = saved.progressiveOverload;
+      const trainedWith = store.startedAt ? trainedWithFor(workoutSessionKey(store.startedAt), 'workout') : [];
       if (overload?.message) {
         const change = overload.volumeChangePercent;
         try {
@@ -495,7 +502,8 @@ export function WorkoutSession() {
             prCount: saved.prCount || 0,
             exercises: exLogs.map(e => e.name),
             // Preserve completion state so shared anatomy reflects this
-            exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets, muscleGroup: e.muscleGroup, section: e.section }))
+            exerciseLogs: exLogs.map(e => ({ name: e.name, sets: e.sets, muscleGroup: e.muscleGroup, section: e.section })),
+            ...(trainedWith.length ? { trainedWith } : {}),
           },
           visibility: privacy,
           likesCount: 0,
@@ -784,6 +792,17 @@ export function WorkoutSession() {
           <ArrowLeft size={18} />
         </button>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setNearbyOpen(true)}
+            className="dx-pill h-8 px-3 text-[12px]"
+            aria-label={`Nearby: ${nearbyVisibility === 'off' ? 'hidden' : 'visible'}`}
+            title="Nearby visibility"
+          >
+            <Radar size={13} style={{ color: nearbyVisibility === 'off' ? 'var(--dx-muted)' : 'var(--dx-success)' }} />
+            {nearbyVisibility === 'off' ? 'Hidden' : 'Visible'}
+          </button>
+          {nearbyOpen && <NearbySettingsSheet onClose={() => setNearbyOpen(false)} />}
           {store.isActive && !store.startedAt && (
             <button onClick={() => store.startTimer()} className="dx-pill dx-pill--accent h-8 px-3 text-[12px]">
               <Play size={12} fill="currentColor" /> Start timer
@@ -804,6 +823,7 @@ export function WorkoutSession() {
       </div>
 
       {/* Hero */}
+      <NearbyNowBanner id="workout-live" className="mb-4" />
       <section className="dx-hero p-5 sm:p-6">
         <div className="flex items-center justify-between gap-3">
           <span className="text-[11px] font-semibold uppercase tracking-[0.1em] opacity-75">

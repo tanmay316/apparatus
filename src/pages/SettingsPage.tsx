@@ -670,7 +670,7 @@ function SettingsForm({ profile }: { profile: UserProfile }) {
               <div className="flex-1 min-w-0">
                 <div className="text-[14px] font-medium">Nearby</div>
                 <div className="text-[12.5px] dx-muted leading-snug">
-                  {{ off: 'Off. Others training near you can’t see you.', followers: 'Followers see your approximate area while you train.', everyone: 'Everyone nearby sees your approximate area while you train.' }[nearbyVisibilityOf(profile)]}
+                  {{ off: 'Off. Others training near you can’t see you.', followers: 'Followers see where you are while you train.', everyone: 'Everyone nearby sees where you are while you train.' }[nearbyVisibilityOf(profile)]}
                 </div>
               </div>
               <ChevronRight size={16} className="dx-muted group-hover:translate-x-0.5 transition-transform" />

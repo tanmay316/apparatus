@@ -13,7 +13,6 @@ import { CreateEventSheet } from '@/components/community/CreateEventSheet';
 import { CreatePersonalChallengeSheet } from '@/components/community/CreatePersonalChallengeSheet';
 import { UpcomingReminderWidget } from '@/components/community/UpcomingReminderWidget';
 import { Eyebrow, Segmented } from '@/components/community/ui';
-import { NearbyStrip } from '@/components/nearby/NearbyStrip';
 
 const CREATE_OPTIONS = [
   { type: 'clan', icon: Shield, title: 'Clan', description: 'Build a group around a sport, gym or city' },
@@ -63,10 +62,7 @@ export function CommunityPage() {
       </div>
 
       {/* Primary tabs */}
-      <div className="px-4 pb-4">
-        <NearbyStrip />
-      </div>
-      <div className="sticky z-30 px-4 py-3 bg-ink/90 backdrop-blur-xl border-b border-line" style={{ top: 'calc(72px * var(--topbar-visible, 1))', transition: 'top 0.3s ease-out' }}>
+      <div className="sticky z-30 px-4 py-3 bg-ink/90 backdrop-blur-xl border-b border-line" style={{ top: 'calc(var(--sat) + 72px * var(--topbar-visible, 1))', transition: 'top 0.3s ease-out' }}>
         <Segmented
           layoutId="community-primary-tab"
           fullWidth

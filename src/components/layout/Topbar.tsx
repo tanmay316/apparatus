@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Menu, Search, Settings, Store } from 'lucide-react';
+import { ArrowLeft, Menu, Radar, Search, Settings, Store } from 'lucide-react';
+import { useNearby } from '@/hooks/useNearby';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import { getAvatarUrl } from '@/lib/avatar';
@@ -12,6 +13,21 @@ import { ProRing, ProTopbarButton } from '@/components/subscription/ProEntry';
 import { useIsPro } from '@/stores/subscription-store';
 
 const iconBtn = 'w-10 h-10 rounded-full text-bone-dim hover:text-bone hover:bg-bone/5 active:bg-bone/10 flex items-center justify-center transition-colors shrink-0';
+
+/** Entry to Nearby; shows how many are training around you whenever a Nearby widget has loaded them. */
+function NearbyTopbarButton({ className }: { className: string }) {
+  const { live } = useNearby(Infinity, { enabled: false });
+  return (
+    <Link to="/nearby" className={className} aria-label={live.length ? `Nearby, ${live.length} training now` : 'Nearby athletes'} title="Nearby">
+      <Radar size={19} />
+      {live.length > 0 && (
+        <span className="absolute top-1 right-0.5 min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold leading-4 text-white text-center border-2 border-ink" style={{ background: '#10b981', boxSizing: 'content-box' }}>
+          {live.length > 9 ? '9+' : live.length}
+        </span>
+      )}
+    </Link>
+  );
+}
 
 export function Topbar() {
   const { user, profile } = useAuthStore();
@@ -116,6 +132,7 @@ export function Topbar() {
           <button onClick={() => navigate('/search')} className={`${iconBtn} lg:hidden`} aria-label="Search">
             <Search size={19} />
           </button>
+          {profile && <NearbyTopbarButton className={`${iconBtn} relative ${pathname.startsWith('/nearby') ? '!text-bone bg-bone/5' : ''}`} />}
           <Link
             to="/marketplace"
             className={`${iconBtn} ${pathname.startsWith('/marketplace') ? '!text-bone bg-bone/5' : ''}`}

@@ -10,6 +10,7 @@ import { isFollowing, visibilityForUser } from '@/services/social';
 import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@/services/stats';
 import { forgetSession, getMyHistory, isMe, patchSession, rememberSession } from '@/services/history';
 import { simplifyRoute } from '@/lib/route-simplify';
+import { cardioSessionKey, trainedWithFor } from '@/stores/encounter-store';
 
 export { simplifyRoute };
 
@@ -26,10 +27,14 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
     return cleanPt;
   });
 
+  const startedMs = activity.startedAt?.toMillis?.();
+  const trainedWith = activity.trainedWith ?? (startedMs ? trainedWithFor(cardioSessionKey(startedMs), 'cardio') : []);
+
   const dataToSave = {
     ...activity,
     id,
     route,
+    ...(trainedWith.length ? { trainedWith } : {}),
     visibility: await visibilityForUser(userId, activity.visibility),
     startedAt: activity.startedAt || Timestamp.now(),
     finishedAt: activity.finishedAt || Timestamp.now(),

@@ -41,7 +41,7 @@ final class LiveSessionSync {
 
     // Nearby: the ~1 km cell the app shares ('' = not shared) and its on-device privacy zone.
     private static final long NEARBY_EVERY_MS = 3 * 60_000L;
-    private static final long NEARBY_TTL_MS = 10 * 60_000L;
+    private static final long NEARBY_TTL_MS = 7L * 60 * 60_000L;
     private static String nearbyCell = "";
     private static double zoneLat = Double.NaN;
     private static double zoneLng = Double.NaN;
@@ -164,8 +164,8 @@ final class LiveSessionSync {
     }
 
     /**
-     * Moves the shared Nearby cell with the runner (only coarse geohash, never coordinates) and
-     * removes it on entering the privacy zone. Only updates a presence the app created.
+     * Moves the shared Nearby position with the runner and removes it on entering the privacy
+     * zone. Only updates a presence the app created.
      */
     private static void tickNearby(SharedPreferences prefs, String token, String commitUrl) throws Exception {
         String sharedCell;
@@ -188,9 +188,8 @@ final class LiveSessionSync {
         double lng = Double.longBitsToDouble(prefs.getLong(WorkoutLocationService.KEY_LAST_LNG, 0L));
 
         JSONObject write;
-        // Paused (a stop, often a café or home) or inside the privacy zone: stop sharing.
-        boolean paused = "PAUSED".equals(prefs.getString(WorkoutLocationService.KEY_STATE, ""));
-        boolean hide = paused || (!Double.isNaN(zLat) && distanceM(lat, lng, zLat, zLng) <= zRadius + 800d);
+        // Inside the privacy zone: stop sharing. A paused session still counts as training.
+        boolean hide = !Double.isNaN(zLat) && distanceM(lat, lng, zLat, zLng) <= zRadius;
         if (hide) {
             write = new JSONObject().put("delete", docPath);
         } else {
@@ -200,6 +199,10 @@ final class LiveSessionSync {
             putString(fields, mask, "geohash4", cell.substring(0, 4));
             putString(fields, mask, "geohash5", cell.substring(0, 5));
             putString(fields, mask, "geohash6", cell);
+            fields.put("lat", new JSONObject().put("doubleValue", Math.round(lat * 1e5) / 1e5));
+            mask.put("lat");
+            fields.put("lng", new JSONObject().put("doubleValue", Math.round(lng * 1e5) / 1e5));
+            mask.put("lng");
             fields.put("expiresAt", new JSONObject().put("timestampValue", isoUtc(System.currentTimeMillis() + NEARBY_TTL_MS)));
             mask.put("expiresAt");
             // The landmark name belonged to the old cell; drop it rather than mislabel the area.

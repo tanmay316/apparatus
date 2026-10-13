@@ -21,6 +21,16 @@ export function formatSince(startedAt?: { toMillis?: () => number } | null, now 
   return `${h} h ${min % 60} min`;
 }
 
+/** "just now", "12 min ago", "2 h ago". */
+export function formatAgo(at?: { toMillis?: () => number } | null, now = Date.now()): string {
+  const t = at?.toMillis?.();
+  if (!t) return 'recently';
+  const min = Math.max(0, Math.round((now - t) / 60_000));
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  return `${Math.floor(min / 60)} h ago`;
+}
+
 /** Avatar with a ring and badge in the activity's colour. */
 export function NearbyAvatar({ athlete, size = 48 }: { athlete: Pick<NearbyPresence, 'uid' | 'displayName' | 'photoURL' | 'activity'>; size?: number }) {
   const theme = useUIStore(s => s.theme);

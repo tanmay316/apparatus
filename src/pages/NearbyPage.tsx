@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ChevronRight, Eye, EyeOff, Loader2, LocateFixed, MapPin, MessageCircle, Radar, RefreshCw, Send, Settings2, ShieldCheck, Users, X,
+  ChevronRight, Eye, EyeOff, Loader2, LocateFixed, MapPin, MessageCircle, Radar, RefreshCw, Send, Settings2, ShieldCheck, Sparkles, Users, X,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { useCardioStore } from '@/stores/cardio-store';
@@ -17,9 +17,9 @@ import { NearbyMap } from '@/components/nearby/NearbyMap';
 import { NearbySettingsSheet } from '@/components/nearby/NearbySettingsSheet';
 import { ACTIVITY_META, NearbyAvatar, formatSince } from '@/components/nearby/nearby-ui';
 
-// Max 15 km: the 3×3 block of p4 query cells always covers it.
-const RADII = [2, 5, 10, 15];
-const RADIUS_KEY = 'apparatus.nearby-radius';
+const RADII = [5, 25, 100, Infinity];
+const radiusLabel = (r: number) => (Number.isFinite(r) ? `${r} km` : 'Any');
+const RADIUS_KEY = 'apparatus.nearby-radius.v2';
 const CHEERS = ['Go go go! 🔥', "You've got this 💪", 'Crushing it ⚡', 'Keep going! 🏃'];
 
 function useNow(intervalMs: number) {
@@ -102,7 +102,7 @@ function CheerSheet({ athlete, onClose }: { athlete: NearbyAthlete; onClose: () 
   );
 }
 
-function AthleteRow({
+function LiveCard({
   athlete, following, now, selected, onSelect, onCheer,
 }: {
   athlete: NearbyAthlete; following: boolean; now: number; selected: boolean; onSelect: () => void; onCheer: () => void;
@@ -110,71 +110,72 @@ function AthleteRow({
   const { displayName } = useLiveDisplayName(athlete.uid, athlete.displayName);
   const meta = ACTIVITY_META[athlete.activity];
   return (
-    <li
-      data-uid={athlete.uid}
-      className="p-3.5 flex items-center gap-3 transition-colors cursor-pointer"
-      style={{ borderColor: 'var(--dx-border)', ...(selected ? { background: 'var(--dx-accent-soft)' } : {}) }}
-      onClick={onSelect}
-    >
-      <NearbyAvatar athlete={athlete} size={46} />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-[14.5px] font-semibold truncate">{displayName || 'Athlete'}</span>
-          {following && <span className="dx-pill !h-5 !px-1.5 !text-[10px] shrink-0">Following</span>}
-        </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[12.5px] min-w-0">
-          <span className="font-semibold shrink-0" style={{ color: meta.color }}>{meta.verb}</span>
-          <span className="dx-muted shrink-0">· {formatSince(athlete.startedAt, now)}</span>
-        </div>
-        {athlete.place && (
-          <div className="mt-0.5 flex items-center gap-1 text-[12px] dx-muted min-w-0">
-            <MapPin size={11} className="shrink-0" /> <span className="truncate">near {athlete.place}</span>
+    <li data-uid={athlete.uid} data-selected={selected} className="nb-card p-3.5" onClick={onSelect}>
+      <div className="flex items-center gap-3">
+        <NearbyAvatar athlete={athlete} size={48} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[15px] font-semibold truncate">{displayName || 'Athlete'}</span>
+            {following && <span className="dx-pill dx-pill--accent !h-5 !px-1.5 !text-[10px] shrink-0">Following</span>}
           </div>
-        )}
-      </div>
-      <div className="flex flex-col items-end gap-1.5 shrink-0">
-        <span className="dx-pill tabular" title="Approximate distance">{formatNearbyDistance(athlete.distanceKm)}</span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); onCheer(); }}
-            className="dx-icon-btn dx-icon-btn--sm"
-            aria-label={`Cheer on ${displayName}`}
-            title="Cheer"
-          >
-            <MessageCircle size={15} />
-          </button>
-          {athlete.username && (
-            <Link
-              to={`/profile/${athlete.username}`}
-              onClick={e => e.stopPropagation()}
-              className="dx-icon-btn dx-icon-btn--sm"
-              aria-label={`View ${displayName}'s profile`}
-              title="Profile"
-            >
-              <ChevronRight size={16} />
-            </Link>
-          )}
+          <div className="mt-0.5 flex items-center gap-1.5 text-[12.5px] min-w-0">
+            <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
+              <span className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping" style={{ background: meta.color }} />
+              <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: meta.color }} />
+            </span>
+            <span className="font-semibold shrink-0" style={{ color: meta.color }}>{meta.verb}</span>
+            <span className="dx-muted truncate">· {formatSince(athlete.startedAt, now)}</span>
+          </div>
         </div>
+        <div className="text-right shrink-0">
+          <div className="text-[16px] font-semibold tabular leading-none">{formatNearbyDistance(athlete.distanceKm)}</div>
+          <div className="text-[10.5px] dx-muted mt-1 uppercase tracking-wide">away</div>
+        </div>
+      </div>
+      {athlete.place && (
+        <div className="mt-2.5 flex items-center gap-1.5 text-[12px] dx-muted min-w-0">
+          <MapPin size={12} className="shrink-0" /> <span className="truncate">{athlete.place}</span>
+        </div>
+      )}
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={e => { e.stopPropagation(); onCheer(); }}
+          className="h-10 rounded-xl flex items-center justify-center gap-1.5 text-[13px] font-semibold text-white"
+          style={{ background: meta.color }}
+        >
+          <MessageCircle size={15} /> Cheer
+        </button>
+        {athlete.username ? (
+          <Link
+            to={`/profile/${athlete.username}`}
+            onClick={e => e.stopPropagation()}
+            className="h-10 rounded-xl flex items-center justify-center gap-1 text-[13px] font-semibold"
+            style={{ background: 'var(--dx-card-2)' }}
+          >
+            Profile <ChevronRight size={15} />
+          </Link>
+        ) : <span />}
       </div>
     </li>
   );
 }
 
-/** Opt-in "who's training around me", with privacy-safe approximate areas. */
+/** Strava-style "who's training around me right now". */
 export function NearbyPage() {
   const { profile } = useAuthStore();
   const visibility = nearbyVisibilityOf(profile);
   const cardioLive = useCardioStore(s => s.isTracking);
   const workoutLive = useWorkoutStore(s => s.isActive);
   const recording = cardioLive || workoutLive;
+  const [params] = useSearchParams();
   const [radius, setRadius] = useState(() => {
-    const saved = Number(localStorage.getItem(RADIUS_KEY));
-    return RADII.includes(saved) ? saved : 5;
+    const saved = Number(localStorage.getItem(RADIUS_KEY) ?? 'Infinity');
+    return RADII.includes(saved) ? saved : Infinity;
   });
   const [sport, setSport] = useState<'all' | NearbyActivity>('all');
   const [followingOnly, setFollowingOnly] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(params.get('focus'));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [cheerFor, setCheerFor] = useState<NearbyAthlete | null>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -184,7 +185,8 @@ export function NearbyPage() {
   useEffect(() => { localStorage.setItem(RADIUS_KEY, String(radius)); }, [radius]);
 
   const followingSet = useMemo(() => new Set(following), [following]);
-  const visible = athletes.filter(a => (sport === 'all' || a.activity === sport) && (!followingOnly || followingSet.has(a.uid)));
+  const matches = (a: NearbyAthlete) => (sport === 'all' || a.activity === sport) && (!followingOnly || followingSet.has(a.uid));
+  const list = athletes.filter(matches);
   const counts = useMemo(() => {
     const c: Record<NearbyActivity, number> = { run: 0, walk: 0, cycle: 0, workout: 0 };
     for (const a of athletes) c[a.activity] += 1;
@@ -198,53 +200,83 @@ export function NearbyPage() {
     });
   };
 
-  return (
-    <div className="dx pro-scope max-w-3xl mx-auto pt-1 sm:pt-4 space-y-4">
-      <header className="flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <div className="dx-eyebrow">Community</div>
-          <h1 className="text-[24px] sm:text-[28px] font-semibold tracking-tight leading-tight flex items-center gap-2">
-            Nearby
-            <span className="relative flex h-2.5 w-2.5" aria-hidden>
-              <span className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping" style={{ background: 'var(--dx-success)' }} />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full" style={{ background: 'var(--dx-success)' }} />
-            </span>
-          </h1>
-          <p className="text-[13.5px] dx-muted mt-0.5">Athletes training around you right now.</p>
-        </div>
-        <button type="button" onClick={() => setSettingsOpen(true)} className="dx-btn-secondary !h-10 !px-3.5 !text-[13px] shrink-0">
-          <Settings2 size={15} /> <span className="hidden sm:inline">Privacy</span>
-        </button>
-      </header>
+  const sports: { key: 'all' | NearbyActivity; label: string; count: number; color: string; Icon: typeof Radar }[] = [
+    { key: 'all', label: 'All', count: athletes.length, color: 'var(--dx-ink)', Icon: Sparkles },
+    ...(Object.keys(ACTIVITY_META) as NearbyActivity[]).map(k => ({
+      key: k, label: k === 'workout' ? 'Gym' : ACTIVITY_META[k].label, count: counts[k], color: ACTIVITY_META[k].color, Icon: ACTIVITY_META[k].icon,
+    })),
+  ];
 
-      {/* Your visibility */}
-      {visibility === 'off' ? (
-        <section className="dx-card p-4 flex items-center gap-3">
-          <span className="dx-badge-icon !w-11 !h-11 !rounded-2xl"><EyeOff size={19} /></span>
-          <div className="flex-1 min-w-0">
-            <div className="text-[14.5px] font-semibold">You're hidden</div>
-            <div className="text-[12.5px] dx-muted leading-snug">Show up here while you train. Approximate area only, never your exact spot.</div>
+  return (
+    <div className="dx pro-scope max-w-3xl mx-auto pt-1 sm:pt-4 space-y-3.5 pb-4">
+      {status === 'ready' && viewer ? (
+        <section className="relative rounded-[28px] overflow-hidden" style={{ border: '1px solid var(--dx-border)' }}>
+          <NearbyMap viewer={viewer} radiusKm={radius} athletes={athletes.filter(matches)} selectedUid={selected} onSelect={select} height={420} />
+          <div className="absolute left-3 right-3 top-3 z-[500] flex items-start justify-between gap-2 pointer-events-none">
+            <div className="nb-glass rounded-2xl px-3.5 py-2.5 pointer-events-auto min-w-0">
+              <div className="flex items-center gap-2 text-[17px] font-semibold leading-tight">
+                Nearby
+                <span className="relative flex h-2 w-2" aria-hidden>
+                  <span className="absolute inline-flex h-full w-full rounded-full opacity-60 animate-ping" style={{ background: '#10b981' }} />
+                  <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: '#10b981' }} />
+                </span>
+              </div>
+              <div className="text-[12px] opacity-70 tabular">{athletes.length} training right now</div>
+            </div>
+            <button type="button" onClick={() => setSettingsOpen(true)} className="nb-glass w-11 h-11 rounded-2xl flex items-center justify-center pointer-events-auto shrink-0" aria-label="Nearby privacy">
+              <Settings2 size={18} />
+            </button>
           </div>
-          <button type="button" onClick={() => setSettingsOpen(true)} className="dx-btn !h-10 !px-4 !text-[13px] shrink-0">Turn on</button>
+          <div className="absolute left-3 right-3 bottom-3 z-[500] flex justify-center pointer-events-none">
+            <div className="nb-glass nb-seg pointer-events-auto w-full max-w-sm" role="tablist" aria-label="Distance">
+              {RADII.map(r => (
+                <button key={r} type="button" role="tab" aria-selected={radius === r} onClick={() => setRadius(r)} className="tabular">
+                  {radiusLabel(r)}
+                </button>
+              ))}
+            </div>
+          </div>
         </section>
       ) : (
-        <section className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: 'var(--dx-success-soft)' }}>
-          <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--dx-success)', color: '#fff' }}>
-            <Eye size={17} />
-          </span>
-          <div className="flex-1 min-w-0 text-[12.5px] leading-snug">
-            <div className="text-[13.5px] font-semibold" style={{ color: 'var(--dx-success)' }}>
-              {recording ? 'You are visible now' : 'Visible while you train'}
-            </div>
-            <div className="dx-muted">{visibility === 'everyone' ? 'Everyone nearby' : 'Your followers'} can see your approximate area.</div>
+        <header className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="dx-eyebrow">Train together</div>
+            <h1 className="text-[24px] sm:text-[28px] font-semibold tracking-tight leading-tight">Nearby</h1>
+            <p className="text-[13.5px] dx-muted mt-0.5">Who's running, riding and lifting around you.</p>
           </div>
-          <button type="button" onClick={() => setSettingsOpen(true)} className="dx-link !text-[12.5px] shrink-0">Manage</button>
-        </section>
+          <button type="button" onClick={() => setSettingsOpen(true)} className="dx-icon-btn shrink-0" aria-label="Nearby privacy"><Settings2 size={18} /></button>
+        </header>
       )}
 
-      {/* Location states */}
+      <button
+        type="button"
+        onClick={() => setSettingsOpen(true)}
+        className="w-full rounded-2xl px-3.5 py-3 flex items-center gap-3 text-left"
+        style={{ background: visibility === 'off' ? 'var(--dx-card-2)' : 'var(--dx-success-soft)' }}
+      >
+        <span
+          className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+          style={visibility === 'off' ? { background: 'var(--dx-card)', color: 'var(--dx-muted)' } : { background: 'var(--dx-success)', color: '#fff' }}
+        >
+          {visibility === 'off' ? <EyeOff size={17} /> : <Eye size={17} />}
+        </span>
+        <span className="flex-1 min-w-0 leading-snug">
+          <span className="block text-[13.5px] font-semibold" style={visibility === 'off' ? undefined : { color: 'var(--dx-success)' }}>
+            {visibility === 'off' ? "You're hidden" : recording ? 'You are live on Nearby' : 'Visible while you train'}
+          </span>
+          <span className="block text-[12px] dx-muted truncate">
+            {visibility === 'off'
+              ? 'Turn on so others can find and join you'
+              : `${visibility === 'everyone' ? 'Everyone' : 'Your followers'} can see you from the moment you start`}
+          </span>
+        </span>
+        <span className={visibility === 'off' ? 'dx-btn !h-9 !px-3.5 !text-[12.5px] shrink-0' : 'dx-link !text-[12.5px] shrink-0'}>
+          {visibility === 'off' ? 'Turn on' : 'Manage'}
+        </span>
+      </button>
+
       {(status === 'idle' || status === 'locating') && (
-        <div className="dx-card h-[320px] flex flex-col items-center justify-center gap-3">
+        <div className="dx-card h-[340px] flex flex-col items-center justify-center gap-3">
           <Loader2 size={26} className="animate-spin dx-muted" />
           <span className="text-[13px] dx-muted">Finding athletes near you…</span>
         </div>
@@ -254,7 +286,7 @@ export function NearbyPage() {
           <span className="dx-badge-icon !w-16 !h-16 !rounded-3xl mx-auto"><Radar size={28} /></span>
           <h2 className="mt-3 text-[18px] font-semibold">See who's training around you</h2>
           <p className="mt-1 text-[13px] dx-muted max-w-sm mx-auto leading-snug">
-            We use your approximate location to find runs, rides and workouts nearby. It isn't saved or shared.
+            We use your location to show runs, rides and workouts near you. Looking doesn't share your location.
           </p>
           <button type="button" onClick={requestLocation} className="dx-btn mt-4 !h-11"><LocateFixed size={16} /> Use my location</button>
         </section>
@@ -274,58 +306,46 @@ export function NearbyPage() {
 
       {status === 'ready' && viewer && (
         <>
-          <NearbyMap viewer={viewer} radiusKm={radius} athletes={visible} selectedUid={selected} onSelect={select} />
-
-          <div className="flex items-center justify-between gap-3">
-            <div className="dx-segment" role="tablist" aria-label="Distance">
-              {RADII.map(r => (
-                <button key={r} type="button" role="tab" aria-selected={radius === r} onClick={() => setRadius(r)} className="!px-3 tabular">
-                  {r} km
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setFollowingOnly(v => !v)}
-              aria-pressed={followingOnly}
-              className="dx-chip !h-9 shrink-0"
-              style={followingOnly ? { background: 'var(--dx-accent-soft)', color: 'var(--dx-accent)' } : undefined}
-            >
-              <Users size={14} /> Following
-            </button>
-          </div>
-
-          <div className="flex gap-2 overflow-x-auto -mx-1 px-1 pb-1" style={{ scrollbarWidth: 'none' }}>
-            <button
-              type="button"
-              onClick={() => setSport('all')}
-              className="dx-chip !h-9 shrink-0"
-              style={sport === 'all' ? { background: 'var(--dx-ink)', color: 'var(--dx-on-ink)' } : undefined}
-            >
-              All · {athletes.length}
-            </button>
-            {(Object.keys(ACTIVITY_META) as NearbyActivity[]).map(k => {
-              const m = ACTIVITY_META[k];
-              const on = sport === k;
+          <div className="grid grid-cols-5 gap-2" role="group" aria-label="Filter by sport">
+            {sports.map(s => {
+              const on = sport === s.key;
               return (
                 <button
-                  key={k}
+                  key={s.key}
                   type="button"
-                  onClick={() => setSport(on ? 'all' : k)}
-                  className="dx-chip !h-9 shrink-0"
-                  style={on ? { background: m.color, color: '#fff' } : undefined}
+                  aria-pressed={on}
+                  onClick={() => setSport(on && s.key !== 'all' ? 'all' : s.key)}
+                  className="nb-sport"
+                  style={on ? { background: s.color, color: s.key === 'all' ? 'var(--dx-on-ink)' : '#fff' } : undefined}
                 >
-                  <m.icon size={14} style={on ? undefined : { color: m.color }} /> {m.label} · {counts[k]}
+                  <s.Icon size={18} style={on ? undefined : { color: s.key === 'all' ? 'var(--dx-text)' : s.color }} />
+                  <span className="leading-none">{s.label}</span>
+                  <span className="nb-count leading-none">{s.count}</span>
                 </button>
               );
             })}
           </div>
 
+          <div className="flex items-center gap-2">
+            <h2 className="flex-1 text-[15px] font-semibold">Training now · {list.length}</h2>
+            <button
+              type="button"
+              onClick={() => setFollowingOnly(v => !v)}
+              aria-pressed={followingOnly}
+              aria-label="Only people you follow"
+              title="Only people you follow"
+              className="w-[38px] h-[38px] rounded-full flex items-center justify-center shrink-0 transition-colors"
+              style={followingOnly ? { background: 'var(--dx-accent)', color: '#fff' } : { background: 'var(--dx-card-2)' }}
+            >
+              <Users size={16} />
+            </button>
+          </div>
+
           {!loaded ? (
-            <div className="dx-card divide-y" style={{ borderColor: 'var(--dx-border)' }}>
+            <div className="space-y-2.5">
               {[0, 1, 2].map(i => (
-                <div key={i} className="p-3.5 flex items-center gap-3 animate-pulse">
-                  <span className="w-[46px] h-[46px] rounded-full" style={{ background: 'var(--dx-card-2)' }} />
+                <div key={i} className="nb-card p-3.5 flex items-center gap-3 animate-pulse">
+                  <span className="w-12 h-12 rounded-full" style={{ background: 'var(--dx-card-2)' }} />
                   <span className="flex-1 space-y-2">
                     <span className="block h-3.5 w-1/2 rounded" style={{ background: 'var(--dx-card-2)' }} />
                     <span className="block h-3 w-1/3 rounded" style={{ background: 'var(--dx-card-2)' }} />
@@ -333,46 +353,38 @@ export function NearbyPage() {
                 </div>
               ))}
             </div>
-          ) : visible.length === 0 ? (
-            <section className="dx-card p-7 text-center">
+          ) : list.length === 0 ? (
+            <section className="nb-card p-7 text-center">
               <span className="dx-badge-icon !w-14 !h-14 !rounded-2xl mx-auto"><Radar size={24} /></span>
-              <h2 className="mt-3 text-[16px] font-semibold">Quiet around here right now</h2>
+              <h2 className="mt-3 text-[16px] font-semibold">No one training right now</h2>
               <p className="mt-1 text-[13px] dx-muted max-w-sm mx-auto leading-snug">
-                {athletes.length > 0
+                {athletes.length > 0 && (sport !== 'all' || followingOnly)
                   ? 'No one matches these filters.'
-                  : `No one within ${radius} km is sharing a live session. Check back during a morning or evening rush.`}
+                  : 'People appear here the moment they start a run, ride, walk or workout with Nearby on.'}
               </p>
-              {radius < 15 && athletes.length === 0 && (
-                <button type="button" onClick={() => setRadius(RADII[RADII.indexOf(radius) + 1])} className="dx-btn-secondary mt-4 !h-10">
-                  Search {RADII[RADII.indexOf(radius) + 1]} km
-                </button>
+              {Number.isFinite(radius) && athletes.length === 0 && (
+                <button type="button" onClick={() => setRadius(Infinity)} className="dx-btn-secondary mt-4 !h-10">Search everywhere</button>
               )}
             </section>
           ) : (
-            <section className="dx-card overflow-hidden">
-              <div className="px-4 pt-3.5 pb-2 flex items-center justify-between">
-                <h2 className="dx-section-title">{visible.length} training now</h2>
-                <span className="text-[11.5px] dx-muted">Closest first</span>
-              </div>
-              <ul ref={listRef} className="divide-y" style={{ borderColor: 'var(--dx-border)' }}>
-                {visible.map(a => (
-                  <AthleteRow
-                    key={a.uid}
-                    athlete={a}
-                    following={followingSet.has(a.uid)}
-                    now={now}
-                    selected={selected === a.uid}
-                    onSelect={() => setSelected(a.uid)}
-                    onCheer={() => setCheerFor(a)}
-                  />
-                ))}
-              </ul>
-            </section>
+            <ul ref={listRef} className="space-y-2.5">
+              {list.map(a => (
+                <LiveCard
+                  key={a.uid}
+                  athlete={a}
+                  following={followingSet.has(a.uid)}
+                  now={now}
+                  selected={selected === a.uid}
+                  onSelect={() => select(a.uid)}
+                  onCheer={() => setCheerFor(a)}
+                />
+              ))}
+            </ul>
           )}
 
-          <p className="flex items-start gap-2 text-[11.5px] dx-muted leading-snug px-1 pb-2">
+          <p className="flex items-start gap-2 text-[11.5px] dx-muted leading-snug px-1">
             <ShieldCheck size={14} className="shrink-0 mt-px" style={{ color: 'var(--dx-success)' }} />
-            Areas are approximate (about 1 km) and shown only while someone is recording. Exact locations and routes are never shared.
+            Only people who turned Nearby on appear, from the moment they start until they finish. Routes are never shared and privacy zones are respected.
           </p>
         </>
       )}

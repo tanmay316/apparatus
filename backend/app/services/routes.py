@@ -247,3 +247,85 @@ async def snap_route(points: list[list[float]], kind: str) -> Optional[dict]:
     }
     _cache_set(key, out)
     return out
+
+
+_TURN_WORDS = {
+    "uturn": "Make a U-turn", "sharp right": "Turn sharp right", "right": "Turn right", "slight right": "Bear right",
+    "straight": "Continue straight", "slight left": "Bear left", "left": "Turn left", "sharp left": "Turn sharp left",
+}
+
+
+def _instruction(step: dict) -> str:
+    """Human turn instruction from an OSRM step (maneuver type + modifier + street name)."""
+    m = step.get("maneuver") or {}
+    kind, mod = m.get("type", ""), m.get("modifier", "")
+    name = (step.get("name") or "").strip()
+    on = f" onto {name}" if name else ""
+    if kind == "depart":
+        return f"Head {_compass(float(m.get('bearing_after') or 0))}{' on ' + name if name else ''}"
+    if kind == "arrive":
+        return "Arrive at your destination"
+    if kind in ("roundabout", "rotary", "roundabout turn"):
+        exit_no = m.get("exit")
+        return f"At the roundabout, take exit {exit_no}{on}" if exit_no else f"Go through the roundabout{on}"
+    if kind in ("continue", "new name") and mod in ("straight", ""):
+        return f"Continue{' on ' + name if name else ' straight'}"
+    if kind == "fork":
+        return f"Keep {'right' if 'right' in mod else 'left'} at the fork{on}"
+    if kind == "end of road":
+        return f"At the end of the road, turn {'right' if 'right' in mod else 'left'}{on}"
+    return f"{_TURN_WORDS.get(mod, 'Continue')}{on}"
+
+
+async def directions(start: tuple[float, float], end: tuple[float, float], kind: str, via: Optional[list[tuple[float, float]]] = None) -> list[dict]:
+    """
+    A→B routes on foot or by bike with turn-by-turn steps: up to 3 alternatives when there are no
+    via points. The router (OSRM, contraction hierarchies / multi-level Dijkstra) returns the optimal
+    path for the profile, and alternatives that are genuinely different, not small detours.
+    """
+    coords = [start, *(via or []), end]
+    key = f"d:{kind}:" + ";".join(f"{lat:.5f},{lng:.5f}" for lat, lng in coords)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+    base = settings.ROUTING_BIKE_URL if kind == "cycle" else settings.ROUTING_FOOT_URL
+    path = ";".join(f"{lng:.6f},{lat:.6f}" for lat, lng in coords)
+    params = {"overview": "full", "geometries": "geojson", "steps": "true", "alternatives": "3" if len(coords) == 2 else "false"}
+    await _throttle()
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            r = await client.get(f"{base}/{path}", params=params, headers=_HEADERS)
+    except httpx.HTTPError:
+        return []
+    if r.status_code != 200:
+        return []
+    data = r.json()
+    if data.get("code") != "Ok":
+        return []
+    out: list[dict] = []
+    for i, route in enumerate((data.get("routes") or [])[:3]):
+        geometry = route.get("geometry", {}).get("coordinates") or []
+        points = [[c[1], c[0]] for c in geometry if isinstance(c, list) and len(c) >= 2]
+        if len(points) < 2:
+            continue
+        steps = []
+        for leg in route.get("legs") or []:
+            for step in leg.get("steps") or []:
+                loc = (step.get("maneuver") or {}).get("location") or [None, None]
+                steps.append({
+                    "instruction": _instruction(step),
+                    "distanceM": round(float(step.get("distance") or 0)),
+                    "type": (step.get("maneuver") or {}).get("type", ""),
+                    "modifier": (step.get("maneuver") or {}).get("modifier", ""),
+                    "at": [loc[1], loc[0]] if loc[0] is not None else None,
+                })
+        out.append({
+            "id": f"dir-{i}",
+            "distanceKm": round(float(route.get("distance") or 0) / 1000, 2),
+            "durationSec": round(float(route.get("duration") or 0)),
+            "points": simplify(points),
+            "steps": steps[:200],
+        })
+    if out:
+        _cache_set(key, out)
+    return out

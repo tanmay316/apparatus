@@ -39,6 +39,14 @@ function FlyTo({ target }: { target: LatLng | null }) {
   return null;
 }
 
+function FitOnce({ points }: { points: LatLng[] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (points.length > 1) map.fitBounds(L.latLngBounds(points), { padding: [36, 36], animate: false });
+  }, [map]); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 function joinLegs(legs: LatLng[][]): LatLng[] {
   const out: LatLng[] = [];
   for (const leg of legs) {
@@ -52,18 +60,20 @@ function joinLegs(legs: LatLng[][]): LatLng[] {
 
 /**
  * Strava-style route builder: tap the map to add points; with "Snap to paths" each leg follows
- * roads and trails. Undo, clear, back to start and out-and-back like Strava's route builder.
+ * roads and trails. Drag any point to reshape the route (e.g. a suggested A→B route).
  */
-export function RouteBuilder({ start, darkMap, onSave }: {
+export function RouteBuilder({ start, darkMap, onSave, initial }: {
   start: LatLng | null;
   darkMap: boolean;
   onSave: (route: PlannedRoute) => void;
+  /** Pre-filled route to edit: waypoints and the path between each pair. */
+  initial?: { type: CardioActivityType; waypoints: LatLng[]; legs: LatLng[][]; name?: string } | null;
 }) {
   const showToast = useUIStore(s => s.showToast);
-  const [type, setType] = useState<CardioActivityType>('run');
+  const [type, setType] = useState<CardioActivityType>(initial?.type ?? 'run');
   const [snap, setSnap] = useState(true);
-  const [waypoints, setWaypoints] = useState<LatLng[]>([]);
-  const [legs, setLegs] = useState<LatLng[][]>([]);
+  const [waypoints, setWaypoints] = useState<LatLng[]>(initial?.waypoints ?? []);
+  const [legs, setLegs] = useState<LatLng[][]>(initial?.legs ?? []);
   const [pending, setPending] = useState(0);
   const [elevation, setElevation] = useState<{ gain: number | null; profile: number[] | null } | null>(null);
   const [flyTarget, setFlyTarget] = useState<LatLng | null>(null);
@@ -110,6 +120,20 @@ export function RouteBuilder({ start, darkMap, onSave }: {
     setWaypoints(w => w.slice(0, -1));
     setLegs(l => l.slice(0, Math.max(0, waypoints.length - 2)));
   };
+
+  // Dragging a point re-plans only the two legs that touch it.
+  const movePoint = useCallback(async (i: number, p: LatLng) => {
+    if (pending > 0) return;
+    const next = waypoints.map((w, j) => (j === i ? p : w));
+    setWaypoints(next);
+    setPending(n => n + 1);
+    const [before, after] = await Promise.all([
+      i > 0 ? legFor(next[i - 1], p) : Promise.resolve(null),
+      i < next.length - 1 ? legFor(p, next[i + 1]) : Promise.resolve(null),
+    ]);
+    setLegs(l => l.map((leg, j) => (j === i - 1 && before ? before : j === i && after ? after : leg)));
+    setPending(n => n - 1);
+  }, [waypoints, legFor, pending]);
   const clear = () => { if (!pending) { setWaypoints([]); setLegs([]); setElevation(null); } };
   const backToStart = () => { if (waypoints.length > 1 && !pending) addPoint(waypoints[0]); };
   const outAndBack = () => {
@@ -135,7 +159,7 @@ export function RouteBuilder({ start, darkMap, onSave }: {
     if (path.length < 2) return;
     const pts = simplifyRoute(path.map(([lat, lng]) => ({ lat, lng })), 1500).map(p => [p.lat, p.lng] as LatLng);
     onSave({
-      name: `${distanceKm.toFixed(1)} km ${TYPES.find(t => t.value === type)?.label.toLowerCase()} route`,
+      name: initial?.name || `${distanceKm.toFixed(1)} km ${TYPES.find(t => t.value === type)?.label.toLowerCase()} route`,
       type,
       distanceKm: Math.round(distanceKm * 100) / 100,
       elevationGainM: elevation?.gain ?? null,
@@ -163,6 +187,7 @@ export function RouteBuilder({ start, darkMap, onSave }: {
           <TileLayer url={theme.url} maxNativeZoom={theme.maxNativeZoom} maxZoom={19} />
           <ClickToAdd onAdd={addPoint} />
           <FlyTo target={flyTarget} />
+          {initial && <FitOnce points={initial.legs.flat()} />}
           {path.length > 1 && (
             <>
               <Polyline positions={path} pathOptions={{ color: '#ffffff', weight: 8, opacity: 0.9 }} />
@@ -170,16 +195,27 @@ export function RouteBuilder({ start, darkMap, onSave }: {
             </>
           )}
           {waypoints.map((p, i) => (
-            <Marker key={`${i}-${p[0]}-${p[1]}`} position={p} interactive={false}
-              icon={i === 0 ? START_ICON : i === waypoints.length - 1 ? END_ICON : POINT_ICON} />
+            <Marker
+              key={`${i}-${p[0]}-${p[1]}`}
+              position={p}
+              draggable={pending === 0}
+              eventHandlers={{ dragend: (e) => { const ll = (e.target as L.Marker).getLatLng(); void movePoint(i, [ll.lat, ll.lng]); } }}
+              icon={i === 0 ? START_ICON : i === waypoints.length - 1 ? END_ICON : POINT_ICON}
+            />
           ))}
         </MapContainer>
         <MapAttribution text={theme.attribution} className="left-2 bottom-2" />
 
-        {waypoints.length === 0 && (
+        {waypoints.length === 0 ? (
           <div className="absolute top-3 inset-x-3 z-[500] pointer-events-none flex justify-center">
             <span className="px-3.5 py-2 rounded-full text-[12.5px] font-semibold shadow-md" style={{ background: 'var(--dx-card)', color: 'var(--dx-text)' }}>
               Tap the map to start drawing
+            </span>
+          </div>
+        ) : waypoints.length > 1 && pending === 0 && (
+          <div className="absolute bottom-3 inset-x-3 z-[500] pointer-events-none flex justify-center">
+            <span className="px-3 py-1.5 rounded-full text-[11.5px] font-semibold shadow-md" style={{ background: 'var(--dx-card)', color: 'var(--dx-text)' }}>
+              Drag a point to change the route · tap to extend
             </span>
           </div>
         )}

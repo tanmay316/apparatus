@@ -2,7 +2,7 @@
   "name": "apparatus",
   "private": true,
   "version": "2.0.91",
-  "nativeVersion": "2.1.20",
+  "nativeVersion": "2.1.22",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -49,6 +49,7 @@
     "@capacitor/text-zoom": "^8.0.1",
     "@capacitor/toast": "^8.0.1",
     "@capawesome-team/capacitor-android-foreground-service": "^8.1.0",
+    "@capawesome/capacitor-app-update": "^8.1.0",
     "@capgo/capacitor-pedometer": "^8.0.38",
     "@capgo/capacitor-social-login": "^8.4.0",
     "@capgo/native-purchases": "^8.8.1",

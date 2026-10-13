@@ -19,7 +19,6 @@ import { StepGoalCard } from '@/components/dashboard/StepGoalCard';
 import { WeeklyTimeline } from '@/components/dashboard/WeeklyTimeline';
 import { XPPanel } from '@/components/dashboard/XPPanel';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
-import { NearbyStrip } from '@/components/nearby/NearbyStrip';
 import { LiveTrainingHub } from '@/components/social/LiveTrainingHub';
 import { UpcomingReminderWidget } from '@/components/community/UpcomingReminderWidget';
 import type { PlanDay, Activity } from '@/types';
@@ -248,7 +247,6 @@ export function Dashboard() {
     <div className="dx pro-scope max-w-6xl mx-auto sm:px-2 lg:px-0 pt-1 sm:pt-4">
       {/* Live Training Hub (Stories-style) */}
       <LiveTrainingHub />
-      <NearbyStrip liveOnly className="mb-4" />
 
       <HeroDashboard
         displayName={profile.displayName || 'Athlete'}

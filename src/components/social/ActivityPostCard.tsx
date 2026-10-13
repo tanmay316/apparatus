@@ -18,6 +18,7 @@ import { AnatomyFigureSVG } from '@/components/ui/AnatomySvg';
 import { AnimatedHeart } from '@/components/ui/AnimatedHeart';
 import { getAvatarUrl } from '@/lib/avatar';
 import { ProRing } from '@/components/subscription/ProEntry';
+import { TrainedWithRow } from '@/components/nearby/TrainedWithRow';
 import { RouteMap } from '@/components/cardio/RouteMap';
 import { CelebrationPodiumCard } from '@/components/community/CelebrationPodiumCard';
 import { getAppShareUrl, shareContent } from '@/lib/share';
@@ -664,6 +665,12 @@ export function ActivityPostCard({ activity, onShare, onDelete, onCommentClick, 
       </div>
 
       {/* ─── SECTION 2: WORKOUT / ACHIEVEMENT HERO ─────────────────────── */}
+      {Array.isArray(details.trainedWith) && details.trainedWith.length > 0 && (
+        <TrainedWithRow
+          partners={details.trainedWith}
+          fallbackStartMs={activity.createdAt?.seconds ? activity.createdAt.seconds * 1000 - (Number(details.elapsedDurationSec ?? details.durationSec) || Number(details.durationMin || 0) * 60) * 1000 : undefined}
+        />
+      )}
       {isCelebration ? (
         <div className="mb-4 sm:mb-5">
           <CelebrationPodiumCard

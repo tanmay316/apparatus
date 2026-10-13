@@ -57,6 +57,86 @@ export async function routeElevation(points: LatLng[]): Promise<{ elevationGainM
   return apiRequest('/routes/elevation', { method: 'POST', body: JSON.stringify({ points: points.slice(0, 2000) }) });
 }
 
+// ─── A → B directions ─────────────────────────────────────────
+
+export interface DirectionStep {
+  instruction: string;
+  distanceM: number;
+  type: string;
+  modifier: string;
+  at: LatLng | null;
+}
+
+export interface DirectionsRoute {
+  id: string;
+  distanceKm: number;
+  /** Router's estimate for a typical walker/rider; the UI prefers the user's own pace. */
+  durationSec: number;
+  points: LatLng[];
+  steps: DirectionStep[];
+}
+
+export async function getDirections(start: LatLng, end: LatLng, type: CardioActivityType, via: LatLng[] = []): Promise<DirectionsRoute[]> {
+  const res = await apiRequest<{ routes: DirectionsRoute[] }>('/routes/directions', {
+    method: 'POST',
+    body: JSON.stringify({ type, start, end, via }),
+  });
+  return res.routes;
+}
+
+export interface PlaceResult {
+  id: string;
+  name: string;
+  detail: string;
+  point: LatLng;
+}
+
+const placeCache = new Map<string, PlaceResult[]>();
+
+/**
+ * Place search (OpenStreetMap data). Photon is built for search-as-you-type and biased to
+ * where the user is; Nominatim is the fallback. Both are free public services.
+ */
+export async function searchPlaces(q: string, near?: LatLng | null, signal?: AbortSignal): Promise<PlaceResult[]> {
+  const text = q.trim();
+  if (text.length < 3) return [];
+  const key = `${text.toLowerCase()}|${near ? `${near[0].toFixed(1)},${near[1].toFixed(1)}` : ''}`;
+  const hit = placeCache.get(key);
+  if (hit) return hit;
+  let results: PlaceResult[] = [];
+  try {
+    const url = new URL('https://photon.komoot.io/api/');
+    url.searchParams.set('q', text);
+    url.searchParams.set('limit', '6');
+    if (near) { url.searchParams.set('lat', String(near[0])); url.searchParams.set('lon', String(near[1])); }
+    const res = await fetch(url, { signal });
+    if (!res.ok) throw new Error(String(res.status));
+    const data = await res.json();
+    results = (data.features || []).map((f: any, i: number) => {
+      const p = f.properties || {};
+      const [lng, lat] = f.geometry?.coordinates || [];
+      const name = p.name || [p.street, p.housenumber].filter(Boolean).join(' ') || p.city || 'Place';
+      const detail = [p.street && p.name ? p.street : '', p.district || p.locality, p.city, p.state, p.country].filter(Boolean).filter((v: string, j: number, a: string[]) => a.indexOf(v) === j && v !== name).join(', ');
+      return { id: `${p.osm_type || ''}${p.osm_id || i}`, name: String(name).slice(0, 80), detail: String(detail).slice(0, 120), point: [lat, lng] as LatLng };
+    }).filter((r: PlaceResult) => Number.isFinite(r.point[0]) && Number.isFinite(r.point[1]));
+  } catch (err: any) {
+    if (err?.name === 'AbortError') throw err;
+    const url = new URL('https://nominatim.openstreetmap.org/search');
+    url.searchParams.set('q', text);
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('limit', '6');
+    const res = await fetch(url, { signal, headers: { Accept: 'application/json' } });
+    const data = res.ok ? await res.json() : [];
+    results = (data || []).map((d: any) => {
+      const [name, ...rest] = String(d.display_name || '').split(', ');
+      return { id: String(d.place_id), name: name.slice(0, 80), detail: rest.slice(0, 3).join(', '), point: [Number(d.lat), Number(d.lon)] as LatLng };
+    });
+  }
+  if (placeCache.size > 100) placeCache.delete(placeCache.keys().next().value!);
+  placeCache.set(key, results);
+  return results;
+}
+
 // ─── Saved routes (Firestore users/{uid}/routes + offline copy on the phone) ──
 
 const OFFLINE_KEY = (uid: string) => `offline-routes.${uid}`;

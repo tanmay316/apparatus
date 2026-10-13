@@ -222,6 +222,18 @@ export interface Workout {
   likesCount: number;
   commentsCount: number;
   progressiveOverload?: ProgressiveOverloadSummary;
+  trainedWith?: TrainedWith[];
+}
+
+/** Someone who trained alongside the user during a session ("with …" on the post). */
+export interface TrainedWith {
+  uid: string;
+  displayName: string;
+  username?: string;
+  photoURL?: string;
+  activity: 'run' | 'walk' | 'cycle' | 'workout';
+  /** When their session started (ms), used to find it later. */
+  startedAt?: number;
 }
 
 export interface ProgressiveOverloadSummary {
@@ -683,6 +695,7 @@ export interface CardioActivity {
   notes: string;
   steps?: number;
   stepSource?: 'native' | 'motion_estimate' | 'gps_estimate' | 'none';
+  trainedWith?: TrainedWith[];
 }
 
 // ─── Clan System (V2) ────────────────────────────────────────

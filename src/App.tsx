@@ -11,6 +11,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { safeInternalPath } from '@/lib/validation';
 import { refreshSafeArea } from '@/lib/safe-area';
+import { checkPlayUpdate } from '@/lib/play-update';
 import { subscribeToNotifications } from '@/services/social';
 import { refreshForNotification } from '@/lib/notification-sync';
 import { 
@@ -31,6 +32,8 @@ import { useWorkoutStore } from '@/stores/workout-store';
 import { useCardioStore, syncWithNativeSession } from '@/stores/cardio-store';
 import { CardioLivePublisher } from '@/components/social/CardioLivePublisher';
 import { NearbyPresencePublisher } from '@/components/social/NearbyPresencePublisher';
+import { NearbyEncounterTracker } from '@/components/social/NearbyEncounterTracker';
+import { NearbyDataProvider } from '@/hooks/useNearby';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { OtaKit } from '@otakit/capacitor-updater';
@@ -190,6 +193,27 @@ function PreferencesSync() {
     const fallback = setTimeout(() => SplashScreen.hide().catch(() => {}), 4000);
     return () => clearTimeout(fallback);
   }, [initialized]);
+
+  useEffect(() => {
+    // Google Play update: shortly after launch, on resume, and right after a session ends.
+    if (Capacitor.getPlatform() !== 'android') return;
+    const first = setTimeout(() => void checkPlayUpdate(true), 8000);
+    const onVisible = () => { if (!document.hidden) void checkPlayUpdate(); };
+    document.addEventListener('visibilitychange', onVisible);
+    const busy = () => useCardioStore.getState().isTracking || useWorkoutStore.getState().isActive;
+    let wasBusy = busy();
+    const onStore = () => {
+      const now = busy();
+      if (wasBusy && !now) setTimeout(() => void checkPlayUpdate(true), 15_000);
+      wasBusy = now;
+    };
+    const unsubs = [useCardioStore.subscribe(onStore), useWorkoutStore.subscribe(onStore)];
+    return () => {
+      clearTimeout(first);
+      document.removeEventListener('visibilitychange', onVisible);
+      unsubs.forEach(u => u());
+    };
+  }, []);
 
   useEffect(() => {
     // One-time migration to ensure light theme is the default for new build/installs.
@@ -443,6 +467,8 @@ export function App() {
       <PreferencesSync />
       <CardioLivePublisher />
       <NearbyPresencePublisher />
+      <NearbyDataProvider />
+      <NearbyEncounterTracker />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <ActiveSessionRestorer />
         <Suspense fallback={<PageLoader />}>

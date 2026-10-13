@@ -1,36 +1,26 @@
 import { useEffect, useRef } from 'react';
-import { Capacitor } from '@capacitor/core';
-import { Geolocation } from '@capacitor/geolocation';
 import { useAuthStore } from '@/stores/auth-store';
 import { useCardioStore } from '@/stores/cardio-store';
 import { useWorkoutStore } from '@/stores/workout-store';
-import { encodeGeohash } from '@/lib/geohash';
+import { distanceKm, encodeGeohash } from '@/lib/geohash';
+import { currentFix } from '@/lib/current-fix';
 import {
-  CARDIO_TTL_MS, SHARE_PRECISION, START_HIDE_KM, WORKOUT_TTL_MS,
+  LIVE_TTL_MS, SHARE_PRECISION, buildTrail,
   clearPresence, inPrivacyZone, nearbyVisibilityOf, placeNameForCell, publishPresence, type NearbyActivity,
 } from '@/services/nearby';
 
-const TICK_MS = 20_000;
+const TICK_MS = 15_000;
 /** Re-publish this often even without moving (keeps expiresAt ahead of the TTL with margin). */
-const REFRESH_MS = { cardio: 3 * 60_000, workout: 10 * 60_000 };
-
-async function coarseFix(): Promise<{ lat: number; lng: number } | null> {
-  try {
-    if (Capacitor.isNativePlatform()) {
-      let perm = await Geolocation.checkPermissions();
-      if (perm.location === 'prompt' || perm.location === 'prompt-with-rationale') perm = await Geolocation.requestPermissions();
-      if (perm.location !== 'granted') return null;
-    }
-    const pos = await Geolocation.getCurrentPosition({ enableHighAccuracy: false, timeout: 15_000, maximumAge: 5 * 60_000 });
-    return { lat: pos.coords.latitude, lng: pos.coords.longitude };
-  } catch {
-    return null;
-  }
-}
+const REFRESH_MS = { cardio: 60_000, workout: 10 * 60_000 };
+/** Movement that triggers an immediate update. */
+const MOVE_KM = 0.04;
+/** A gym doesn't move; refresh its fix now and then in case the first one was poor. */
+const WORKOUT_FIX_MS = 5 * 60_000;
 
 /**
- * Shares the user's approximate area on Nearby while a run or workout is being recorded (opt-in),
- * and removes it the moment the session ends, they opt out, or they enter their privacy zone.
+ * Shares the user's live position on Nearby from the moment a run or workout starts until it ends
+ * (opt-in). The long expiry keeps them listed while the phone is locked; leaving the privacy zone,
+ * opting out or ending the session removes it.
  */
 export function NearbyPresencePublisher() {
   const profile = useAuthStore(s => s.profile);
@@ -39,7 +29,7 @@ export function NearbyPresencePublisher() {
   const cardioLive = useCardioStore(s => s.isTracking);
   const workoutLive = useWorkoutStore(s => s.isActive);
   const live = cardioLive || workoutLive;
-  const shared = useRef<{ uid: string; cell: string; at: number; audience: string } | null>(null);
+  const shared = useRef<{ uid: string; lat: number; lng: number; at: number; audience: string } | null>(null);
 
   useEffect(() => {
     if (!uid || visibility === 'off' || !live) {
@@ -51,7 +41,7 @@ export function NearbyPresencePublisher() {
     }
 
     let cancelled = false;
-    let workoutFix: { lat: number; lng: number } | null = null;
+    let fallbackFix: { lat: number; lng: number; at: number } | null = null;
     let busy = false;
 
     const hide = () => {
@@ -73,26 +63,30 @@ export function NearbyPresencePublisher() {
         if (isCardio) {
           activity = cardio.activityType!;
           startedAt = cardio.startedAt || Date.now();
-          // Keep the start (often home) private: appear only once the run is underway.
-          if (cardio.distanceKm < START_HIDE_KM || !cardio.currentLocation) return hide();
-          // A paused run is a stop somewhere (often a café or home), not training.
-          if (cardio.isPaused) return hide();
           pos = cardio.currentLocation;
         } else {
           activity = 'workout';
           startedAt = useWorkoutStore.getState().startedAt || Date.now();
-          workoutFix = workoutFix || await coarseFix();
-          pos = workoutFix;
+        }
+        // Before the first GPS point of a run (and for gym sessions) use a one-off fix, so people appear right away.
+        if (!pos) {
+          if (!fallbackFix || Date.now() - fallbackFix.at > WORKOUT_FIX_MS) {
+            const fix = await currentFix();
+            if (fix) fallbackFix = { ...fix, at: Date.now() };
+          }
+          pos = fallbackFix;
         }
         if (cancelled || !pos) return;
         if (inPrivacyZone(pos.lat, pos.lng)) return hide();
 
-        const cell = encodeGeohash(pos.lat, pos.lng, SHARE_PRECISION);
         const prev = shared.current;
         const refresh = isCardio ? REFRESH_MS.cardio : REFRESH_MS.workout;
-        if (prev && prev.cell === cell && prev.audience === visibility && Date.now() - prev.at < refresh) return;
+        if (
+          prev && prev.audience === visibility && Date.now() - prev.at < refresh
+          && distanceKm(prev.lat, prev.lng, pos.lat, pos.lng) < MOVE_KM
+        ) return;
 
-        const place = await placeNameForCell(cell);
+        const place = await placeNameForCell(encodeGeohash(pos.lat, pos.lng, SHARE_PRECISION));
         if (cancelled) return;
         const current = useAuthStore.getState().profile;
         if (!current) return;
@@ -103,9 +97,10 @@ export function NearbyPresencePublisher() {
           lng: pos.lng,
           startedAt,
           place,
-          ttlMs: isCardio ? CARDIO_TTL_MS : WORKOUT_TTL_MS,
+          ttlMs: LIVE_TTL_MS,
+          trail: isCardio ? buildTrail(cardio.routePoints) : undefined,
         });
-        shared.current = { uid: current.uid, cell, at: Date.now(), audience: visibility };
+        shared.current = { uid: current.uid, lat: pos.lat, lng: pos.lng, at: Date.now(), audience: visibility };
       } catch (err) {
         console.warn('[Nearby] presence update failed', err);
       } finally {
