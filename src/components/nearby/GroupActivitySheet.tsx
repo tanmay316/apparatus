@@ -46,7 +46,8 @@ function MemberRow({ target, onOpen }: { target: PeekTarget; onOpen: () => void 
       { label: 'Sets', value: String(sets) },
     ];
   }
-  const route = session?.kind === 'cardio' && (session.data.route?.length ?? 0) > 1 ? session.data.route : null;
+  const cardio = session?.kind === 'cardio' ? session.data : null;
+  const route = cardio && (cardio.route?.length ?? 0) > 1 ? cardio.route : null;
 
   return (
     <li>
@@ -67,7 +68,7 @@ function MemberRow({ target, onOpen }: { target: PeekTarget; onOpen: () => void 
         </div>
         {route ? (
           <span className="w-[72px] h-[72px] rounded-xl overflow-hidden shrink-0 pointer-events-none" style={{ border: '1px solid var(--dx-border)' }}>
-            <RouteMap route={route} height="72px" theme={theme === 'dark' ? 'dark' : 'light'} variant="card" interactive={false} hideMarkers fitToContainer highlightColor={meta.color} cardioType={session!.kind === 'cardio' ? session!.data.type : undefined} />
+            <RouteMap route={route} height="72px" theme={theme === 'dark' ? 'dark' : 'light'} variant="card" interactive={false} hideMarkers fitToContainer highlightColor={meta.color} cardioType={cardio?.type} />
           </span>
         ) : (
           <ChevronRight size={18} className="dx-muted shrink-0" />
