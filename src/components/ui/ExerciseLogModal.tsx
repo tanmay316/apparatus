@@ -9,6 +9,10 @@ import { MUSCLE_GROUPS } from '@/lib/muscle-map';
 import { Browser } from '@capacitor/browser';
 import { Capacitor } from '@capacitor/core';
 import { GearPicks } from '@/components/market/GearPicks';
+import { useCountdownTimer, useStopwatch } from '@/hooks/useWallClockTimer';
+
+const REST_ALERT_ID = 4100;
+const COUNTDOWN_ALERT_ID = 4101;
 
 interface Props {
   exercise: Exercise;
@@ -249,17 +253,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
 
   // Timer States
   const [restDuration, setRestDuration] = useState(90);
-  const [restTimeLeft, setRestTimeLeft] = useState(90);
-  const [isRestRunning, setIsRestRunning] = useState(false);
-
-  const [stopwatchElapsed, setStopwatchElapsed] = useState(0);
-  const [isStopwatchRunning, setIsStopwatchRunning] = useState(false);
-
   const [countdownDuration, setCountdownDuration] = useState(300); // 5 min default
-  const [countdownTimeLeft, setCountdownTimeLeft] = useState(300);
-  const [isCountdownRunning, setIsCountdownRunning] = useState(false);
-
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const beep = () => {
     try {
@@ -284,38 +278,9 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
     }
   };
 
-  // General Timer Loop
-  useEffect(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
-
-    timerRef.current = setInterval(() => {
-      if (timerMode === 'rest' && isRestRunning) {
-        if (restTimeLeft > 0) {
-          setRestTimeLeft(prev => prev - 1);
-        } else {
-          setIsRestRunning(false);
-          beep();
-        }
-      }
-
-      if (timerMode === 'stopwatch' && isStopwatchRunning) {
-        setStopwatchElapsed(prev => prev + 1);
-      }
-
-      if (timerMode === 'countdown' && isCountdownRunning) {
-        if (countdownTimeLeft > 0) {
-          setCountdownTimeLeft(prev => prev - 1);
-        } else {
-          setIsCountdownRunning(false);
-          beep();
-        }
-      }
-    }, 1000);
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [timerMode, isRestRunning, restTimeLeft, isStopwatchRunning, isCountdownRunning, countdownTimeLeft]);
+  const rest = useCountdownTimer(90, REST_ALERT_ID, 'Rest is over. Time for your next set.', beep);
+  const stopwatch = useStopwatch();
+  const countdown = useCountdownTimer(300, COUNTDOWN_ALERT_ID, 'Your countdown has finished.', beep);
 
   if (!isOpen) return null;
 
@@ -582,8 +547,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                           if (isReadOnly) return;
                           store.markSetComplete(exercise.name, idx, !set.completed);
                           if (!set.completed && timerMode === 'rest') {
-                            setRestTimeLeft(restDuration);
-                            setIsRestRunning(true);
+                            rest.start(restDuration);
                           }
                         }}
                         disabled={isReadOnly}
@@ -663,8 +627,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                           key={s}
                           onClick={() => {
                             setRestDuration(s);
-                            setRestTimeLeft(s);
-                            setIsRestRunning(false);
+                            rest.stop(s);
                           }}
                           className="min-w-[3rem] h-8 rounded-full px-3 text-[12px] font-semibold tabular transition"
                           style={restDuration === s ? { background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' } : { background: 'var(--dx-card)', color: 'var(--dx-muted)' }}
@@ -686,21 +649,20 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                         onChange={(e) => {
                           const val = parseInt(e.target.value) || 0;
                           setRestDuration(val);
-                          setRestTimeLeft(val);
-                          setIsRestRunning(false);
+                          rest.stop(val);
                         }}
                       />
                       <span>sec</span>
                     </div>
 
-                    <div className={`text-[48px] leading-none font-semibold tabular tracking-tight ${isRestRunning ? 'dx-accent' : ''}`}>
-                      {formatMMSS(restTimeLeft)}
+                    <div className={`text-[48px] leading-none font-semibold tabular tracking-tight ${rest.running ? 'dx-accent' : ''}`}>
+                      {formatMMSS(rest.left)}
                     </div>
                     <div className="flex gap-2.5 max-w-xs mx-auto">
-                      <button onClick={() => setIsRestRunning(!isRestRunning)} className="dx-btn flex-1">
-                        {isRestRunning ? 'Pause' : 'Start'}
+                      <button onClick={rest.toggle} className="dx-btn flex-1">
+                        {rest.running ? 'Pause' : 'Start'}
                       </button>
-                      <button onClick={() => { setRestTimeLeft(restDuration); setIsRestRunning(false); }} className="dx-icon-btn" aria-label="Reset timer" style={{ background: 'var(--dx-card)' }}>
+                      <button onClick={() => rest.stop(restDuration)} className="dx-icon-btn" aria-label="Reset timer" style={{ background: 'var(--dx-card)' }}>
                         <RotateCcw size={16} />
                       </button>
                     </div>
@@ -710,14 +672,14 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                 {/* Stopwatch Block */}
                 {timerMode === 'stopwatch' && (
                   <div className="space-y-4 text-center">
-                    <div className={`text-[48px] leading-none font-semibold tabular tracking-tight ${isStopwatchRunning ? 'dx-accent' : ''}`}>
-                      {formatMMSS(stopwatchElapsed)}
+                    <div className={`text-[48px] leading-none font-semibold tabular tracking-tight ${stopwatch.running ? 'dx-accent' : ''}`}>
+                      {formatMMSS(stopwatch.elapsed)}
                     </div>
                     <div className="flex gap-2.5 max-w-xs mx-auto">
-                      <button onClick={() => setIsStopwatchRunning(!isStopwatchRunning)} className="dx-btn flex-1">
-                        {isStopwatchRunning ? 'Pause' : 'Start'}
+                      <button onClick={stopwatch.toggle} className="dx-btn flex-1">
+                        {stopwatch.running ? 'Pause' : 'Start'}
                       </button>
-                      <button onClick={() => { setStopwatchElapsed(0); setIsStopwatchRunning(false); }} className="dx-icon-btn" aria-label="Reset stopwatch" style={{ background: 'var(--dx-card)' }}>
+                      <button onClick={stopwatch.reset} className="dx-icon-btn" aria-label="Reset stopwatch" style={{ background: 'var(--dx-card)' }}>
                         <RotateCcw size={16} />
                       </button>
                     </div>
@@ -733,8 +695,7 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                           key={s}
                           onClick={() => {
                             setCountdownDuration(s);
-                            setCountdownTimeLeft(s);
-                            setIsCountdownRunning(false);
+                            countdown.stop(s);
                           }}
                           className="min-w-[3rem] h-8 rounded-full px-3 text-[12px] font-semibold tabular transition"
                           style={countdownDuration === s ? { background: 'var(--dx-accent)', color: 'var(--dx-on-accent)' } : { background: 'var(--dx-card)', color: 'var(--dx-muted)' }}
@@ -756,21 +717,20 @@ export function ExerciseLogModal({ exercise, section, index, isOpen, onClose, hi
                         onChange={(e) => {
                           const val = (parseInt(e.target.value) || 0) * 60;
                           setCountdownDuration(val);
-                          setCountdownTimeLeft(val);
-                          setIsCountdownRunning(false);
+                          countdown.stop(val);
                         }}
                       />
                       <span>min</span>
                     </div>
 
-                    <div className={`text-[48px] leading-none font-semibold tabular tracking-tight ${isCountdownRunning ? 'dx-accent' : ''}`}>
-                      {formatMMSS(countdownTimeLeft)}
+                    <div className={`text-[48px] leading-none font-semibold tabular tracking-tight ${countdown.running ? 'dx-accent' : ''}`}>
+                      {formatMMSS(countdown.left)}
                     </div>
                     <div className="flex gap-2.5 max-w-xs mx-auto">
-                      <button onClick={() => setIsCountdownRunning(!isCountdownRunning)} className="dx-btn flex-1">
-                        {isCountdownRunning ? 'Pause' : 'Start'}
+                      <button onClick={countdown.toggle} className="dx-btn flex-1">
+                        {countdown.running ? 'Pause' : 'Start'}
                       </button>
-                      <button onClick={() => { setCountdownTimeLeft(countdownDuration); setIsCountdownRunning(false); }} className="dx-icon-btn" aria-label="Reset countdown" style={{ background: 'var(--dx-card)' }}>
+                      <button onClick={() => countdown.stop(countdownDuration)} className="dx-icon-btn" aria-label="Reset countdown" style={{ background: 'var(--dx-card)' }}>
                         <RotateCcw size={16} />
                       </button>
                     </div>

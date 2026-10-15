@@ -4,10 +4,36 @@ import { Timestamp } from 'firebase/firestore';
 import { Copy, RefreshCw, Ticket, Trash2 } from 'lucide-react';
 import { useUIStore } from '@/stores/ui-store';
 import {
-  COUPON_CODE_RE, createCoupon, deleteCoupon, generateCouponCode, isDiscountPlanId, listCoupons, setCouponActive,
+  COUPON_CODE_RE, createCoupon, deleteCoupon, generateCouponCode, isDiscountPlanId, listCoupons, setCouponActive, setCouponEndDate,
   type Coupon, type CouponType,
 } from '@/services/coupons';
 import { EmptyState, ErrorState, LoadingState, RefreshButton, SectionHeader, formatWhen } from './AdminShared';
+
+const DURATIONS = [
+  { id: '7d', label: '7 days', days: 7 },
+  { id: '14d', label: '14 days', days: 14 },
+  { id: '1m', label: '1 month', months: 1 },
+  { id: '3m', label: '3 months', months: 3 },
+  { id: '6m', label: '6 months', months: 6 },
+  { id: '1y', label: '1 year', months: 12 },
+] as const;
+type DurationId = typeof DURATIONS[number]['id'] | 'custom';
+
+const pad = (n: number) => String(n).padStart(2, '0');
+const toDateInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/** A coupon ends at the very end of its last day (device time zone). */
+const endOfDay = (date: string) => new Date(`${date}T23:59:59`);
+const daysUntil = (date: string) => Math.ceil((endOfDay(date).getTime() - Date.now()) / 86_400_000);
+
+function durationEnd(id: DurationId): string {
+  const opt = DURATIONS.find(d => d.id === id);
+  const d = new Date();
+  if (opt && 'months' in opt) d.setMonth(d.getMonth() + opt.months);
+  else if (opt) d.setDate(d.getDate() + opt.days);
+  return toDateInput(d);
+}
+
+const durationFor = (date: string): DurationId => DURATIONS.find(d => durationEnd(d.id) === date)?.id ?? 'custom';
 
 export function AdminCouponsTab() {
   const { showToast, confirm } = useUIStore();
@@ -16,7 +42,9 @@ export function AdminCouponsTab() {
 
   const [code, setCode] = useState(() => generateCouponCode());
   const [type, setType] = useState<CouponType>('free');
-  const [days, setDays] = useState(30);
+  const [duration, setDuration] = useState<DurationId>('1m');
+  const [endDate, setEndDate] = useState(() => durationEnd('1m'));
+  const days = endDate ? daysUntil(endDate) : 0;
   const [basePlanId, setBasePlanId] = useState('');
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [label, setLabel] = useState('');
@@ -31,7 +59,9 @@ export function AdminCouponsTab() {
   const create = useMutation({
     mutationFn: () => createCoupon({
       code, type, days, basePlanId, plan: type === 'discount' ? period : 'any', label, maxRedemptions, active: true,
-      expiresAt: expires ? Timestamp.fromDate(new Date(`${expires}T23:59:59`)) : null,
+      expiresAt: type === 'free'
+        ? Timestamp.fromDate(endOfDay(endDate))
+        : expires ? Timestamp.fromDate(endOfDay(expires)) : null,
     }),
     onSuccess: () => {
       showToast(`Coupon ${code} created`);
@@ -44,8 +74,17 @@ export function AdminCouponsTab() {
 
   const toggle = useMutation({
     mutationFn: ({ c, active }: { c: Coupon; active: boolean }) => setCouponActive(c, active),
-    onSuccess: refresh,
+    onSuccess: (_, { c, active }) => {
+      if (c.type === 'free' && c.redeemedCount > 0) showToast(active ? 'Pro restored for everyone who used this code' : 'Pro from this code is switched off');
+      refresh();
+    },
     onError: (e: any) => showToast(e?.message || 'Could not update coupon', 'error'),
+  });
+
+  const changeEnd = useMutation({
+    mutationFn: ({ c, date }: { c: Coupon; date: string }) => setCouponEndDate(c, Timestamp.fromDate(endOfDay(date))),
+    onSuccess: () => { showToast('End date updated'); refresh(); },
+    onError: (e: any) => showToast(e?.message || 'Could not change the date', 'error'),
   });
 
   const remove = useMutation({
@@ -55,12 +94,12 @@ export function AdminCouponsTab() {
   });
 
   const validCode = COUPON_CODE_RE.test(code);
-  const canCreate = validCode && (type === 'discount' ? isDiscountPlanId(basePlanId) : days >= 1);
+  const canCreate = validCode && (type === 'discount' ? isDiscountPlanId(basePlanId) : days >= 1 && days <= 3660);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] gap-5">
       <section className="card p-5">
-        <SectionHeader icon={Ticket} title="New coupon" description="Free Pro days, or a discount that unlocks a cheaper Google Play plan for whoever redeems the code." />
+        <SectionHeader icon={Ticket} title="New coupon" description="Free Pro until a set date, or a one-time discount on a cheaper Google Play plan for whoever redeems the code." />
         <div className="space-y-4">
           <div>
             <label htmlFor="cp-code" className="label">Code</label>
@@ -91,9 +130,34 @@ export function AdminCouponsTab() {
           </div>
 
           {type === 'free' ? (
-            <div>
-              <label htmlFor="cp-days" className="label">Days of Pro</label>
-              <input id="cp-days" type="number" min={1} max={3660} value={days} onChange={e => setDays(Math.max(1, Math.min(3660, Number(e.target.value) || 1)))} className="input-field" />
+            <div className="space-y-3">
+              <div>
+                <span className="label">Pro for</span>
+                <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Pro duration">
+                  {DURATIONS.map(d => (
+                    <button key={d.id} type="button" role="radio" aria-checked={duration === d.id}
+                      onClick={() => { setDuration(d.id); setEndDate(durationEnd(d.id)); }}
+                      className={duration === d.id ? 'btn-primary py-1.5 text-xs' : 'btn-secondary py-1.5 text-xs'}>
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label htmlFor="cp-end" className="label">Pro ends on</label>
+                <input
+                  id="cp-end"
+                  type="date"
+                  min={durationEnd('custom')}
+                  value={endDate}
+                  onChange={e => { setEndDate(e.target.value); setDuration(durationFor(e.target.value)); }}
+                  className="input-field"
+                />
+                <p className="text-[11px] text-bone-dim mt-1">
+                  {days >= 1 ? `${days} day${days === 1 ? '' : 's'} from today. ` : 'Pick a future date. '}
+                  Pro unlocked by this code ends at the end of this day for everyone, whenever they redeem it, and the code stops working after it.
+                </p>
+              </div>
             </div>
           ) : (
             <>
@@ -102,7 +166,8 @@ export function AdminCouponsTab() {
                 <input id="cp-plan" value={basePlanId} onChange={e => setBasePlanId(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 63))} placeholder="monthly-49" className="input-field font-mono" />
                 <p className="text-[11px] text-bone-dim mt-1">
                   First add this base plan (with the lower price) to the "pro" subscription in Play Console → Monetize → Subscriptions and activate it.
-                  Only accounts that redeemed this code can keep a purchase of it; anyone else is refunded automatically.
+                  The discount is one-time: each account can buy this plan once, for one billing period (it doesn't renew; after that the normal price applies).
+                  Anyone without the code is refunded automatically.
                 </p>
                 {basePlanId && !isDiscountPlanId(basePlanId) && <p className="text-[11px] text-danger mt-1">Use a separate plan id, not monthly or yearly.</p>}
               </div>
@@ -127,10 +192,12 @@ export function AdminCouponsTab() {
               <input id="cp-max" type="number" min={0} value={maxRedemptions} onChange={e => setMaxRedemptions(Math.max(0, Number(e.target.value) || 0))} className="input-field" />
               <p className="text-[11px] text-bone-dim mt-1">0 = unlimited</p>
             </div>
-            <div>
-              <label htmlFor="cp-exp" className="label">Expires</label>
-              <input id="cp-exp" type="date" value={expires} onChange={e => setExpires(e.target.value)} className="input-field" />
-            </div>
+            {type === 'discount' && (
+              <div>
+                <label htmlFor="cp-exp" className="label">Redeem by</label>
+                <input id="cp-exp" type="date" value={expires} onChange={e => setExpires(e.target.value)} className="input-field" />
+              </div>
+            )}
           </div>
 
           <button onClick={() => create.mutate()} disabled={!canCreate || create.isPending} className="btn-primary w-full">
@@ -166,19 +233,53 @@ export function AdminCouponsTab() {
                       </span>
                     </div>
                     <div className="text-xs text-bone-dim mt-0.5">
-                      {c.type === 'free' ? `${c.days} days free` : `Discount · ${c.basePlanId || c.offerId || '?'}${c.plan !== 'any' ? ` · ${c.plan}` : ''}`}
+                      {c.type === 'free' ? (c.expiresAt ? 'Free Pro' : `${c.days} days free`) : `One-time discount · ${c.basePlanId || c.offerId || '?'}${c.plan !== 'any' ? ` · ${c.plan}` : ''}`}
                       {' · '}{c.redeemedCount}/{c.maxRedemptions || '∞'} used
-                      {c.expiresAt ? ` · until ${formatWhen(c.expiresAt)}` : ''}
+                      {c.expiresAt ? ` · ${c.type === 'free' ? 'Pro until' : 'redeem by'} ${formatWhen(c.expiresAt)}` : ''}
                     </div>
                     {c.label && <div className="text-xs mt-0.5 truncate">{c.label}</div>}
+                    {c.type === 'free' && (
+                      <label className="mt-1.5 flex items-center gap-2 text-[11px] text-bone-dim">
+                        <span>Change end date</span>
+                        <input
+                          type="date"
+                          min={durationEnd('custom')}
+                          value={c.expiresAt ? toDateInput(c.expiresAt.toDate()) : ''}
+                          disabled={changeEnd.isPending}
+                          onChange={async e => {
+                            const date = e.target.value;
+                            if (!date) return;
+                            const ok = await confirm({
+                              title: `End ${c.code} on ${endOfDay(date).toLocaleDateString()}?`,
+                              message: 'Pro unlocked by this code ends on this day for everyone who used it.',
+                              confirmText: 'Change date',
+                            });
+                            if (ok) changeEnd.mutate({ c, date });
+                          }}
+                          className="input-field !h-8 !min-h-0 !py-0 !w-auto text-xs"
+                        />
+                      </label>
+                    )}
                   </div>
                   <div className="flex gap-2">
-                    <button type="button" onClick={() => toggle.mutate({ c, active: !c.active })} className="btn-secondary py-1.5 px-3 text-xs">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (c.active && c.type === 'free' && c.redeemedCount > 0 && !await confirm({
+                          title: `Disable ${c.code}?`,
+                          message: 'Pro unlocked by this code is switched off for everyone who used it. Enabling it again restores it.',
+                          confirmText: 'Disable',
+                          type: 'warning',
+                        })) return;
+                        toggle.mutate({ c, active: !c.active });
+                      }}
+                      className="btn-secondary py-1.5 px-3 text-xs"
+                    >
                       {c.active ? 'Disable' : 'Enable'}
                     </button>
                     <button
                       type="button"
-                      onClick={async () => { if (await confirm({ title: `Delete ${c.code}?`, message: 'People who already redeemed it keep their Pro.', confirmText: 'Delete', type: 'danger' })) remove.mutate(c.code); }}
+                      onClick={async () => { if (await confirm({ title: `Delete ${c.code}?`, message: c.type === 'free' ? 'Pro unlocked by this code ends now for everyone who used it.' : 'Unused discounts from this code stop working. Already paid periods are kept.', confirmText: 'Delete', type: 'danger' })) remove.mutate(c.code); }}
                       className="btn-danger py-1.5 px-2.5"
                       aria-label="Delete coupon"
                     >

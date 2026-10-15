@@ -1,4 +1,4 @@
-import { collection, doc, setDoc, getDoc, runTransaction, Timestamp, query, where, getDocs, orderBy, limit, deleteDoc } from 'firebase/firestore';
+import { collection, doc, setDoc, getDoc, getDocFromCache, runTransaction, Timestamp, query, where, getDocs, orderBy, limit, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import type { Workout, UserStats, ProgressiveOverloadSummary } from '@/types';
 import { findPersonalRecords, summarizeProgressiveOverload } from '@/lib/progressive-overload';
@@ -9,6 +9,7 @@ import { isFollowing, visibilityForUser } from '@/services/social';
 import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@/services/stats';
 import { forgetSession, getMyHistory, isMe, rememberSession } from '@/services/history';
 import { trainedWithFor, workoutSessionKey } from '@/stores/encounter-store';
+import { commitSession, isOffline } from '@/lib/offline';
 
 function removeUndefined(obj: any): any {
   if (Array.isArray(obj)) {
@@ -62,42 +63,53 @@ export const saveWorkout = async (userId: string, workout: Omit<Workout, 'id'>):
   let daysPerWeek = 0;
   if (workout.planId) {
     try {
-      const plan = await getDoc(doc(db, 'plans', workout.planId));
+      const planRef = doc(db, 'plans', workout.planId);
+      const plan = isOffline() ? await getDocFromCache(planRef) : await getDoc(planRef);
       daysPerWeek = Number(plan.data()?.daysPerWeek) || 0;
-    } catch { /* sample or deleted plan */ }
+    } catch { /* sample, deleted or uncached plan */ }
   }
   const fullWeek = completesPlanWeek({ ...workout, date: dateKey }, earlierWorkouts, daysPerWeek);
   const visibility = await visibilityForUser(userId, workout.visibility);
 
-  const result = await runTransaction(db, async (transaction) => {
-    const statsDoc = await transaction.get(statsRef);
-    const outcome = applySession(statsDoc.data() as UserStats | undefined, {
-      kind: 'workout',
-      dateKey,
-      calories: workout.calories || 0,
-      durationMin: workout.durationMin || 0,
-      volume: workout.volume || 0,
-      prCount: personalRecords.size,
-      bestHold: bestHoldSeconds(workout),
-      maxLiftKg: heaviestLiftKg(workout),
-      fullWeek,
-      metrics: workoutMetrics(workout),
-    });
-
-    const startedMs = workout.startedAt?.toMillis?.();
-    const trainedWith = workout.trainedWith ?? (startedMs ? trainedWithFor(workoutSessionKey(startedMs), 'workout') : []);
-    const workoutData: any = { ...workout, exercises, visibility, date: dateKey, id: newWorkoutId, finishedAt: Timestamp.now() };
-    if (trainedWith.length) workoutData.trainedWith = trainedWith;
-    if (progressiveOverload !== undefined) {
-      workoutData.progressiveOverload = progressiveOverload;
-    }
-
-    transaction.set(workoutRef, removeUndefined(workoutData));
-    transaction.set(statsRef, outcome.stats);
-    return { ...outcome, saved: workoutData as Workout };
+  const startedMs = workout.startedAt?.toMillis?.();
+  const trainedWith = workout.trainedWith ?? (startedMs ? trainedWithFor(workoutSessionKey(startedMs), 'workout') : []);
+  const workoutData: any = { ...workout, exercises, visibility, date: dateKey, id: newWorkoutId, finishedAt: Timestamp.now() };
+  if (trainedWith.length) workoutData.trainedWith = trainedWith;
+  if (progressiveOverload !== undefined) {
+    workoutData.progressiveOverload = progressiveOverload;
+  }
+  const cleanData = removeUndefined(workoutData);
+  const applyTo = (stats: UserStats | undefined) => applySession(stats, {
+    kind: 'workout',
+    dateKey,
+    calories: workout.calories || 0,
+    durationMin: workout.durationMin || 0,
+    volume: workout.volume || 0,
+    prCount: personalRecords.size,
+    bestHold: bestHoldSeconds(workout),
+    maxLiftKg: heaviestLiftKg(workout),
+    fullWeek,
+    metrics: workoutMetrics(workout),
   });
 
-  rememberSession('workouts', userId, result.saved);
+  const committed = await commitSession(userId, workoutRef, cleanData, () => runTransaction(db, async (transaction) => {
+    const statsDoc = await transaction.get(statsRef);
+    const outcome = applyTo(statsDoc.data() as UserStats | undefined);
+    transaction.set(workoutRef, cleanData);
+    transaction.set(statsRef, outcome.stats);
+    return outcome;
+  }));
+
+  rememberSession('workouts', userId, workoutData as Workout);
+  if (!committed) {
+    // Queued offline: show it in the local stats now; the stats doc is rebuilt once it syncs.
+    const { useAuthStore } = await import('@/stores/auth-store');
+    const local = useAuthStore.getState();
+    const offline = applyTo(local.stats ?? undefined);
+    if (local.user?.uid === userId) useAuthStore.setState({ stats: offline.stats });
+    return { id: newWorkoutId, xpEarned: offline.xpEarned, streakBonus: offline.streakBonus, prCount: personalRecords.size, unlockedBadges: [], progressiveOverload };
+  }
+  const result = committed;
   notifyUnlockedBadges(userId, result.unlocked).catch(() => {});
   syncAthleteRank(userId, result.stats).catch(() => {});
   import('@/lib/query-client').then(({ queryClient }) => queryClient.invalidateQueries({ queryKey: ['training-burned'] })).catch(() => {});

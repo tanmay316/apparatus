@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Send, Image as ImageIcon, X, Reply, Edit2, Trash2,
   Smile, CornerDownLeft, ChevronDown, Check, CheckCheck,
-  Shield, Crown, Star, Lock, AlertCircle, Loader2, Sparkles, Plus
+  Shield, Crown, Star, Lock, AlertCircle, Loader2, Sparkles, Plus, Clock
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/auth-store';
 import { useUIStore } from '@/stores/ui-store';
 import {
@@ -13,8 +14,11 @@ import {
   editClanMessage,
   deleteClanMessage,
   toggleClanMessageReaction,
-  markClanMessageRead
+  subscribeClanReads,
+  getClanHistoryFrom,
+  getClanMembers,
 } from '@/services/community';
+import { markClanChatRead } from '@/stores/clan-unread-store';
 import type { ClanMessage, ClanMessageReplyTo } from '@/types';
 import { LiveUserName, LiveUserAvatar } from '@/components/ui/LiveUser';
 import { shareablePhotoURL } from '@/utils/image-compression';
@@ -93,6 +97,23 @@ async function compressImage(file: File): Promise<string> {
   });
 }
 
+function messageMs(date: any): number {
+  if (!date) return Date.now();
+  if (typeof date?.toMillis === 'function') return date.toMillis();
+  if (date?.seconds) return date.seconds * 1000;
+  return Date.now();
+}
+
+/** Highlights "@Name" for clan members' names. */
+function renderMentions(text: string, names: string[], isMe: boolean): React.ReactNode {
+  if (!names.length || !text.includes('@')) return text;
+  const escaped = names.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const parts = text.split(new RegExp(`(@(?:${escaped.join('|')}))`, 'g'));
+  return parts.map((part, i) => (i % 2 === 1
+    ? <span key={i} className={`font-semibold ${isMe ? 'underline underline-offset-2' : 'text-sienna'}`}>{part}</span>
+    : part));
+}
+
 function formatMessageTime(date: any): string {
   if (!date) return '';
   const millis = typeof date?.toMillis === 'function'
@@ -166,7 +187,7 @@ export function ClanDiscussionTab({
     }
   }, [inputText]);
 
-  // Subscribe to real-time clan messages
+  // Subscribe to real-time clan messages (new members only from the moment they joined)
   useEffect(() => {
     if (!isMember || !clanId) {
       setLoading(false);
@@ -175,38 +196,98 @@ export function ClanDiscussionTab({
 
     setLoading(true);
     setLoadError(false);
-    const unsubscribe = subscribeClanMessages(
-      clanId,
-      (newMsgs) => {
-        setMessages(newMsgs);
-        setLoadError(false);
-        setLoading(false);
-      },
-      (err) => {
-        console.error('Failed to load clan messages:', err);
-        setLoadError(true);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [clanId, isMember, reloadKey]);
-
-  // Mark incoming messages as read when viewed
-  useEffect(() => {
-    if (!user || messages.length === 0) return;
-    
-    const unreadMessages = messages.filter(m => 
-      !m.isDeleted && 
-      m.userId !== user.uid && 
-      (!m.readBy || !m.readBy.includes(user.uid))
-    );
-    
-    // Fire and forget read receipts
-    unreadMessages.forEach(m => {
-      if (m.id) markClanMessageRead(m.id, user.uid);
+    let unsubscribe = () => {};
+    let cancelled = false;
+    const historyFrom = user && userRole !== 'leader'
+      ? getClanHistoryFrom(clanId, user.uid).catch(() => null)
+      : Promise.resolve(null);
+    historyFrom.then(from => {
+      if (cancelled) return;
+      unsubscribe = subscribeClanMessages(
+        clanId,
+        (newMsgs) => {
+          setMessages(newMsgs);
+          setLoadError(false);
+          setLoading(false);
+        },
+        (err) => {
+          console.error('Failed to load clan messages:', err);
+          setLoadError(true);
+          setLoading(false);
+        },
+        from,
+      );
     });
-  }, [messages, user]);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [clanId, isMember, reloadKey, user?.uid, userRole]);
+
+  // One read marker per member (instead of a write per message), refreshed while the chat is on screen.
+  useEffect(() => {
+    if (!user || !isMember || messages.length === 0) return;
+    if (document.visibilityState === 'visible') markClanChatRead(clanId, user.uid);
+  }, [messages, user, isMember, clanId]);
+
+  useEffect(() => {
+    if (!user || !isMember) return;
+    const onVisible = () => { if (document.visibilityState === 'visible') markClanChatRead(clanId, user.uid); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [user, isMember, clanId]);
+
+  // Latest time any other member read the chat: my messages up to then show as read.
+  const [othersReadMs, setOthersReadMs] = useState(0);
+  useEffect(() => {
+    if (!isMember || !clanId || !user) return;
+    return subscribeClanReads(clanId, reads => {
+      setOthersReadMs(Math.max(0, ...Object.entries(reads).filter(([uid]) => uid !== user.uid).map(([, ms]) => ms)));
+    });
+  }, [clanId, isMember, user?.uid]);
+
+  // Members for @mentions.
+  const { data: members = [] } = useQuery({
+    queryKey: ['clanMembers', clanId],
+    queryFn: () => getClanMembers(clanId),
+    enabled: !!clanId && isMember,
+  });
+  const mentionable = useMemo(
+    () => members.filter(m => m.userId && m.userId !== user?.uid && (m.userName || '').trim()),
+    [members, user?.uid],
+  );
+  const memberNames = useMemo(
+    () => [...new Set(members.map(m => (m.userName || '').trim()).filter(Boolean))].sort((a, b) => b.length - a.length),
+    [members],
+  );
+  // Names picked from the @ list in the current draft (name -> uid).
+  const draftMentionsRef = useRef<Map<string, string>>(new Map());
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const mentionMatches = useMemo(() => {
+    if (mentionQuery === null) return [];
+    const q = mentionQuery.toLowerCase();
+    return mentionable.filter(m => m.userName.toLowerCase().includes(q)).slice(0, 6);
+  }, [mentionQuery, mentionable]);
+
+  const updateMentionQuery = (value: string, caret: number) => {
+    const match = /(^|\s)@([^\s@]{0,30})$/.exec(value.slice(0, caret));
+    setMentionQuery(match ? match[2] : null);
+  };
+
+  const pickMention = (member: { userId: string; userName: string }) => {
+    const el = inputRef.current;
+    const caret = el?.selectionStart ?? inputText.length;
+    const before = inputText.slice(0, caret).replace(/@([^\s@]{0,30})$/, `@${member.userName} `);
+    const next = before + inputText.slice(caret);
+    draftMentionsRef.current.set(member.userName, member.userId);
+    setInputText(next);
+    setMentionQuery(null);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(before.length, before.length);
+    });
+  };
 
   // Scroll to bottom on initial load or new messages if near bottom
   useEffect(() => {
@@ -374,9 +455,19 @@ export function ClanDiscussionTab({
       };
     }
 
-    setIsSending(true);
+    // Shows instantly (pending) and syncs in the background; the composer never waits on the network.
+    const draft = { text: inputText, images, replyingTo };
+    const mentions = [...draftMentionsRef.current.entries()]
+      .filter(([name]) => trimmedText.includes(`@${name}`))
+      .map(([, uid]) => uid);
+    setInputText('');
+    setImages([]);
+    setReplyingTo(null);
+    setMentionQuery(null);
+    draftMentionsRef.current = new Map();
+    setTimeout(() => scrollToBottom(), 50);
     try {
-      await sendClanMessage({
+      const { committed } = sendClanMessage({
         clanId,
         userId: user.uid,
         userName: user.displayName || profile?.displayName || 'Clan Member',
@@ -386,16 +477,22 @@ export function ClanDiscussionTab({
         imageUrl: images[0] || undefined,
         images: images.length > 0 ? images : undefined,
         replyTo: replyPayload,
+        mentions,
       });
-
-      setInputText('');
-      setImages([]);
-      setReplyingTo(null);
-      setTimeout(() => scrollToBottom(), 50);
+      committed.catch((err: any) => {
+        showToast(err?.code === 'permission-denied'
+          ? 'You can no longer post in this clan chat.'
+          : err?.message || 'Failed to send message', 'error');
+        // Give the text back so nothing typed is lost.
+        setInputText(current => current || draft.text);
+        setImages(current => (current.length ? current : draft.images));
+        setReplyingTo(current => current || draft.replyingTo);
+      });
     } catch (err: any) {
       showToast(err?.message || 'Failed to send message', 'error');
-    } finally {
-      setIsSending(false);
+      setInputText(draft.text);
+      setImages(draft.images);
+      setReplyingTo(draft.replyingTo);
     }
   };
 
@@ -717,7 +814,7 @@ export function ClanDiscussionTab({
 
                       {/* Message Text */}
                       <p className="whitespace-pre-wrap leading-snug break-words select-text">
-                        {msg.text}
+                        {msg.mentions?.length ? renderMentions(msg.text, memberNames, isMe) : msg.text}
                       </p>
 
                       {/* Footer: Time + Edited badge + Status Checkmarks */}
@@ -727,9 +824,11 @@ export function ClanDiscussionTab({
                         {msg.isEdited && !msg.isDeleted && <span>Edited</span>}
                         <span>{formatMessageTime(msg.createdAt)}</span>
                         {isMe && (
-                          msg.readBy && msg.readBy.length > 0
-                            ? <CheckCheck size={13} className="text-sky-300" aria-label="Read" />
-                            : <Check size={13} aria-label="Sent" />
+                          msg.pending
+                            ? <Clock size={11} aria-label="Sending" />
+                            : (othersReadMs >= messageMs(msg.createdAt) || (msg.readBy && msg.readBy.length > 0))
+                              ? <CheckCheck size={13} className="text-sky-300" aria-label="Read" />
+                              : <Check size={13} aria-label="Sent" />
                         )}
                       </div>
                     </motion.div>
@@ -896,6 +995,26 @@ export function ClanDiscussionTab({
         </div>
       )}
 
+      {/* ─── @MENTION SUGGESTIONS ─── */}
+      {!editingMessage && mentionMatches.length > 0 && (
+        <div className="cx-composer px-2 py-1.5 z-20 max-h-56 overflow-y-auto" role="listbox" aria-label="Mention a member">
+          {mentionMatches.map(m => (
+            <button
+              key={m.userId}
+              type="button"
+              role="option"
+              aria-selected={false}
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => pickMention(m)}
+              className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left hover:bg-ink-3 transition-colors !shadow-none"
+            >
+              <LiveUserAvatar userId={m.userId} fallbackName={m.userName} fallbackPhoto={m.userPhoto} className="w-7 h-7 rounded-full object-cover shrink-0" />
+              <span className="text-sm font-medium text-bone truncate">{m.userName}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ─── CHAT INPUT BAR ─── */}
       <form
         onSubmit={handleSendMessage}
@@ -940,7 +1059,10 @@ export function ClanDiscussionTab({
             aria-label="Message the clan"
             ref={inputRef}
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={(e) => {
+              setInputText(e.target.value);
+              if (!editingMessage) updateMentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
+            }}
             onKeyDown={handleKeyDown}
             placeholder={editingMessage ? 'Edit your message' : 'Message'}
             rows={1}

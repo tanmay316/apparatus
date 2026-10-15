@@ -1,8 +1,9 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, orderBy, query, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { logAdminAction } from '@/services/admin';
+import { syncCouponGrants } from '@/services/billing';
 
-/** `free`: Pro for N days. `discount`: lets the account buy a cheaper Play base plan (created in Play Console). */
+/** `free`: Pro until a fixed date. `discount`: one purchase of a cheaper Play base plan (one billing period). */
 export type CouponType = 'free' | 'discount';
 
 export interface Coupon {
@@ -49,6 +50,7 @@ export async function createCoupon(input: Omit<Coupon, 'redeemedCount' | 'create
   const basePlanId = (input.basePlanId || '').trim();
   if (discount && !isDiscountPlanId(basePlanId)) throw new Error('Enter the Play Console base plan id of the discounted plan (lowercase, digits, hyphens), e.g. monthly-49.');
   if (!discount && !(input.days && input.days >= 1 && input.days <= 3660)) throw new Error('Coupons need 1-3660 days.');
+  if (!discount && !input.expiresAt) throw new Error('Pick the last day of Pro for this coupon.');
   const ref = doc(db, 'coupons', code);
   if ((await getDoc(ref)).exists()) throw new Error('That code already exists.');
   await setDoc(ref, {
@@ -69,9 +71,30 @@ export async function createCoupon(input: Omit<Coupon, 'redeemedCount' | 'create
 export async function setCouponActive(coupon: Coupon, active: boolean): Promise<void> {
   await updateDoc(doc(db, 'coupons', coupon.code), { active, type: coupon.type, label: coupon.label || '' });
   await logAdminAction(active ? 'coupon.enable' : 'coupon.disable', 'coupon', coupon.code);
+  await syncGrants(coupon.code);
+}
+
+/** Moves the coupon's last day of Pro (also for everyone who already redeemed it). */
+export async function setCouponEndDate(coupon: Coupon, expiresAt: Timestamp): Promise<void> {
+  const days = Math.max(1, Math.min(3660, Math.ceil((expiresAt.toMillis() - Date.now()) / 86_400_000)));
+  await updateDoc(doc(db, 'coupons', coupon.code), {
+    expiresAt, type: coupon.type, label: coupon.label || '', ...(coupon.type === 'free' ? { days } : {}),
+  });
+  await logAdminAction('coupon.update', 'coupon', coupon.code, { details: `ends ${expiresAt.toDate().toDateString()}` });
+  await syncGrants(coupon.code);
 }
 
 export async function deleteCoupon(code: string): Promise<void> {
   await deleteDoc(doc(db, 'coupons', code));
   await logAdminAction('coupon.delete', 'coupon', code);
+  await syncGrants(code);
+}
+
+// The backend also watches coupons; this makes the change immediate and reports a failure.
+async function syncGrants(code: string) {
+  try {
+    await syncCouponGrants(code);
+  } catch (err) {
+    console.warn('Coupon grant sync failed (the server retries on its own):', err);
+  }
 }

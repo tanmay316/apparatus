@@ -11,6 +11,7 @@ import { notifyUnlockedBadges, scheduleStatsReconcile, syncAthleteRank } from '@
 import { forgetSession, getMyHistory, isMe, patchSession, rememberSession } from '@/services/history';
 import { simplifyRoute } from '@/lib/route-simplify';
 import { cardioSessionKey, trainedWithFor } from '@/stores/encounter-store';
+import { commitSession } from '@/lib/offline';
 
 export { simplifyRoute };
 
@@ -49,24 +50,32 @@ export const saveCardioActivity = async (userId: string, activity: Omit<CardioAc
   });
 
   const statsRef = doc(db, 'users', userId, 'stats', 'current');
-  const outcome = await runTransaction(db, async (transaction) => {
+  const applyTo = (stats: UserStats | undefined) => applySession(stats, {
+    kind: 'cardio',
+    dateKey: activity.date || localDateKey(),
+    calories: activity.calories || 0,
+    durationMin: cardioDurationMin(activity),
+    distanceKm: activity.distanceKm || 0,
+    cardioType: activity.type,
+    elevationGainM: activity.elevationGainM || 0,
+    steps: activity.steps || 0,
+    metrics: cardioMetrics(activity),
+  });
+  const outcome = await commitSession(userId, ref, dataToSave, () => runTransaction(db, async (transaction) => {
     const statsDoc = await transaction.get(statsRef);
-    const result = applySession(statsDoc.data() as UserStats | undefined, {
-      kind: 'cardio',
-      dateKey: activity.date || localDateKey(),
-      calories: activity.calories || 0,
-      durationMin: cardioDurationMin(activity),
-      distanceKm: activity.distanceKm || 0,
-      cardioType: activity.type,
-      elevationGainM: activity.elevationGainM || 0,
-      steps: activity.steps || 0,
-      metrics: cardioMetrics(activity),
-    });
+    const result = applyTo(statsDoc.data() as UserStats | undefined);
     transaction.set(ref, dataToSave);
     transaction.set(statsRef, result.stats);
     return result;
-  });
+  }));
   rememberSession('cardio', userId, dataToSave as CardioActivity);
+  if (!outcome) {
+    // Queued offline: show it in the local stats now; the stats doc is rebuilt once it syncs.
+    const { useAuthStore } = await import('@/stores/auth-store');
+    const local = useAuthStore.getState();
+    if (local.user?.uid === userId) useAuthStore.setState({ stats: applyTo(local.stats ?? undefined).stats });
+    return id;
+  }
   notifyUnlockedBadges(userId, outcome.unlocked).catch(() => {});
   syncAthleteRank(userId, outcome.stats).catch(() => {});
   scheduleInactivityReminders().catch(() => {});

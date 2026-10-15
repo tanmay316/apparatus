@@ -41,6 +41,8 @@ import { usePaymentsEnabled } from '@/lib/payments-mode';
 import { SponsorBanner } from '@/components/market/SponsorBanner';
 import { formatInr, isPaid } from '@/services/market';
 import { BadgeIndianRupee } from 'lucide-react';
+import { markClanChatRead, useClanUnread } from '@/stores/clan-unread-store';
+import { MentionBadge } from '@/components/community/ClanUnreadSync';
 
 type ClanTab = 'posts' | 'challenges' | 'events' | 'members' | 'about';
 
@@ -129,81 +131,8 @@ export function ClanPage() {
 
   const pinnedAnnouncement = announcements.find(a => a.isPinned) || announcements[0];
 
-  const [hasUnreadChat, setHasUnreadChat] = useState(false);
-
-  // Real-time unread message subscription
-  useEffect(() => {
-    if (!clanId || !isMember) {
-      setHasUnreadChat(false);
-      return;
-    }
-
-    let cancelled = false;
-    let unsubscribe: () => void = () => {};
-
-    const evaluate = (rawDocs: any[]) => {
-      if (rawDocs.length === 0) {
-        setHasUnreadChat(false);
-        return;
-      }
-
-      const getTime = (val: any) => {
-        if (!val) return 0;
-        if (typeof val.toMillis === 'function') return val.toMillis();
-        if (val.seconds) return val.seconds * 1000;
-        if (typeof val === 'string') return new Date(val).getTime();
-        if (typeof val === 'number') return val;
-        return 0;
-      };
-
-      const docs = [...rawDocs];
-      docs.sort((a, b) => getTime(b.createdAt) - getTime(a.createdAt));
-      const latestMsg = docs[0];
-
-      if (!latestMsg) {
-        setHasUnreadChat(false);
-        return;
-      }
-
-      // If user themselves sent the latest message, it is not unread for them
-      if (latestMsg.userId === user?.uid) {
-        setHasUnreadChat(false);
-        return;
-      }
-
-      const msgTime = getTime(latestMsg.createdAt);
-      const lastRead = parseInt(localStorage.getItem(`lastReadChat_${clanId}`) || '0', 10);
-      
-      setHasUnreadChat(msgTime > lastRead);
-    };
-
-    // Latest message only (uses the clanId + createdAt DESC index); falls back to an
-    // unordered window if the index is unavailable.
-    const subscribe = (ordered: boolean) => {
-      const q = ordered
-        ? query(collection(db, 'clan_messages'), where('clanId', '==', clanId), orderBy('createdAt', 'desc'), limit(1))
-        : query(collection(db, 'clan_messages'), where('clanId', '==', clanId), limit(50));
-
-      unsubscribe = onSnapshot(
-        q,
-        (snap) => evaluate(snap.docs.map(d => d.data({ serverTimestamps: 'estimate' }))),
-        (err: any) => {
-          if (ordered && err?.code === 'failed-precondition' && !cancelled) {
-            subscribe(false);
-            return;
-          }
-          console.warn('Unread chat listener error:', err);
-        }
-      );
-    };
-
-    subscribe(true);
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [clanId, isMember, user?.uid]);
+  const chatBadge = useClanUnread(clanId);
+  const hasUnreadChat = isMember && (chatBadge.unread || chatBadge.mentioned);
 
   const cancelRequestMutation = useMutation({
     mutationFn: async (reqId: string) => {
@@ -423,19 +352,17 @@ export function ClanPage() {
           <button
             type="button"
             onClick={() => {
-              if (clanId) {
-                localStorage.setItem(`lastReadChat_${clanId}`, Date.now().toString());
-                setHasUnreadChat(false);
-              }
+              if (clanId && user) markClanChatRead(clanId, user.uid);
               navigate(`/clan/${clanId}/chat`);
             }}
             className="cx-icon-btn"
             title="Clan discussion"
-            aria-label={hasUnreadChat ? 'Clan discussion, new messages' : 'Clan discussion'}
+            aria-label={chatBadge.mentioned ? 'Clan discussion, you were mentioned' : hasUnreadChat ? 'Clan discussion, new messages' : 'Clan discussion'}
           >
             <MessageCircle size={18} />
-            {isMember && hasUnreadChat && (
-              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-ink-2" />
+            {hasUnreadChat && (chatBadge.mentioned
+              ? <MentionBadge className="absolute top-1 right-1" />
+              : <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-ink-2" />
             )}
           </button>
 

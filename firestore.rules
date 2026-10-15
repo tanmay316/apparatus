@@ -833,6 +833,8 @@ service cloud.firestore {
         && membershipId == request.resource.data.clanId + '_' + request.resource.data.userId
         && request.resource.data.status == 'active'
         && !request.resource.data.keys().hasAny(['paid', 'orderId'])
+        // Chat history starts at the moment of joining; it can't be backdated.
+        && (!('historyFrom' in request.resource.data) || request.resource.data.historyFrom == request.time)
         && (
           // Joining a free public clan yourself (paid clans go through checkout)
           (request.resource.data.userId == request.auth.uid
@@ -878,14 +880,22 @@ service cloud.firestore {
       allow delete: if isOwner(resource.data.userId) || isClanManager(resource.data.clanId);
     }
 
+    // Members who joined after this existed only see messages from their join time on (like WhatsApp).
+    function seesClanMessage(clanId, createdAt) {
+      let from = get(membershipPath(clanId)).data.get('historyFrom', null);
+      return from == null || createdAt >= from;
+    }
+
     match /clan_messages/{messageId} {
       allow read: if isAdmin()
-        || isClanMember(resource.data.clanId)
-        || isClanLeader(resource.data.clanId);
+        || isClanLeader(resource.data.clanId)
+        || (isClanMember(resource.data.clanId) && seesClanMessage(resource.data.clanId, resource.data.createdAt));
       allow create: if canPost()
         && request.resource.data.userId == request.auth.uid
         && (isClanMember(request.resource.data.clanId) || isClanLeader(request.resource.data.clanId))
-        && textOk(request.resource.data, 'text', 4000);
+        && textOk(request.resource.data, 'text', 4000)
+        && (!('mentions' in request.resource.data)
+          || (request.resource.data.mentions is list && request.resource.data.mentions.size() <= 20));
       allow update: if request.resource.data.userId == resource.data.userId
         && request.resource.data.clanId == resource.data.clanId
         && (
@@ -896,6 +906,21 @@ service cloud.firestore {
         );
       allow delete: if resource == null || isOwner(resource.data.userId)
         || isClanManager(resource.data.clanId);
+    }
+
+    // One "last read" marker per member and clan (unread dots, @ badges, read ticks).
+    match /clan_reads/{readId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid
+        || isClanMember(resource.data.clanId)
+        || isClanLeader(resource.data.clanId));
+      allow create, update: if isAuthenticated()
+        && readId == request.resource.data.clanId + '_' + request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['clanId', 'userId', 'lastReadAt'])
+        && request.resource.data.lastReadAt == request.time
+        && (isClanMember(request.resource.data.clanId) || isClanLeader(request.resource.data.clanId));
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 
     // ─── Challenges ─────────────────────────────────────────────

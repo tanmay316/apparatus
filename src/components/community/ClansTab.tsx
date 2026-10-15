@@ -1,15 +1,38 @@
 import { useQuery } from '@tanstack/react-query';
 import { getPublicClans, getUserClans } from '@/services/community';
 import { useAuthStore } from '@/stores/auth-store';
-import { Shield, Users, MapPin, Crown } from 'lucide-react';
+import { Shield, Users, MapPin, Crown, MessageCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CardSkeleton, EmptyState, FilterChips, MetaItem } from './ui';
+import { useClanUnread, useClansBadge } from '@/stores/clan-unread-store';
+import { MentionBadge } from './ClanUnreadSync';
+
+/** Chat icon on a clan card: "@" when I was mentioned, green dot for new messages. Tap opens the chat. */
+function ClanChatBadge({ clanId }: { clanId: string }) {
+  const navigate = useNavigate();
+  const { unread, mentioned } = useClanUnread(clanId);
+  if (!unread && !mentioned) return null;
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); navigate(`/clan/${clanId}/chat`); }}
+      aria-label={mentioned ? 'You were mentioned in the clan chat' : 'New clan chat messages'}
+      className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/55 backdrop-blur-sm text-white flex items-center justify-center"
+    >
+      <MessageCircle size={17} />
+      {mentioned
+        ? <MentionBadge className="absolute -top-1 -right-1" />
+        : <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />}
+    </button>
+  );
+}
 
 export function ClansTab() {
   const { user } = useAuthStore();
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<'discover' | 'my_clans'>('discover');
+  const clansBadge = useClansBadge();
+  const [filter, setFilter] = useState<'discover' | 'my_clans'>(() => (clansBadge && user ? 'my_clans' : 'discover'));
 
   const { data: publicClans = [], isLoading: loadingPublic } = useQuery({
     queryKey: ['publicClans'],
@@ -71,6 +94,7 @@ export function ClansTab() {
                 {clan.category && (
                   <span className="cx-status cx-status-on-media absolute top-3 left-3 capitalize">{clan.category}</span>
                 )}
+                {clan.id && <ClanChatBadge clanId={clan.id} />}
               </div>
 
               <div className="p-4 flex-1 flex flex-col">

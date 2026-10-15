@@ -123,6 +123,18 @@ async def redeem_coupon(req: CouponRequest, current_user: dict = Depends(get_cur
     return {"ok": True, **result}
 
 
+@router.post("/coupon/sync")
+async def sync_coupon(req: CouponRequest, current_user: dict = Depends(get_current_user)):
+    """Admin: apply a coupon's on/off state, deletion or end date to everyone who redeemed it."""
+    if not market.is_admin(current_user):
+        raise HTTPException(status_code=403, detail="Admins only.")
+    try:
+        changed = await asyncio.to_thread(subs.sync_coupon_grants, req.code)
+    except subs.CouponError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"ok": True, "changed": changed}
+
+
 @router.post("/webhook")
 async def webhook(request: Request):
     """Razorpay → server for marketplace payment links. Authenticated by the HMAC signature."""

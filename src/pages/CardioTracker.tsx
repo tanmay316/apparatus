@@ -35,6 +35,7 @@ import { NativeWorkoutLocation } from '@/utils/native-workout-location';
 import { Capacitor } from '@capacitor/core';
 import type { CardioActivityType, CardioActivity } from '@/types';
 import { lockBodyScroll } from '@/lib/scroll-lock';
+import { isOffline, settle } from '@/lib/offline';
 
 function toShareData(a: Partial<CardioActivity>, extra: Partial<CardioShareData> = {}): CardioShareData {
   return {
@@ -504,6 +505,7 @@ export function CardioTracker() {
         setSavedId(id);
         setSaveState('saved');
         pendingSaveRef.current = null;
+        if (isOffline()) showToast('Saved on this phone. It syncs when you are back online.');
       } catch (err) {
         console.error('Failed to save activity:', err);
         setSaveState('error');
@@ -545,17 +547,17 @@ export function CardioTracker() {
       } catch { /* feed post is best-effort */ }
 
       try {
-        await updateUserChallengeProgress(user.uid, [
+        await settle(updateUserChallengeProgress(user.uid, [
           { metric: 'distance', amount: data.distanceKm! },
           { metric: 'calories', amount: data.calories! },
           { metric: 'duration', amount: data.durationSec! / 60 },
           { metric: 'workouts', amount: 1 }
-        ]);
+        ]), 8000);
       } catch (err) {
         console.error('Failed to update challenges:', err);
       }
 
-      useAuthStore.getState().refreshProfile().catch(() => {});
+      if (!isOffline()) useAuthStore.getState().refreshProfile().catch(() => {});
     };
 
     pendingSaveRef.current = persist;
@@ -824,12 +826,8 @@ export function CardioTracker() {
                     type: 'info',
                     icon: 'info',
                   });
-                  if (choice) {
-                    setSearchParams({});
-                    navigate('/');
-                  }
+                  if (choice) navigate('/');
                 } else {
-                  setSearchParams({});
                   navigate('/');
                 }
               }}

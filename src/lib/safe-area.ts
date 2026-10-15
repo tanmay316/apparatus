@@ -1,4 +1,6 @@
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+
+const AppWindow = registerPlugin<{ getStatusBar(): Promise<{ visible: boolean; height: number }> }>('AppWindow');
 
 // Android reports the system-bar insets even on phones where the WebView already sits
 // below/above the bars, so we check the WebView's real size against the screen and only
@@ -65,8 +67,7 @@ function schedule() {
 
 async function readStatusBar() {
   try {
-    const { StatusBar } = await import('@capacitor/status-bar');
-    const info = await StatusBar.getInfo();
+    const info = await AppWindow.getStatusBar();
     statusBarHeight = info.visible ? info.height || 0 : 0;
   } catch {
     statusBarHeight = 0;

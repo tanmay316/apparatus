@@ -148,6 +148,15 @@
       ]
     },
     {
+      "collectionGroup": "clan_messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clanId", "order": "ASCENDING" },
+        { "fieldPath": "mentions", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "clan_memberships",
       "queryScope": "COLLECTION",
       "fields": [

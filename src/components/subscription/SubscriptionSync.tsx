@@ -24,7 +24,9 @@ export function SubscriptionSync() {
     if (!uid) { store.reset(); return; }
     store.restore(uid);
 
+    let expiryTimer: ReturnType<typeof setTimeout> | undefined;
     const unsub = onSnapshot(doc(db, 'users', uid, 'private', 'entitlement'), snap => {
+      clearTimeout(expiryTimer);
       const data = snap.data();
       if (!data) { store.setEntitlement({ pro: false }); return; }
       const endMs = data.currentPeriodEnd?.toMillis?.() ?? null;
@@ -36,6 +38,15 @@ export function SubscriptionSync() {
         subscriptionId: data.subscriptionId,
       };
       useSubscriptionStore.getState().setEntitlement(entitlement);
+      // Re-check when the end date passes (coupon grants have no renewal notice to wake us).
+      if (entitlement.pro && endMs != null && (data.status === 'granted' || data.status === 'cancelled')) {
+        const recheck = () => {
+          const pro = entitlementIsPro(data.status, endMs);
+          if (!pro) useSubscriptionStore.getState().setEntitlement({ ...entitlement, pro });
+          else expiryTimer = setTimeout(recheck, Math.min(Math.max(1000, endMs - Date.now() + 1000), 2 ** 31 - 1));
+        };
+        expiryTimer = setTimeout(recheck, Math.min(Math.max(0, endMs - Date.now()) + 1000, 2 ** 31 - 1));
+      }
     }, () => {});
 
     let lastFetch = 0;
@@ -58,6 +69,7 @@ export function SubscriptionSync() {
 
     return () => {
       unsub();
+      clearTimeout(expiryTimer);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [uid]);

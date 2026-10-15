@@ -555,6 +555,10 @@ export interface ClanMessage {
   isEdited?: boolean;
   isDeleted?: boolean;
   readBy?: string[];
+  /** uids tagged with @name. */
+  mentions?: string[];
+  /** Client-only: still waiting for the server to confirm the write. */
+  pending?: boolean;
   createdAt: Timestamp | string | null;
   updatedAt?: Timestamp | string | null;
 }
@@ -734,6 +738,8 @@ export interface ClanMembership {
   userPhoto: string;
   role: ClanRole;
   joinedAt: Timestamp | null;
+  /** Chat history visible from here (absent on memberships created before this existed). */
+  historyFrom?: Timestamp | null;
   status: 'active' | 'removed' | 'left';
 }
 

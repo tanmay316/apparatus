@@ -72,6 +72,27 @@ export function timestampMs(value: any): number {
   return 0;
 }
 
+// In-app banners are only for things arriving right now while the app is on screen.
+// In the background FCM shows the push, and Firestore catching up after a resume or
+// reconnect must not replay messages the user already got.
+const BANNER_FRESH_MS = 2 * 60 * 1000;
+const SHOWN_BANNERS_KEY = 'apparatus.shown-banners';
+
+/** True once per id for fresh items while the app is visible. */
+export function claimBanner(id: string | undefined, createdAtMillis: number): boolean {
+  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return false;
+  // A pending local write has no server time yet: it was created just now.
+  const created = createdAtMillis || Date.now();
+  if (Date.now() - created > BANNER_FRESH_MS) return false;
+  if (!id) return true;
+  try {
+    const shown: string[] = JSON.parse(localStorage.getItem(SHOWN_BANNERS_KEY) || '[]');
+    if (shown.includes(id)) return false;
+    localStorage.setItem(SHOWN_BANNERS_KEY, JSON.stringify([...shown.slice(-199), id]));
+  } catch { /* storage unavailable: freshness check still applies */ }
+  return true;
+}
+
 /** Where tapping a social notification should go. */
 export function socialLink(n: SocialNotification, username?: string): string | null {
   const link = safeInternalPath(n.extra?.link);

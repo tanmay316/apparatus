@@ -21,6 +21,11 @@ const FEATURES = [
   { icon: Swords, title: 'Compare with friends', body: 'You vs athletes you follow: who is improving faster in training and nutrition, why, and what to do next.' },
 ];
 
+function freeCouponText(coupon: CouponInfo): string {
+  if (!coupon.until) return `${coupon.days} days of Pro free`;
+  return `Pro free until ${new Date(coupon.until * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+
 export function PaywallSheet() {
   const { open, reason } = useSubscriptionStore(s => s.paywall);
   const close = useSubscriptionStore(s => s.closePaywall);
@@ -239,7 +244,7 @@ export function PaywallSheet() {
                         <div className="min-w-0 flex-1">
                           <div className="text-[13px] font-semibold font-mono">{coupon.code}</div>
                           <div className="text-[12px] dx-muted leading-snug">
-                            {coupon.label || (coupon.type === 'discount' ? `Discounted Pro${couponPrice ? ` · ${couponPrice}/${coupon.plan === 'yearly' ? 'year' : 'month'}` : ''}` : `${coupon.days} days of Pro, free`)}
+                            {coupon.label || (coupon.type === 'discount' ? `One-time discount${couponPrice ? ` · ${couponPrice} for one ${coupon.plan === 'yearly' ? 'year' : 'month'}` : ''}` : freeCouponText(coupon))}
                           </div>
                         </div>
                         <button type="button" onClick={() => { setCoupon(null); setCode(''); }} aria-label="Remove coupon" className="dx-icon-btn dx-icon-btn--sm !w-8 !h-8">
@@ -271,7 +276,7 @@ export function PaywallSheet() {
                       {couponBusy || busy ? <Loader2 size={18} className="animate-spin" /> : <Crown size={17} />}
                       {coupon.type === 'discount'
                         ? (busy ? 'Opening Google Play…' : `Get Pro${couponPrice ? ` · ${couponPrice}/${coupon.plan === 'yearly' ? 'year' : 'month'}` : ' with this discount'}`)
-                        : (couponBusy ? 'Unlocking…' : `Redeem · ${coupon.days} days of Pro free`)}
+                        : (couponBusy ? 'Unlocking…' : `Redeem · ${freeCouponText(coupon)}`)}
                     </button>
                   ) : CAN_PURCHASE && plans ? (
                     <button type="button" onClick={() => checkout()} disabled={busy || !price} className="dx-btn w-full mt-4 !h-12 !text-[15px]">

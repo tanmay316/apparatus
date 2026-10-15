@@ -32,6 +32,8 @@ export function historyQuery<K extends Kind>(kind: K, uid: string | undefined) {
     queryKey: historyKey(kind, uid),
     queryFn: () => load(kind, uid!),
     staleTime: HISTORY_STALE_MS,
+    // Firestore answers from its disk cache offline; React Query's default would pause until online.
+    networkMode: 'offlineFirst' as const,
     enabled: !!uid,
   };
 }
@@ -42,6 +44,7 @@ export async function getMyHistory<K extends Kind>(kind: K, uid: string, opts: {
     queryKey: historyKey(kind, uid),
     queryFn: () => load(kind, uid),
     staleTime: opts.fresh ? 0 : HISTORY_STALE_MS,
+    networkMode: 'offlineFirst',
   });
   return [...list];
 }

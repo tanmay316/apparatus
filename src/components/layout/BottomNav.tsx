@@ -10,6 +10,8 @@ import { useCardioStore } from '@/stores/cardio-store';
 import { useWorkoutStore } from '@/stores/workout-store';
 import type { Activity } from '@/types';
 import { BOTTOM_TAB_PATHS } from './nav-config';
+import { useClansBadge } from '@/stores/clan-unread-store';
+import { MentionBadge } from '@/components/community/ClanUnreadSync';
 
 interface Tab { id: string; path: string; label: string; icon: LucideIcon; match: (p: string) => boolean }
 
@@ -60,6 +62,7 @@ export function BottomNav() {
   const workoutPlanId = useWorkoutStore(s => s.planId);
   const workoutDayId = useWorkoutStore(s => s.dayId);
   const hasLive = cardioLive || workoutLive;
+  const clansBadge = useClansBadge();
 
   useEffect(() => {
     if (!sheetOpen || !user) return;
@@ -102,8 +105,12 @@ export function BottomNav() {
         aria-current={active ? 'page' : undefined}
         className="bn-tab flex-1 min-w-0 flex flex-col items-center justify-center gap-1 h-full"
       >
-        <span className="bn-pill flex items-center justify-center w-14 h-8 rounded-full">
+        <span className="bn-pill relative flex items-center justify-center w-14 h-8 rounded-full">
           <Icon size={21} strokeWidth={active ? 2.4 : 2} />
+          {tab.id === 'community' && clansBadge === 'mention' && <MentionBadge className="absolute -top-0.5 right-2" />}
+          {tab.id === 'community' && clansBadge === 'unread' && (
+            <span className="absolute top-0.5 right-3.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
+          )}
         </span>
         <span className={`text-[10.5px] leading-none tracking-tight truncate ${active ? 'font-semibold' : 'font-medium'}`}>{tab.label}</span>
       </Link>

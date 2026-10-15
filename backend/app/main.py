@@ -116,5 +116,11 @@ def on_startup():
     except Exception as exc:
         logger.error("Failed to start FCM listener: %s", exc)
 
+    try:
+        from app.services.subscription import start_coupon_watch
+        start_coupon_watch()
+    except Exception as exc:
+        logger.error("Failed to start coupon watcher: %s", exc)
+
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

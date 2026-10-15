@@ -13,6 +13,9 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:windowBackground">@color/window_background</item>
+        <!-- Pre-Android 15: transparent bar shows the window background, which AppWindow paints
+             in the app theme colour (no deprecated Window.setStatusBarColor calls). -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
 
 

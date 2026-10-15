@@ -13,6 +13,7 @@ import {
 import { ClanDiscussionTab } from '@/components/community/ClanDiscussionTab';
 import { ClanAnnouncementsModal } from '@/components/community/ClanAnnouncementsModal';
 import { ClanInfoModal } from '@/components/community/ClanInfoModal';
+import { markClanChatRead } from '@/stores/clan-unread-store';
 
 export function ClanChatPage() {
   const { id: clanId } = useParams<{ id: string }>();
@@ -54,12 +55,13 @@ export function ClanChatPage() {
 
   // Mark discussion as read when entering AND leaving the chat page, so messages
   // that arrived while the chat was open don't show up as unread afterwards.
+  const uid = user?.uid;
   useEffect(() => {
-    if (!clanId) return;
-    const markRead = () => localStorage.setItem(`lastReadChat_${clanId}`, Date.now().toString());
+    if (!clanId || !uid) return;
+    const markRead = () => markClanChatRead(clanId, uid);
     markRead();
     return markRead;
-  }, [clanId]);
+  }, [clanId, uid]);
 
   const joinMutation = useMutation({
     mutationFn: async () => {

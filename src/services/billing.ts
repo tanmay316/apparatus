@@ -42,7 +42,7 @@ export const verifyPlayPurchase = (purchaseToken: string) =>
   request<{ ok: boolean; pro: boolean }>('/play/verify', { method: 'POST', body: JSON.stringify({ purchase_token: purchaseToken }) });
 
 /** `free` grants Pro days; `discount` unlocks a cheaper Google Play base plan for this account. */
-export interface CouponInfo { code: string; type: 'free' | 'discount'; label: string; days: number; plan: ProPlan | 'any'; basePlanId: string | null }
+export interface CouponInfo { code: string; type: 'free' | 'discount'; label: string; days: number; until?: number | null; plan: ProPlan | 'any'; basePlanId: string | null }
 
 export const checkCoupon = (code: string) =>
   request<CouponInfo>('/coupon/check', { method: 'POST', body: JSON.stringify({ code }) });
@@ -51,3 +51,7 @@ export type RedeemResult = { ok: boolean } & ({ type: 'free'; days: number; unti
 
 export const redeemCoupon = (code: string) =>
   request<RedeemResult>('/coupon/redeem', { method: 'POST', body: JSON.stringify({ code }) });
+
+/** Admin: applies a coupon's on/off state, deletion or end date to everyone who redeemed it. */
+export const syncCouponGrants = (code: string) =>
+  request<{ ok: boolean; changed: number }>('/coupon/sync', { method: 'POST', body: JSON.stringify({ code }) });

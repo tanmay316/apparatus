@@ -103,6 +103,9 @@ def get_entitlement(uid: str, email: Optional[str] = None) -> dict:
         logger.warning("Entitlement read failed for %s: %s", uid, exc)
         return {"pro": False}
     data = (snap.to_dict() or {}) if snap.exists else {}
+    if data.get("provider") == "coupon" and data.get("couponCode"):
+        # Safety net for the coupon watcher: a disabled/deleted/shortened coupon ends the grant.
+        data = _apply_coupon(uid, ref, data, _coupon_state(str(data["couponCode"])))
     end = _to_epoch(data.get("currentPeriodEnd"))
     data["pro"] = compute_pro(data.get("status", ""), end) if data else False
     data["currentPeriodEnd"] = end
@@ -246,9 +249,10 @@ def _set_badge(uid: str, pro: bool) -> None:
 
 # ─── Coupons ──────────────────────────────────────────────────────────────
 # coupons/{CODE}: { type, label, maxRedemptions (0 = unlimited), redeemedCount, expiresAt, active }
-#   type 'free':     days -> Pro for that long, no payment.
-#   type 'discount': basePlanId -> a cheaper Play base plan (e.g. "monthly-49") that only accounts
-#                    holding a redemption of this code may buy; other purchases of it are refunded.
+#   type 'free':     Pro until expiresAt for everyone who redeems (legacy codes without a date: `days`).
+#                    Disabling or deleting the code ends that Pro; re-enabling restores it.
+#   type 'discount': basePlanId -> a cheaper Play base plan (e.g. "monthly-49") that each redeeming
+#                    account may buy once, for one billing period (auto-renew is switched off).
 
 class CouponError(Exception):
     """User-facing reason a coupon can't be used."""
@@ -271,7 +275,7 @@ def _discount_plan(data: dict) -> Optional[str]:
     return base if BASE_PLAN_RE.match(base) and base not in PLANS else None
 
 
-def _check_coupon(data: dict, redeemed_by_user: bool, plan: Optional[str]) -> None:
+def _check_coupon(data: dict, redeemed_by_user: bool, plan: Optional[str], consumed: bool = False) -> None:
     if not data or not data.get("active"):
         raise CouponError("That code isn't valid.")
     expires = _to_epoch(data.get("expiresAt"))
@@ -284,8 +288,8 @@ def _check_coupon(data: dict, redeemed_by_user: bool, plan: Optional[str]) -> No
     elif kind == "discount":
         if not _discount_plan(data):
             raise CouponError("That code isn't valid.")
-        # Already applied to this account: buying the discounted plan is still allowed.
-        if redeemed_by_user:
+        # Applied but not bought yet: buying the discounted plan is still allowed (once).
+        if redeemed_by_user and not consumed:
             return
     else:
         raise CouponError("That code isn't valid.")
@@ -303,21 +307,24 @@ def load_coupon(code: str, uid: str, plan: Optional[str] = None) -> dict:
         raise CouponError("Coupons are not available right now.")
     snap = ref.get()
     data = (snap.to_dict() or {}) if snap.exists else {}
-    used = ref.collection("redemptions").document(uid).get().exists if data else False
-    _check_coupon(data, used, plan)
+    red = ref.collection("redemptions").document(uid).get() if data else None
+    used = bool(red and red.exists)
+    _check_coupon(data, used, plan, consumed=bool(used and (red.to_dict() or {}).get("purchaseTokenKey")))
     discount = data["type"] == "discount"
+    fixed_end = None if discount else _to_epoch(data.get("expiresAt"))
     return {
         "code": code,
         "type": data["type"],
         "label": str(data.get("label") or "")[:120],
-        "days": 0 if discount else int(data.get("days") or 0),
+        "days": 0 if discount else (max(1, -(-int(fixed_end - time.time()) // 86400)) if fixed_end else int(data.get("days") or 0)),
+        "until": fixed_end,
         "plan": (data.get("plan") if data.get("plan") in PLANS else "monthly") if discount else "any",
         "basePlanId": _discount_plan(data) if discount else None,
     }
 
 
 def public_coupon(coupon: dict) -> dict:
-    return {k: coupon[k] for k in ("code", "type", "label", "days", "plan", "basePlanId")}
+    return {k: coupon[k] for k in ("code", "type", "label", "days", "until", "plan", "basePlanId")}
 
 
 def _record_redemption(code: str, uid: str, kind: str) -> None:
@@ -362,8 +369,9 @@ def redeem_coupon(uid: str, email: Optional[str], code: str) -> dict:
     def _txn(transaction):
         snap = ref.get(transaction=transaction)
         data = (snap.to_dict() or {}) if snap.exists else {}
-        used = red_ref.get(transaction=transaction).exists if data else False
-        _check_coupon(data, used, None)
+        red_snap = red_ref.get(transaction=transaction) if data else None
+        used = bool(red_snap and red_snap.exists)
+        _check_coupon(data, used, None, consumed=bool(used and (red_snap.to_dict() or {}).get("purchaseTokenKey")))
         if data["type"] == "discount":
             base_plan = _discount_plan(data)
             if not used:
@@ -372,10 +380,17 @@ def redeem_coupon(uid: str, email: Optional[str], code: str) -> dict:
             return {"type": "discount", "basePlanId": base_plan}
         ent_snap = ent_ref.get(transaction=transaction)
         ent = (ent_snap.to_dict() or {}) if ent_snap.exists else {}
-        start = time.time()
-        if ent.get("provider") == "coupon":
-            start = max(start, _to_epoch(ent.get("currentPeriodEnd")) or 0)
-        end = start + int(data["days"]) * 86400
+        fixed_end = _to_epoch(data.get("expiresAt"))
+        if fixed_end is not None:
+            # The coupon's date is the final day of Pro for everyone, whenever they redeem.
+            end = fixed_end
+        else:
+            start = time.time()
+            if ent.get("provider") == "coupon" and compute_pro(ent.get("status", ""), _to_epoch(ent.get("currentPeriodEnd"))):
+                start = max(start, _to_epoch(ent.get("currentPeriodEnd")) or 0)
+            end = start + int(data["days"]) * 86400
+        if ent.get("provider") == "coupon" and compute_pro(ent.get("status", ""), _to_epoch(ent.get("currentPeriodEnd"))):
+            end = max(end, _to_epoch(ent.get("currentPeriodEnd")) or 0)
         entitlement = {
             "pro": True, "plan": "coupon", "status": "granted", "provider": "coupon",
             "couponCode": code, "subscriptionId": None,
@@ -383,14 +398,104 @@ def redeem_coupon(uid: str, email: Optional[str], code: str) -> dict:
             "updatedAt": gcf.SERVER_TIMESTAMP,
         }
         transaction.set(ent_ref, entitlement)
-        transaction.set(red_ref, {"uid": uid, "type": "free", "at": gcf.SERVER_TIMESTAMP})
+        transaction.set(red_ref, {"uid": uid, "type": "free", "until": datetime.fromtimestamp(end, tz=timezone.utc), "at": gcf.SERVER_TIMESTAMP})
         transaction.update(ref, {"redeemedCount": gcf.Increment(1)})
-        return {"type": "free", "days": int(data["days"]), "until": end}
+        return {"type": "free", "days": max(1, round((end - time.time()) / 86400)), "until": end}
 
     result = _txn(get_firestore_client().transaction())
     if result["type"] == "free":
         _set_badge(uid, True)
     return result
+
+
+# Coupon docs change rarely; a short cache keeps /billing/status from reading one on every call.
+_COUPON_CACHE: dict[str, tuple[float, Optional[dict]]] = {}
+_COUPON_TTL = 60
+
+
+def _coupon_state(code: str, fresh: bool = False) -> Optional[dict]:
+    """The coupon doc (None if deleted), cached briefly."""
+    hit = _COUPON_CACHE.get(code)
+    if hit and not fresh and hit[0] > time.time():
+        return hit[1]
+    ref = _coupon_ref(code)
+    if not ref:
+        return {"active": True}  # fail open like the rest of billing
+    snap = ref.get()
+    data = (snap.to_dict() or {}) if snap.exists else None
+    _COUPON_CACHE[code] = (time.time() + _COUPON_TTL, data)
+    return data
+
+
+def _apply_coupon(uid: str, ent_ref, ent: dict, coupon: Optional[dict], until: Optional[float] = None) -> dict:
+    """Brings a coupon grant in line with its coupon: revoked while the code is off or deleted,
+    restored when it is switched back on, and never past the coupon's end date."""
+    status = ent.get("status")
+    end = _to_epoch(ent.get("currentPeriodEnd"))
+    live = bool(coupon) and bool(coupon.get("active")) and coupon.get("type") == "free"
+    if not live:
+        new_status, new_end = ("revoked" if status == "granted" else status), end
+    else:
+        coupon_end = _to_epoch(coupon.get("expiresAt"))
+        base = until if until is not None else end
+        new_end = min(x for x in (base, coupon_end) if x is not None) if (base is not None or coupon_end is not None) else None
+        new_status = "granted" if status in ("granted", "revoked") else status
+    if new_status == status and new_end == end:
+        return ent
+    update = {"status": new_status, "pro": compute_pro(new_status or "", new_end)}
+    if new_end is not None:
+        update["currentPeriodEnd"] = datetime.fromtimestamp(new_end, tz=timezone.utc)
+    try:
+        from google.cloud import firestore as gcf
+        ent_ref.set({**update, "updatedAt": gcf.SERVER_TIMESTAMP}, merge=True)
+        _set_badge(uid, update["pro"])
+    except Exception as exc:
+        logger.warning("Coupon grant update failed for %s: %s", uid, exc)
+    return {**ent, **update}
+
+
+def sync_coupon_grants(code: str) -> int:
+    """Re-applies a coupon to every account that redeemed it (after it was disabled, enabled,
+    deleted or its date changed). Returns how many entitlements changed."""
+    code = normalize_coupon(code)
+    ref = _coupon_ref(code)
+    if not ref:
+        return 0
+    coupon = _coupon_state(code, fresh=True)
+    changed = 0
+    for red in ref.collection("redemptions").stream():
+        rdata = red.to_dict() or {}
+        if rdata.get("type") != "free":
+            continue
+        ent_ref = _private(red.id, "entitlement")
+        snap = ent_ref.get() if ent_ref else None
+        ent = (snap.to_dict() or {}) if snap and snap.exists else {}
+        if ent.get("provider") != "coupon" or ent.get("couponCode") != code:
+            continue
+        after = _apply_coupon(red.id, ent_ref, ent, coupon, _to_epoch(rdata.get("until")))
+        changed += after is not ent
+    return changed
+
+
+_coupon_watch = None
+
+
+def start_coupon_watch() -> None:
+    """Applies admin changes to coupons (on/off, delete, date) to everyone who redeemed them."""
+    global _coupon_watch
+    db = get_firestore_client()
+    if not db:
+        return
+
+    def on_snapshot(_docs, changes, _read_time):
+        for change in changes:
+            # The first snapshot reports every coupon as ADDED: that fixes grants made before this existed.
+            try:
+                sync_coupon_grants(change.document.id)
+            except Exception as exc:
+                logger.warning("Coupon sync failed for %s: %s", change.document.id, exc)
+
+    _coupon_watch = db.collection("coupons").on_snapshot(on_snapshot)
 
 
 def coupon_allows_plan(uid: str, base_plan: str) -> bool:
@@ -400,5 +505,34 @@ def coupon_allows_plan(uid: str, base_plan: str) -> bool:
         return False
     for snap in db.collection("coupons").where("basePlanId", "==", base_plan).limit(50).stream():
         if snap.reference.collection("redemptions").document(uid).get().exists:
+            return True
+    return False
+
+
+def claim_discount(uid: str, base_plan: str, purchase_key: str) -> bool:
+    """Discount coupons are one-time: the first purchase of the discounted plan uses up the
+    redemption, so another purchase of it (a second month, a re-buy) is refused."""
+    db = get_firestore_client()
+    if not db or not BASE_PLAN_RE.match(base_plan or ""):
+        return False
+    from google.cloud import firestore as gcf
+    for snap in db.collection("coupons").where("basePlanId", "==", base_plan).limit(50).stream():
+        coupon = snap.to_dict() or {}
+        red_ref = snap.reference.collection("redemptions").document(uid)
+
+        @gcf.transactional
+        def _txn(transaction):
+            red = red_ref.get(transaction=transaction)
+            if not red.exists:
+                return False
+            used = (red.to_dict() or {}).get("purchaseTokenKey")
+            if used:
+                return used == purchase_key
+            if not coupon.get("active"):
+                return False
+            transaction.update(red_ref, {"purchaseTokenKey": purchase_key, "usedAt": gcf.SERVER_TIMESTAMP})
+            return True
+
+        if _txn(db.transaction()):
             return True
     return False

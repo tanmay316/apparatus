@@ -1,5 +1,6 @@
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch, onSnapshot, documentId, type Query } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocFromCache, getDocs, setDoc, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp, Timestamp, increment, limit, orderBy, runTransaction, writeBatch, onSnapshot, documentId, type Query } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
+import { isOffline } from '@/lib/offline';
 import { validateComment } from '@/lib/validation';
 import { followNeedsApproval, getProfileVisibility } from '@/lib/privacy';
 import { shareablePhotoURL } from '@/utils/image-compression';
@@ -161,7 +162,8 @@ export async function acceptAllFollowRequests(myUid: string): Promise<number> {
 export async function visibilityForUser<T extends 'public' | 'followers' | 'private'>(uid: string, visibility: T): Promise<T | 'followers'> {
   if (visibility !== 'public') return visibility;
   try {
-    const snap = await getDoc(doc(db, 'users', uid));
+    const ref = doc(db, 'users', uid);
+    const snap = isOffline() ? await getDocFromCache(ref) : await getDoc(ref);
     return getProfileVisibility(snap.data() as UserProfile) === 'public' ? visibility : 'followers';
   } catch {
     return visibility;
@@ -352,10 +354,17 @@ export async function postActivity(activity: Omit<Activity, 'id' | 'createdAt'>)
     ...activity,
     visibility: await visibilityForUser(activity.userId, activity.visibility as 'public' | 'followers' | 'private'),
   });
-  const docRef = await addDoc(collection(db, 'activities'), {
+  const docRef = doc(collection(db, 'activities'));
+  const write = setDoc(docRef, {
     ...cleanedActivity,
     createdAt: Timestamp.now(),
   });
+  if (isOffline()) {
+    // Queued in the offline cache and synced later; follower pings would be stale by then.
+    write.catch(err => console.warn('Queued feed post rejected:', err));
+    return docRef.id;
+  }
+  await write;
   if (cleanedActivity.visibility !== 'private') {
     const followerUids = await getFollowers(activity.userId);
     await Promise.allSettled(followerUids.map(receiverId => notify(receiverId, {

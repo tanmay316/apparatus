@@ -20,8 +20,11 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(AppWindowPlugin.class);
         super.onCreate(savedInstanceState);
         if (getBridge() != null) {
-            AppWindowPlugin.applySaved(this, getBridge().getWebView());
-            AppWindowPlugin.keepRendererWarm(getBridge().getWebView());
+            android.webkit.WebView webView = getBridge().getWebView();
+            AppWindowPlugin.applySaved(this, webView);
+            // SystemBars' first setStyle (posted during load) repaints the decor; reapply after it.
+            if (webView != null) webView.post(() -> AppWindowPlugin.applySaved(this, webView));
+            AppWindowPlugin.keepRendererWarm(webView);
         }
     }
 

@@ -169,6 +169,8 @@ export async function joinClan(userId: string, userName: string, userPhoto: stri
     userPhoto,
     role: 'member',
     joinedAt: serverTimestamp(),
+    // New members only see chat from this moment on (like WhatsApp).
+    historyFrom: serverTimestamp(),
     status: 'active'
   });
   await updateDoc(doc(db, 'clans_v2', clanId), {
@@ -2566,33 +2568,50 @@ export async function deleteClanAnnouncement(announcementId: string): Promise<vo
 
 // ─── CLAN DISCUSSION & CHAT ──────────────────────────────────────
 
+/** Start of the chat history this member may see (null = everything; older memberships). */
+export async function getClanHistoryFrom(clanId: string, userId: string): Promise<Timestamp | null> {
+  const snap = await getDoc(doc(db, 'clan_memberships', `${clanId}_${userId}`));
+  const from = snap.data()?.historyFrom;
+  return from && typeof from.toMillis === 'function' ? from as Timestamp : null;
+}
+
+/** Constraints every member query on clan_messages needs (rules hide messages from before joining). */
+export function clanMessageScope(clanId: string, historyFrom: Timestamp | null) {
+  return historyFrom
+    ? [where('clanId', '==', clanId), where('createdAt', '>=', historyFrom)]
+    : [where('clanId', '==', clanId)];
+}
+
 export function subscribeClanMessages(
   clanId: string,
   onMessages: (messages: ClanMessage[]) => void,
-  onError?: (error: any) => void
+  onError?: (error: any) => void,
+  historyFrom: Timestamp | null = null,
 ): () => void {
   // Newest 150 messages (ordered server-side). Without orderBy, Firestore returns an
   // arbitrary 150 docs by id, so recent messages could silently disappear in busy clans.
   const orderedQ = query(
     collection(db, 'clan_messages'),
-    where('clanId', '==', clanId),
+    ...clanMessageScope(clanId, historyFrom),
     orderBy('createdAt', 'desc'),
     limit(150)
   );
   const fallbackQ = query(
     collection(db, 'clan_messages'),
-    where('clanId', '==', clanId),
+    ...clanMessageScope(clanId, historyFrom),
     limit(150)
   );
 
   let unsub: () => void = () => {};
   let cancelled = false;
 
+  // Metadata changes too, so a message flips from "sending" to "sent" once the server has it.
   const listen = (q: typeof orderedQ, isFallback: boolean) => onSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snap) => {
       const msgs = snap.docs
-        .map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) } as ClanMessage))
+        .map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }), pending: d.metadata.hasPendingWrites } as ClanMessage))
         .sort((a, b) => {
           const getTime = (val: any) => {
             if (!val) return 0;
@@ -2627,15 +2646,25 @@ export function subscribeClanMessages(
   };
 }
 
-export async function sendClanMessage(
-  data: Omit<ClanMessage, 'id' | 'createdAt' | 'updatedAt' | 'reactions' | 'isEdited' | 'isDeleted'>
-): Promise<string> {
-  const docRef = await addDoc(collection(db, 'clan_messages'), cleanDoc({
+/**
+ * Writes the message and returns at once: Firestore shows it locally right away (pending until the
+ * server confirms), so the composer never waits on the network. `committed` settles on server ack.
+ * Pushes to the clan are sent by the backend (one listener) instead of one notification doc per
+ * member per message; only @mentioned members get a notification doc (bell + push).
+ */
+export function sendClanMessage(
+  data: Omit<ClanMessage, 'id' | 'createdAt' | 'updatedAt' | 'reactions' | 'isEdited' | 'isDeleted' | 'pending'>
+): { id: string; committed: Promise<void> } {
+  const ref = doc(collection(db, 'clan_messages'));
+  const mentions = [...new Set((data.mentions || []).filter(uid => uid && uid !== data.userId))].slice(0, 20);
+  const committed = setDoc(ref, cleanDoc({
     ...data,
     text: (data.text || '').trim(),
     imageUrl: data.imageUrl || null,
     images: data.images || (data.imageUrl ? [data.imageUrl] : []),
     replyTo: data.replyTo ? cleanDoc(data.replyTo) : null,
+    mentions,
+    fanout: 'server',
     reactions: {},
     isEdited: false,
     isDeleted: false,
@@ -2643,24 +2672,23 @@ export async function sendClanMessage(
     updatedAt: serverTimestamp(),
   }));
 
-  // Notify all clan members of the chat message (WhatsApp style)
-  let preview = data.text ? data.text.slice(0, 140) : (data.imageUrl ? '📷 Photo' : 'New message');
-  if (data.replyTo) {
-    preview = `↩️ ${data.replyTo.userName}: ${preview}`;
+  if (mentions.length) {
+    const preview = data.text ? data.text.slice(0, 140) : '📷 Photo';
+    committed.then(() => Promise.allSettled(mentions.map(uid => addDoc(collection(db, 'notifications'), {
+      receiverId: uid,
+      senderId: data.userId,
+      senderName: (data.userName || '').slice(0, 80),
+      senderPhoto: '',
+      type: 'clan_message',
+      message: `${data.userName} mentioned you: ${preview}`,
+      targetId: ref.id,
+      read: false,
+      createdAt: serverTimestamp(),
+      extra: { clanId: data.clanId, link: `/clan/${data.clanId}/chat`, messageId: ref.id, kind: 'mention' },
+    })))).catch(err => console.warn('Failed to notify mentioned members:', err));
   }
 
-  notifyClanMembers({
-    clanId: data.clanId,
-    senderId: data.userId,
-    senderName: data.userName,
-    title: data.userName,
-    body: preview,
-    type: 'clan_message',
-    link: `/clan/${data.clanId}/chat`,
-    extraData: { messageId: docRef.id, clanId: data.clanId }
-  }).catch(err => console.warn('Failed to notify clan members for chat message:', err));
-
-  return docRef.id;
+  return { id: ref.id, committed };
 }
 
 export async function editClanMessage(
@@ -2688,11 +2716,21 @@ export async function deleteClanMessage(
   });
 }
 
-export async function markClanMessageRead(messageId: string, userId: string): Promise<void> {
-  const ref = doc(db, 'clan_messages', messageId);
-  await updateDoc(ref, {
-    readBy: arrayUnion(userId)
-  }).catch(() => {}); // fire and forget
+/** Each member's last-read time in a clan (read ticks). One small doc per member, not per message. */
+export function subscribeClanReads(clanId: string, onReads: (reads: Record<string, number>) => void): () => void {
+  return onSnapshot(
+    query(collection(db, 'clan_reads'), where('clanId', '==', clanId)),
+    snap => {
+      const reads: Record<string, number> = {};
+      snap.docs.forEach(d => {
+        const data = d.data({ serverTimestamps: 'estimate' });
+        const at = data.lastReadAt;
+        if (typeof data.userId === 'string' && at && typeof at.toMillis === 'function') reads[data.userId] = at.toMillis();
+      });
+      onReads(reads);
+    },
+    err => console.warn('Clan read receipts unavailable:', err),
+  );
 }
 
 export async function toggleClanMessageReaction(

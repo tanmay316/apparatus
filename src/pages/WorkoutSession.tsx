@@ -36,6 +36,7 @@ import { getBadge } from '@/lib/badges';
 import { effectiveStreak } from '@/lib/stats';
 import { BRAND } from '@/lib/brand';
 import { NowPlayingCard } from '@/components/cardio/NowPlayingCard';
+import { isOffline, settle } from '@/lib/offline';
 
 // NowPlayingCard is styled with the cardio tracker's variables; point them at the dx palette.
 const MUSIC_CARD_VARS = {
@@ -428,13 +429,13 @@ export function WorkoutSession() {
 
       if (currentDay && store.planId) {
         try {
-          await savePlanDay(store.planId, {
+          await settle(savePlanDay(store.planId, {
             ...currentDay,
             warmup: store.warmup,
             skillWork: store.skillWork,
             strength: store.strength,
             cooldown: store.cooldown,
-          });
+          }));
           queryClient.invalidateQueries({ queryKey: ['planDays', store.planId] });
         } catch (planError) {
           console.error('Failed to persist session exercise definitions to plan:', planError);
@@ -470,12 +471,12 @@ export function WorkoutSession() {
       if (overload?.message) {
         const change = overload.volumeChangePercent;
         try {
-          await createSelfNotification(user.uid, overload.message, saved.id, {
+          await settle(createSelfNotification(user.uid, overload.message, saved.id, {
             kind: 'progress',
             trend: change === undefined || change === 0 ? 'flat' : change > 0 ? 'up' : 'down',
             ...(change !== undefined ? { volumeChangePercent: change } : {}),
             link: '/progress',
-          });
+          }));
         } catch (notificationError) {
           console.error('Failed to create progression notification:', notificationError);
         }
@@ -483,7 +484,7 @@ export function WorkoutSession() {
 
       // Post to activity feed
       try {
-        await postActivity({
+        await settle(postActivity({
           userId: user!.uid,
           userName: user!.displayName || 'Athlete',
           username: profile!.username,
@@ -508,18 +509,18 @@ export function WorkoutSession() {
           visibility: privacy,
           likesCount: 0,
           commentsCount: 0,
-        });
+        }), 8000);
       } catch (e) {
         console.error('Failed to post activity:', e);
       }
 
       // Auto-update community challenges
       try {
-        await updateUserChallengeProgress(user.uid, [
+        await settle(updateUserChallengeProgress(user.uid, [
           { metric: 'calories', amount: calories },
           { metric: 'duration', amount: finalDurationMin },
           { metric: 'workouts', amount: 1 }
-        ]);
+        ]), 8000);
       } catch (err) {
         console.error('Failed to update challenges:', err);
       }
@@ -535,7 +536,7 @@ export function WorkoutSession() {
 
       // Refresh Zustand store stats with new database data so all components re-render immediately
       try {
-        await useAuthStore.getState().refreshProfile();
+        if (!isOffline()) await settle(useAuthStore.getState().refreshProfile(), 6000);
       } catch (refreshError) {
         console.error('Failed to refresh profile stats locally:', refreshError);
       }

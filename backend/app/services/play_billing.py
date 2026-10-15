@@ -139,6 +139,7 @@ def parse(sub: dict) -> dict:
         "plan": base_plan if base_plan in subs.PLANS else "monthly",
         "base_plan": base_plan,
         "end": _epoch(line.get("expiryTime")),
+        "auto_renew": bool((line.get("autoRenewingPlan") or {}).get("autoRenewEnabled")),
         "acknowledged": sub.get("acknowledgementState") == "ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED",
         "account": str(((sub.get("externalAccountIdentifiers") or {}).get("obfuscatedExternalAccountId")) or ""),
         "linked": str(sub.get("linkedPurchaseToken") or ""),
@@ -202,6 +203,12 @@ def save(uid: str, token: str, sub: dict) -> dict:
         except PlayError as exc:
             # The app acknowledges too; Play refunds only if nobody does within 3 days.
             logger.warning("Acknowledge failed for %s: %s", uid, exc.message)
+    if pro and info["base_plan"] not in subs.PLANS and info["auto_renew"]:
+        # Coupon prices are one-time: the discounted period runs out instead of renewing.
+        try:
+            cancel(token)
+        except PlayError as exc:
+            logger.warning("Stopping renewal of a discount plan failed for %s: %s", uid, exc.message)
     return entitlement
 
 
@@ -224,12 +231,12 @@ def verify_purchase(uid: str, token: str) -> dict:
         owner = _bound_to(token)
         if owner and owner != uid:
             raise PlayError(403, "This purchase belongs to a different account.")
-        if not owner and not subs.coupon_allows_plan(uid, info["base_plan"]):
+        if not owner and not subs.claim_discount(uid, info["base_plan"], token_key(token)):
             try:
                 revoke(token)
             except PlayError as exc:
                 logger.error("Revoking an unentitled discount purchase failed for %s: %s", uid, exc.message)
-            raise PlayError(403, "That price needs a coupon on your account, so the purchase was refunded.")
+            raise PlayError(403, "That price needs an unused coupon on your account, so the purchase was refunded.")
     return save(uid, token, sub)
 
 

@@ -46,8 +46,9 @@ android {
             if (keystorePropsFile.exists()) {
                 signingConfig signingConfigs.release
             }
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // R8 shrink + obfuscate (Play Console "DEX code optimization"). mapping.txt ships inside the .aab.
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             // Bundles native crash symbols into the .aab for Play Console.
             ndk { debugSymbolLevel 'SYMBOL_TABLE' }
         }

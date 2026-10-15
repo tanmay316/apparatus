@@ -557,7 +557,8 @@ def fulfil_order(db, order_id: str, payment_id: str) -> dict:
             elif (mem.to_dict() or {}).get("status") != "active":
                 t.set(mem_ref, {"clanId": item_id, "userId": buyer, "userName": order.get("buyerName", ""),
                                 "userPhoto": order.get("buyerPhoto", ""), "role": "member", "status": "active",
-                                "joinedAt": gcf.SERVER_TIMESTAMP, "paid": True, "orderId": order_id})
+                                "joinedAt": gcf.SERVER_TIMESTAMP, "historyFrom": gcf.SERVER_TIMESTAMP,
+                                "paid": True, "orderId": order_id})
                 t.update(clan_ref, {"memberCount": gcf.Increment(1), "paidMembers": gcf.Increment(1)})
         elif kind == "plan":
             listing_ref = db.collection("market_listings").document(item_id)

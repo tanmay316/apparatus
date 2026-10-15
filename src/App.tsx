@@ -11,6 +11,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { safeInternalPath } from '@/lib/validation';
 import { refreshSafeArea } from '@/lib/safe-area';
+import { flushOfflineSaves } from '@/lib/offline';
 import { checkPlayUpdate } from '@/lib/play-update';
 import { subscribeToNotifications } from '@/services/social';
 import { refreshForNotification } from '@/lib/notification-sync';
@@ -22,7 +23,7 @@ import {
   setupNotificationChannels,
   initPushNotifications
 } from '@/utils/notifications';
-import { categoryOf } from '@/lib/notification-center';
+import { categoryOf, claimBanner } from '@/lib/notification-center';
 import { localDateKey } from '@/lib/stats';
 import { useSubscriptionStore } from '@/stores/subscription-store';
 import { useNotificationPrefs } from '@/stores/notification-prefs-store';
@@ -34,7 +35,8 @@ import { CardioLivePublisher } from '@/components/social/CardioLivePublisher';
 import { NearbyPresencePublisher } from '@/components/social/NearbyPresencePublisher';
 import { NearbyEncounterTracker } from '@/components/social/NearbyEncounterTracker';
 import { NearbyDataProvider } from '@/hooks/useNearby';
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { ClanUnreadSync } from '@/components/community/ClanUnreadSync';
+import { Capacitor, registerPlugin, SystemBars, SystemBarsStyle } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
 import { OtaKit } from '@otakit/capacitor-updater';
 import { SplashScreen } from '@capacitor/splash-screen';
@@ -126,26 +128,6 @@ function LoadingScreen() {
   );
 }
 
-// In-app banners are only for things arriving right now while the app is on screen.
-// In the background FCM shows the push, and Firestore catching up after a resume or
-// reconnect must not replay messages the user already got.
-const BANNER_FRESH_MS = 2 * 60 * 1000;
-const SHOWN_BANNERS_KEY = 'apparatus.shown-banners';
-
-function claimBanner(id: string | undefined, createdAtMillis: number): boolean {
-  if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return false;
-  // A pending local write has no server time yet: it was created just now.
-  const created = createdAtMillis || Date.now();
-  if (Date.now() - created > BANNER_FRESH_MS) return false;
-  if (!id) return true;
-  try {
-    const shown: string[] = JSON.parse(localStorage.getItem(SHOWN_BANNERS_KEY) || '[]');
-    if (shown.includes(id)) return false;
-    localStorage.setItem(SHOWN_BANNERS_KEY, JSON.stringify([...shown.slice(-199), id]));
-  } catch { /* storage unavailable: freshness check still applies */ }
-  return true;
-}
-
 function PageLoader() {
   return (
     <div className="flex h-full min-h-[50vh] w-full items-center justify-center">
@@ -228,21 +210,18 @@ function PreferencesSync() {
     document.documentElement.dataset.theme = theme;
     document.documentElement.lang = language;
 
-    // Status Bar config to prevent overlap and adjust colors dynamically
+    // System bar icons follow the app theme; the bar background is the native window colour.
     if (Capacitor.isNativePlatform()) {
-      import('@capacitor/status-bar').then(({ StatusBar, Style }) => {
-        // setOverlaysWebView / setBackgroundColor are Android-only; on iOS the
-        // status bar sits over the webview and is spaced via safe-area insets.
-        if (Capacitor.getPlatform() === 'android') {
-          StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {}).finally(refreshSafeArea);
-          StatusBar.setBackgroundColor({ color: theme === 'dark' ? '#050505' : '#FFFFFF' }).catch(() => {});
-        }
-        StatusBar.setStyle({ style: theme === 'dark' ? Style.Dark : Style.Light }).catch(() => {});
-      }).catch(() => {});
-      // Native canvas shown while the WebView repaints after returning from another app.
-      if (Capacitor.isPluginAvailable('AppWindow')) {
-        AppWindow.setBackgroundColor({ color: theme === 'dark' ? '#050505' : '#FFFFFF' }).catch(() => {});
-      }
+      const color = theme === 'dark' ? '#050505' : '#FFFFFF';
+      SystemBars.setStyle({ style: theme === 'dark' ? SystemBarsStyle.Dark : SystemBarsStyle.Light })
+        .catch(() => {})
+        .finally(() => {
+          // SystemBars.setStyle resets the decor background, so paint ours afterwards.
+          if (Capacitor.isPluginAvailable('AppWindow')) {
+            AppWindow.setBackgroundColor({ color }).catch(() => {});
+          }
+          refreshSafeArea();
+        });
     }
 
     // Keep the browser/PWA chrome colour in sync with the active theme.
@@ -361,7 +340,7 @@ function PreferencesSync() {
             ? (newNote.createdAt as any).toMillis()
             : ((newNote.createdAt as any)?.seconds ? (newNote.createdAt as any).seconds * 1000 : 0);
 
-          if (claimBanner(newNote.id, createdAtMillis)) {
+          if (claimBanner(newNote.type === 'clan_message' && newNote.extra?.messageId ? `msg_${newNote.extra.messageId}` : newNote.id, createdAtMillis)) {
             notifyDevice(
               categoryOf(newNote.type),
               newNote.senderName || BRAND.name,
@@ -426,6 +405,16 @@ function PreferencesSync() {
     return () => { cancelled = true; unsub?.(); };
   }, [user?.uid, queryClient]);
 
+  // Sessions saved offline skipped the stats transaction; rebuild stats once they have synced.
+  useEffect(() => {
+    const uid = user?.uid;
+    if (!uid) return;
+    void flushOfflineSaves(uid);
+    const onOnline = () => void flushOfflineSaves(uid);
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [user?.uid]);
+
   // Weekly AI coach report (Pro): once per week, shortly after launch.
   const subLoaded = useSubscriptionStore(s => s.loaded);
   useEffect(() => {
@@ -447,13 +436,12 @@ function ActiveSessionRestorer() {
   const location = useLocation();
   const hasRestoredRef = useRef(false);
 
-  // Only auto-redirect on initial cold-start / first mount, not on subsequent navigations.
-  // This prevents the flash-back loop when the user intentionally leaves the tracking page.
+  // Only on the very first location: later visits to '/' are the user leaving the tracker on purpose
+  // (otherwise "Go home" bounced back to /cardio once and needed a second tap).
   useEffect(() => {
     if (hasRestoredRef.current) return;
-    const cardio = useCardioStore.getState();
-    if (cardio.isTracking && location.pathname === '/') {
-      hasRestoredRef.current = true;
+    hasRestoredRef.current = true;
+    if (useCardioStore.getState().isTracking && location.pathname === '/') {
       navigate('/cardio', { replace: true });
     }
   }, [navigate, location.pathname]);
@@ -465,6 +453,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <PreferencesSync />
+      <ClanUnreadSync />
       <CardioLivePublisher />
       <NearbyPresencePublisher />
       <NearbyDataProvider />
