@@ -51,7 +51,119 @@ function hasPhrase(text: string, phrase: string): boolean {
 
 // ─── EXACT OVERRIDES ───────────────────────────────────────────────
 // For specific edge cases or explicitly mapped custom exercises.
-const EXERCISE_OVERRIDES: Record<string, string> = {};
+const EXERCISE_OVERRIDES: Record<string, string> = {
+  row: 'rowing-machine-main.webp',
+  bike: 'stationary-bike-main.webp',
+  'core work': 'plank-main.webp',
+};
+
+/** Yoga poses, pranayama and meditation, each with its own illustration (Sanskrit and English names). */
+const YOGA_RULES: ImageRule[] = ([
+  [['griva sanchalana', 'neck movement', 'neck roll', 'neck rotation', 'neck tilt'], 'yoga-neck-movements'],
+  [['skandha chakra', 'shoulder circle', 'shoulder rotation', 'shoulder roll'], 'yoga-shoulder-circles'],
+  [['kati sanchalana', 'trunk twist', 'trunk rotation', 'standing twist'], 'yoga-trunk-twist'],
+  [['janu sanchalana', 'knee movement'], 'yoga-knee-bends'],
+  [['tadasana', 'mountain pose'], 'yoga-mountain-pose'],
+  [['vrikshasana', 'vrksasana', 'tree pose'], 'yoga-tree-pose'],
+  [['pada hastasana', 'padahastasana', 'standing forward bend', 'standing forward fold', 'uttanasana'], 'yoga-standing-forward-bend'],
+  [['ardha chakrasana', 'half wheel'], 'yoga-half-wheel'],
+  [['trikonasana', 'triangle pose'], 'yoga-triangle-pose'],
+  [['virabhadrasana i', 'warrior i', 'warrior 1'], 'yoga-warrior-1'],
+  [['virabhadrasana ii', 'warrior ii', 'warrior 2'], 'yoga-warrior-2'],
+  [['utkatasana', 'chair pose'], 'yoga-chair-pose'],
+  [['vajrasana', 'thunderbolt pose', 'diamond pose'], 'yoga-thunderbolt'],
+  [['bhadrasana', 'butterfly pose', 'butterfly stretch', 'baddha konasana'], 'banded-adductor-stretch-main.webp'],
+  [['ushtrasana', 'ustrasana', 'camel pose'], 'yoga-camel'],
+  [['shashankasana', 'hare pose'], 'yoga-hare'],
+  [['balasana', 'childs pose', 'child pose'], 'yoga-childs-pose'],
+  [['uttana mandukasana', 'mandukasana', 'frog pose'], 'yoga-stretched-frog'],
+  [['vakrasana', 'seated twist'], 'yoga-seated-twist'],
+  [['ardha matsyendrasana', 'matsyendrasana', 'half spinal twist', 'spinal twist'], 'yoga-half-spinal-twist'],
+  [['paschimottanasana', 'seated forward bend', 'seated forward fold'], 'yoga-seated-forward-bend'],
+  [['gomukhasana', 'cow face'], 'yoga-cow-face'],
+  [['marjariasana', 'cat cow', 'cat camel', 'cat stretch'], 'bird-dog-hold-main.webp'],
+  [['naukasana', 'navasana', 'boat pose'], 'russian-twist-start.webp'],
+  [['simhasana', 'lion pose', 'lions breath'], 'yoga-lion'],
+  [['makarasana', 'crocodile pose'], 'yoga-crocodile'],
+  [['bhujangasana', 'cobra pose', 'cobra stretch', 'cobra'], 'yoga-cobra'],
+  [['shalabhasana', 'salabhasana', 'locust'], 'superman-peak.webp'],
+  [['dhanurasana', 'bow pose'], 'superman-peak.webp'],
+  [['adho mukha svanasana', 'downward dog', 'downward facing dog', 'down dog'], 'yoga-downward-dog'],
+  [['uttanapadasana', 'raised legs pose', 'raised leg pose'], 'yoga-raised-legs'],
+  [['ardha halasana', 'halasana', 'half plough', 'plough pose', 'plow pose'], 'yoga-half-plough'],
+  [['pavanamuktasana', 'wind relieving', 'knees to chest'], 'yoga-wind-relieving'],
+  [['viparita karani', 'legs up the wall'], 'yoga-legs-up-wall'],
+  [['shavasana', 'savasana', 'corpse pose', 'yoga nidra', 'body scan'], 'yoga-corpse'],
+  [['surya namaskar', 'sun salutation', 'salutation', 'namaskar'], 'yoga-sun-salutation'],
+  [['anulom vilom', 'nadi shodhana', 'alternate nostril'], 'yoga-anulom-vilom'],
+  [['bhramari', 'bee breath'], 'yoga-bhramari'],
+  [['dhyana', 'meditation', 'mindfulness'], 'yoga-meditation'],
+  [['pigeon'], 'bench-figure-4-glute-stretch-main.webp'],
+  [['crow pose', 'crane pose', 'bakasana', 'frog stand'], 'planche-main.webp'],
+  [['yoga flow', 'vinyasa'], 'yoga-sun-salutation'],
+  [['hip opener'], 'bench-figure-4-glute-stretch-main.webp'],
+  [['chest opener', 'shoulder opener'], 'banded-chest-stretch-main.webp'],
+] as [string[], string][]).map(([phrases, slug]): ImageRule => ({
+  phrases,
+  filename: slug.endsWith('.webp') ? slug : `${slug}-main.webp`,
+  priority: 120,
+})).concat([
+  { phrases: ['phalakasana'], filename: 'high-plank-main.webp', priority: 120 },
+  { phrases: ['setu bandhasana', 'bridge pose'], filename: 'glute-bridge-peak.webp', priority: 120 },
+  // Breathing exercises without their own picture share the seated pranayama one.
+  { phrases: ['pranayama', 'kapalbhati', 'bhastrika', 'ujjayi', 'sheetali', 'sitali', 'udgeeth', 'bahya', 'breathing', 'breath', 'breathwork'], filename: 'yoga-pranayama-main.webp', priority: 115 },
+]);
+
+/** Specific matches for exercises that used to fall back to a muscle-group or unrelated picture. */
+const EXTRA_RULES: ImageRule[] = [
+  { phrases: ['russian twist'], filename: 'russian-twist-peak.webp', priority: 110 },
+  { phrases: ['bird dog'], filename: 'bird-dog-hold-main.webp', priority: 110 },
+  { phrases: ['farmers walk', 'farmer walk', 'farmers carry', 'farmer carry', 'suitcase carry', 'carry'], filename: 'kettlebell-farmers-walk-main.webp', priority: 110 },
+  { phrases: ['dumbbell floor press'], filename: 'dumbbell-floor-press-peak.webp', priority: 106 },
+  { phrases: ['floor press'], filename: 'floor-press-peak.webp', priority: 105 },
+  { phrases: ['close grip bench', 'jm press'], filename: 'close-grip-bench-press-peak.webp', priority: 100 },
+  { phrases: ['tate press'], filename: 'lying-tricep-extension-peak.webp', priority: 100 },
+  { phrases: ['dumbbell upright row'], filename: 'dumbbell-upright-row-peak.webp', priority: 101 },
+  { phrases: ['upright row'], filename: 'upright-row-peak.webp', priority: 100 },
+  { phrases: ['bodyweight good morning'], filename: 'bodyweight-good-morning-peak.webp', priority: 101 },
+  { phrases: ['good morning'], filename: 'good-morning-peak.webp', priority: 100 },
+  { phrases: ['wall sit'], filename: 'wall-sit-main.webp', priority: 100 },
+  { phrases: ['box jump'], filename: 'box-jump-peak.webp', priority: 100 },
+  { phrases: ['flutter kick'], filename: 'flutter-kicks-peak.webp', priority: 100 },
+  { phrases: ['superman'], filename: 'superman-peak.webp', priority: 100 },
+  { phrases: ['clamshell'], filename: 'clamshells-peak.webp', priority: 100 },
+  { phrases: ['overhead tricep extension', 'overhead triceps extension', 'overhead dumbbell tricep extension'], filename: 'overhead-tricep-extension-peak.webp', priority: 100 },
+  { phrases: ['dead hang', 'bar hang', 'static hang'], filename: 'dead-hang-main.webp', priority: 100 },
+  { phrases: ['kettlebell press'], filename: 'double-kettlebell-overhead-press-peak.webp', priority: 95 },
+  { phrases: ['glute ham raise', 'ghr'], filename: 'nordic-hamstring-curl-peak.webp', priority: 100 },
+  { phrases: ['reverse hyper'], filename: 'back-extension-peak.webp', priority: 100 },
+  { phrases: ['rack pull'], filename: 'deadlift-peak.webp', priority: 100 },
+  { phrases: ['meadows row', 'yates row'], filename: 'barbell-row-peak.webp', priority: 100 },
+  { phrases: ['rope pushdown', 'triceps pushdown', 'pushdown'], filename: 'tricep-pushdown-peak.webp', priority: 70 },
+  { phrases: ['band chest fly', 'ring fly'], filename: 'cable-fly-peak.webp', priority: 100 },
+  { phrases: ['ring rollout'], filename: 'ab-wheel-rollout-peak.webp', priority: 100 },
+  { phrases: ['lu raise'], filename: 'lateral-raise-peak.webp', priority: 100 },
+  { phrases: ['hip abduction'], filename: 'hip-abduction-peak.webp', priority: 75 },
+  { phrases: ['chest press'], filename: 'chest-press-machine-peak.webp', priority: 75 },
+  { phrases: ['shoulder press'], filename: 'dumbbell-shoulder-press-peak.webp', priority: 75 },
+  { phrases: ['seated row', 'machine lat row', 'cable row', 'machine row'], filename: 'wide-grip-seated-cable-row-peak.webp', priority: 75 },
+  { phrases: ['y raise', 'w raise', 'ytwl', 'ytw', 't raise'], filename: 'lateral-raise-peak.webp', priority: 100 },
+  { phrases: ['pallof press', 'pallof'], filename: 'cable-chest-press-peak.webp', priority: 100 },
+  { phrases: ['woodchop', 'woodchopper', 'wood chop', 'wood chopper'], filename: 'kettlebell-rotational-lunge-peak.webp', priority: 100 },
+  { phrases: ['v sit', 'v up'], filename: 'russian-twist-start.webp', priority: 100 },
+  { phrases: ['windshield wiper'], filename: 'hanging-leg-raise-peak.webp', priority: 100 },
+  { phrases: ['pull through'], filename: 'kettlebell-swing-start.webp', priority: 100 },
+  { phrases: ['step up'], filename: 'step-up-main.webp', priority: 100 },
+  { phrases: ['wall ball'], filename: 'wall-balls-main.webp', priority: 100 },
+  { phrases: ['high knee'], filename: 'cardio-running-main.webp', priority: 100 },
+  { phrases: ['butt kick'], filename: 'cardio-running-main.webp', priority: 100 },
+  { phrases: ['jump rope', 'skipping', 'double under'], filename: 'jump-rope-main.webp', priority: 100 },
+  { phrases: ['rowing machine', 'rowing', 'rower', 'row erg', 'erg row'], filename: 'rowing-machine-main.webp', priority: 100 },
+  { phrases: ['stationary bike', 'exercise bike', 'spin bike', 'cycling', 'spin class'], filename: 'stationary-bike-main.webp', priority: 95 },
+  { phrases: ['skierg', 'ski erg'], filename: 'ski-erg-main.webp', priority: 100 },
+  { phrases: ['sled push'], filename: 'sled-push-main.webp', priority: 100 },
+  { phrases: ['sled pull', 'sled drag'], filename: 'sled-pull-main.webp', priority: 100 },
+];
 
 // ─── PRIORITY-BASED RULES ──────────────────────────────────────────
 type ImageRule = {
@@ -354,7 +466,7 @@ const IMAGE_RULES: ImageRule[] = [
   },
   {
     phrases: ['barbell shrug'],
-    filename: 'barbell-shrug-peak.webp',
+    filename: 'shrug-peak.webp',
     priority: 90,
   },
   {
@@ -612,9 +724,19 @@ const IMAGE_RULES: ImageRule[] = [
 
   // Olympic & Full Body
   {
-    phrases: ['walk', 'treadmill', 'run', 'jog'],
-    filename: 'air-bike-main.webp', // Best general cardio fallback
-    priority: 50,
+    phrases: ['air bike', 'assault bike', 'echo bike', 'fan bike'],
+    filename: 'air-bike-main.webp',
+    priority: 100,
+  },
+  {
+    phrases: ['walk', 'walking', 'hike', 'march'],
+    filename: 'cardio-walking-main.webp',
+    priority: 55,
+  },
+  {
+    phrases: ['run', 'running', 'jog', 'sprint', 'treadmill', 'repeats', 'zone 2', 'endurance', 'tempo run', 'intervals', 'fartlek'],
+    filename: 'cardio-running-main.webp',
+    priority: 55,
   },
   {
     phrases: ['clean and jerk'],
@@ -654,11 +776,6 @@ const IMAGE_RULES: ImageRule[] = [
 
   // Flexibility & Mobility
   {
-    phrases: ['childs pose', 'child pose', 'meditation', 'breathing', 'bhastrika', 'namaskar', 'yoga', 'nadi shodhana', 'pranayama', 'salutation', 'downward dog', 'cobra', 'pigeon', 'fold', 'twist', 'bird dog', 'opener', 'pose', 'sanchalana', 'skandha chakra', 'dhyana', 'balloon breath'],
-    filename: 'bench-childs-pose-main.webp',
-    priority: 90,
-  },
-  {
     phrases: ['chest stretch'],
     filename: 'bench-chest-stretch-main.webp',
     priority: 90,
@@ -673,9 +790,22 @@ const IMAGE_RULES: ImageRule[] = [
     filename: 'bench-hamstring-stretch-main.webp',
     priority: 90,
   },
+  { phrases: ['shoulder stretch', 'cross body stretch', 'dislocation', 'dislocate'], filename: 'banded-shoulder-stretch-main.webp', priority: 90 },
+  { phrases: ['triceps stretch', 'tricep stretch'], filename: 'banded-triceps-stretch-main.webp', priority: 90 },
+  { phrases: ['rear delt stretch'], filename: 'banded-rear-delt-stretch-main.webp', priority: 90 },
+  { phrases: ['calf stretch'], filename: 'bench-calf-stretch-main.webp', priority: 90 },
+  { phrases: ['quad stretch', 'couch stretch', 'hip flexor stretch', 'hip flexor'], filename: 'bench-couch-stretch-main.webp', priority: 90 },
+  { phrases: ['figure 4', 'figure four', 'glute stretch', 'piriformis'], filename: 'bench-figure-4-glute-stretch-main.webp', priority: 90 },
+  { phrases: ['adductor stretch', 'groin stretch', 'frog stretch'], filename: 'bench-adductor-stretch-main.webp', priority: 90 },
+  { phrases: ['it band'], filename: 'banded-it-band-stretch-main.webp', priority: 90 },
+  { phrases: ['ankle'], filename: 'bench-ankle-stretch-main.webp', priority: 85 },
+  { phrases: ['foam roll', 'foam rolling', 'foam roller'], filename: 'foam-roll-main.webp', priority: 95 },
+  { phrases: ['thoracic rotation', 'thoracic', 'open book'], filename: 'thoracic-rotation-main.webp', priority: 95 },
+  { phrases: ['wall slide'], filename: 'wall-slides-main.webp', priority: 95 },
+  { phrases: ['arm circle', 'wrist circle', 'circles', 'circle'], filename: 'arm-circles-main.webp', priority: 60 },
   {
-    phrases: ['circle', 'activation', 'prep', 'dislocation', 'swing', 'warm up', 'cooldown', 'stretching', 'stretch', 'mobility', 'foam rolling'],
-    filename: 'bench-chest-stretch-main.webp', // Generic mobility fallback
+    phrases: ['activation', 'prep', 'swing', 'warm up', 'cooldown', 'cool down', 'stretching', 'stretch', 'mobility', 'dynamic drills', 'drills'],
+    filename: 'standing-stretch-main.webp', // Generic mobility fallback
     priority: 50,
   },
   
@@ -686,12 +816,17 @@ const IMAGE_RULES: ImageRule[] = [
     priority: 90,
   },
   {
-    phrases: ['front lever', 'back lever', 'german hang'],
+    phrases: ['front lever'],
+    filename: 'front-lever-main.webp',
+    priority: 96,
+  },
+  {
+    phrases: ['back lever', 'german hang'],
     filename: 'inverted-row-peak.webp', // Closest horizontal hang
     priority: 95,
   },
   {
-    phrases: ['elbow lever', 'frog stand'],
+    phrases: ['elbow lever'],
     filename: 'planche-main.webp',
     priority: 95,
   },
@@ -702,7 +837,7 @@ const IMAGE_RULES: ImageRule[] = [
   },
   {
     phrases: ['handstand'],
-    filename: 'handstand-push-ups-peak.webp', // No generic handstand, use HSPU
+    filename: 'handstand-main.webp',
     priority: 90,
   },
   {
@@ -715,6 +850,8 @@ const IMAGE_RULES: ImageRule[] = [
     filename: 'planche-main.webp',
     priority: 90,
   },
+  ...YOGA_RULES,
+  ...EXTRA_RULES,
 ];
 
 // Sort rules dynamically so higher priority rules are evaluated first
@@ -724,23 +861,33 @@ const SORTED_RULES = [...IMAGE_RULES].sort((a, b) => b.priority - a.priority);
  * Resolve an exercise name to its visual filename.
  */
 export function getExerciseImageFilename(name: string, muscleGroup?: string): string {
+  return getExerciseImageMatch(name, muscleGroup).file;
+}
+
+/** The image for an exercise and how it was found ('rule'/'override' = specific to the exercise). */
+export function getExerciseImageMatch(name: string, muscleGroup?: string): { file: string; kind: 'override' | 'rule' | 'muscle' | 'default' } {
   const normalized = normalizeExerciseName(name);
 
   // 1. Check explicit overrides first
   if (EXERCISE_OVERRIDES[normalized]) {
-    return EXERCISE_OVERRIDES[normalized];
+    return { file: EXERCISE_OVERRIDES[normalized], kind: 'override' };
   }
 
   // 2. Check phrase rules
   for (const rule of SORTED_RULES) {
     for (const phrase of rule.phrases) {
       if (hasPhrase(normalized, phrase)) {
-        return rule.filename;
+        return { file: rule.filename, kind: 'rule' };
       }
     }
   }
 
   // 3. Fallback based on muscleGroup from the exercise library
+  const fallback = muscleFallback(muscleGroup);
+  return fallback ? { file: fallback, kind: 'muscle' } : { file: 'default', kind: 'default' };
+}
+
+function muscleFallback(muscleGroup?: string): string | null {
   if (muscleGroup) {
     const mg = muscleGroup.toLowerCase();
     if (mg === 'chest') return 'bench-press-peak.webp';
@@ -757,5 +904,5 @@ export function getExerciseImageFilename(name: string, muscleGroup?: string): st
     if (mg === 'traps') return 'shrug-peak.webp';
   }
 
-  return 'default';
+  return null;
 }
