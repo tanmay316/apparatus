@@ -1,6 +1,7 @@
 import { db } from '@/lib/firebase';
 import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 import type { LibraryExercise } from '@/types';
+import { YOGA_LIBRARY } from '@/data/yoga';
 
 interface CompactExercise {
   name: string;
@@ -2060,7 +2061,8 @@ export const COMPACT_LIBRARY: CompactExercise[] = [
     equipment: 'Pull-up Bar',
     difficulty: 'intermediate',
     tags: ['back', 'explosive', 'plyo']
-  }
+  },
+  ...YOGA_LIBRARY,
 ];
 
 /** Fetch all library exercises */
@@ -2279,6 +2281,9 @@ function eqEstimate(equipment: string): number {
 
 function estimateMet(name: string, equipment: string): number {
   const n = name.toLowerCase();
+  if (/namaskar|salutation/.test(n)) return 3.3;
+  if (/pranayama|dhyana|meditation|nidra|breath/.test(n)) return 1.3;
+  if (/asana|pose\b|sanchalana|skandha/.test(n)) return 2.5;
   if (/(squat|deadlift|lunge|burpee|muscle|pull-up|chin-up|dip|push-up|row|clean|snatch)/i.test(n)) return 6;
   if (/(run|jump|sprint|climber)/i.test(n)) return 7;
   if (/(stretch|mobility|breath|warm-up|dislocation)/i.test(n)) return 2.8;

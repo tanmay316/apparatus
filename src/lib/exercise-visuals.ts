@@ -654,7 +654,7 @@ const IMAGE_RULES: ImageRule[] = [
 
   // Flexibility & Mobility
   {
-    phrases: ['childs pose', 'child pose', 'meditation', 'breathing', 'bhastrika', 'namaskar', 'yoga', 'nadi shodhana', 'pranayama', 'salutation', 'downward dog', 'cobra', 'pigeon', 'fold', 'twist', 'bird dog', 'opener'],
+    phrases: ['childs pose', 'child pose', 'meditation', 'breathing', 'bhastrika', 'namaskar', 'yoga', 'nadi shodhana', 'pranayama', 'salutation', 'downward dog', 'cobra', 'pigeon', 'fold', 'twist', 'bird dog', 'opener', 'pose', 'sanchalana', 'skandha chakra', 'dhyana', 'balloon breath'],
     filename: 'bench-childs-pose-main.webp',
     priority: 90,
   },

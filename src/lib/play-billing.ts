@@ -12,15 +12,17 @@ export async function playAccountId(uid: string): Promise<string> {
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Localised prices from Google Play, keyed by base plan id (monthly, yearly and any coupon plans). */
-export async function loadPlayPrices(): Promise<Record<string, string>> {
+export interface PlayPrice { priceString: string; price: number; currencyCode: string }
+
+/** Localised prices from Google Play, keyed by base plan id (monthly, sixmonth, yearly and any coupon plans). */
+export async function loadPlayPrices(): Promise<Record<string, PlayPrice>> {
   const { isBillingSupported } = await NativePurchases.isBillingSupported();
   if (!isBillingSupported) return {};
   const { products } = await NativePurchases.getProducts({ productIdentifiers: [PRO_PRODUCT_ID], productType: PURCHASE_TYPE.SUBS });
-  const prices: Record<string, string> = {};
+  const prices: Record<string, PlayPrice> = {};
   // One entry per offer; the base offer (no offerId) carries the regular price.
   for (const p of [...products].sort((a, b) => Number(!!a.offerId) - Number(!!b.offerId))) {
-    if (p.identifier && !prices[p.identifier]) prices[p.identifier] = p.priceString;
+    if (p.identifier && !prices[p.identifier]) prices[p.identifier] = { priceString: p.priceString, price: p.price, currencyCode: p.currencyCode };
   }
   return prices;
 }

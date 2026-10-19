@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Crown, ExternalLink, Loader2, RotateCcw, Sparkles, Ticket } from 'lucide-react';
 import { SettingRow, SettingsSection } from '@/components/settings/SettingsLayout';
-import { CAN_PURCHASE, CAN_UPSELL, PRO_PRICE_LABEL, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
+import { CAN_PURCHASE, CAN_UPSELL, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
+import { proPriceLabel, useProPricing } from '@/lib/pro-pricing';
 import { useUIStore } from '@/stores/ui-store';
 import { getBillingStatus } from '@/services/billing';
 import { manageProSubscription, restorePro } from '@/lib/play-billing';
@@ -21,13 +22,14 @@ export function ProSettings() {
   const isPro = useIsPro();
   const { showToast } = useUIStore();
   const [restoring, setRestoring] = useState(false);
+  const priceLabel = proPriceLabel(useProPricing());
 
   if (!enabled && !isPro) return null;
 
   const renews = entitlement.renewsAt ? new Date(entitlement.renewsAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null;
   const cancelled = entitlement.status === 'cancelled';
   const viaCoupon = entitlement.status === 'granted';
-  const planLabel = comped ? 'Complimentary' : viaCoupon ? 'Coupon' : entitlement.plan === 'yearly' ? 'Yearly' : entitlement.plan === 'monthly' ? 'Monthly' : 'Pro';
+  const planLabel = comped ? 'Complimentary' : viaCoupon ? 'Coupon' : entitlement.plan === 'yearly' ? 'Yearly' : entitlement.plan === 'sixmonth' ? '6-month' : entitlement.plan === 'monthly' ? 'Monthly' : 'Pro';
   const viaPlay = isPro && !comped && !viaCoupon && !!entitlement.subscriptionId;
 
   const handleRestore = async () => {
@@ -50,7 +52,7 @@ export function ProSettings() {
         description={isPro
           ? comped ? 'Pro is on the house for this account.'
             : renews ? (viaCoupon ? `Free Pro until ${renews}` : cancelled ? `Cancelled · Pro until ${renews}` : `Renews on ${renews}`) : 'Active'
-          : CAN_PURCHASE ? `${PRO_PRICE_LABEL}, billed through Google Play. Cancel anytime.` : CAN_UPSELL ? `${PRO_PRICE_LABEL} in the Android app, or redeem a code.` : 'Have a code? Redeem it here.'}
+          : CAN_PURCHASE ? `${priceLabel}, billed through Google Play. Cancel anytime.` : CAN_UPSELL ? `${priceLabel} in the Android app, or redeem a code.` : 'Have a code? Redeem it here.'}
       >
         {isPro ? (
           <span className="dx-pill dx-pill--accent !h-7 !px-3"><Crown size={12} /> Pro</span>

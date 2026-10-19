@@ -43,7 +43,7 @@ import { SplashScreen } from '@capacitor/splash-screen';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import { MedalCelebrationModal } from '@/components/community/MedalCelebrationModal';
 import { SubscriptionSync } from '@/components/subscription/SubscriptionSync';
-import { PaywallSheet } from '@/components/subscription/PaywallSheet';
+import { PaywallNavigator } from '@/components/subscription/PaywallNavigator';
 import type { AppNotificationItem } from '@/types';
 import { BRAND } from '@/lib/brand';
 
@@ -78,6 +78,7 @@ const AchievementsPage = lazy(() => import('@/pages/AchievementsPage').then(m =>
 const SkillsPage = lazy(() => import('@/pages/SkillsPage').then(m => ({ default: m.SkillsPage })));
 const MeasurementsPage = lazy(() => import('@/pages/MeasurementsPage').then(m => ({ default: m.MeasurementsPage })));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const ProPage = lazy(() => import('@/pages/ProPage').then(m => ({ default: m.ProPage })));
 const GuidePage = lazy(() => import('@/pages/GuidePage').then(m => ({ default: m.GuidePage })));
 const CardioTracker = lazy(() => loadCardio().then(m => ({ default: m.CardioTracker })));
 const SinglePostPage = lazy(() => import('@/pages/SinglePostPage').then(m => ({ default: m.SinglePostPage })));
@@ -491,6 +492,7 @@ export function App() {
               <Route path="profile/:username" element={<ProfilePage />} />
               <Route path="compare/:uid" element={<ComparePage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="pro" element={<ProPage />} />
               <Route path="admin" element={<AdminPage />} />
             <Route path="marketplace" element={<MarketplacePage />} />              <Route path="marketplace/orders" element={<OrdersPage />} />
               <Route path="seller" element={<ErrorBoundary><SellerDashboardPage /></ErrorBoundary>} />
@@ -504,7 +506,7 @@ export function App() {
         <UpdatePopup />
         <MedalCelebrationModal />
         <SubscriptionSync />
-        <PaywallSheet />
+        <PaywallNavigator />
       </BrowserRouter>
     </QueryClientProvider>
   );

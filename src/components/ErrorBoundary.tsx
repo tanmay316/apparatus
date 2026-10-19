@@ -1,4 +1,5 @@
 import React from 'react';
+import { isChunkLoadError, reloadForStaleChunk } from '@/lib/stale-chunk';
 
 export class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
   constructor(props: {children: React.ReactNode}) {
@@ -11,6 +12,7 @@ export class ErrorBoundary extends React.Component<{children: React.ReactNode}, 
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    if (isChunkLoadError(error) && reloadForStaleChunk()) return;
     console.error("ErrorBoundary caught an error:", error, errorInfo);
   }
 

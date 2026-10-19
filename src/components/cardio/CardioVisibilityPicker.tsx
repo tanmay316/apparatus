@@ -44,11 +44,11 @@ export function CardioVisibilityPicker({ value, onChange, disabled, className = 
             aria-checked={on}
             disabled={disabled}
             onClick={() => !on && onChange(v)}
-            className={`h-9 rounded-xl flex items-center justify-center gap-1.5 text-[12.5px] font-semibold transition-colors ${
+            className={`min-w-0 min-h-9 px-2 py-1.5 rounded-xl flex items-center justify-center gap-1.5 text-[12.5px] leading-tight font-semibold transition-colors ${
               on ? 'bg-[var(--dx-card,var(--card))] text-[var(--text)] shadow-sm' : 'text-[var(--muted)]'
             }`}
           >
-            <Icon size={14} /> {label}
+            <Icon size={14} className="shrink-0" /> <span className="truncate">{label}</span>
           </button>
         );
       })}

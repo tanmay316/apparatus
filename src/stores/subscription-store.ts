@@ -8,8 +8,6 @@ import { PLAY_BILLING } from '@/lib/play-billing';
 export const CAN_PURCHASE = PLAY_BILLING;
 /** Pro locks, badges and the paywall (codes on web) are shown everywhere except the iPhone app (App Store rules). */
 export const CAN_UPSELL = Capacitor.getPlatform() !== 'ios';
-/** Shown before Google Play has returned the localised price. */
-export const PRO_PRICE_LABEL = '₹99/month';
 const FREE_LIMIT_MESSAGE = "You've reached the free limit for now. It resets soon.";
 
 export interface Entitlement {
@@ -32,7 +30,8 @@ interface SubscriptionState {
   /** Server-granted Pro (team / giveaway emails) that has no entitlement doc. */
   comped: boolean;
   usage: Record<string, QuotaUsage>;
-  paywall: { open: boolean; reason?: string };
+  /** Open = the Pro page (/pro) is showing; PaywallNavigator routes there. */
+  paywall: { open: boolean; reason?: string; redeem?: boolean };
   setStatus: (status: BillingStatus, uid?: string) => void;
   /** Last known billing state for this account, used until /billing/status answers. */
   restore: (uid: string) => void;
@@ -91,7 +90,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       return;
     }
     if (opts?.auto && (get().paywall.open || Date.now() - paywallClosedAt < AUTO_REOPEN_QUIET_MS)) return;
-    set({ paywall: { open: true, reason } });
+    set({ paywall: { open: true, reason, redeem: !!opts?.redeem } });
   },
   closePaywall: () => {
     paywallClosedAt = Date.now();

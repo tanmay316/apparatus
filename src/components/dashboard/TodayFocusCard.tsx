@@ -78,7 +78,7 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
       <p className="mt-1 text-[13px] opacity-75 truncate">{activePlan.title}</p>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] opacity-90">
-        <span className="inline-flex items-center gap-1.5"><Clock size={14} className="opacity-75" /> ~{todayDay.time}</span>
+        <span className="inline-flex items-center gap-1.5"><Clock size={14} className="opacity-75" /> ~{String(todayDay.time ?? '').replace(/^~+\s*/, '')}</span>
         <span className="inline-flex items-center gap-1.5"><Target size={14} className="opacity-75" /> {todayDay.skill || 'General'}</span>
         <span className="inline-flex items-center gap-1.5"><Layers size={14} className="opacity-75" /> {allExercises.length} exercises</span>
       </div>
@@ -98,10 +98,10 @@ export function TodayFocusCard({ activePlan, activeDays, todayWorkouts, currentD
       <div className="mt-5 flex items-center gap-2.5">
         <Link
           to={`/workout/${activePlan.id}/day/${todayDay.id}`}
-          className="dx-hero-btn flex-1"
+          className="dx-hero-btn flex-1 min-w-0"
           title={ctaLabel}
         >
-          <CtaIcon size={17} fill={wasCompletedToday ? 'none' : 'currentColor'} /> {ctaLabel}
+          <CtaIcon size={17} className="shrink-0" fill={wasCompletedToday ? 'none' : 'currentColor'} /> <span className="truncate">{ctaLabel}</span>
         </Link>
         <Link to="/explore" className="dx-hero-icon" title="Explore Programs & Community Workouts" aria-label="Explore programs">
           <Compass size={19} />

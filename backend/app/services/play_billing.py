@@ -1,7 +1,7 @@
 """
 Pro subscriptions through Google Play Billing.
 
-The app buys the "pro" subscription (base plan "monthly" or "yearly") with the user's hashed uid as
+The app buys the "pro" subscription (base plan "monthly", "sixmonth" or "yearly") with the user's hashed uid as
 the obfuscated account id, then sends the purchase token here. We read the subscription from the
 Play Developer API (never trust the client), bind the token to that one account, acknowledge it and
 write users/{uid}/private/entitlement. Renewals, cancellations and refunds arrive as Real-time
@@ -210,6 +210,89 @@ def save(uid: str, token: str, sub: dict) -> dict:
         except PlayError as exc:
             logger.warning("Stopping renewal of a discount plan failed for %s: %s", uid, exc.message)
     return entitlement
+
+
+# ─── Admin: Pro prices in Play Console ────────────────────────────────────
+
+def _console(method: str, path: str, body: Optional[dict] = None, params: Optional[dict] = None) -> dict:
+    """Admin-only Play Developer API call; Google's own error text is passed on to the admin."""
+    url = f"{API}/{quote(settings.GOOGLE_PLAY_PACKAGE, safe='')}{path}"
+    resp = requests.request(method, url, headers={"Authorization": f"Bearer {_access_token()}"}, json=body, params=params, timeout=30)
+    if resp.status_code >= 400:
+        try:
+            detail = str(resp.json()["error"]["message"])[:300]
+        except Exception:
+            detail = resp.text[:300]
+        logger.warning("Play console %s %s -> %s %s", method, path, resp.status_code, detail)
+        raise PlayError(502 if resp.status_code >= 500 else 400, f"Google Play: {detail}")
+    return resp.json() if resp.content else {}
+
+
+def _inr_money(amount: int) -> dict:
+    return {"currencyCode": "INR", "units": str(int(amount)), "nanos": 0}
+
+
+def _inr_of(config: Optional[dict]) -> Optional[int]:
+    price = (config or {}).get("price") or {}
+    if price.get("currencyCode") != "INR":
+        return None
+    return int(price.get("units") or 0) + round(int(price.get("nanos") or 0) / 1e9)
+
+
+def _pro_product_path() -> str:
+    return f"/subscriptions/{quote(settings.GOOGLE_PLAY_PRO_PRODUCT_ID, safe='')}"
+
+
+def play_plan_prices() -> dict:
+    """India price and state of every base plan of the Pro subscription, as Play sells it now."""
+    sub = _console("GET", _pro_product_path())
+    out = {}
+    for bp in sub.get("basePlans") or []:
+        india = next((c for c in bp.get("regionalConfigs") or [] if c.get("regionCode") == "IN"), None)
+        out[str(bp.get("basePlanId"))] = {"inr": _inr_of(india), "state": bp.get("state")}
+    return out
+
+
+def set_play_prices(prices: dict[str, int]) -> dict[str, str]:
+    """Sets each base plan's India price and converts it for every other region the plan is sold in.
+    Play keeps existing subscribers on the price they signed up at; new buyers pay the new price."""
+    sub = _console("GET", _pro_product_path())
+    results: dict[str, str] = {}
+    for bp in sub.get("basePlans") or []:
+        plan = str(bp.get("basePlanId"))
+        if plan not in prices:
+            continue
+        inr = int(prices[plan])
+        configs = bp.setdefault("regionalConfigs", [])
+        india = next((c for c in configs if c.get("regionCode") == "IN"), None)
+        if india and _inr_of(india) == inr:
+            results[plan] = "unchanged"
+            continue
+        converted = _console("POST", "/pricing:convertRegionPrices", {"price": _inr_money(inr)})
+        regional = converted.get("convertedRegionPrices") or {}
+        for cfg in configs:
+            new_price = (regional.get(cfg.get("regionCode")) or {}).get("price")
+            if cfg.get("regionCode") != "IN" and new_price:
+                cfg["price"] = new_price
+        if india:
+            india["price"] = _inr_money(inr)
+        else:
+            configs.append({"regionCode": "IN", "newSubscriberAvailability": True, "price": _inr_money(inr)})
+        other = bp.get("otherRegionsConfig")
+        other_price = converted.get("convertedOtherRegionsPrice") or {}
+        if other and other_price.get("usdPrice") and other_price.get("eurPrice"):
+            other["usdPrice"] = other_price["usdPrice"]
+            other["eurPrice"] = other_price["eurPrice"]
+        results[plan] = "updated"
+    missing = [p for p in prices if p not in results]
+    if missing:
+        raise PlayError(400, f"Add the base plan{'s' if len(missing) > 1 else ''} {', '.join(missing)} to the \"{settings.GOOGLE_PLAY_PRO_PRODUCT_ID}\" subscription in Play Console first.")
+    if "updated" in results.values():
+        _console("PATCH", _pro_product_path(), sub, params={
+            "updateMask": "basePlans",
+            "regionsVersion.version": settings.GOOGLE_PLAY_REGIONS_VERSION,
+        })
+    return results
 
 
 def _bound_to(token: str) -> Optional[str]:

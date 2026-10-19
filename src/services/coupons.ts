@@ -15,7 +15,7 @@ export interface Coupon {
   basePlanId?: string;
   /** Legacy, unused. */
   offerId?: string;
-  plan: 'any' | 'monthly' | 'yearly';
+  plan: 'any' | 'monthly' | 'sixmonth' | 'yearly';
   label: string;
   /** 0 = unlimited. */
   maxRedemptions: number;
@@ -26,9 +26,9 @@ export interface Coupon {
 }
 
 export const COUPON_CODE_RE = /^[A-Z0-9][A-Z0-9_-]{2,31}$/;
-/** Same rule as the backend: Play base plan id, never the regular monthly/yearly plans. */
+/** Same rule as the backend: Play base plan id, never one of the regular plans. */
 export const BASE_PLAN_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
-export const isDiscountPlanId = (id: string) => BASE_PLAN_RE.test(id) && id !== 'monthly' && id !== 'yearly';
+export const isDiscountPlanId = (id: string) => BASE_PLAN_RE.test(id) && !['monthly', 'sixmonth', 'yearly'].includes(id);
 
 /** 10 random chars without look-alikes (0/O, 1/I) - hard to guess, easy to read out. */
 export function generateCouponCode(prefix = ''): string {
@@ -56,7 +56,7 @@ export async function createCoupon(input: Omit<Coupon, 'redeemedCount' | 'create
   await setDoc(ref, {
     code,
     type: discount ? 'discount' : 'free',
-    ...(discount ? { basePlanId, plan: input.plan === 'yearly' ? 'yearly' : 'monthly' } : { days: input.days, plan: 'any' }),
+    ...(discount ? { basePlanId, plan: input.plan === 'yearly' || input.plan === 'sixmonth' ? input.plan : 'monthly' } : { days: input.days, plan: 'any' }),
     label: input.label.trim().slice(0, 120),
     maxRedemptions: Math.max(0, Math.floor(input.maxRedemptions || 0)),
     redeemedCount: 0,

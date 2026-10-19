@@ -1,4 +1,4 @@
-import { db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { waitForPendingWrites, writeBatch, type DocumentReference } from 'firebase/firestore';
 
 /** Browser/WebView believes there is no network. */
@@ -18,7 +18,7 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /** Errors that mean "can't reach the server", not "the write is invalid". */
 export function isConnectivityError(err: unknown): boolean {
   const code = (err as { code?: string } | null)?.code;
-  return code === 'unavailable' || code === 'deadline-exceeded' || isOffline();
+  return code === 'unavailable' || code === 'deadline-exceeded' || code === 'auth/network-request-failed' || isOffline();
 }
 
 /**
@@ -66,6 +66,10 @@ export async function commitSession<T>(
 ): Promise<T | null> {
   if (!isOffline()) {
     try {
+      // A transaction whose token refresh fails hangs inside the Firestore SDK (internal assertion),
+      // so make sure the token is reachable first.
+      const user = auth.currentUser;
+      if (user) await withTimeout(user.getIdToken(), ONLINE_COMMIT_MS);
       return await withTimeout(online(), ONLINE_COMMIT_MS);
     } catch (err) {
       if (!isConnectivityError(err)) throw err;

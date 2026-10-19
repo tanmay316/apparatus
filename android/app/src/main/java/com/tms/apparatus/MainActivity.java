@@ -12,6 +12,9 @@ import android.view.View;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+    /** Largest system font scale the WebView follows; beyond it fixed-size buttons and tabs overflow. */
+    private static final int MAX_TEXT_ZOOM = 115;
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(WorkoutLocationPlugin.class);
@@ -21,6 +24,10 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         if (getBridge() != null) {
             android.webkit.WebView webView = getBridge().getWebView();
+            if (webView != null) {
+                int systemZoom = Math.round(getResources().getConfiguration().fontScale * 100);
+                webView.getSettings().setTextZoom(Math.min(MAX_TEXT_ZOOM, systemZoom));
+            }
             AppWindowPlugin.applySaved(this, webView);
             // SystemBars' first setStyle (posted during load) repaints the decor; reapply after it.
             if (webView != null) webView.post(() -> AppWindowPlugin.applySaved(this, webView));

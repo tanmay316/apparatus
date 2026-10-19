@@ -41,10 +41,11 @@ interface Props {
   onClose: () => void;
 }
 
-type ShareLayout = 'map' | 'stack' | 'bold' | 'summary' | 'splits' | 'photo' | 'editorial' | 'route';
+type ShareLayout = 'map' | 'dashboard' | 'stack' | 'bold' | 'summary' | 'splits' | 'photo' | 'editorial' | 'route';
 
 const LAYOUT_OPTIONS: { id: ShareLayout; label: string; short: string }[] = [
   { id: 'map', label: 'Map', short: 'Map' },
+  { id: 'dashboard', label: 'Stats + Map', short: 'Full' },
   { id: 'stack', label: 'Stats Sticker', short: 'Stats' },
   { id: 'bold', label: 'Bold', short: 'Bold' },
   { id: 'summary', label: 'Summary', short: 'Summary' },
@@ -75,9 +76,15 @@ const AVAILABLE_THEMES = Object.keys(MAP_THEMES) as MapThemeKey[];
 const MAP_PREVIEW: Partial<Record<MapThemeKey, { base: string; road: string; park: string; water: string }>> = {
   street: { base: '#f2efe9', road: '#ffffff', park: '#cfe8c3', water: '#aad3df' },
   dark: { base: '#1f1f1f', road: '#3a3a3a', park: '#272727', water: '#141414' },
+  midnight: { base: '#151b23', road: '#2f3a49', park: '#1a2a22', water: '#0a1220' },
   light: { base: '#ececec', road: '#ffffff', park: '#e0e0e0', water: '#d4d4d4' },
+  mono: { base: '#e6e6e6', road: '#ffffff', park: '#d0d0d0', water: '#b8b8b8' },
   satellite: { base: '#34402c', road: '#565a47', park: '#233722', water: '#15283a' },
+  hybrid: { base: '#34402c', road: '#f2d06b', park: '#233722', water: '#15283a' },
   terrain: { base: '#e8e4d8', road: '#ffffff', park: '#c9dcb0', water: '#a7c8de' },
+  topo: { base: '#f1eee4', road: '#f5c26b', park: '#c5dca0', water: '#9cc9e3' },
+  vintage: { base: '#ede0c4', road: '#fbf5e6', park: '#cfd3a0', water: '#b9cdbf' },
+  blueprint: { base: '#0b2545', road: '#5c8dc4', park: '#12345e', water: '#081a33' },
   cyclosm: { base: '#f2efe9', road: '#b07acb', park: '#b9dfa6', water: '#aad3df' },
 };
 
@@ -309,6 +316,23 @@ function LayoutThumb({ id, accent }: { id: ShareLayout; accent: string }) {
         </>
       );
       break;
+    case 'dashboard':
+      body = (
+        <>
+          <rect width={W} height={H} fill="#0B0B0D" />
+          <rect width={W} height={42} fill="#2a2d33" />
+          <path d="M0 16 L60 10 M0 32 L60 36 M20 0 L16 42 M42 0 L46 42" stroke="rgba(255,255,255,0.12)" strokeWidth={2.5} />
+          {route(accent, 2.4, 'M12 34 C 18 20, 28 28, 32 16 S 46 10, 48 6')}
+          {line(6, 47, 22, '#fff', 5)}
+          {[0, 1].map(r => [0, 1, 2].map(i => (
+            <g key={`${r}-${i}`}>
+              {line(6 + i * 17, 58 + r * 13, 10, 'rgba(255,255,255,0.4)', 2)}
+              {line(6 + i * 17, 62 + r * 13, 14, i === 0 && r === 0 ? accent : '#fff', 4)}
+            </g>
+          )))}
+        </>
+      );
+      break;
     case 'stack':
       body = (
         <>
@@ -536,6 +560,20 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
     maxSpeed: (data.maxSpeedKmh || 0) > 0 ? { label: 'Max speed', value: data.maxSpeedKmh!.toFixed(1), unit: 'km/h' } : null,
   };
   const trio = [m.pace, m.time, m.elevation && isRide ? m.elevation : m.calories];
+
+  const fullSplits = splits.filter(s => !s.partial);
+  const bestSplit = fullSplits.length > 1 ? fullSplits.reduce((a, b) => (b.paceSec < a.paceSec ? b : a)) : null;
+  const kpis = ([
+    m.time,
+    m.pace,
+    m.calories,
+    m.elevation,
+    isRide ? m.maxSpeed : m.steps,
+    bestSplit ? { label: isRide ? `Best ${splitKm} km` : 'Best km', value: isRide ? bestSplit.kmh.toFixed(1) : paceText(bestSplit.paceSec), unit: isRide ? 'km/h' : '/km' } : null,
+    isRide
+      ? (km > 0 && sec > 0 ? { label: 'Avg pace', value: paceText(sec / km), unit: '/km' } : null)
+      : (speed > 0 ? { label: 'Avg speed', value: speed.toFixed(1), unit: 'km/h' } : null),
+  ].filter(Boolean) as { label: string; value: string; unit?: string }[]).slice(0, 6);
 
   // ─── Responsive preview scaling ───
   const scale = stageSize.w > 0 && stageSize.h > 0 ? Math.min(stageSize.w / DESIGN_W, stageSize.h / designH, 1.25) : 0;
@@ -766,13 +804,13 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
                 cardioType={data.type}
                 hideMarkers
                 recenterTrigger={isSquare ? 1 : 0}
-                mapPaddingTopLeft={[34, isSquare ? 80 : 150]}
-                mapPaddingBottomRight={[34, isSquare ? 130 : 250]}
+                mapPaddingTopLeft={[34, isSquare ? 70 : 120]}
+                mapPaddingBottomRight={[34, isSquare ? 120 : 220]}
               />
             ) : noRoute('rgba(255,255,255,0.3)')}
           </div>
-          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: isSquare ? 100 : 190, zIndex: 1000, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0) 100%)' }} />
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: isSquare ? 170 : 320, zIndex: 1000, pointerEvents: 'none', background: 'linear-gradient(0deg, rgba(0,0,0,0.94) 0%, rgba(0,0,0,0.72) 45%, rgba(0,0,0,0) 100%)' }} />
+          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: isSquare ? 84 : 140, zIndex: 1000, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0.22) 60%, rgba(0,0,0,0) 100%)' }} />
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: isSquare ? 150 : 250, zIndex: 1000, pointerEvents: 'none', background: 'linear-gradient(0deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.6) 50%, rgba(0,0,0,0) 100%)' }} />
           <div style={{ position: 'absolute', inset: 0, zIndex: 1001, pointerEvents: 'none', padding: pad, display: 'flex', flexDirection: 'column' }}>
             {header()}
             <div style={{ marginTop: isSquare ? 8 : 14 }}>
@@ -787,6 +825,68 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
             <div style={{ marginTop: isSquare ? 12 : 16, paddingTop: isSquare ? 10 : 14, borderTop: '1px solid rgba(255,255,255,0.16)' }}>
               {statsRow(trio, { size: isSquare ? 17 : 20, divider: 'rgba(255,255,255,0.14)' })}
             </div>
+          </div>
+        </div>
+      );
+      break;
+    }
+
+    case 'dashboard': {
+      const mapH = isSquare ? 168 : 340;
+      content = (
+        <div style={{ position: 'absolute', inset: 0, background: '#0B0B0D', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ position: 'relative', height: mapH, flexShrink: 0 }}>
+            <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+              {hasRoute || data.currentLocation ? (
+                <RouteMap
+                  route={route}
+                  currentLocation={data.currentLocation}
+                  theme={selectedTheme}
+                  height="100%"
+                  highlightColor={accent}
+                  isCapturing={busy}
+                  fitToContainer
+                  showZoomControls={false}
+                  interactive={false}
+                  cardioType={data.type}
+                  hideMarkers
+                  recenterTrigger={isSquare ? 1 : 0}
+                  mapPaddingTopLeft={[28, isSquare ? 44 : 64]}
+                  mapPaddingBottomRight={[28, isSquare ? 30 : 50]}
+                />
+              ) : noRoute('rgba(255,255,255,0.3)')}
+            </div>
+            <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: isSquare ? 54 : 76, zIndex: 1000, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 100%)' }} />
+            <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: isSquare ? 36 : 56, zIndex: 1000, pointerEvents: 'none', background: 'linear-gradient(0deg, #0B0B0D 0%, rgba(11,11,13,0) 100%)' }} />
+            <div style={{ position: 'absolute', left: pad, right: pad, top: isSquare ? 14 : 18, zIndex: 1001, pointerEvents: 'none' }}>{header()}</div>
+          </div>
+          <div style={{ flex: 1, minHeight: 0, padding: `${isSquare ? 2 : 6}px ${pad}px ${isSquare ? 14 : pad}px`, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 10 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: isSquare ? 15 : 19, fontWeight: 800, letterSpacing: '-0.015em', color: '#fff', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+                <div style={{ marginTop: 3, fontSize: isSquare ? 9.5 : 10.5, fontWeight: 600, color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap' }}>{isSquare ? shortDate : dateLine}</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, flexShrink: 0 }}>
+                <span style={{ fontSize: isSquare ? 32 : 44, fontWeight: 900, letterSpacing: '-0.04em', lineHeight: 0.9, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>{distText}</span>
+                <span style={{ fontSize: isSquare ? 12 : 14, fontWeight: 800, color: accent }}>km</span>
+              </div>
+            </div>
+            <div style={{ marginTop: isSquare ? 10 : 14, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: isSquare ? 6 : 8 }}>
+              {kpis.map(k => (
+                <div key={k.label} style={{ minWidth: 0, overflow: 'hidden', borderRadius: 12, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.07)', padding: isSquare ? '7px 8px' : '10px 10px' }}>
+                  <Stat label={k.label} value={k.value} unit={k.unit} size={isSquare ? 15 : 18} labelColor="rgba(255,255,255,0.5)" />
+                </div>
+              ))}
+            </div>
+            {!isSquare && elevation && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, fontWeight: 800, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>
+                  <span>ELEVATION</span>
+                  <span>{Math.round(Math.min(...elevation))}–{Math.round(Math.max(...elevation))} M</span>
+                </div>
+                <ElevationArea values={elevation} width={innerW} height={40} color={accent} />
+              </div>
+            )}
           </div>
         </div>
       );
@@ -1074,7 +1174,7 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
 
   const tabVisibility = (id: typeof activeTab) => `${activeTab === id ? '' : 'hidden'} md:block`;
   const hScroll = 'flex md:grid gap-3 overflow-x-auto md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden';
-  const mapStyleUsed = layout === 'map';
+  const mapStyleUsed = layout === 'map' || layout === 'dashboard';
   const subtitle = `${distText} km · ${shortDate}`;
 
   return createPortal(
@@ -1250,7 +1350,7 @@ export function CardioShareModal({ data, mapTheme, onClose }: Props) {
 
               {/* Map style */}
               <section className={tabVisibility('theme')}>
-                <ControlHeading hint={mapStyleUsed ? undefined : 'Only the Map template shows map tiles.'}>Map style</ControlHeading>
+                <ControlHeading hint={mapStyleUsed ? undefined : 'Only the Map and Stats + Map templates show map tiles.'}>Map style</ControlHeading>
                 <div className={`${hScroll} md:grid-cols-4 ${mapStyleUsed ? '' : 'opacity-40 pointer-events-none'}`}>
                   {AVAILABLE_THEMES.map(t => {
                     const selected = selectedTheme === t;

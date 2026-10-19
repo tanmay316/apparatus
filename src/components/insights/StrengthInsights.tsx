@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Line, LineChart, Tooltip, XAxis, YAxis } from 'recharts';
 import { format } from 'date-fns';
-import { Activity, BatteryCharging, Dumbbell, Grid3x3, Scale, Trophy } from 'lucide-react';
+import { Activity, BatteryCharging, Dumbbell, Grid3x3, Scale } from 'lucide-react';
 import type { Workout } from '@/types';
 import { analyzeStrengthTrends, MAJOR_GROUPS, type LiftProgress } from '@/lib/strength-trends';
 import { InsightList } from '@/components/analysis/AnalysisParts';
@@ -17,7 +17,7 @@ const tooltipStyle = { borderRadius: 12, border: '1px solid rgb(var(--color-bone
 const tick = { fontSize: 10.5, fill: 'rgb(var(--color-bone-dim))' };
 const today = () => format(new Date(), 'yyyy-MM-dd');
 
-function Card(props: { icon: typeof Activity; title: string; subtitle?: string; right?: ReactNode; children: ReactNode }) {
+function Card(props: { icon: typeof Activity; title: string; subtitle?: string; info?: ReactNode; right?: ReactNode; children: ReactNode }) {
   return <ToolCard color="rgb(var(--viz-strength))" {...props} />;
 }
 
@@ -43,7 +43,6 @@ function StrengthInsightsBody({ workouts, imperial, range, earliest }: { workout
     const last = liftData[liftData.length - 1].metric;
     return { best, changePct: liftData.length > 1 && first > 0 ? Math.round(((last - first) / first) * 1000) / 10 : undefined };
   }, [lift, liftData]);
-  const prs = t.prs.filter(p => p.date >= from);
   const liftTicks = useMemo(() => {
     const vals = liftData.map(p => p.v);
     const lo = Math.min(...vals);
@@ -63,7 +62,7 @@ function StrengthInsightsBody({ workouts, imperial, range, earliest }: { workout
       <Card
         icon={BatteryCharging}
         title="Muscle recovery"
-        subtitle="Based on sets in the last 7 days and time since you trained each muscle"
+        info="How ready each muscle is, from the sets you did in the last 7 days and the time since you trained it. Green = ready to train hard."
         right={<AskAIButton prompt={() => `My muscle recovery: ${t.recovery.filter(r => r.hoursAgo !== null).map(r => `${r.group} ${r.readiness}% ready (trained ${r.hoursAgo}h ago, ${r.recentSets} sets in 7 days)`).join('; ')}. What should I train today and what should rest?`} />}
       >
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -86,7 +85,7 @@ function StrengthInsightsBody({ workouts, imperial, range, earliest }: { workout
         <Card
           icon={Activity}
           title="Training load"
-          subtitle="This week's sets vs your 4-week average (acute:chronic ratio)"
+          info="This week's sets compared with your usual week (last 4 weeks). 0.8–1.3× is the sweet spot; above that is a sudden jump that raises injury risk."
           right={<AskAIButton prompt={() => `My strength training load: ${t.acwr!.acute} sets this week vs ${t.acwr!.chronic} usual, an acute:chronic ratio of ${t.acwr!.ratio}. Should I push harder, hold, or deload?`} />}
         >
           <div className="flex items-end gap-3">
@@ -110,7 +109,7 @@ function StrengthInsightsBody({ workouts, imperial, range, earliest }: { workout
         <Card
           icon={Dumbbell}
           title="Lift progression"
-          subtitle={`${RANGE_LABEL[range]} · ${lift.unit === 'kg' ? 'estimated 1-rep max' : lift.unit === 's' ? 'longest hold' : 'best set (reps)'} per session`}
+          info={`Your ${lift.unit === 'kg' ? 'estimated 1-rep max' : lift.unit === 's' ? 'longest hold' : 'best set (reps)'} in each session.`}
           right={<AskAIButton prompt={() => `My ${lift.name} progression (${lift.unit === 'kg' ? 'estimated 1RM' : 'best set'}): ${lift.points.slice(-10).map(p => `${p.date} ${liftValue(lift, p.metric, imperial)}`).join(', ')}. Best ${liftValue(lift, lift.best, imperial)}${lift.changePct !== undefined ? `, ${lift.changePct}% change` : ''}${lift.stalled ? `, no PR for ${lift.stalled} sessions` : ''}. How do I keep progressing on this lift?`} />}
         >
           <CustomSelect ariaLabel="Choose exercise" className="w-full mb-3" value={lift.name} onChange={setLiftName} options={t.lifts.map(l => ({ value: l.name, label: `${l.name} · ${l.sessions} sessions` }))} />
@@ -138,27 +137,11 @@ function StrengthInsightsBody({ workouts, imperial, range, earliest }: { workout
         </Card>
       )}
 
-      {prs.length > 0 && (
-        <Card icon={Trophy} title="Personal records" subtitle={`${RANGE_LABEL[range]} · ${prs.length} PR${prs.length === 1 ? '' : 's'}`}>
-          <ul className="divide-y divide-line/60">
-            {prs.slice(0, 8).map((p, i) => (
-              <li key={`${p.name}-${p.date}-${i}`} className="py-2.5 flex items-center gap-3 text-[13px]">
-                <Trophy size={13} className="text-amber-500 shrink-0" />
-                <span className="flex-1 min-w-0 truncate font-semibold text-bone">{p.name}</span>
-                <span className="font-mono tabular-nums text-bone">{liftValue(p, p.value, imperial)}</span>
-                <span className="text-[11px] text-emerald-500 font-semibold tabular-nums">+{Math.round(((p.value - p.prev) / p.prev) * 100)}%</span>
-                <span className="text-[11px] text-bone-dim w-[70px] text-right">{p.date.slice(5)}</span>
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
-
       {groups.length > 0 && (
         <Card
           icon={Grid3x3}
           title="Weekly sets per muscle"
-          subtitle={`${RANGE_LABEL[range]} · 10–20 hard sets a week is the growth range`}
+          info="Hard sets per muscle each week. Green = 10–20 sets (growth range), blue = fewer, orange = more."
           right={<AskAIButton prompt={() => `My weekly hard sets per muscle (oldest to newest, ${heatWeeks.length} weeks): ${groups.map(g => `${g}: ${heatWeeks.map(w => Math.round(w.sets[g] || 0)).join('/')}`).join('; ')}. Which muscles are under- or over-trained, and how should I adjust my plan?`} />}
         >
           <div ref={heatRef} className="overflow-x-auto -mx-1 px-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -194,7 +177,7 @@ function StrengthInsightsBody({ workouts, imperial, range, earliest }: { workout
         <Card
           icon={Scale}
           title="Muscle balance"
-          subtitle={`Sets · ${RANGE_LABEL[range]}`}
+          info="Sets for opposing muscle pairs (e.g. push vs pull). Big gaps can lead to posture problems or injuries."
           right={<AskAIButton prompt={() => `My muscle balance (${RANGE_LABEL[range].toLowerCase()}): ${t.balance.map(b => `${b.left} ${b.leftSets} sets vs ${b.right} ${b.rightSets} sets`).join('; ')}. Are any of these imbalanced, and how do I fix it?`} />}
         >
           <div className="space-y-3">
@@ -230,11 +213,8 @@ export function StrengthInsightsPanel({ workouts, imperial, range = '90d', earli
   if (workouts.length < 2) return null;
   return (
     <section className="space-y-3">
-      <div className="px-1">
-        <h3 className="text-[17px] font-semibold text-bone flex items-center gap-2">Strength insights <ProBadge /></h3>
-        <p className="text-[12px] text-bone-dim mt-0.5">Recovery, training load, lift progression, PRs and muscle balance</p>
-      </div>
-      <ProLock title="Strength insights" reason={`Track muscle recovery, training load, estimated 1RM progression, every PR and muscle balance with ${BRAND.name} Pro.`} maxHeight={520}>
+      <h3 className="px-1 text-[17px] font-semibold text-bone flex items-center gap-2">Strength insights <ProBadge /></h3>
+      <ProLock title="Strength insights" reason={`Track muscle recovery, training load, lift progression and muscle balance with ${BRAND.name} Pro.`} maxHeight={520}>
         <StrengthInsightsBody workouts={workouts} imperial={imperial} range={range} earliest={earliest} />
       </ProLock>
     </section>

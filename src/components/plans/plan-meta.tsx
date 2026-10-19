@@ -1,4 +1,4 @@
-import { Dumbbell, HeartPulse, Home, PersonStanding, Sparkles, Trophy, type LucideIcon } from 'lucide-react';
+import { Dumbbell, Flower2, HeartPulse, Home, PersonStanding, Sparkles, Trophy, type LucideIcon } from 'lucide-react';
 import type { Plan } from '@/types';
 
 export interface PlanCategory {
@@ -11,10 +11,11 @@ export interface PlanCategory {
 
 const CATEGORIES: { match: RegExp; category: PlanCategory }[] = [
   { match: /\b(calisthenics|skills?|street workout)\b/, category: { label: 'Calisthenics', icon: PersonStanding, tint: '#b6552f', tintDark: '#ffa37a' } },
+  { match: /\b(yoga|pranayama)\b/, category: { label: 'Yoga', icon: Flower2, tint: '#2e7d5b', tintDark: '#8fe0b8' } },
   { match: /\b(home|no.?equipment)\b/, category: { label: 'Home', icon: Home, tint: '#2f7a6d', tintDark: '#7fd1c2' } },
   { match: /\b(hyrox|marathon|running|cardio|endurance|conditioning|fat.?loss)\b/, category: { label: 'Conditioning', icon: HeartPulse, tint: '#be3455', tintDark: '#f59aae' } },
   { match: /\b(powerlifting|strength|powerbuilding)\b/, category: { label: 'Strength', icon: Trophy, tint: '#a86b12', tintDark: '#f1c46b' } },
-  { match: /\b(posture|mobility|yoga)\b/, category: { label: 'Mobility', icon: Sparkles, tint: '#5b5fc7', tintDark: '#aab0ff' } },
+  { match: /\b(posture|mobility)\b/, category: { label: 'Mobility', icon: Sparkles, tint: '#5b5fc7', tintDark: '#aab0ff' } },
   { match: /\b(gym|hypertrophy|barbell|bodybuilding|split|push pull legs|ppl)\b/, category: { label: 'Gym', icon: Dumbbell, tint: '#3d5a80', tintDark: '#9cc0ea' } },
 ];
 

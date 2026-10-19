@@ -99,7 +99,7 @@ export function AdminPage() {
     { id: 'events', label: 'Events', icon: CalendarClock, badge: overview.data?.pendingEvents },
     { id: 'content', label: 'Content', icon: Database },
     { id: 'updates', label: 'Announcements', icon: Megaphone },
-    { id: 'coupons', label: 'Coupons', icon: Ticket },
+    { id: 'coupons', label: 'Pricing & coupons', icon: Ticket },
     { id: 'market', label: 'Market', icon: Store },
     { id: 'ai', label: 'AI keys', icon: Bot },
     { id: 'logs', label: 'Logs', icon: Terminal, badge: overview.data?.logs24h },

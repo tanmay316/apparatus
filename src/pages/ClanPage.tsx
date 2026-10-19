@@ -494,13 +494,13 @@ export function ClanPage() {
                 role="tab"
                 aria-selected={selected}
                 onClick={() => setActiveTab(tab.id)}
-                className={`relative shrink-0 h-11 px-3 text-sm font-medium inline-flex items-center gap-1.5 transition-colors !shadow-none ${
+                className={`relative shrink-0 h-11 px-3 text-sm font-medium leading-none inline-flex items-center gap-1.5 whitespace-nowrap transition-colors !shadow-none ${
                   selected ? 'text-bone' : 'text-bone-dim hover:text-bone'
                 }`}
               >
                 {tab.label}
                 {!!tab.count && (
-                  <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-ink-3 text-[11px] font-semibold leading-5 text-center tabular-nums text-bone-dim">
+                  <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-ink-3 text-[11px] font-semibold leading-none tabular-nums text-bone-dim">
                     {tab.count}
                   </span>
                 )}

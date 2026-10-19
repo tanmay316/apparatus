@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef, useMemo, useId, type ReactNode } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo, useId, startTransition, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -14,7 +14,8 @@ import { useUIStore } from '@/stores/ui-store';
 import { CustomSelect } from '@/components/ui/CustomSelect';
 import { RouteMap } from '@/components/cardio/RouteMap';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
-import { CardioAnalysisPanel, InlineSessionAnalysis, StrengthAnalysisPanel } from '@/components/analysis/ProgressAnalysis';
+import { InlineSessionAnalysis } from '@/components/analysis/ProgressAnalysis';
+import { InfoTip } from '@/components/ui/InfoTip';
 import { CardioInsightsPanel } from '@/components/insights/CardioInsights';
 import { StrengthInsightsPanel } from '@/components/insights/StrengthInsights';
 import { TrainingToolsPanel } from '@/components/insights/TrainingTools';
@@ -132,8 +133,8 @@ function Panel({ children, className = '' }: { children: ReactNode; className?: 
   return <section className={`pro-panel ${className}`}>{children}</section>;
 }
 
-function SectionHeader({ title, subtitle, dotClass, right }: {
-  title: string; subtitle?: string; dotClass?: string; right?: ReactNode;
+function SectionHeader({ title, subtitle, dotClass, right, info }: {
+  title: string; subtitle?: string; dotClass?: string; right?: ReactNode; info?: ReactNode;
 }) {
   return (
     <div className="flex items-end justify-between gap-3 px-1">
@@ -141,6 +142,7 @@ function SectionHeader({ title, subtitle, dotClass, right }: {
         <h2 className="flex items-center gap-2 text-[17px] font-semibold tracking-tight text-bone">
           {dotClass && <span className={`w-2 h-2 rounded-full ${dotClass}`} />}
           {title}
+          {info && <InfoTip>{info}</InfoTip>}
         </h2>
         {subtitle && <p className="text-xs text-bone-dim mt-0.5 truncate">{subtitle}</p>}
       </div>
@@ -149,11 +151,11 @@ function SectionHeader({ title, subtitle, dotClass, right }: {
   );
 }
 
-function CardTitle({ title, subtitle, right }: { title: string; subtitle?: string; right?: ReactNode }) {
+function CardTitle({ title, subtitle, right, info }: { title: string; subtitle?: string; right?: ReactNode; info?: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 mb-4">
       <div className="min-w-0">
-        <h3 className="text-[15px] font-semibold text-bone">{title}</h3>
+        <h3 className="flex items-center gap-1.5 text-[15px] font-semibold text-bone">{title}{info && <InfoTip>{info}</InfoTip>}</h3>
         {subtitle && <p className="text-xs text-bone-dim mt-0.5">{subtitle}</p>}
       </div>
       {right}
@@ -191,10 +193,13 @@ function Segmented<T extends string>({ id, value, options, onChange, size = 'md'
   size?: 'sm' | 'md';
   className?: string;
 }) {
+  // The thumb moves right away; the (heavy) page below re-renders in a transition so it can't stall the animation.
+  const [shown, setShown] = useState(value);
+  useEffect(() => setShown(value), [value]);
   return (
     <div role="tablist" className={`pro-track relative flex p-1 rounded-full ${className}`}>
       {options.map(opt => {
-        const active = opt.value === value;
+        const active = opt.value === shown;
         const Icon = opt.icon;
         return (
           <button
@@ -202,21 +207,25 @@ function Segmented<T extends string>({ id, value, options, onChange, size = 'md'
             type="button"
             role="tab"
             aria-selected={active}
-            onClick={() => onChange(opt.value)}
-            className={`relative flex-1 flex items-center justify-center whitespace-nowrap rounded-full font-medium transition-colors ${
-              size === 'sm' ? 'h-7 px-3 text-xs' : 'h-8 px-3.5 text-[13px]'
+            onClick={() => {
+              if (opt.value === shown) return;
+              setShown(opt.value);
+              startTransition(() => onChange(opt.value));
+            }}
+            className={`relative flex-1 min-w-0 flex items-center justify-center whitespace-nowrap rounded-full font-medium leading-tight transition-colors ${
+              size === 'sm' ? 'min-h-7 px-2 text-xs' : 'min-h-8 px-2 text-[13px]'
             } ${active ? 'text-bone' : 'text-bone-dim hover:text-bone'}`}
           >
             {active && (
               <motion.span
                 layoutId={`seg-${id}`}
                 className="absolute inset-0 rounded-full pro-thumb"
-                transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 36 }}
               />
             )}
-            <span className="relative flex items-center gap-1.5">
-              {Icon && <Icon size={14} className="hidden sm:block" />}
-              {opt.label}
+            <span className="relative flex min-w-0 items-center gap-1.5 py-1">
+              {Icon && <Icon size={14} className="hidden sm:block shrink-0" />}
+              <span className="truncate">{opt.label}</span>
             </span>
           </button>
         );
@@ -927,7 +936,7 @@ export function ProgressPage({
   }, [dateParam, tabParam, sessionParam]);
 
   // Personal Records & Strength Volume metrics state
-  const [cardioPrSection, setCardioPrSection] = useState<'all' | 'run' | 'walk' | 'cycle'>('all');
+  const [cardioPrSection, setCardioPrSection] = useState<'run' | 'walk' | 'cycle' | null>(null);
   const [strengthMetric, setStrengthMetric] = useState<'volume' | 'reps'>('volume');
   const [hasAutoSwitchedMetric, setHasAutoSwitchedMetric] = useState(false);
 
@@ -1313,17 +1322,13 @@ export function ProgressPage({
     { key: 'walk', label: 'Walk', dist: cardioKPIs.walkDist, count: cardioKPIs.walksCount, bar: 'bg-viz-elev' },
   ];
 
-  const prDate = (c: CardioActivity) => {
-    const d = getCardioDateStr(c);
-    return `${format(parseDateKey(d), 'MMM d, yyyy')} · ${cardioMeta(c.type).label}`;
-  };
-
-  const cardioSections = [
-    { id: 'all' as const, label: 'All', count: allCardio.length },
-    { id: 'run' as const, label: 'Run', icon: Activity, count: allRuns.length, items: runPrItems, tone: 'text-viz-cardio bg-viz-cardio/10' },
-    { id: 'walk' as const, label: 'Walk', icon: Footprints, count: allWalks.length, items: walkPrItems, tone: 'text-viz-elev bg-viz-elev/10' },
-    { id: 'cycle' as const, label: 'Ride', icon: Bike, count: allCycles.length, items: cyclePrItems, tone: 'text-viz-speed bg-viz-speed/10' },
-  ];
+  const cardioPrTypes = [
+    { id: 'run' as const, label: 'Run', icon: Activity, count: allRuns.length, items: runPrItems },
+    { id: 'walk' as const, label: 'Walk', icon: Footprints, count: allWalks.length, items: walkPrItems },
+    { id: 'cycle' as const, label: 'Ride', icon: Bike, count: allCycles.length, items: cyclePrItems },
+  ].filter(s => s.count > 0);
+  const prType = cardioPrTypes.find(s => s.id === cardioPrSection)?.id ?? cardioPrTypes[0]?.id ?? 'run';
+  const prItems = cardioPrTypes.find(s => s.id === prType)?.items ?? [];
 
   const bodyMetrics = [
     { key: 'weight' as const, label: 'Weight', unit: 'kg', icon: Scale },
@@ -1811,8 +1816,6 @@ export function ProgressPage({
 
           {isOverview && <WeeklyReportCard workouts={allWorkouts} cardio={allCardio} />}
 
-          {isOverview && <TrainingToolsPanel cardio={allCardio} workouts={allWorkouts} range={timeRange} earliest={earliest} />}
-
           {/* ─── Cardio ─── */}
           {showCardio && (
             <div className="space-y-3">
@@ -1823,24 +1826,18 @@ export function ProgressPage({
                 right={isOverview && <LinkButton onClick={() => setActiveCategory('cardio')} toneClass="text-viz-cardio">Details</LinkButton>}
               />
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {!isOverview && <Stat label="Distance" value={cardioKPIs.totalDist.toFixed(1)} unit="km" icon={MapPin} tone="cardio" />}
-                <Stat label="Moving time" value={formatDurationSec(cardioKPIs.totalSec)} icon={Clock} tone="neutral" />
-                <Stat label="Avg pace" value={cardioKPIs.avgPaceStr} unit="/km" icon={Timer} tone="speed" />
-                <Stat label="Avg speed" value={cardioKPIs.avgSpeed.toFixed(1)} unit="km/h" icon={Gauge} tone="event" />
-                <Stat label="Elevation" value={formatNumber(cardioKPIs.totalElev)} unit="m" icon={Mountain} tone="elev" />
-                {!isOverview && <Stat label="Calories" value={formatNumber(cardioKPIs.totalCal)} unit="kcal" icon={Flame} tone="energy" />}
-                {!isOverview && <Stat label="Steps" value={formatNumber(cardioKPIs.totalSteps)} icon={Footprints} tone="neutral" />}
-                {!isOverview && <Stat label="Activities" value={cardioKPIs.totalSessions} icon={Activity} tone="cardio" />}
-              </div>
+              {!isOverview && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <Stat label="Distance" value={cardioKPIs.totalDist.toFixed(1)} unit="km" icon={MapPin} tone="cardio" />
+                  <Stat label="Activities" value={cardioKPIs.totalSessions} icon={Activity} tone="cardio" />
+                  <Stat label="Moving time" value={formatDurationSec(cardioKPIs.totalSec)} icon={Clock} tone="neutral" />
+                  <Stat label="Avg pace" value={cardioKPIs.avgPaceStr} unit="/km" icon={Timer} tone="speed" />
+                </div>
+              )}
 
-              {!isOverview && <CardioAnalysisPanel activities={allCardio} from={rangeStart(timeRange, todayKey, earliest)} />}
-              {!isOverview && <CardioInsightsPanel activities={allCardio} workouts={allWorkouts} range={timeRange} earliest={earliest} />}
-              {!isOverview && <HeatmapPanel activities={filteredCardio} range={timeRange} />}
-
-              {!isOverview && mixTotal > 0 && (
+              {!isOverview && activityMix.filter(m => m.dist > 0).length > 1 && (
                 <Panel className="p-4 sm:p-5">
-                  <CardTitle title="Activity mix" subtitle="Share of distance by type" />
+                  <CardTitle title="Activity mix" info="Share of your distance by activity type." />
                   <div className="flex h-2.5 rounded-full overflow-hidden gap-[2px] pro-track">
                     {activityMix.filter(m => m.dist > 0).map(m => (
                       <motion.div
@@ -1873,13 +1870,10 @@ export function ProgressPage({
               <Panel className="p-4 sm:p-5">
                 <CardTitle
                   title="Distance"
-                  subtitle={`${PER_BUCKET[bucketSize(timeRange, todayKey, earliest)]} totals · ${rangeLabel}`}
+                  info={`${PER_BUCKET[bucketSize(timeRange, todayKey, earliest)]} distance totals.`}
                   right={
-                    <div className="text-right shrink-0">
-                      <div className="text-lg font-semibold text-bone tabular-nums leading-tight">
-                        {cardioKPIs.totalDist.toFixed(1)} <span className="text-xs font-medium text-bone-dim">km</span>
-                      </div>
-                      <div className="text-[11px] text-bone-dim">{rangeLabel}</div>
+                    <div className="text-lg font-semibold text-bone tabular-nums leading-tight shrink-0">
+                      {cardioKPIs.totalDist.toFixed(1)} <span className="text-xs font-medium text-bone-dim">km</span>
                     </div>
                   }
                 />
@@ -1890,7 +1884,7 @@ export function ProgressPage({
                 <Panel className="p-4 sm:p-5">
                   <CardTitle
                     title="Speed trend"
-                    subtitle={`Average speed per session · ${rangeLabel}`}
+                    info="Average speed of each session. Going up means you're getting faster."
                     right={
                       <div className="text-right shrink-0">
                         <div className="text-lg font-semibold text-bone tabular-nums leading-tight">
@@ -1906,233 +1900,49 @@ export function ProgressPage({
 
               {!isOverview && (
                 <Panel className="p-4 sm:p-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                    <div>
-                      <div className="text-sm font-semibold text-bone">Personal records</div>
-                      <div className="text-xs text-bone-dim">Your all-time cardio bests by activity</div>
+                  <CardTitle title="Personal records" subtitle="All-time" />
+                  {cardioPrTypes.length > 1 && (
+                    <div className="pro-track flex p-1 rounded-full mb-3" role="tablist" aria-label="Activity">
+                      {cardioPrTypes.map(s => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={prType === s.id}
+                          onClick={() => setCardioPrSection(s.id)}
+                          className={`flex-1 min-w-0 h-8 rounded-full text-[13px] font-semibold inline-flex items-center justify-center gap-1.5 ${prType === s.id ? 'pro-thumb text-bone' : 'text-bone-dim'}`}
+                        >
+                          <s.icon size={13} className="shrink-0" /> <span className="truncate">{s.label}</span>
+                        </button>
+                      ))}
                     </div>
-                    {/* Section Filter Pills */}
-                    <div
-                      className="inline-flex items-center gap-1 p-0.5 rounded-lg bg-surface-2 border border-line self-start sm:self-auto overflow-x-auto max-w-full [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-                      style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                    >
-                      {cardioSections.map(s => {
-                        const isActive = cardioPrSection === s.id;
-                        const IconComponent = 'icon' in s ? s.icon : null;
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => setCardioPrSection(s.id)}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors shrink-0 ${
-                              isActive
-                                ? 'bg-bone text-ink font-semibold shadow-sm'
-                                : 'text-bone-dim hover:text-bone'
-                            }`}
-                          >
-                            {IconComponent && <IconComponent size={12} />}
-                            <span>{s.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Content based on selected section */}
-                  {allCardio.length === 0 ? (
-                    <EmptyState icon={Trophy} title="No records yet" text="Complete a cardio session to set your first record." />
-                  ) : cardioPrSection === 'all' ? (
-                    <div className="space-y-6">
-                      {/* Run Section */}
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-lg flex items-center justify-center bg-viz-cardio/10 text-viz-cardio">
-                              <Activity size={13} />
-                            </span>
-                            <span className="text-xs font-semibold uppercase tracking-wider text-bone">Run Records</span>
-                          </div>
-                          <span className="text-[11px] text-bone-dim">{allRuns.length} session{allRuns.length === 1 ? '' : 's'}</span>
-                        </div>
-                        {runPrItems.length === 0 ? (
-                          <div className="rounded-xl border border-dashed border-line p-3 text-center text-xs text-bone-dim">
-                            No running records yet. Complete a run to set your first record.
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                            {runPrItems.map(pr => (
-                              <div key={pr.key} className="pro-tile p-3.5">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
-                                    <pr.icon size={13} />
-                                  </span>
-                                  <span className="pro-label truncate">{pr.label}</span>
-                                </div>
-                                <div className="mt-2.5 flex items-baseline gap-1">
-                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
-                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
-                                </div>
-                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="border-t border-line" />
-
-                      {/* Walk Section */}
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-lg flex items-center justify-center bg-viz-elev/10 text-viz-elev">
-                              <Footprints size={13} />
-                            </span>
-                            <span className="text-xs font-semibold uppercase tracking-wider text-bone">Walk Records</span>
-                          </div>
-                          <span className="text-[11px] text-bone-dim">{allWalks.length} session{allWalks.length === 1 ? '' : 's'}</span>
-                        </div>
-                        {walkPrItems.length === 0 ? (
-                          <div className="rounded-xl border border-dashed border-line p-3 text-center text-xs text-bone-dim">
-                            No walking records yet. Complete a walk to set your first record.
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                            {walkPrItems.map(pr => (
-                              <div key={pr.key} className="pro-tile p-3.5">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
-                                    <pr.icon size={13} />
-                                  </span>
-                                  <span className="pro-label truncate">{pr.label}</span>
-                                </div>
-                                <div className="mt-2.5 flex items-baseline gap-1">
-                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
-                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
-                                </div>
-                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="border-t border-line" />
-
-                      {/* Ride Section */}
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-lg flex items-center justify-center bg-viz-speed/10 text-viz-speed">
-                              <Bike size={13} />
-                            </span>
-                            <span className="text-xs font-semibold uppercase tracking-wider text-bone">Ride Records</span>
-                          </div>
-                          <span className="text-[11px] text-bone-dim">{allCycles.length} session{allCycles.length === 1 ? '' : 's'}</span>
-                        </div>
-                        {cyclePrItems.length === 0 ? (
-                          <div className="rounded-xl border border-dashed border-line p-3 text-center text-xs text-bone-dim">
-                            No ride records yet. Complete a ride to set your first record.
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                            {cyclePrItems.map(pr => (
-                              <div key={pr.key} className="pro-tile p-3.5">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
-                                    <pr.icon size={13} />
-                                  </span>
-                                  <span className="pro-label truncate">{pr.label}</span>
-                                </div>
-                                <div className="mt-2.5 flex items-baseline gap-1">
-                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
-                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
-                                </div>
-                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                  )}
+                  {prItems.length === 0 ? (
+                    <EmptyState icon={Trophy} title="No records yet" text="Complete a session to set your first record." />
                   ) : (
-                    /* Specific Discipline View */
-                    <div>
-                      {cardioPrSection === 'run' && (
-                        runPrItems.length === 0 ? (
-                          <EmptyState icon={Activity} title="No run records yet" text="Log a run to track your personal distance, pace, and endurance records." />
-                        ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                            {runPrItems.map(pr => (
-                              <div key={pr.key} className="pro-tile p-3.5">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
-                                    <pr.icon size={13} />
-                                  </span>
-                                  <span className="pro-label truncate">{pr.label}</span>
-                                </div>
-                                <div className="mt-2.5 flex items-baseline gap-1">
-                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
-                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
-                                </div>
-                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
-                              </div>
-                            ))}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      {prItems.map(pr => (
+                        <div key={pr.key} className="pro-tile p-3.5 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
+                              <pr.icon size={13} />
+                            </span>
+                            <span className="pro-label truncate">{pr.label}</span>
                           </div>
-                        )
-                      )}
-
-                      {cardioPrSection === 'walk' && (
-                        walkPrItems.length === 0 ? (
-                          <EmptyState icon={Footprints} title="No walk records yet" text="Log a walk to track your distance, steps, and duration records." />
-                        ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                            {walkPrItems.map(pr => (
-                              <div key={pr.key} className="pro-tile p-3.5">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
-                                    <pr.icon size={13} />
-                                  </span>
-                                  <span className="pro-label truncate">{pr.label}</span>
-                                </div>
-                                <div className="mt-2.5 flex items-baseline gap-1">
-                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
-                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
-                                </div>
-                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
-                              </div>
-                            ))}
+                          <div className="mt-2.5 flex items-baseline gap-1">
+                            <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
+                            {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
                           </div>
-                        )
-                      )}
-
-                      {cardioPrSection === 'cycle' && (
-                        cyclePrItems.length === 0 ? (
-                          <EmptyState icon={Bike} title="No ride records yet" text="Log a ride to track your distance, speed, and elevation records." />
-                        ) : (
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                            {cyclePrItems.map(pr => (
-                              <div key={pr.key} className="pro-tile p-3.5">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${TONE[pr.tone]}`}>
-                                    <pr.icon size={13} />
-                                  </span>
-                                  <span className="pro-label truncate">{pr.label}</span>
-                                </div>
-                                <div className="mt-2.5 flex items-baseline gap-1">
-                                  <span className="text-xl font-semibold text-bone tabular-nums">{pr.value}</span>
-                                  {pr.unit && <span className="text-xs text-bone-dim">{pr.unit}</span>}
-                                </div>
-                                <div className="text-[11px] text-bone-dim mt-1 truncate">{prDate(pr.act)}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      )}
+                          <div className="text-[11px] text-bone-dim mt-1 truncate">{format(parseDateKey(getCardioDateStr(pr.act)), 'MMM d, yyyy')}</div>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </Panel>
               )}
+
+              {!isOverview && <CardioInsightsPanel activities={allCardio} range={timeRange} earliest={earliest} />}
+              {!isOverview && <HeatmapPanel activities={filteredCardio} range={timeRange} />}
             </div>
           )}
 
@@ -2167,18 +1977,14 @@ export function ProgressPage({
                 </div>
               )}
 
-              {!isOverview && <StrengthAnalysisPanel workouts={allWorkouts} imperial={imperial} from={rangeStart(timeRange, todayKey, earliest)} />}
-              {!isOverview && <StrengthInsightsPanel workouts={allWorkouts} imperial={imperial} range={timeRange} earliest={earliest} />}
-
               <Panel className="p-4 sm:p-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                   <div>
-                    <div className="text-sm font-semibold text-bone">Training volume</div>
-                    <div className="text-xs text-bone-dim">
-                      {strengthMetric === 'volume'
-                        ? `${PER_BUCKET[bucketSize(timeRange, todayKey, earliest)]} load lifted · ${rangeLabel}`
-                        : `${PER_BUCKET[bucketSize(timeRange, todayKey, earliest)]} reps completed · ${rangeLabel}`}
+                    <div className="flex items-center gap-1.5 text-[15px] font-semibold text-bone">
+                      Training volume
+                      <InfoTip>{strengthMetric === 'volume' ? 'Weight × reps added up' : 'Reps added up'} ({PER_BUCKET[bucketSize(timeRange, todayKey, earliest)].toLowerCase()} totals). Use Reps for bodyweight training.</InfoTip>
                     </div>
+                    <div className="text-xs text-bone-dim">{rangeLabel}</div>
                   </div>
 
                   <div className="flex items-center justify-between sm:justify-end gap-3">
@@ -2192,7 +1998,7 @@ export function ProgressPage({
                             : 'text-bone-dim hover:text-bone'
                         }`}
                       >
-                        Weight (kg)
+                        Weight
                       </button>
                       <button
                         type="button"
@@ -2203,7 +2009,7 @@ export function ProgressPage({
                             : 'text-bone-dim hover:text-bone'
                         }`}
                       >
-                        Reps (bodyweight)
+                        Reps
                       </button>
                     </div>
 
@@ -2265,18 +2071,22 @@ export function ProgressPage({
                   </div>
                 )}
               </Panel>
+
+              {!isOverview && <StrengthInsightsPanel workouts={allWorkouts} imperial={imperial} range={timeRange} earliest={earliest} />}
             </div>
           )}
 
           {/* ─── Consistency ─── */}
           {isOverview && (
             <div className="space-y-3">
-              <SectionHeader title="Consistency" subtitle={`Training days · ${rangeLabel}`} dotClass="bg-bone" />
+              <SectionHeader title="Consistency" subtitle={rangeLabel} info="Every square is a day. Coloured days are days you trained." dotClass="bg-bone" />
               <Panel className="p-4 sm:p-5">
                 <ConsistencyHeatmap workouts={allWorkouts} cardio={allCardio} range={timeRange} earliest={earliest} />
               </Panel>
             </div>
           )}
+
+          {isOverview && <TrainingToolsPanel cardio={allCardio} workouts={allWorkouts} range={timeRange} earliest={earliest} />}
 
           {/* ─── Body ─── */}
           {showBody && (

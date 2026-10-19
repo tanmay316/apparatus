@@ -1,6 +1,7 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
 import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import '@/lib/leaflet-safe';
 import 'leaflet/dist/leaflet.css';
 import type { RoutePoint } from '@/types';
 
@@ -57,17 +58,37 @@ const esri = (service: string) =>
 const OSM_CREDIT = '© OpenStreetMap contributors';
 const ESRI_CREDIT = 'Powered by Esri';
 
-export interface MapTheme { label: string; url: string; bg: string; maxNativeZoom: number; attribution: string }
+export interface MapTheme {
+  label: string;
+  url: string;
+  bg: string;
+  maxNativeZoom: number;
+  attribution: string;
+  /** Label/road tiles drawn above the base (Esri base maps carry no place names). */
+  overlays?: string[];
+  /** CSS filter on the base tiles: restyles a labelled street map (names stay readable). */
+  filter?: string;
+  /** Filtered/base map reads as dark → route gets the glow treatment. */
+  dark?: boolean;
+}
 
 /** Keyless OpenStreetMap street map: the fallback when another provider's tiles fail. */
 export const OSM_STREET: MapTheme = { label: 'Street', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', bg: '#f5f5f5', maxNativeZoom: 19, attribution: OSM_CREDIT };
+const STREET: MapTheme = ARCGIS_KEY ? { ...OSM_STREET, url: esri('World_Street_Map'), attribution: ESRI_CREDIT } : OSM_STREET;
+const PLACE_LABELS = [esri('Reference/World_Transportation'), esri('Reference/World_Boundaries_and_Places')];
 
 export const MAP_THEMES = {
-  street: ARCGIS_KEY ? { ...OSM_STREET, url: esri('World_Street_Map'), attribution: ESRI_CREDIT } : OSM_STREET,
-  dark: { label: 'Dark', url: esri('Canvas/World_Dark_Gray_Base'), bg: '#121212', maxNativeZoom: 16, attribution: ESRI_CREDIT },
-  light: { label: 'Light', url: esri('Canvas/World_Light_Gray_Base'), bg: '#f5f5f5', maxNativeZoom: 16, attribution: ESRI_CREDIT },
-  satellite: { label: 'Satellite', url: esri('World_Imagery'), bg: '#0a0a0a', maxNativeZoom: 17, attribution: ESRI_CREDIT },
+  street: STREET,
+  dark: { label: 'Dark', url: esri('Canvas/World_Dark_Gray_Base'), overlays: [esri('Canvas/World_Dark_Gray_Reference')], bg: '#121212', maxNativeZoom: 16, attribution: ESRI_CREDIT, dark: true },
+  midnight: { ...STREET, label: 'Midnight', bg: '#0d1117', filter: 'invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.92) saturate(0.55)', dark: true },
+  light: { label: 'Light', url: esri('Canvas/World_Light_Gray_Base'), overlays: [esri('Canvas/World_Light_Gray_Reference')], bg: '#f5f5f5', maxNativeZoom: 16, attribution: ESRI_CREDIT },
+  mono: { ...STREET, label: 'Mono', bg: '#eeeeee', filter: 'grayscale(1) contrast(1.08) brightness(1.04)' },
+  satellite: { label: 'Satellite', url: esri('World_Imagery'), bg: '#0a0a0a', maxNativeZoom: 17, attribution: ESRI_CREDIT, dark: true },
+  hybrid: { label: 'Hybrid', url: esri('World_Imagery'), overlays: PLACE_LABELS, bg: '#0a0a0a', maxNativeZoom: 17, attribution: ESRI_CREDIT, dark: true },
   terrain: { label: 'Terrain', url: esri('World_Topo_Map'), bg: '#e8e4d8', maxNativeZoom: 17, attribution: ESRI_CREDIT },
+  topo: { label: 'Topo', url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', bg: '#f1eee4', maxNativeZoom: 17, attribution: `${OSM_CREDIT}, SRTM · © OpenTopoMap (CC-BY-SA)` },
+  vintage: { ...STREET, label: 'Vintage', bg: '#efe6d2', filter: 'sepia(0.65) saturate(1.35) contrast(0.95) brightness(1.03)' },
+  blueprint: { ...STREET, label: 'Blueprint', bg: '#0b2545', filter: 'invert(1) grayscale(1) sepia(1) hue-rotate(175deg) saturate(3.5) brightness(0.8) contrast(1.15)', dark: true },
   cyclosm: { label: 'CyclOSM', url: 'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', bg: '#f5f5f5', maxNativeZoom: 18, attribution: `${OSM_CREDIT} · CyclOSM` },
 } satisfies Record<string, MapTheme>;
 
@@ -860,7 +881,7 @@ export function RouteMap({
 
   const requestedThemeData = MAP_THEMES[theme] || MAP_THEMES.street;
   const themeData: MapTheme = useStreetFallback ? OSM_STREET : requestedThemeData;
-  const isDarkMap = !useStreetFallback && (theme === 'dark' || theme === 'satellite');
+  const isDarkMap = !useStreetFallback && Boolean(themeData.dark);
 
   const isGradient = highlightColor === 'url(#route-gradient)';
   const startColor = isGradient ? '#fbbf24' : highlightColor || '#fbbf24';
@@ -958,7 +979,7 @@ export function RouteMap({
           {showZoomControls && <ShareZoomControls />}
           {!hideMap && (
             <TileLayer
-              key={themeData.url}
+              key={`${themeData.url}|${themeData.filter ?? ''}`}
               url={themeData.url}
               // CORS is only needed when the map is rasterised (share cards); some providers reject it.
               crossOrigin={fitToContainer || isCapturing ? 'anonymous' : undefined}
@@ -967,6 +988,10 @@ export function RouteMap({
               keepBuffer={2}
               updateWhenZooming={false}
               eventHandlers={{
+                add: (e) => {
+                  const el = (e.target as L.TileLayer).getContainer();
+                  if (el) el.style.filter = themeData.filter || '';
+                },
                 tileerror: () => {
                   tileErrorCountRef.current += 1;
                   if (themeData.url !== OSM_STREET.url && tileErrorCountRef.current >= 2) {
@@ -976,6 +1001,19 @@ export function RouteMap({
               }}
             />
           )}
+          {/* Compact feed previews skip label tiles (half the tile requests). */}
+          {!hideMap && variant !== 'card' && themeData.overlays?.map(url => (
+            <TileLayer
+              key={url}
+              url={url}
+              crossOrigin={fitToContainer || isCapturing ? 'anonymous' : undefined}
+              maxNativeZoom={themeData.maxNativeZoom}
+              maxZoom={19}
+              keepBuffer={2}
+              updateWhenZooming={false}
+              zIndex={2}
+            />
+          ))}
 
           {plannedRoute && plannedRoute.length > 1 && (
             <>

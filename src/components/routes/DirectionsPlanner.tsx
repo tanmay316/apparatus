@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, Marker, Polyline, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import '@/lib/leaflet-safe';
 import 'leaflet/dist/leaflet.css';
 import {
   ArrowDownUp, ArrowLeft, ArrowRight, ArrowUp, Bike, CornerUpLeft, CornerUpRight, Flag, Footprints, Loader2, LocateFixed,

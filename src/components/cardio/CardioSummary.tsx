@@ -114,8 +114,8 @@ export function CardioSummary({ data, saveState, effort, onEffort, notes, onNote
 
       {analysis ? (
         <section className="dx-card p-4 sm:p-5">
-          <h2 className="text-sm font-bold mb-3">Session analysis</h2>
-          <CardioAnalysisView analysis={analysis} activity={current ?? undefined} history={history} />
+          <h2 className="text-sm font-bold mb-3">How it went</h2>
+          <CardioAnalysisView analysis={analysis} activity={current ?? undefined} history={history} showStats={false} />
         </section>
       ) : current && !history && (
         <section className="dx-card p-4 sm:p-5 flex items-center gap-2.5 text-[13px] text-[var(--dx-muted)]">

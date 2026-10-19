@@ -32,7 +32,7 @@ FREE_LIMITS: dict[str, tuple[int, str]] = {
     "ai_summary": (1, "week"),
 }
 
-PLANS = ("monthly", "yearly")
+PLANS = ("monthly", "sixmonth", "yearly")
 
 # Pro is "unlimited" for people, but a daily fair-use cap stops one account (or a leaked token)
 # from running up LLM bills. Counted separately as "pro_<kind>" and reset daily.

@@ -74,12 +74,15 @@ class Settings(BaseSettings):
 
     # Pro subscriptions (Google Play Billing). Pro features and free-tier AI limits are enforced
     # whenever PRO_ENFORCED is on; buying needs the service account. Play Console: subscription
-    # product GOOGLE_PLAY_PRO_PRODUCT_ID with base plans "monthly" and "yearly".
+    # product GOOGLE_PLAY_PRO_PRODUCT_ID with base plans "monthly", "sixmonth" and "yearly".
     PRO_ENFORCED: bool = True
     GOOGLE_PLAY_PACKAGE: str = _BRAND.get("appId", "com.tms.apparatus")
     GOOGLE_PLAY_PRO_PRODUCT_ID: str = "pro"
-    # Service-account key JSON (raw or base64) with "View financial data" + "Manage orders" in Play Console.
+    # Service-account key JSON (raw or base64) with "View financial data" + "Manage orders" in Play Console
+    # (+ "Manage store presence" so admins can change Pro prices from the app).
     GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: str = ""
+    # Play regions version used when the admin console changes base plan prices.
+    GOOGLE_PLAY_REGIONS_VERSION: str = "2022/02"
     # Real-time developer notifications (Pub/Sub push). Audience = the push endpoint URL;
     # the service account is the one set as the push subscription's authentication identity.
     GOOGLE_PLAY_RTDN_AUDIENCE: str = ""

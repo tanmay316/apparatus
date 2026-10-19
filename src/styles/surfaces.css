@@ -252,6 +252,8 @@
   height: 48px;
   padding: 0 18px;
   border-radius: 14px;
+  white-space: nowrap;
+  line-height: 1.1;
   background: var(--dx-hero-btn);
   color: var(--dx-hero-btn-text);
   font-size: 15px;

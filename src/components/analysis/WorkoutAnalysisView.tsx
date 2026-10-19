@@ -1,6 +1,7 @@
-import { Trophy } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronDown, Trophy } from 'lucide-react';
 import type { WorkoutAnalysis } from '@/lib/workout-analysis';
-import { Compare, GatedInsights, Headline, SectionTitle, StatGrid, TrendChip, trendOf } from './AnalysisParts';
+import { Compare, GatedInsights, Headline, MoreDetails, SectionTitle, StatGrid, TrendChip, trendOf } from './AnalysisParts';
 import { ProBadge, ProLock } from '@/components/insights/ProLock';
 import { AISummaryCard } from '@/components/insights/AICoach';
 import { workoutFacts } from '@/lib/ai-facts';
@@ -15,7 +16,47 @@ const ZONES = [
 
 const signed = (n: number, suffix = '') => `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n)}${suffix}`;
 
-export function WorkoutAnalysisView({ analysis: a, imperial, workout }: { analysis: WorkoutAnalysis; imperial: boolean; workout?: Workout }) {
+type ExerciseRowData = WorkoutAnalysis['exercises'][number];
+
+/** One line per exercise; tap to see the comparison with last time. */
+function ExerciseRow({ row, toUnit, wu }: { row: ExerciseRowData; toUnit: (kg: number) => number; wu: string }) {
+  const [open, setOpen] = useState(false);
+  const p = row.prev;
+  const volUnit = row.unit === 'kg' ? wu : row.unit === 's' ? 's' : 'reps';
+  const vol = (v: number) => (row.unit === 'kg' ? toUnit(v) : v).toLocaleString();
+  const summary = [
+    `${row.sets} set${row.sets === 1 ? '' : 's'}`,
+    row.weighted ? `top ${toUnit(row.topWeight)} ${wu}` : row.holdSec > 0 ? `${row.holdSec}s hold` : row.reps > 0 ? `${row.reps} reps` : '',
+  ].filter(Boolean).join(' · ');
+  return (
+    <li className="rounded-2xl border border-line/60">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-2.5 p-3 text-left">
+        {row.isPR && <Trophy size={15} className="text-amber-500 shrink-0" aria-label="Personal record" />}
+        <span className="min-w-0 flex-1">
+          <span className="block text-[13.5px] font-semibold text-bone truncate">{row.name}</span>
+          <span className="block text-[12px] text-bone-dim truncate">{summary}</span>
+        </span>
+        <TrendChip trend={trendOf(row.volumeChange)}>{row.volumeChange === undefined ? 'New' : signed(row.volumeChange, '%')}</TrendChip>
+        <ChevronDown size={15} className={`shrink-0 text-bone-dim transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="px-3 pb-3 space-y-1">
+          {p?.date && <div className="text-[11px] text-bone-dim mb-1">Last time: {p.date}</div>}
+          <Compare label="Sets" before={p ? String(p.sets) : undefined} after={String(row.sets)} />
+          {(row.reps > 0 || (p?.reps || 0) > 0) && <Compare label="Reps" before={p ? String(p.reps) : undefined} after={String(row.reps)} />}
+          {(row.holdSec > 0 || (p?.holdSec || 0) > 0) && <Compare label="Hold" before={p ? `${p.holdSec}s` : undefined} after={`${row.holdSec}s`} />}
+          {row.weighted && <Compare label="Top weight" before={p?.topWeight ? `${toUnit(p.topWeight)} ${wu}` : undefined} after={`${toUnit(row.topWeight)} ${wu}`} />}
+          {row.weighted && row.e1rm > 0 && <Compare label="Est. 1-rep max" before={p?.e1rm ? `${toUnit(p.e1rm)} ${wu}` : undefined} after={`${toUnit(row.e1rm)} ${wu}`} />}
+          <Compare label={`Volume (${volUnit})`} before={p ? vol(p.volume) : undefined} after={vol(row.volume)} />
+          {row.stalled >= 3 && <div className="pt-1 text-[11.5px] font-semibold text-amber-600">No PR in {row.stalled} sessions</div>}
+          {row.reasons[0] && <div className="pt-1 text-[11.5px] text-bone-dim leading-snug">{row.reasons[0]}</div>}
+        </div>
+      )}
+    </li>
+  );
+}
+
+export function WorkoutAnalysisView({ analysis: a, imperial, workout, showStats = true }: { analysis: WorkoutAnalysis; imperial: boolean; workout?: Workout; showStats?: boolean }) {
   const toUnit = (kg: number) => Math.round(imperial ? kg * 2.20462 : kg);
   const wu = imperial ? 'lb' : 'kg';
   const change = a.volumeChangePercent;
@@ -23,17 +64,19 @@ export function WorkoutAnalysisView({ analysis: a, imperial, workout }: { analys
   const weighted = a.totals.volumeKg > 0;
   const zoneTotal = a.zones.strength + a.zones.hypertrophy + a.zones.endurance;
 
-  const totals = [
-    { label: 'Working sets', value: String(a.totals.sets) },
-    ...(a.totals.reps ? [{ label: 'Total reps', value: a.totals.reps.toLocaleString() }] : []),
-    ...(a.totals.holdSec ? [{ label: 'Hold time', value: String(a.totals.holdSec), unit: 's' }] : []),
-    ...(weighted ? [
-      { label: 'Volume', value: toUnit(a.totals.volumeKg).toLocaleString(), unit: wu },
-      { label: 'Heaviest set', value: String(toUnit(a.totals.heaviestKg)), unit: wu },
-    ] : []),
+  const keyStats = [
+    { label: 'Sets', value: String(a.totals.sets) },
+    weighted
+      ? { label: 'Volume', value: toUnit(a.totals.volumeKg).toLocaleString(), unit: wu }
+      : a.totals.reps ? { label: 'Reps', value: a.totals.reps.toLocaleString() } : { label: 'Hold', value: String(a.totals.holdSec), unit: 's' },
+    a.totals.durationMin ? { label: 'Time', value: String(a.totals.durationMin), unit: 'min' } : { label: 'Exercises', value: String(a.totals.exercises) },
+  ];
+  const extraStats = [
+    ...(a.totals.durationMin ? [{ label: 'Exercises', value: String(a.totals.exercises) }] : []),
+    ...(weighted && a.totals.reps ? [{ label: 'Reps', value: a.totals.reps.toLocaleString() }] : []),
+    ...(a.totals.holdSec && (weighted || a.totals.reps) ? [{ label: 'Hold', value: String(a.totals.holdSec), unit: 's' }] : []),
+    ...(weighted ? [{ label: 'Heaviest set', value: String(toUnit(a.totals.heaviestKg)), unit: wu }] : []),
     ...(a.totals.avgRpe !== null ? [{ label: 'Avg RPE', value: String(a.totals.avgRpe) }] : []),
-    ...(a.totals.durationMin ? [{ label: 'Duration', value: String(a.totals.durationMin), unit: 'min' }] : []),
-    { label: 'Exercises', value: String(a.totals.exercises) },
   ];
 
   const last = a.lastSameDay;
@@ -47,12 +90,41 @@ export function WorkoutAnalysisView({ analysis: a, imperial, workout }: { analys
     <div>
       <Headline
         trend={trend}
-        title={change === undefined ? 'Baseline session' : change === 0 ? 'Volume matched' : `Volume ${change > 0 ? 'up' : 'down'} ${Math.abs(change)}%`}
-        subtitle="Each exercise vs its best previous session"
+        title={change === undefined ? 'First time · baseline saved' : change === 0 ? 'Same volume as before' : `${Math.abs(change)}% ${change > 0 ? 'more' : 'less'} volume than before`}
+        info={<>Each exercise is compared with its best earlier session.<br /><br />Volume = weight × reps for loaded sets, reps for bodyweight sets and seconds for holds.</>}
       />
 
+      {showStats && <div className="mt-3"><StatGrid items={keyStats} /></div>}
+
+      {last && (
+        <>
+          <SectionTitle info={`Last time you did this day: ${last.date}`}>vs last time</SectionTitle>
+          <div className="p-3 rounded-2xl border border-line/60 space-y-1.5">
+            <Compare label="Sets" before={String(last.sets)} after={String(a.totals.sets)} delta={signed(a.totals.sets - last.sets)} trend={trendOf(a.totals.sets - last.sets)} />
+            {(last.reps > 0 || a.totals.reps > 0) && <Compare label="Reps" before={String(last.reps)} after={String(a.totals.reps)} delta={signed(a.totals.reps - last.reps)} trend={trendOf(a.totals.reps - last.reps)} />}
+            {weighted && last.volumeKg > 0 && <Compare label={`Volume (${wu})`} before={toUnit(last.volumeKg).toLocaleString()} after={toUnit(a.totals.volumeKg).toLocaleString()} delta={signed(Math.round(((a.totals.volumeKg - last.volumeKg) / last.volumeKg) * 100), '%')} trend={trendOf(a.totals.volumeKg - last.volumeKg)} />}
+          </div>
+        </>
+      )}
+
+      {rows.length > 0 && (
+        <>
+          <SectionTitle info="Tap an exercise to compare it with last time. The % is its volume change.">Exercises</SectionTitle>
+          <ul className="space-y-2">
+            {rows.map((row, i) => <ExerciseRow key={`${row.name}-${i}`} row={row} toUnit={toUnit} wu={wu} />)}
+          </ul>
+        </>
+      )}
+
+      {a.insights.length > 0 && (
+        <>
+          <SectionTitle>Coach tips</SectionTitle>
+          <GatedInsights insights={a.insights.slice(0, 3)} />
+        </>
+      )}
+
       {workout && (
-        <div className="mt-3">
+        <div className="mt-4">
           <AISummaryCard
             kind="workout"
             summaryKey={sessionKey('w', workout)}
@@ -62,27 +134,16 @@ export function WorkoutAnalysisView({ analysis: a, imperial, workout }: { analys
         </div>
       )}
 
-      <SectionTitle>Session totals</SectionTitle>
-      <StatGrid items={totals} />
-
-      {last && (
-        <div className="mt-2 p-3 rounded-2xl border border-line/60 space-y-1.5">
-          <div className="text-[12px] font-semibold text-bone">vs last time you did this day <span className="font-normal text-bone-dim">({last.date})</span></div>
-          <Compare label="Sets" before={String(last.sets)} after={String(a.totals.sets)} delta={signed(a.totals.sets - last.sets)} trend={trendOf(a.totals.sets - last.sets)} />
-          {(last.reps > 0 || a.totals.reps > 0) && <Compare label="Reps" before={String(last.reps)} after={String(a.totals.reps)} delta={signed(a.totals.reps - last.reps)} trend={trendOf(a.totals.reps - last.reps)} />}
-          {weighted && last.volumeKg > 0 && <Compare label={`Volume (${wu})`} before={toUnit(last.volumeKg).toLocaleString()} after={toUnit(a.totals.volumeKg).toLocaleString()} delta={signed(Math.round(((a.totals.volumeKg - last.volumeKg) / last.volumeKg) * 100), '%')} trend={trendOf(a.totals.volumeKg - last.volumeKg)} />}
-          {last.durationMin > 0 && a.totals.durationMin > 0 && <Compare label="Duration" before={`${last.durationMin} min`} after={`${a.totals.durationMin} min`} />}
-        </div>
-      )}
-
-      <SectionTitle>Coaching insights</SectionTitle>
-      <GatedInsights insights={a.insights} />
+      {(extraStats.length > 0 || zoneTotal > 0 || a.muscles.length > 0 || a.insights.length > 3) && (
+      <MoreDetails>
+      {extraStats.length > 0 && <div className="mt-3"><StatGrid items={extraStats} /></div>}
+      {a.insights.length > 3 && <div className="mt-3"><GatedInsights insights={a.insights.slice(3)} free={0} /></div>}
 
       {(zoneTotal > 0 || a.muscles.length > 0) && (
         <ProLock compact title="Rep ranges & weekly muscle volume" maxHeight={260}>
       {zoneTotal > 0 && (
         <>
-          <SectionTitle right={`${zoneTotal} rep sets`}>Rep ranges <ProBadge className="ml-1 align-middle" /></SectionTitle>
+          <SectionTitle right={<ProBadge />} info="1–5 reps builds strength, 6–12 builds muscle, 13+ builds endurance.">Rep ranges</SectionTitle>
           <div className="flex h-2.5 rounded-full overflow-hidden bg-bone/[0.06]">
             {ZONES.map(z => a.zones[z.key] > 0 && (
               <div key={z.key} style={{ width: `${(a.zones[z.key] / zoneTotal) * 100}%`, background: z.color }} />
@@ -101,7 +162,7 @@ export function WorkoutAnalysisView({ analysis: a, imperial, workout }: { analys
 
       {a.muscles.length > 0 && (
         <>
-          <SectionTitle right="10–20 sets/week for growth">Weekly sets per muscle</SectionTitle>
+          <SectionTitle info="Hard sets in the last 7 days. 10–20 a week per muscle is the growth range (green). A full set counts for the main muscle, half for helpers.">Weekly sets per muscle</SectionTitle>
           <ul className="space-y-2">
             {a.muscles.map(m => {
               const color = m.weekSets > 20 ? '#d97706' : m.weekSets >= 10 ? '#059669' : '#0284c7';
@@ -109,8 +170,8 @@ export function WorkoutAnalysisView({ analysis: a, imperial, workout }: { analys
                 <li key={m.group}>
                   <div className="flex items-center justify-between text-[11.5px]">
                     <span className="text-bone font-medium">{m.group}</span>
-                    <span className="font-mono text-bone-dim tabular-nums">
-                      {m.sessionSets > 0 ? `${m.sessionSets} today · ` : ''}<span className="text-bone font-semibold">{m.weekSets}</span> / wk · {m.weekDays}d
+                    <span className="tabular-nums text-bone-dim">
+                      <span className="text-bone font-semibold">{m.weekSets}</span> sets this week
                     </span>
                   </div>
                   <div className="relative mt-1 h-1.5 rounded-full bg-bone/[0.06] overflow-hidden">
@@ -125,55 +186,8 @@ export function WorkoutAnalysisView({ analysis: a, imperial, workout }: { analys
       )}
         </ProLock>
       )}
-
-      {rows.length > 0 && (
-        <>
-          <SectionTitle>Exercise breakdown</SectionTitle>
-          <ul className="space-y-2.5">
-            {rows.map((row, i) => {
-              const p = row.prev;
-              const volUnit = row.unit === 'kg' ? wu : row.unit === 's' ? 's' : 'reps';
-              const vol = (v: number) => (row.unit === 'kg' ? toUnit(v) : v).toLocaleString();
-              return (
-                <li key={`${row.name}-${i}`} className="p-3 rounded-2xl border border-line/60">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[13.5px] font-semibold text-bone truncate flex items-center gap-1.5">
-                      {row.isPR && <Trophy size={13} className="text-amber-500 shrink-0" />}{row.name}
-                    </span>
-                    <TrendChip trend={trendOf(row.volumeChange)}>{row.volumeChange === undefined ? 'New' : signed(row.volumeChange, '%')}</TrendChip>
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    <Compare label="Sets" before={p ? String(p.sets) : undefined} after={String(row.sets)} />
-                    {(row.reps > 0 || (p?.reps || 0) > 0) && <Compare label="Total reps" before={p ? String(p.reps) : undefined} after={String(row.reps)} />}
-                    {(row.holdSec > 0 || (p?.holdSec || 0) > 0) && <Compare label="Hold time" before={p ? `${p.holdSec}s` : undefined} after={`${row.holdSec}s`} />}
-                    {row.weighted && (
-                      <>
-                        <Compare label="Top weight" before={p?.topWeight ? `${toUnit(p.topWeight)} ${wu}` : undefined} after={`${toUnit(row.topWeight)} ${wu}`} />
-                        {row.e1rm > 0 && <Compare label="Est. 1-rep max" before={p?.e1rm ? `${toUnit(p.e1rm)} ${wu}` : undefined} after={`${toUnit(row.e1rm)} ${wu}`} />}
-                      </>
-                    )}
-                    <Compare label={`Volume (${volUnit})`} before={p ? vol(p.volume) : undefined} after={vol(row.volume)} />
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {row.zone && <span className="px-1.5 py-px rounded-md bg-bone/[0.06] text-[10.5px] text-bone-dim">avg {row.avgReps} reps · {row.zone === 'hypertrophy' ? 'muscle' : row.zone} range</span>}
-                    {row.rpe ? <span className="px-1.5 py-px rounded-md bg-bone/[0.06] text-[10.5px] text-bone-dim">RPE {row.rpe}</span> : null}
-                    {row.groups.slice(0, 3).map(g => <span key={g} className="px-1.5 py-px rounded-md bg-bone/[0.06] text-[10.5px] text-bone-dim">{g}</span>)}
-                    {row.stalled >= 3 && <span className="px-1.5 py-px rounded-md text-[10.5px] font-semibold" style={{ background: 'rgba(217,119,6,0.12)', color: '#d97706' }}>No PR in {row.stalled} sessions</span>}
-                  </div>
-                  <ul className="mt-2 space-y-0.5">
-                    {row.reasons.map((r, j) => <li key={j} className="text-[11.5px] text-bone-dim leading-snug">• {r}</li>)}
-                  </ul>
-                  {p?.date && <div className="mt-1.5 text-[10.5px] text-bone-dim">Compared with {p.date}</div>}
-                </li>
-              );
-            })}
-          </ul>
-        </>
+      </MoreDetails>
       )}
-
-      <p className="mt-4 text-[11px] text-bone-dim leading-relaxed">
-        Volume = weight × reps for loaded sets, reps for bodyweight sets and seconds for holds. Weekly sets count a full set for the main muscle and half for helpers.
-      </p>
     </div>
   );
 }

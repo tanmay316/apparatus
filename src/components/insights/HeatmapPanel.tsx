@@ -7,6 +7,7 @@ import { RANGE_LABEL, type TimeRange } from '@/lib/time-range';
 import { BRAND } from '@/lib/brand';
 import { ProBadge, ProLock } from './ProLock';
 import { Pills } from './TrainingTools';
+import { InfoTip } from '@/components/ui/InfoTip';
 import type { HeatRoute } from './PersonalHeatmap';
 
 const PersonalHeatmap = lazy(() => import('./PersonalHeatmap'));
@@ -67,8 +68,8 @@ export function HeatmapPanel({ activities, range }: { activities: CardioActivity
   return (
     <section className="pro-panel p-3 sm:p-5">
       <div className="mb-3 px-1 sm:px-0">
-        <h3 className="text-[17px] font-semibold text-bone flex items-center gap-2"><Flame size={17} style={{ color: HEAT }} /> Personal heatmap <ProBadge /></h3>
-        <p className="text-[12px] text-bone-dim mt-0.5">{RANGE_LABEL[range]} · {count} route{count === 1 ? '' : 's'} · {km} km. Brighter lines are the paths you use most.</p>
+        <h3 className="text-[17px] font-semibold text-bone flex items-center gap-2"><Flame size={17} style={{ color: HEAT }} /> Your heatmap <ProBadge /><InfoTip>Every route you did in this period on one map. Brighter lines are the paths you use most.</InfoTip></h3>
+        <p className="text-[12px] text-bone-dim mt-0.5">{RANGE_LABEL[range]} · {count} route{count === 1 ? '' : 's'} · {km} km</p>
       </div>
       <ProLock title="Personal heatmap" reason={`See every route you've run, walked and ridden on one map with ${BRAND.name} Pro.`} maxHeight={400}>
         <div className="space-y-2.5">

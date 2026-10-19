@@ -2,6 +2,7 @@ import type { Plan } from '@/types';
 import { Timestamp } from 'firebase/firestore';
 import { personalCalisthenicsPlan } from '@/data/calisthenics-personal-plan';
 import { tmsCalisthenicsPlan } from '@/data/calisthenics-tms-plan';
+import { YOGA_PLANS } from '@/data/yoga';
 import { BRAND } from '@/lib/brand';
 
 function ex(name: string, sets: string, tempo: string, rest: string, cues: string[], yt?: string) {
@@ -1647,5 +1648,6 @@ export const SAMPLE_PLANS = [
   fatLossPlan,
   postureCorePlan,
   powerliftingPlan,
-  marathonPlan
+  marathonPlan,
+  ...YOGA_PLANS,
 ];

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapContainer, Marker, Polyline, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
+import '@/lib/leaflet-safe';
 import 'leaflet/dist/leaflet.css';
 import { ArrowLeftRight, Bike, Footprints, Loader2, LocateFixed, Magnet, RotateCcw, Save, Trash2, Undo2, Zap } from 'lucide-react';
 import type { CardioActivityType } from '@/types';

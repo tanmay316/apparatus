@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, Crown } from 'lucide-react';
-import { CAN_UPSELL, PRO_PRICE_LABEL, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
+import { CAN_UPSELL, useIsPro, useSubscriptionStore } from '@/stores/subscription-store';
+import { proPriceLabel, useProPricing } from '@/lib/pro-pricing';
 import { BRAND } from '@/lib/brand';
 
 /** Animated gold ring + crown around a Pro member's avatar. Children should be a round image. */
@@ -44,6 +45,7 @@ export function ProTopbarButton({ className }: { className: string }) {
 export function ProSidebarItem({ onNavigate }: { onNavigate?: () => void }) {
   const isPro = useIsPro();
   const openPaywall = useSubscriptionStore(s => s.openPaywall);
+  const priceLabel = proPriceLabel(useProPricing());
   if (!CAN_UPSELL) return null;
   const content = (
     <>
@@ -52,7 +54,7 @@ export function ProSidebarItem({ onNavigate }: { onNavigate?: () => void }) {
       </span>
       <span className="min-w-0 flex-1 text-left">
         <span className="block text-[14px] font-semibold text-bone leading-tight">{BRAND.name} Pro</span>
-        <span className="block text-[11px] text-bone-dim leading-tight">{isPro ? 'Active · manage plan' : `Unlock everything · ${PRO_PRICE_LABEL}`}</span>
+        <span className="block text-[11px] text-bone-dim leading-tight">{isPro ? 'Active · manage plan' : `Unlock everything · ${priceLabel}`}</span>
       </span>
       <ChevronRight size={15} className="text-bone-dim shrink-0" />
     </>
@@ -69,6 +71,7 @@ export function ProSidebarItem({ onNavigate }: { onNavigate?: () => void }) {
 export function ProProfileCard() {
   const isPro = useIsPro();
   const openPaywall = useSubscriptionStore(s => s.openPaywall);
+  const priceLabel = proPriceLabel(useProPricing());
   if (!CAN_UPSELL) return null;
   const body = (
     <>
@@ -80,7 +83,7 @@ export function ProProfileCard() {
           {isPro ? `You're a ${BRAND.name} Pro member` : `Upgrade to ${BRAND.name} Pro`}
         </span>
         <span className="block text-[12px] dx-muted leading-snug">
-          {isPro ? 'Unlimited AI, advanced analytics and every template. Manage your plan.' : `Unlimited AI coach, food scans, advanced analytics and more · ${PRO_PRICE_LABEL}`}
+          {isPro ? 'Unlimited AI, advanced analytics and every template. Manage your plan.' : `Unlimited AI coach, food scans, advanced analytics and more · ${priceLabel}`}
         </span>
       </span>
       <ChevronRight size={18} className="dx-muted shrink-0" />

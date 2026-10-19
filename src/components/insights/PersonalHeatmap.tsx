@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { MapContainer, Polyline, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import '@/lib/leaflet-safe';
 import 'leaflet/dist/leaflet.css';
 import { Hand, Lock } from 'lucide-react';
 import { MAP_THEMES, MapAttribution } from '@/components/cardio/RouteMap';

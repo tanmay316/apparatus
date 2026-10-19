@@ -364,10 +364,10 @@ export function NotificationBell() {
                     </div>
                     <ul>
                       {group.items.map(n => (
-                        <li key={n.key} className="group relative">
+                        <li key={n.key} className={`group relative ${!n.read ? 'bg-sienna/[0.06]' : ''}`}>
                           <button
                             onClick={() => openItem(n)}
-                            className={`w-full text-left pl-3.5 pr-9 py-2 flex items-start gap-2.5 transition-colors hover:bg-bone/[0.05] ${!n.read ? 'bg-sienna/[0.06]' : ''}`}
+                            className="w-full text-left pl-3.5 pr-9 py-2 flex items-start gap-2.5 transition-colors hover:bg-bone/[0.05]"
                           >
                             <NotificationIcon n={n} />
                             <span className="flex-1 min-w-0">
@@ -394,7 +394,7 @@ export function NotificationBell() {
                             {!n.read && <span className="absolute right-[18px] bottom-4 w-2 h-2 rounded-full bg-sienna" aria-label="Unread" />}
                           </button>
                           {n.compare && canCompare && (
-                            <div className={`pl-[60px] pr-9 pb-2 -mt-1 ${!n.read ? 'bg-sienna/[0.06]' : ''}`}>
+                            <div className="pl-[60px] pr-9 pb-2">
                               <button
                                 type="button"
                                 onClick={() => { markRead(n); setOpen(false); openCompare(navigate, n.compare!.uid, n.compare!.name); }}

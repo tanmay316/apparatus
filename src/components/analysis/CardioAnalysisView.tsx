@@ -8,14 +8,14 @@ import { ProBadge, ProLock } from '@/components/insights/ProLock';
 import { AISummaryCard } from '@/components/insights/AICoach';
 import { cardioFacts } from '@/lib/ai-facts';
 import { sessionKey } from '@/services/ai-insights';
-import { Compare, GatedInsights, Headline, SectionTitle, StatGrid, trendOf, type Trend } from './AnalysisParts';
+import { Compare, GatedInsights, Headline, MoreDetails, SectionTitle, StatGrid, trendOf, type Trend } from './AnalysisParts';
 import { PaceElevationCard } from './PaceElevationCard';
 import { sessionProfile } from '@/lib/pro-insights';
 
 const NOUN = { run: 'run', walk: 'walk', cycle: 'ride' } as const;
 const ZONE_COLORS = ['#94a3b8', '#38bdf8', '#22c55e', '#f59e0b', '#f97316', '#ef4444'];
 
-export function CardioAnalysisView({ analysis: a, activity, history }: { analysis: CardioAnalysis; activity?: CardioActivity; history?: CardioActivity[] }) {
+export function CardioAnalysisView({ analysis: a, activity, history, showStats = true }: { analysis: CardioAnalysis; activity?: CardioActivity; history?: CardioActivity[]; showStats?: boolean }) {
   const effort = useMemo(() => (activity ? sessionEffort(activity, history || []) : null), [activity, history]);
   const profile = useMemo(() => (activity ? sessionProfile(activity) : null), [activity]);
   const isRide = a.type === 'cycle';
@@ -35,14 +35,27 @@ export function CardioAnalysisView({ analysis: a, activity, history }: { analysi
   };
 
   const headline = p ? rateDelta(p) : null;
-  const stats = [
+  const headlineTitle = (() => {
+    if (!p) return `First ${noun} · baseline saved`;
+    if (isRide) {
+      const d = Math.round((c.kmh - p.kmh) * 10) / 10;
+      return d === 0 ? `Same speed as last ${noun}` : `${Math.abs(d)} km/h ${d > 0 ? 'faster' : 'slower'} than last ${noun}`;
+    }
+    const d = c.paceSec - p.paceSec;
+    return d === 0 ? `Same pace as last ${noun}` : `${Math.abs(d)} s/km ${d < 0 ? 'faster' : 'slower'} than last ${noun}`;
+  })();
+  const keyStats = [
     { label: 'Distance', value: c.km.toFixed(2), unit: 'km' },
-    { label: 'Moving time', value: formatClock(c.sec) },
+    { label: 'Time', value: formatClock(c.sec) },
     isRide ? { label: 'Avg speed', value: String(c.kmh), unit: 'km/h' } : { label: 'Avg pace', value: formatPaceSec(c.paceSec), unit: '/km' },
-    isRide ? { label: 'Max speed', value: c.maxKmh.toFixed(1), unit: 'km/h' } : { label: 'Avg speed', value: String(c.kmh), unit: 'km/h' },
-    { label: 'Elevation', value: String(c.elevGain), unit: 'm', sub: c.climbPerKm ? `${c.climbPerKm} m/km` : undefined },
+    { label: 'Climb', value: String(c.elevGain), unit: 'm' },
     { label: 'Calories', value: String(c.calories), unit: 'kcal' },
-    ...(c.steps ? [{ label: 'Steps', value: c.steps.toLocaleString() }] : []),
+    c.steps ? { label: 'Steps', value: c.steps.toLocaleString() } : { label: 'Max speed', value: c.maxKmh.toFixed(1), unit: 'km/h' },
+  ];
+  const extraStats = [
+    ...(isRide ? [] : [{ label: 'Avg speed', value: String(c.kmh), unit: 'km/h' }]),
+    ...(c.steps ? [{ label: 'Max speed', value: c.maxKmh.toFixed(1), unit: 'km/h' }] : []),
+    ...(c.climbPerKm ? [{ label: 'Climb per km', value: String(c.climbPerKm), unit: 'm' }] : []),
     ...(c.cadence ? [{ label: 'Cadence', value: String(c.cadence), unit: 'spm' }] : []),
     ...(c.strideM ? [{ label: 'Stride', value: String(c.strideM), unit: 'm' }] : []),
   ];
@@ -55,12 +68,57 @@ export function CardioAnalysisView({ analysis: a, activity, history }: { analysi
     <div>
       <Headline
         trend={headline?.trend ?? 'new'}
-        title={p ? `${rate(c)} · ${headline!.text} vs last ${noun}` : `First ${noun} logged`}
-        subtitle={p ? `Last ${noun} on ${p.date}: ${p.km} km at ${rate(p)}` : 'Future sessions will be compared with this one.'}
+        title={headlineTitle}
+        info={p ? `Last ${noun} on ${p.date}: ${p.km} km at ${rate(p)}.` : 'Your next sessions will be compared with this one.'}
       />
 
+      {showStats && <div className="mt-3"><StatGrid items={keyStats} /></div>}
+
+      {a.splits.length > 0 && (
+        <>
+          <SectionTitle info={<>Each bar is one {a.splitKm} km split. Longer bar = faster. Green is your fastest split, red your slowest.{a.splits.some(s => s.partial) ? ' The last split is shorter than the rest.' : ''}</>}>
+            Splits
+          </SectionTitle>
+          <ul className="space-y-1">
+            {a.splits.map(s => {
+              const value = isRide ? s.kmh : s.paceSec;
+              const fastest = full.length >= 2 && a.pacing?.fastest === s.index;
+              const slowest = full.length >= 2 && a.pacing?.slowest === s.index;
+              // Bar length shows speed: longer = faster.
+              const width = isRide ? (value / maxSplit) * 100 : (minSplit / value) * 100;
+              const color = fastest ? '#059669' : slowest ? '#e11d48' : 'rgb(var(--color-bone-dim) / 0.55)';
+              return (
+                <li key={s.index} className="flex items-center gap-2 text-[12px] tabular-nums">
+                  <span className="w-12 shrink-0 text-bone-dim">{s.partial ? `${s.km}` : `${s.index * a.splitKm}`} km</span>
+                  <div className="flex-1 h-2.5 rounded-full bg-bone/[0.06] overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${Math.max(6, width)}%`, background: color }} />
+                  </div>
+                  <span className={`w-16 shrink-0 text-right ${fastest || slowest ? 'font-bold' : ''} text-bone`}>{isRide ? `${s.kmh} km/h` : formatPaceSec(s.paceSec)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+
+      {activity && profile && (
+        <>
+          <SectionTitle right={<ProBadge />}>{isRide ? 'Speed' : 'Pace'} & elevation</SectionTitle>
+          <ProLock compact title={`${isRide ? 'Speed' : 'Pace'} & elevation chart`} maxHeight={260}>
+            <PaceElevationCard activity={activity} profile={profile} />
+          </ProLock>
+        </>
+      )}
+
+      {a.insights.length > 0 && (
+        <>
+          <SectionTitle>Coach tips</SectionTitle>
+          <GatedInsights insights={a.insights.slice(0, 3)} />
+        </>
+      )}
+
       {activity && (
-        <div className="mt-3">
+        <div className="mt-4">
           <AISummaryCard
             kind="cardio"
             summaryKey={sessionKey('c', activity)}
@@ -70,12 +128,13 @@ export function CardioAnalysisView({ analysis: a, activity, history }: { analysi
         </div>
       )}
 
-      <SectionTitle>This {noun}</SectionTitle>
-      <StatGrid items={stats} />
+      <MoreDetails>
+      {extraStats.length > 0 && <div className="mt-3"><StatGrid items={extraStats} /></div>}
+      {a.insights.length > 3 && <div className="mt-3"><GatedInsights insights={a.insights.slice(3)} free={0} /></div>}
 
       {effort && (
         <>
-          <SectionTitle right={<ProBadge />}>Effort & best efforts</SectionTitle>
+          <SectionTitle right={<ProBadge />} info={<>Training load: an hour at your threshold ({isRide ? `${effort.thresholdKmh} km/h` : `${formatPaceSec(3600 / effort.thresholdKmh)} /km`}) = 100. Intensity is how hard this was compared with that threshold.</>}>Effort</SectionTitle>
           <ProLock compact title="Effort score & best efforts" maxHeight={220}>
             <div className="p-3 rounded-2xl border border-line/60">
               <div className="grid grid-cols-3 gap-2">
@@ -100,7 +159,6 @@ export function CardioAnalysisView({ analysis: a, activity, history }: { analysi
                   ))}
                 </ul>
               )}
-              <p className="mt-2 text-[10.5px] text-bone-dim">Load: an hour at your threshold ({isRide ? `${effort.thresholdKmh} km/h` : `${formatPaceSec(3600 / effort.thresholdKmh)} /km`}) = 100.</p>
             </div>
           </ProLock>
         </>
@@ -108,7 +166,7 @@ export function CardioAnalysisView({ analysis: a, activity, history }: { analysi
 
       {(p || a.recent) && (
         <>
-          <SectionTitle>Compared with</SectionTitle>
+          <SectionTitle info={a.recent ? `28-day average from ${a.recent.count} earlier ${noun}${a.recent.count > 1 ? 's' : ''}.` : undefined}>Compared with</SectionTitle>
           <div className="rounded-2xl border border-line/60 overflow-hidden">
             <table className="w-full text-[11.5px] tabular-nums">
               <thead>
@@ -147,53 +205,10 @@ export function CardioAnalysisView({ analysis: a, activity, history }: { analysi
               </tbody>
             </table>
           </div>
-          {a.recent && <div className="mt-1 text-[10.5px] text-bone-dim">28-day average from {a.recent.count} earlier {noun}{a.recent.count > 1 ? 's' : ''}.</div>}
         </>
       )}
 
-      <SectionTitle>Coaching insights</SectionTitle>
-      <GatedInsights insights={a.insights} />
-
-      {a.splits.length > 0 && (
-        <>
-          <SectionTitle right={a.pacing && (isRide
-            ? `2nd half ${a.pacing.changePct > 0 ? `${a.pacing.changePct}% slower` : `${Math.abs(a.pacing.changePct)}% faster`}`
-            : `halves ${formatPaceSec(a.pacing.firstHalfPaceSec)} / ${formatPaceSec(a.pacing.secondHalfPaceSec)}`)}>
-            Splits ({a.splitKm} km)
-          </SectionTitle>
-          <ul className="space-y-1">
-            {a.splits.map(s => {
-              const value = isRide ? s.kmh : s.paceSec;
-              const fastest = full.length >= 2 && a.pacing?.fastest === s.index;
-              const slowest = full.length >= 2 && a.pacing?.slowest === s.index;
-              // Bar length shows speed: longer = faster.
-              const width = isRide ? (value / maxSplit) * 100 : (minSplit / value) * 100;
-              const color = fastest ? '#059669' : slowest ? '#e11d48' : 'rgb(var(--color-bone-dim) / 0.55)';
-              return (
-                <li key={s.index} className="flex items-center gap-2 text-[11.5px] font-mono tabular-nums">
-                  <span className="w-10 shrink-0 text-bone-dim">{s.partial ? `${s.km}` : `${s.index * a.splitKm}`}</span>
-                  <div className="flex-1 h-2 rounded-full bg-bone/[0.06] overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${Math.max(6, width)}%`, background: color }} />
-                  </div>
-                  <span className={`w-16 shrink-0 text-right ${fastest || slowest ? 'font-bold' : ''} text-bone`}>{isRide ? `${s.kmh}` : formatPaceSec(s.paceSec)}</span>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="mt-1 text-[10.5px] text-bone-dim">{isRide ? 'km/h per split' : 'Pace per km'} · green fastest, red slowest{a.splits.some(s => s.partial) ? ' · last split partial' : ''}</div>
-        </>
-      )}
-
-      {activity && profile && (
-        <>
-          <SectionTitle right={<ProBadge />}>{isRide ? 'Speed' : 'Pace'} & elevation</SectionTitle>
-          <ProLock compact title={`${isRide ? 'Speed' : 'Pace'} & elevation chart`} maxHeight={260}>
-            <PaceElevationCard activity={activity} profile={profile} />
-          </ProLock>
-        </>
-      )}
-
-      <SectionTitle>Last 7 days</SectionTitle>
+      <SectionTitle info="Health guidelines suggest at least 150 minutes of moderate activity a week.">Last 7 days</SectionTitle>
       <div className="p-3 rounded-2xl border border-line/60 space-y-1.5">
         <Compare
           label={`${noun[0].toUpperCase()}${noun.slice(1)} distance`}
@@ -203,12 +218,12 @@ export function CardioAnalysisView({ analysis: a, activity, history }: { analysi
           trend={a.weekly.changePct !== undefined ? (a.weekly.changePct > (isRide ? 50 : 30) ? 'down' : 'up') : undefined}
         />
         <Compare label={`${noun[0].toUpperCase()}${noun.slice(1)}s`} after={String(a.weekly.sessions)} />
-        <Compare label="Heart-health minutes" after={`${a.weekly.moderateMin} / 150`} />
+        <Compare label="Heart points" after={`${a.weekly.moderateMin} / 150`} />
       </div>
 
       {a.predictions.length > 0 && (
         <>
-          <SectionTitle right={<ProBadge />}>Race predictions</SectionTitle>
+          <SectionTitle right={<ProBadge />} info={`Estimated from this ${noun}. Most accurate for distances close to this one.`}>Race predictions</SectionTitle>
           <ProLock compact title="Race predictions" maxHeight={200}>
           <div className="grid grid-cols-2 gap-2">
             {a.predictions.map(pr => (
@@ -219,12 +234,10 @@ export function CardioAnalysisView({ analysis: a, activity, history }: { analysi
               </div>
             ))}
           </div>
-          <p className="mt-1.5 text-[10.5px] text-bone-dim leading-relaxed">
-            From this {noun} using Riegel's formula. Most accurate for distances close to this one and assuming training for the distance.
-          </p>
           </ProLock>
         </>
       )}
+      </MoreDetails>
     </div>
   );
 }

@@ -78,6 +78,7 @@ const WARMUP_PATTERN = new RegExp(
     'pull-apart', 'wrist circle', 'arm circle', 'circles', 'prep', 'fold', 'spinal twist',
     'supine twist', 'seated twist', 'opener', 'downward dog', 'upward dog', 'flow', 'scapular',
     'foam roll', 'german hang', "child'?s pose", 'pigeon pose', 'cobra', 'cat cow', 'cat-cow',
+    'yoga', 'sanchalana', 'skandha', 'dhyana',
   ].map(k => `\\b${k}`).join('|'),
   'i',
 );

@@ -1,5 +1,6 @@
 import type { CardioActivity, CardioActivityType, RoutePoint } from '@/types';
 import { shiftDate, startMs, type Insight } from '@/lib/analysis-common';
+import { cardioHeartPoints } from '@/lib/heart-points';
 
 export interface CardioSplit { index: number; km: number; sec: number; paceSec: number; kmh: number; partial: boolean }
 
@@ -143,10 +144,7 @@ const plausible = (a: CardioActivity) => {
 
 /** Heart-health minutes: vigorous activity counts double (WHO: 150 moderate or 75 vigorous a week). */
 function moderateMinutes(a: CardioActivity): number {
-  const s = snapshot(a);
-  const min = s.sec / 60;
-  const vigorous = a.type === 'run' || (a.type === 'cycle' && s.kmh >= 16) || (a.type === 'walk' && s.kmh >= 6.5);
-  return min * (vigorous ? 2 : 1);
+  return cardioHeartPoints(a);
 }
 
 export function formatPaceSec(sec: number): string {
@@ -342,7 +340,7 @@ function cardioInsights(a: CardioAnalysis, earlier: CardioActivity[]): Insight[]
   }
 
   out.push(a.weekly.moderateMin >= 150
-    ? { tone: 'good', title: 'Weekly heart-health goal met', text: `${a.weekly.moderateMin} moderate-equivalent minutes in the last 7 days (WHO: 150 moderate or 75 vigorous minutes a week).` }
-    : { tone: 'info', title: `${a.weekly.moderateMin} of 150 heart-health minutes`, text: 'The WHO recommends 150 minutes of moderate (or 75 of vigorous) activity a week. Runs and fast rides count double.' });
+    ? { tone: 'good', title: 'Weekly heart points goal met', text: `${a.weekly.moderateMin} heart points in the last 7 days. The WHO recommends 150 minutes of moderate (or 75 of vigorous) activity a week.` }
+    : { tone: 'info', title: `${a.weekly.moderateMin} of 150 weekly heart points`, text: 'The WHO recommends 150 minutes of moderate (or 75 of vigorous) activity a week. 1 point per moderate minute; runs and fast rides count double.' });
   return out;
 }

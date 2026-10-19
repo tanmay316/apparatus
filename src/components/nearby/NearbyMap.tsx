@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo } from 'react';
 import { Circle, MapContainer, Marker, Polyline, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import '@/lib/leaflet-safe';
 import 'leaflet/dist/leaflet.css';
 import { MAP_THEMES, MapAttribution } from '@/components/cardio/RouteMap';
 import { getAvatarUrl } from '@/lib/avatar';

@@ -2,7 +2,7 @@ import { getSignedInUser } from '@/lib/firebase';
 
 const API_BASE = import.meta.env.VITE_NUTRITION_API_URL || 'http://localhost:8000/api/v1';
 
-export type ProPlan = 'monthly' | 'yearly';
+export type ProPlan = 'monthly' | 'sixmonth' | 'yearly';
 
 export interface QuotaUsage { used: number; limit: number; period: 'day' | 'week' | 'month' | 'lifetime' }
 
@@ -55,3 +55,17 @@ export const redeemCoupon = (code: string) =>
 /** Admin: applies a coupon's on/off state, deletion or end date to everyone who redeemed it. */
 export const syncCouponGrants = (code: string) =>
   request<{ ok: boolean; changed: number }>('/coupon/sync', { method: 'POST', body: JSON.stringify({ code }) });
+
+export interface PlanPrice { price: number; mrp: number; enabled: boolean }
+export interface PricingConfig { plans: Record<ProPlan, PlanPrice>; label: string }
+
+/** Admin: configured prices plus the India price Google Play charges for each base plan now. */
+export const getAdminPricing = () =>
+  request<{ config: PricingConfig; play: Record<string, { inr: number | null; state?: string }> | null; playError: string | null }>('/admin/pricing');
+
+/** Admin: saves prices; with `syncPlay` Google Play's prices change first (new subscribers only). */
+export const saveAdminPricing = (config: PricingConfig, syncPlay: boolean) =>
+  request<{ ok: boolean; play: Record<string, 'updated' | 'unchanged'> | null }>('/admin/pricing', {
+    method: 'POST',
+    body: JSON.stringify({ plans: config.plans, label: config.label, sync_play: syncPlay }),
+  });

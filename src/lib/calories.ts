@@ -65,6 +65,10 @@ const MOVE_PROFILES: [RegExp, MoveProfile][] = [
   [/\bl[- ]?sit|\bv[- ]?sit|support hold|ring support|top hold/, timed(4)],
   [/farmer|suitcase carry|carry\b|yoke/, timed(6)],
   [/plank|hollow|arch hold|superman hold|dead ?hang|active hang|flexed hang|scap(ular)? hang|isometric|glute bridge hold/, timed(2.5)],
+  // Yoga (Compendium: Surya Namaskar 3.3 MET, Hatha yoga 2.5, breathing/meditation ~1.3)
+  [/namaskar|salutation/, timed(2.3)],
+  [/pranayama|dhyana|meditation|nidra|shavasana/, timed(0.3)],
+  [/asana|\bpose\b|sanchalana|skandha chakra/, timed(1.5)],
   // Cardio and conditioning
   [/jump(ing)? rope|skipping|double under/, timed(10.8, 0.5)],
   [/sprint/, timed(12, 3)],

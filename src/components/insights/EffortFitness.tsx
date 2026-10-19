@@ -6,6 +6,7 @@ import type { CardioActivity, Workout } from '@/types';
 import { fitnessScore, relativeEffort, type EffortKind } from '@/lib/relative-effort';
 import { Pills, ToolCard } from './TrainingTools';
 import { AskAIButton } from './AICoach';
+import { InfoTip } from '@/components/ui/InfoTip';
 
 const today = () => format(new Date(), 'yyyy-MM-dd');
 const tick = { fontSize: 11, fill: 'rgb(var(--color-bone-dim))' };
@@ -28,7 +29,7 @@ export function RelativeEffortCard({ cardio, workouts }: { cardio: CardioActivit
     <ToolCard
       icon={Flame}
       title="Relative effort"
-      subtitle="One effort score for every run, ride, walk and workout"
+      info="One effort score for every run, ride, walk and workout, based on how long and how hard it was. The shaded band is your usual weekly range (last 3 weeks)."
       color={EFFORT}
       right={<AskAIButton prompt={() => `My relative effort this week is ${current.total}${hasRange ? ` (my weekly range is ${current.low}–${current.high}, from the last 3 weeks)` : ''}: ${e.status.label}. This week's sessions: ${e.activities.map(a => `${a.title} ${a.score}`).join(', ') || 'none yet'}. How should I plan the rest of my week?`} />}
     >
@@ -71,7 +72,7 @@ export function RelativeEffortCard({ cardio, workouts }: { cardio: CardioActivit
         </ResponsiveContainer>
       </div>
 
-      <p className="mt-2 text-[12.5px] leading-snug"><b style={{ color: tone }}>{e.status.label}.</b> <span className="text-bone-dim">{e.status.text}</span></p>
+      <p className="mt-2 text-[13px] font-semibold flex items-center gap-1.5" style={{ color: tone }}>{e.status.label}<InfoTip>{e.status.text}</InfoTip></p>
 
       {e.activities.length > 0 && (
         <div className="mt-3 divide-y divide-line/60">
@@ -110,7 +111,7 @@ export function FitnessScoreCard({ cardio, workouts }: { cardio: CardioActivity[
     <ToolCard
       icon={Gauge}
       title="Fitness score"
-      subtitle="Your training load over the last 6 weeks, from every activity"
+      info="Every session adds to your score by how long and how hard it was; it fades slowly when you rest. A steady climb of a few points a week builds fitness without overdoing it."
       right={<AskAIButton prompt={() => `My fitness score is ${f.current} (${f.level}), ${f.change >= 0 ? 'up' : 'down'} ${Math.abs(f.change)} over the last ${label}. My peak was ${f.peak} on ${f.peakDate}. How do I keep raising it safely?`} />}
     >
       <div className="flex items-end justify-between gap-3">
@@ -147,9 +148,6 @@ export function FitnessScoreCard({ cardio, workouts }: { cardio: CardioActivity[
           </AreaChart>
         </ResponsiveContainer>
       </div>
-      <p className="mt-2 text-[12px] text-bone-dim leading-snug">
-        Every session adds to your score by how long and how hard it was; it fades slowly when you rest. A steady climb of a few points a week builds fitness without overdoing it.
-      </p>
     </ToolCard>
   );
 }

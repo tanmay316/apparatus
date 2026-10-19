@@ -16,6 +16,7 @@ import { ChipGroup, Field, FormSection, FormSheet } from '@/components/ui/FormSh
 import { ProBadge, ProLock } from './ProLock';
 import { AskAIButton } from './AICoach';
 import { FitnessScoreCard, RelativeEffortCard } from './EffortFitness';
+import { InfoTip } from '@/components/ui/InfoTip';
 import { BRAND } from '@/lib/brand';
 
 const today = () => format(new Date(), 'yyyy-MM-dd');
@@ -26,8 +27,8 @@ const STRENGTH = 'rgb(var(--viz-strength))';
 const TONE_COLOR = { good: '#059669', info: '#0284c7', warn: '#d97706' } as const;
 
 /** Full-width card used by the Pro tools; big type and generous charts for phones. */
-export function ToolCard({ icon: Icon, title, subtitle, right, children, color = CARDIO }: {
-  icon: LucideIcon; title: string; subtitle?: string; right?: ReactNode; children: ReactNode; color?: string;
+export function ToolCard({ icon: Icon, title, subtitle, info, right, children, color = CARDIO }: {
+  icon: LucideIcon; title: string; subtitle?: string; info?: ReactNode; right?: ReactNode; children: ReactNode; color?: string;
 }) {
   return (
     <section className="pro-panel p-4 sm:p-5">
@@ -37,8 +38,11 @@ export function ToolCard({ icon: Icon, title, subtitle, right, children, color =
             <Icon size={18} />
           </span>
           <div className="min-w-0">
-            <h3 className="text-[16px] font-semibold text-bone leading-tight">{title}</h3>
-            {subtitle && <p className="text-[12px] text-bone-dim mt-0.5 leading-snug">{subtitle}</p>}
+            <h3 className="flex items-center gap-1.5 text-[16px] font-semibold text-bone leading-tight">
+              <span className="min-w-0">{title}</span>
+              {info && <InfoTip>{info}</InfoTip>}
+            </h3>
+            {subtitle && <p className="text-[12px] text-bone-dim mt-0.5 leading-snug truncate">{subtitle}</p>}
           </div>
         </div>
         {right}
@@ -89,7 +93,7 @@ export function ReadinessCard({ cardio, workouts }: { cardio: CardioActivity[]; 
     <ToolCard
       icon={BatteryCharging}
       title="Today's readiness"
-      subtitle="From your training form, muscle recovery and rest days"
+      info="Based on your recent training load, muscle recovery and rest days. Higher = more ready for a hard session."
       color={color}
       right={<AskAIButton prompt={() => `My readiness today is ${r.score}/100 (${r.label}). ${r.factors.map(f => `${f.label}: ${f.score} (${f.text})`).join('; ')}. Suggested: ${r.plan.title}. What exact session should I do today?`} />}
     >
@@ -97,16 +101,15 @@ export function ReadinessCard({ cardio, workouts }: { cardio: CardioActivity[]; 
         <Gauge value={r.score} color={color} />
         <div className="min-w-0">
           <div className="text-[20px] font-bold leading-tight" style={{ color }}>{r.label}</div>
-          <div className="mt-1.5 text-[14px] font-semibold text-bone">{r.plan.title}</div>
-          <p className="text-[12.5px] text-bone-dim leading-snug mt-0.5">{r.plan.text}</p>
+          <div className="mt-1.5 text-[14px] font-semibold text-bone flex items-center gap-1.5">{r.plan.title}<InfoTip>{r.plan.text}</InfoTip></div>
         </div>
       </div>
       <div className="mt-4 space-y-2.5">
         {r.factors.map(f => (
           <div key={f.key}>
-            <div className="flex items-baseline justify-between gap-2 text-[12.5px]">
-              <span className="font-semibold text-bone">{f.label}</span>
-              <span className="text-bone-dim truncate">{f.text}</span>
+            <div className="flex items-center justify-between gap-2 text-[12.5px]">
+              <span className="font-semibold text-bone flex items-center gap-1.5">{f.label}<InfoTip>{f.text}</InfoTip></span>
+              <span className="text-bone-dim tabular-nums">{f.score}</span>
             </div>
             <div className="mt-1 h-2 rounded-full bg-bone/[0.07] overflow-hidden">
               <div className="h-full rounded-full" style={{ width: `${Math.max(4, f.score)}%`, background: f.score >= 70 ? '#059669' : f.score >= 45 ? '#d97706' : '#e11d48' }} />
@@ -161,7 +164,7 @@ function GoalRow({ p, onEdit }: { p: GoalProgress; onEdit: () => void }) {
         )}
       </div>
       <div className="mt-1.5 text-[11.5px] text-bone-dim">
-        {p.status === 'done' ? 'Goal reached. Nice work.' : `${fmt(p.perDay)} ${p.unit} a day for ${p.daysLeft} day${p.daysLeft === 1 ? '' : 's'} · white line = on pace`}
+        {p.status === 'done' ? 'Goal reached. Nice work.' : `${fmt(p.perDay)} ${p.unit}/day to finish on time`}
       </div>
     </button>
   );
@@ -244,7 +247,7 @@ export function GoalsCard({ cardio, workouts }: { cardio: CardioActivity[]; work
         <button type="button" onClick={() => setEditing('new')} className="w-full pro-tile p-5 text-center">
           <Target size={28} className="mx-auto text-amber-500" />
           <div className="mt-2 text-[15px] font-semibold text-bone">Set your first goal</div>
-          <p className="mt-1 text-[12.5px] text-bone-dim">Like "Run 40 km this month" or "Lift 3 times a week". We track your pace every day.</p>
+          <p className="mt-1 text-[12.5px] text-bone-dim">e.g. "Run 40 km this month"</p>
           <span className="mt-3 inline-flex items-center gap-1 h-10 px-5 rounded-full text-[14px] font-semibold text-white" style={{ background: '#d97706' }}><Plus size={16} /> Add goal</span>
         </button>
       ) : (
@@ -274,7 +277,7 @@ export function CumulativeCard({ cardio, workouts }: { cardio: CardioActivity[];
     <ToolCard
       icon={TrendingUp}
       title={mode === 'month' ? 'This month vs last' : 'This year vs last'}
-      subtitle={metric === 'time' ? 'All cardio and strength time' : 'All runs, walks and rides'}
+      info={metric === 'time' ? 'All cardio and strength time.' : 'All runs, walks and rides.'}
       right={<AskAIButton prompt={() => `${c.currentLabel} so far: ${fmt(c.current)} ${c.unit} (${metric}). ${c.previousLabel} at the same point: ${fmt(c.previousSoFar)} ${c.unit}, total ${fmt(c.previousTotal)} ${c.unit}. Am I on track and what should I aim for?`} />}
     >
       <div className="grid grid-cols-2 gap-2 mb-3">
@@ -365,7 +368,7 @@ export function HybridCard({ cardio, workouts, range, earliest }: { cardio: Card
           </ul>
         </div>
       )}
-      <p className="mt-3 text-[12.5px] leading-snug"><b style={{ color: TONE_COLOR[h.tip.tone] }}>{h.tip.title}.</b> <span className="text-bone-dim">{h.tip.text}</span></p>
+      <p className="mt-3 text-[13px] font-semibold flex items-center gap-1.5" style={{ color: TONE_COLOR[h.tip.tone] }}>{h.tip.title}<InfoTip>{h.tip.text}</InfoTip></p>
     </ToolCard>
   );
 }
@@ -381,10 +384,10 @@ export function TrainingToolsPanel({ cardio, workouts, range, earliest }: { card
       </div>
       <ProLock title="Fitness, effort, readiness & goals" reason={`Track your fitness score over time, measure effort across every activity, see how ready you are today and set goals with ${BRAND.name} Pro.`} maxHeight={560}>
         <div className="space-y-3">
-          <FitnessScoreCard cardio={cardio} workouts={workouts} />
-          <RelativeEffortCard cardio={cardio} workouts={workouts} />
           <ReadinessCard cardio={cardio} workouts={workouts} />
           <GoalsCard cardio={cardio} workouts={workouts} />
+          <FitnessScoreCard cardio={cardio} workouts={workouts} />
+          <RelativeEffortCard cardio={cardio} workouts={workouts} />
           <CumulativeCard cardio={cardio} workouts={workouts} />
           <HybridCard cardio={cardio} workouts={workouts} range={range} earliest={earliest} />
         </div>

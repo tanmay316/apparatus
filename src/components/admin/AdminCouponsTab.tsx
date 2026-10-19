@@ -8,6 +8,7 @@ import {
   type Coupon, type CouponType,
 } from '@/services/coupons';
 import { EmptyState, ErrorState, LoadingState, RefreshButton, SectionHeader, formatWhen } from './AdminShared';
+import { AdminPricing } from './AdminPricing';
 
 const DURATIONS = [
   { id: '7d', label: '7 days', days: 7 },
@@ -40,13 +41,15 @@ export function AdminCouponsTab() {
   const queryClient = useQueryClient();
   const coupons = useQuery({ queryKey: ['adminCoupons'], queryFn: listCoupons });
 
+  const [codeMode, setCodeMode] = useState<'random' | 'custom'>('random');
+  const [prefix, setPrefix] = useState('');
   const [code, setCode] = useState(() => generateCouponCode());
   const [type, setType] = useState<CouponType>('free');
   const [duration, setDuration] = useState<DurationId>('1m');
   const [endDate, setEndDate] = useState(() => durationEnd('1m'));
   const days = endDate ? daysUntil(endDate) : 0;
   const [basePlanId, setBasePlanId] = useState('');
-  const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly');
+  const [period, setPeriod] = useState<'monthly' | 'sixmonth' | 'yearly'>('monthly');
   const [label, setLabel] = useState('');
   const [maxRedemptions, setMaxRedemptions] = useState(1);
   const [expires, setExpires] = useState('');
@@ -65,7 +68,7 @@ export function AdminCouponsTab() {
     }),
     onSuccess: () => {
       showToast(`Coupon ${code} created`);
-      setCode(generateCouponCode());
+      setCode(codeMode === 'random' ? generateCouponCode(prefix) : '');
       setLabel('');
       refresh();
     },
@@ -98,23 +101,57 @@ export function AdminCouponsTab() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)] gap-5">
+      <AdminPricing />
       <section className="card p-5">
         <SectionHeader icon={Ticket} title="New coupon" description="Free Pro until a set date, or a one-time discount on a cheaper Google Play plan for whoever redeems the code." />
         <div className="space-y-4">
           <div>
-            <label htmlFor="cp-code" className="label">Code</label>
-            <div className="flex gap-2">
-              <input
-                id="cp-code"
-                value={code}
-                onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 32))}
-                className="input-field font-mono tracking-wider"
-              />
-              <button type="button" onClick={() => setCode(generateCouponCode())} className="btn-secondary px-3" title="Generate a random code" aria-label="Generate code">
-                <RefreshCw size={14} />
-              </button>
+            <span className="label">Code</span>
+            <div className="grid grid-cols-2 gap-2 mb-2" role="radiogroup" aria-label="Code style">
+              {(['random', 'custom'] as const).map(m => (
+                <button key={m} type="button" role="radio" aria-checked={codeMode === m}
+                  onClick={() => { setCodeMode(m); setCode(m === 'random' ? generateCouponCode(prefix) : ''); }}
+                  className={codeMode === m ? 'btn-primary py-1.5 text-xs' : 'btn-secondary py-1.5 text-xs'}>
+                  {m === 'random' ? 'Random' : 'My own name'}
+                </button>
+              ))}
             </div>
-            <p className="text-[11px] text-bone-dim mt-1">Random codes can't be guessed. Use a readable one (e.g. LAUNCH50) only for public promos.</p>
+            {codeMode === 'random' ? (
+              <>
+                <div className="flex gap-2">
+                  <input
+                    aria-label="Prefix (optional)"
+                    value={prefix}
+                    onChange={e => {
+                      const next = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+                      setPrefix(next);
+                      setCode(generateCouponCode(next));
+                    }}
+                    placeholder="Prefix"
+                    className="input-field font-mono !w-28 shrink-0"
+                  />
+                  <input id="cp-code" value={code} readOnly className="input-field font-mono tracking-wider min-w-0" aria-label="Generated code" />
+                  <button type="button" onClick={() => setCode(generateCouponCode(prefix))} className="btn-secondary px-3" title="Generate another code" aria-label="Generate code">
+                    <RefreshCw size={14} />
+                  </button>
+                </div>
+                <p className="text-[11px] text-bone-dim mt-1">Random codes can't be guessed: best for giveaways and 1-person codes. Add a prefix like DIWALI to keep them readable.</p>
+              </>
+            ) : (
+              <>
+                <input
+                  id="cp-code"
+                  value={code}
+                  onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 32))}
+                  placeholder="e.g. LAUNCH50"
+                  autoCapitalize="characters"
+                  className="input-field font-mono tracking-wider"
+                />
+                <p className={`text-[11px] mt-1 ${code && !validCode ? 'text-danger' : 'text-bone-dim'}`}>
+                  3-32 characters: A-Z, 0-9, - and _. Easy names can be guessed, so set Max uses or a date for public promos.
+                </p>
+              </>
+            )}
           </div>
 
           <div>
@@ -169,12 +206,13 @@ export function AdminCouponsTab() {
                   The discount is one-time: each account can buy this plan once, for one billing period (it doesn't renew; after that the normal price applies).
                   Anyone without the code is refunded automatically.
                 </p>
-                {basePlanId && !isDiscountPlanId(basePlanId) && <p className="text-[11px] text-danger mt-1">Use a separate plan id, not monthly or yearly.</p>}
+                {basePlanId && !isDiscountPlanId(basePlanId) && <p className="text-[11px] text-danger mt-1">Use a separate plan id, not monthly, sixmonth or yearly.</p>}
               </div>
               <div>
                 <label htmlFor="cp-period" className="label">Billing period</label>
-                <select id="cp-period" value={period} onChange={e => setPeriod(e.target.value as 'monthly' | 'yearly')} className="input-field">
+                <select id="cp-period" value={period} onChange={e => setPeriod(e.target.value as 'monthly' | 'sixmonth' | 'yearly')} className="input-field">
                   <option value="monthly">Monthly</option>
+                  <option value="sixmonth">6 months</option>
                   <option value="yearly">Yearly</option>
                 </select>
               </div>

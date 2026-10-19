@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { collection, limit, onSnapshot, orderBy, query, where, type Timestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, limit, onSnapshot, orderBy, query, where, type Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { useClanUnreadStore, type ClanUnread } from '@/stores/clan-unread-store';
@@ -13,6 +13,8 @@ interface ClanWatch {
   latestMs: number;
   latestMine: boolean;
   mentionMs: number;
+  /** Clan doc no longer exists (deleteClan leaves memberships behind) — its chat can't be opened. */
+  gone: boolean;
 }
 
 /** "@" pill shown when someone mentioned me in a clan chat I haven't opened since. */
@@ -50,6 +52,7 @@ export function ClanUnreadSync() {
       const { localReads } = store.getState();
       const byClan: Record<string, ClanUnread> = {};
       watches.forEach((w, clanId) => {
+        if (w.gone) return;
         const lastRead = Math.max(serverReads[clanId] ?? w.baseline, localReads[clanId] ?? 0);
         byClan[clanId] = {
           unread: !w.latestMine && w.latestMs > lastRead,
@@ -61,7 +64,10 @@ export function ClanUnreadSync() {
 
     const watchClan = (clanId: string, historyFrom: Timestamp | null, joinedMs: number) => {
       const legacyRead = parseInt(localStorage.getItem(`lastReadChat_${clanId}`) || '0', 10) || 0;
-      const w: ClanWatch = { stop: () => {}, baseline: Math.max(legacyRead, joinedMs), latestMs: 0, latestMine: false, mentionMs: 0 };
+      const w: ClanWatch = { stop: () => {}, baseline: Math.max(legacyRead, joinedMs), latestMs: 0, latestMine: false, mentionMs: 0, gone: false };
+      getDoc(doc(db, 'clans_v2', clanId))
+        .then(snap => { if (!snap.exists()) { w.gone = true; recompute(); } })
+        .catch(() => {});
       const scope = clanMessageScope(clanId, historyFrom);
       let first = true;
 
@@ -75,7 +81,7 @@ export function ClanUnreadSync() {
           recompute();
           const isNew = !first && snap.docChanges().some(c => c.type === 'added');
           first = false;
-          if (!d || !isNew || w.latestMine || snap.metadata.fromCache) return;
+          if (!d || !isNew || w.latestMine || w.gone || snap.metadata.fromCache) return;
           if (window.location.pathname === `/clan/${clanId}/chat`) return;
           if (!claimBanner(`msg_${d.id}`, w.latestMs)) return;
           const mentioned = Array.isArray(data?.mentions) && data.mentions.includes(uid);
@@ -126,7 +132,10 @@ export function ClanUnreadSync() {
 
     const stopReads = onSnapshot(
       query(collection(db, 'clan_reads'), where('userId', '==', uid)),
+      { includeMetadataChanges: true },
       snap => {
+        // The offline cache can miss read markers written on another device → false dots until the server answers.
+        if (snap.metadata.fromCache && !readsLoaded && navigator.onLine) return;
         snap.docs.forEach(d => {
           const data = d.data({ serverTimestamps: 'estimate' });
           if (typeof data.clanId === 'string') serverReads[data.clanId] = timestampMs(data.lastReadAt);

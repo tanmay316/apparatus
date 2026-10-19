@@ -325,9 +325,11 @@ service cloud.firestore {
 
     // ─── Admin Settings ─────────────────────────────────────────
     // api_keys holds provider secrets and is admin-only; the public on/off flag lives in ai_mode.
+    // pricing is written by the backend so app prices always match what Google Play charges.
     match /admin_settings/{document} {
       allow read: if isAdmin() || (isAuthenticated() && document != 'api_keys');
       allow write: if isAdmin()
+        && document != 'pricing'
         && (document != 'market' || request.resource.data.get('paymentsMode', 'off') in ['off', 'admin', 'on']);
     }
 
@@ -706,7 +708,7 @@ service cloud.firestore {
         && (request.resource.data.type == 'free'
           || (request.resource.data.get('basePlanId', '') is string
             && request.resource.data.get('basePlanId', '').matches('[a-z0-9][a-z0-9-]{0,62}')
-            && !(request.resource.data.get('basePlanId', '') in ['monthly', 'yearly'])))
+            && !(request.resource.data.get('basePlanId', '') in ['monthly', 'sixmonth', 'yearly'])))
         && request.resource.data.get('label', '') is string
         && request.resource.data.get('label', '').size() <= 120;
       match /redemptions/{uid} {

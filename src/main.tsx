@@ -10,6 +10,7 @@ import { Capacitor } from '@capacitor/core';
 import { readSessionCache } from '@/lib/session-cache';
 import { restoreQueryCache, startQueryPersistence } from '@/lib/query-client';
 import { initSafeArea } from '@/lib/safe-area';
+import { isChunkLoadError, reloadForStaleChunk } from '@/lib/stale-chunk';
 
 initSafeArea();
 
@@ -36,12 +37,25 @@ SocialLogin.initialize({
 }).catch(console.error);
 
 // Global unhandled error logging
+window.addEventListener('vite:preloadError', (event) => {
+  if (reloadForStaleChunk()) event.preventDefault();
+});
+
 window.addEventListener('error', (event) => {
+  if (isChunkLoadError(event.error || event.message) && reloadForStaleChunk()) return;
   logError(event.error || new Error(event.message), 'window_onerror');
 });
 
 // Global unhandled promise rejection logging
 window.addEventListener('unhandledrejection', (event) => {
+  const message = String((event.reason as { message?: unknown } | null)?.message ?? '');
+  // Firestore SDK bug: an offline token refresh inside runTransaction trips an internal assertion.
+  // The save falls back to the offline queue (lib/offline.ts), so this is noise.
+  if (message.includes('INTERNAL ASSERTION FAILED') && message.includes('auth/network-request-failed')) {
+    event.preventDefault();
+    return;
+  }
+  if (isChunkLoadError(event.reason) && reloadForStaleChunk()) return;
   logError(event.reason || new Error('Unhandled Promise Rejection'), 'unhandled_rejection');
 });
 

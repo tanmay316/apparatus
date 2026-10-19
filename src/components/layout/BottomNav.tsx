@@ -103,7 +103,7 @@ export function BottomNav() {
         key={tab.id}
         to={tab.path}
         aria-current={active ? 'page' : undefined}
-        className="bn-tab flex-1 min-w-0 flex flex-col items-center justify-center gap-1 h-full"
+        className="bn-tab flex-1 min-w-0 flex flex-col items-center justify-center gap-1 h-full px-0.5"
       >
         <span className="bn-pill relative flex items-center justify-center w-14 h-8 rounded-full">
           <Icon size={21} strokeWidth={active ? 2.4 : 2} />
@@ -112,7 +112,7 @@ export function BottomNav() {
             <span className="absolute top-0.5 right-3.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white" />
           )}
         </span>
-        <span className={`text-[10.5px] leading-none tracking-tight truncate ${active ? 'font-semibold' : 'font-medium'}`}>{tab.label}</span>
+        <span className={`block max-w-full text-[10.5px] leading-tight tracking-tight truncate ${active ? 'font-semibold' : 'font-medium'}`}>{tab.label}</span>
       </Link>
     );
   };
