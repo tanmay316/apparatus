@@ -4,7 +4,7 @@ import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/stores/auth-store';
 import { useSubscriptionStore, type Entitlement } from '@/stores/subscription-store';
 import { getBillingStatus } from '@/services/billing';
-import { PLAY_BILLING, restorePro } from '@/lib/play-billing';
+import { PLAY_BILLING, hasPendingPurchase, restorePro } from '@/lib/play-billing';
 
 const GRACE_MS = 3 * 24 * 3600 * 1000;
 
@@ -50,16 +50,18 @@ export function SubscriptionSync() {
     }, () => {});
 
     let lastFetch = 0;
-    let restored = false;
+    let lastRestore = 0;
     const refresh = () => {
       if (Date.now() - lastFetch < 60_000) return;
       lastFetch = Date.now();
       getBillingStatus().then(status => {
         useSubscriptionStore.getState().setStatus(status, uid);
-        // Picks up a Play purchase that was paid but never confirmed (app closed mid-purchase).
-        if (PLAY_BILLING && status.enabled && !status.entitlement?.pro && !restored) {
-          restored = true;
-          restorePro().catch(() => {});
+        // Links a Play purchase that was paid but not confirmed yet (app closed mid-purchase, no network,
+        // payment still processing). Retried on every resume until Pro shows up.
+        const due = Date.now() - lastRestore > (hasPendingPurchase() ? 60_000 : 10 * 60_000);
+        if (PLAY_BILLING && status.enabled && !status.entitlement?.pro && due) {
+          lastRestore = Date.now();
+          restorePro().then(pro => { if (pro) getBillingStatus().then(s => useSubscriptionStore.getState().setStatus(s, uid)).catch(() => {}); }).catch(() => {});
         }
       }).catch(() => {});
     };

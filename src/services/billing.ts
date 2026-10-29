@@ -23,15 +23,24 @@ export function isProRequired(detail: unknown): detail is ProRequiredDetail {
   return !!detail && typeof detail === 'object' && (detail as any).code === 'pro_required';
 }
 
+/** Error from the billing API; `status` is undefined when the server couldn't be reached. */
+export class BillingApiError extends Error {
+  constructor(message: string, readonly status?: number) {
+    super(message);
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const user = await getSignedInUser();
   if (!user) throw new Error('Not signed in');
   const res = await fetch(`${API_BASE}/billing${path}`, {
     ...init,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await user.getIdToken()}` },
+  }).catch(() => {
+    throw new BillingApiError('No connection to the server. Please try again.');
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(typeof body.detail === 'string' ? body.detail : 'Something went wrong. Please try again.');
+  if (!res.ok) throw new BillingApiError(typeof body.detail === 'string' ? body.detail : 'Something went wrong. Please try again.', res.status);
   return body as T;
 }
 

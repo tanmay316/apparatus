@@ -57,6 +57,8 @@ def _limit(uid: str, key: str, limit: int, window: int) -> None:
 @router.get("/status")
 async def billing_status(current_user: dict = Depends(get_current_user)):
     uid = current_user["uid"]
+    if settings.billing_enabled:
+        await asyncio.to_thread(play.remember_account, uid)
     await asyncio.to_thread(play.refresh_if_stale, uid)
     entitlement, usage = await asyncio.gather(
         asyncio.to_thread(subs.get_entitlement, uid, subs.verified_email(current_user)),

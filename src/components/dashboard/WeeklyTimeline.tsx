@@ -5,27 +5,22 @@ import { useState } from 'react';
 import type { Plan, PlanDay } from '@/types';
 import { AiPlanGeneratorModal } from '@/components/ui/AiPlanGeneratorModal';
 import { getActiveMuscles, type MuscleRegion } from '@/lib/muscle-map';
+import { isDayDoneThisWeek } from '@/lib/plan-schedule';
 
 interface WeeklyTimelineProps {
   activePlan: Plan | null | undefined;
   activeDays: PlanDay[];
-  todayWorkouts: any[];
-  recentWorkouts: any[];
+  /** Workouts logged since Monday. */
+  weekWorkouts: any[];
+  /** Day to train next (upNextDayIndex), shared with Today's focus so both always agree. */
+  upNextIndex: number;
   onShareDay?: (day: PlanDay) => void;
-  isActive?: boolean;
-  sessionProgress?: number;
-  activeSessionDayId?: string | null;
 }
 
-export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWorkouts, onShareDay }: WeeklyTimelineProps) {
+export function WeeklyTimeline({ activePlan, activeDays, weekWorkouts, upNextIndex, onShareDay }: WeeklyTimelineProps) {
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
 
   if (!activePlan || activeDays.length === 0) return null;
-
-  const firstUncompletedIndex = activeDays.findIndex(d =>
-    !todayWorkouts.some((w: any) => w.dayId === d.id) && !recentWorkouts.some((w: any) => w.dayId === d.id)
-  );
-  const activeIndex = firstUncompletedIndex === -1 ? activeDays.length - 1 : firstUncompletedIndex;
 
   return (
     <motion.section
@@ -58,9 +53,8 @@ export function WeeklyTimeline({ activePlan, activeDays, todayWorkouts, recentWo
 
       <div className="dx-rail">
         {activeDays.filter(Boolean).map((day, index) => {
-          const wasCompleted = todayWorkouts.some((w: any) => w.dayId === day.id)
-            || recentWorkouts.some((w: any) => w.dayId === day.id);
-          const isToday = index === activeIndex;
+          const wasCompleted = isDayDoneThisWeek(day, weekWorkouts, activePlan.id);
+          const isToday = index === upNextIndex;
 
           const allExercises = [...(day.warmup || []), ...(day.skillWork || []), ...(day.strength || []), ...(day.cooldown || [])];
           const exerciseNames = allExercises.filter(Boolean).map(ex => ex.name);

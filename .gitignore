@@ -75,3 +75,9 @@ scratch/
 # Build outputs
 Apparatus.apk
 Apparatus.aab
+
+# Google Cloud service-account keys (Play billing). Put the contents in Render's env, never in git.
+apparatus-46b1b-*.json
+*service-account*.json
+*-sa-key*.json
+random.txt

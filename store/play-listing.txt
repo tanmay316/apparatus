@@ -132,4 +132,7 @@ Needs a Google Payments merchant profile: Play Console > Settings > Payments pro
                  GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT = the push service-account email.
      Play Console > Monetize > Monetization setup > Real-time developer notifications: topic
      projects/<project>/topics/play-billing, then "Send test notification".
+     Needed so a purchase the app couldn't confirm (app closed, no network, UPI still processing)
+     still unlocks Pro by itself. Anything never unlocked is refunded by Google after 3 days, because
+     only the server acknowledges a purchase, after granting Pro.
 5. Setup > License testing: add your Gmail so test purchases are free. Install from the testing track and buy.

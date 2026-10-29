@@ -115,6 +115,49 @@ async function readNativeRoute(maxPoints: number): Promise<RoutePoint[]> {
 
 /** Most fixes a resume may append one by one; longer gaps reload the whole simplified route. */
 const MAX_RESUME_GAP_POINTS = 4000;
+/** Accepted fixes arrive every second or few while moving; a longer silence means JS missed some. */
+const ROUTE_GAP_FILL_MS = 6000;
+
+/** Merges journal fixes into the live route by timestamp (live fixes may have arrived meanwhile). */
+function mergeRoutePoints(extra: RoutePoint[]) {
+  if (!extra.length) return;
+  const byTs = new Map<number, RoutePoint>();
+  for (const p of useCardioStore.getState().routePoints) byTs.set(p.ts ?? 0, p);
+  for (const p of extra) byTs.set(p.ts ?? 0, p);
+  const merged = [...byTs.values()].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+  useCardioStore.setState({ routePoints: merged.length > MAX_DISPLAY_POINTS ? simplifyRoute(merged, SIMPLIFY_TO_POINTS) : merged });
+}
+
+let gapFillInFlight: Promise<void> | null = null;
+let gapFillPendingFrom: number | null = null;
+
+/** Pulls every fix the native journal recorded after `fromTs` into the route. */
+function fillRouteGap(fromTs: number): Promise<void> {
+  if (!hasNativeEngine()) return Promise.resolve();
+  if (gapFillInFlight) {
+    gapFillPendingFrom = Math.min(gapFillPendingFrom ?? fromTs, fromTs);
+    return gapFillInFlight;
+  }
+  gapFillInFlight = (async () => {
+    try {
+      const { points } = await NativeWorkoutLocation.getLocationsAfter({ timestamp: fromTs });
+      if (points.length > MAX_RESUME_GAP_POINTS) {
+        const full = await readNativeRoute(MAX_DISPLAY_POINTS);
+        if (full.length > 0) useCardioStore.setState({ routePoints: full });
+      } else {
+        mergeRoutePoints(points.map(toRoutePoint));
+      }
+    } catch (e) {
+      console.warn('[CardioStore] Route gap fill failed:', e);
+    }
+  })().finally(() => {
+    gapFillInFlight = null;
+    const next = gapFillPendingFrom;
+    gapFillPendingFrom = null;
+    if (next != null) void fillRouteGap(next);
+  });
+  return gapFillInFlight;
+}
 
 function resetWebGpsEngine() {
   rawSpeedBuffer = [];
@@ -244,19 +287,23 @@ const runNativeSync = async (): Promise<boolean> => {
 
       // Same session: add only the exact fixes recorded while we were away (keeps every curve).
       // A restored snapshot is only a coarse placeholder, so it is always replaced in full.
-      let displayRoute: RoutePoint[] | null = null;
       if (sameSession && !routeFromSnapshot && summary.pointCount - known.length <= MAX_RESUME_GAP_POINTS) {
         try {
-          const gap = await NativeWorkoutLocation.getLocationsAfter({ timestamp: lastKnown!.ts ?? 0 });
-          // Live fixes may have arrived meanwhile, so merge by timestamp.
-          const byTs = new Map<number, RoutePoint>();
-          for (const p of useCardioStore.getState().routePoints) byTs.set(p.ts ?? 0, p);
-          for (const p of gap.points) byTs.set(p.timestamp, toRoutePoint(p));
-          const merged = [...byTs.values()].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
-          displayRoute = merged.length > MAX_DISPLAY_POINTS ? simplifyRoute(merged, SIMPLIFY_TO_POINTS) : merged;
+          // A live fix may already have landed after the background gap; fetch from before that gap.
+          let fromTs = lastKnown!.ts ?? 0;
+          for (let i = known.length - 1; i >= Math.max(1, known.length - 5); i--) {
+            if ((known[i].ts ?? 0) - (known[i - 1].ts ?? 0) > ROUTE_GAP_FILL_MS) {
+              fromTs = known[i - 1].ts ?? 0;
+              break;
+            }
+          }
+          const gap = await NativeWorkoutLocation.getLocationsAfter({ timestamp: fromTs });
+          mergeRoutePoints(gap.points.map(toRoutePoint));
+          routeFromSnapshot = false;
+          return true;
         } catch { /* fall back to the full route below */ }
       }
-      if (!displayRoute) displayRoute = await readNativeRoute(MAX_DISPLAY_POINTS);
+      const displayRoute = await readNativeRoute(MAX_DISPLAY_POINTS);
       if (displayRoute.length > 0) useCardioStore.setState({ routePoints: displayRoute });
       routeFromSnapshot = false;
       return true;
@@ -387,6 +434,10 @@ function handleNativeLocation(point: NativeWorkoutPoint) {
       alt: point.altitude ?? undefined,
       speed: point.speed ?? undefined,
     };
+    const prev = store.routePoints[store.routePoints.length - 1];
+    // Fixes recorded while the screen was locked / app minimised never reached JS. Without this the
+    // first fix after unlocking was joined to the last one before locking by a straight line.
+    if (prev?.ts && now - prev.ts > ROUTE_GAP_FILL_MS) void fillRouteGap(prev.ts);
     nextRoutePoints = [...store.routePoints, acceptedPt];
 
     if (nextRoutePoints.length > MAX_DISPLAY_POINTS) {

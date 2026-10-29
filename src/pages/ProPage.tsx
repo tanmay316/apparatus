@@ -88,12 +88,12 @@ export function ProPage() {
     if (!user) return;
     setBusy(true);
     try {
-      const pro = await buyPro(basePlan, user.uid);
+      const pro = await buyPro(basePlan, user.uid, prices?.[basePlan]?.offerToken);
       refreshStatus();
       if (pro) {
         showToast(`Welcome to ${BRAND.name} Pro!`, 'success');
       } else {
-        showToast('Payment is pending. Pro unlocks as soon as Google Play confirms it.', 'info');
+        showToast('Payment is processing. Pro unlocks automatically as soon as Google Play confirms it.', 'info');
       }
     } catch (err: any) {
       if (!isPurchaseCancelled(err)) showToast(err?.message || 'Could not complete the purchase.', 'error');

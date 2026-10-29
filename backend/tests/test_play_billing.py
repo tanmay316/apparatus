@@ -50,7 +50,7 @@ for mod in (play, subs):
     mod.get_firestore_client = lambda: db
 settings.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = "{}"
 settings.GOOGLE_PLAY_PRO_PRODUCT_ID = "pro"
-for coll in ("play_purchases", "users", "coupons"):
+for coll in ("play_purchases", "play_accounts", "users", "coupons"):
     for d in db.collection(coll).stream():
         for sub in d.reference.collections():
             for x in sub.stream():
@@ -180,5 +180,38 @@ T7 = "tok_erin_discount_with_coupon_0"
 make(T7, "erin", plan="monthly-49")
 check("discount plan with coupon grants Pro", play.verify_purchase("erin", T7)["pro"] and T7 not in revokes)
 check("someone else can't claim erin's discount token", raises(lambda: play.verify_purchase("frank", T7), 403) and T7 not in revokes)
+
+# Paid but the app never confirmed (closed mid-purchase / no network / UPI pending): the notification links it.
+envelope_new = lambda token: {"message": {"data": base64.b64encode(json.dumps({  # noqa: E731
+    "packageName": settings.GOOGLE_PLAY_PACKAGE, "subscriptionNotification": {"purchaseToken": token, "notificationType": 4}}).encode()).decode()}}
+T8 = "tok_hank_never_confirmed_00000"
+make(T8, "hank")
+play.handle_notification(envelope_new(T8))
+check("unknown purchase without a known account stays unlinked", not ent("hank").get("pro"))
+play.remember_account("hank")
+check("account mapping stored by hash", (db.collection("play_accounts").document(play.account_id("hank")).get().to_dict() or {}).get("uid") == "hank")
+play.handle_notification(envelope_new(T8))
+check("notification unlocks Pro the app never confirmed", ent("hank")["pro"] and ent("hank")["provider"] == "google_play")
+check("...and the server acknowledges it", T8 in acks)
+check("...and binds the token to the buyer", raises(lambda: play.verify_purchase("mallory", T8), 403))
+db.collection("play_accounts").document(play.account_id("ivy")).set({"uid": "mallory"})
+T9 = "tok_ivy_forged_mapping_000000"
+make(T9, "ivy")
+play.handle_notification(envelope_new(T9))
+check("forged account mapping can't redirect a purchase", not ent("mallory").get("pro") and not ent("ivy").get("pro"))
+T10 = "tok_jack_discount_no_coupon_000"
+make(T10, "jack", plan="monthly-49")
+play.remember_account("jack")
+play.handle_notification(envelope_new(T10))
+check("notified discount purchase without coupon is refunded, not granted", T10 in revokes and not ent("jack").get("pro"))
+
+# Pending UPI payment is re-checked within minutes, not hours
+T11 = "tok_kim_pending_then_paid_00000"
+make(T11, "kim", state="SUBSCRIPTION_STATE_PENDING")
+play.verify_purchase("kim", T11)
+purchases[T11]["subscriptionState"] = "SUBSCRIPTION_STATE_ACTIVE"
+db.collection("users").document("kim").collection("private").document("entitlement").update({"checkedAt": now - play.PENDING_REFRESH_SEC - 1})
+play.refresh_if_stale("kim")
+check("pending payment unlocks on the next status check once paid", ent("kim")["pro"])
 
 sys.exit(1 if failed else 0)

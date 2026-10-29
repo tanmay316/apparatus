@@ -9,6 +9,7 @@ import { getFollowing, getFeedPage } from '@/services/social';
 import { calculateWorkoutCalories } from '@/lib/calories';
 import { effectiveStreak } from '@/lib/stats';
 import { computeAthleteRank } from '@/lib/rank';
+import { upNextDayIndex } from '@/lib/plan-schedule';
 import { ShareCardModal, type ShareCardData } from '@/components/ui/ShareCardModal';
 import { CardioShareModal, type CardioShareData } from '@/components/ui/CardioShareModal';
 
@@ -164,21 +165,9 @@ export function Dashboard() {
     sessionProgress = totalEx ? Math.round((completedEx / totalEx) * 100) : 0;
   }
 
-  // Determine current day index based on active session, today's logged workout, or next queued day
-  const findDayIndex = (dayId: string) => {
-    return activeDays.findIndex(d => d.id === dayId || String(d.dayNumber) === String(dayId));
-  };
-
-  let currentDayIndex = 0;
-  if (store.isActive && store.dayId) {
-    const activeIdx = findDayIndex(store.dayId);
-    if (activeIdx !== -1) currentDayIndex = activeIdx;
-  } else if (activeDays.length > 0) {
-    const firstUncompletedIndex = activeDays.findIndex(d =>
-      !todayWorkouts.some((w: any) => w.dayId === d.id) && !recentWorkouts.some((w: any) => w.dayId === d.id)
-    );
-    currentDayIndex = firstUncompletedIndex === -1 ? activeDays.length - 1 : firstUncompletedIndex;
-  }
+  // Same rule as the weekly timeline: running session, else the first plan day not done this week.
+  const weekPlanWorkouts = [...currentWeekWorkouts, ...todayWorkouts];
+  const currentDayIndex = Math.max(0, upNextDayIndex(activeDays, weekPlanWorkouts, activePlan?.id, store.isActive ? store.dayId : null));
 
   // Handle Share button click on a completed workout day
   const handleShareDay = (day: PlanDay) => {
@@ -290,12 +279,9 @@ export function Dashboard() {
           <WeeklyTimeline
             activePlan={activePlan}
             activeDays={activeDays}
-            todayWorkouts={todayWorkouts}
-            recentWorkouts={currentWeekWorkouts}
+            weekWorkouts={weekPlanWorkouts}
+            upNextIndex={currentDayIndex}
             onShareDay={handleShareDay}
-            isActive={store.isActive}
-            sessionProgress={sessionProgress}
-            activeSessionDayId={store.dayId}
           />
         </div>
 

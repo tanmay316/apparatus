@@ -7,8 +7,13 @@ Play Developer API (never trust the client), bind the token to that one account,
 write users/{uid}/private/entitlement. Renewals, cancellations and refunds arrive as Real-time
 developer notifications (Pub/Sub push) and are also re-checked lazily from /billing/status.
 
+The app buys with autoAcknowledgePurchases off, so only the server acknowledges, and only after Pro is
+granted. If Pro is never unlocked for a payment, Google refunds it automatically after 3 days.
+
 Firestore (Admin SDK only):
   play_purchases/{sha256(token)}  { uid, token, productId, plan, status, linkedTokenKey, updatedAt }
+  play_accounts/{account_id(uid)} { uid }  lets a purchase notification find its account even when the
+                                           app never got to send the token (crash, network, pending UPI).
 """
 from __future__ import annotations
 
@@ -36,6 +41,8 @@ SCOPE = "https://www.googleapis.com/auth/androidpublisher"
 TOKEN_RE = re.compile(r"^[A-Za-z0-9._:-]{20,1000}$")
 # Re-check a subscription with Google at most this often when the app asks for its status.
 REFRESH_SEC = 6 * 3600
+# Payments still being processed (UPI, cash) are re-checked much sooner.
+PENDING_REFRESH_SEC = 5 * 60
 
 STATES = {
     "SUBSCRIPTION_STATE_ACTIVE": "active",
@@ -65,6 +72,33 @@ def token_key(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+_known_accounts: set[str] = set()
+
+
+def remember_account(uid: str) -> None:
+    """Records account_id -> uid (once per process) so notifications can resolve the buyer."""
+    if not uid or uid in _known_accounts:
+        return
+    db = get_firestore_client()
+    if not db:
+        return
+    try:
+        db.collection("play_accounts").document(account_id(uid)).set({"uid": uid})
+        _known_accounts.add(uid)
+    except Exception as exc:
+        logger.warning("Could not record Play account for %s: %s", uid, exc)
+
+
+def _uid_for_account(account: str) -> Optional[str]:
+    db = get_firestore_client()
+    if not db or not re.fullmatch(r"[0-9a-f]{64}", account or ""):
+        return None
+    snap = db.collection("play_accounts").document(account).get()
+    uid = (snap.to_dict() or {}).get("uid") if snap.exists else None
+    # The id is derived from the uid, so a mismatching doc can't redirect a purchase to someone else.
+    return uid if uid and account_id(uid) == account else None
+
+
 _lock = threading.Lock()
 _creds = None
 
@@ -92,6 +126,14 @@ def _api(method: str, path: str, body: Optional[dict] = None) -> dict:
     if resp.status_code in (400, 404, 410):
         logger.warning("Play %s %s -> %s %s", method, path.split("/tokens/")[0], resp.status_code, resp.text[:200])
         raise PlayError(400, "This purchase could not be verified.")
+    if resp.status_code in (401, 403):
+        logger.error(
+            "Play %s -> %s %s | The service account in GOOGLE_PLAY_SERVICE_ACCOUNT_JSON can't read purchases: "
+            "enable the Google Play Android Developer API and invite it in Play Console > Users and permissions "
+            "with 'View financial data' + 'Manage orders and subscriptions'.",
+            method, resp.status_code, resp.text[:300],
+        )
+        raise PlayError(502, "Google Play isn't reachable right now. Pro will unlock shortly.")
     if resp.status_code >= 400:
         logger.error("Play %s -> %s %s", method, resp.status_code, resp.text[:300])
         raise PlayError(502, "Google Play isn't reachable right now. Pro will unlock shortly.")
@@ -304,7 +346,10 @@ def _bound_to(token: str) -> Optional[str]:
 def verify_purchase(uid: str, token: str) -> dict:
     if not TOKEN_RE.match(token or ""):
         raise PlayError(400, "This purchase could not be verified.")
-    sub = fetch(token)
+    return _link(uid, token, fetch(token))
+
+
+def _link(uid: str, token: str, sub: dict) -> dict:
     info = parse(sub)
     # Discounted base plans are only for accounts that redeemed the matching coupon. The plan is
     # visible to every client, so a purchase of it without the coupon is refunded, never honoured.
@@ -336,7 +381,8 @@ def refresh_if_stale(uid: str) -> None:
         if data.get("provider") != "google_play" or not data.get("subscriptionId"):
             return
         end = subs._to_epoch(data.get("currentPeriodEnd"))
-        if time.time() - float(data.get("checkedAt") or 0) < REFRESH_SEC and not (end and end < time.time()):
+        every = PENDING_REFRESH_SEC if data.get("status") == "pending_payment" else REFRESH_SEC
+        if time.time() - float(data.get("checkedAt") or 0) < every and not (end and end < time.time()):
             return
         owner = get_firestore_client().collection("play_purchases").document(data["subscriptionId"]).get()
         token = (owner.to_dict() or {}).get("token") if owner.exists else None
@@ -381,15 +427,26 @@ def handle_notification(envelope: dict) -> None:
     owner = db.collection("play_purchases").document(token_key(token)).get()
     uid = (owner.to_dict() or {}).get("uid") if owner.exists else None
     sub = fetch(token)
-    if not uid:
-        # A plan change creates a new token; it inherits the owner of the purchase it replaces.
-        linked = str(sub.get("linkedPurchaseToken") or "")
-        prev = db.collection("play_purchases").document(token_key(linked)).get() if linked else None
-        uid = (prev.to_dict() or {}).get("uid") if prev and prev.exists else None
-        if uid and parse(sub)["base_plan"] not in subs.PLANS and not subs.coupon_allows_plan(uid, parse(sub)["base_plan"]):
+    if uid:
+        save(uid, token, sub)
+        return
+    # A plan change creates a new token; it inherits the owner of the purchase it replaces.
+    linked = str(sub.get("linkedPurchaseToken") or "")
+    prev = db.collection("play_purchases").document(token_key(linked)).get() if linked else None
+    uid = (prev.to_dict() or {}).get("uid") if prev and prev.exists else None
+    if uid:
+        if parse(sub)["base_plan"] not in subs.PLANS and not subs.coupon_allows_plan(uid, parse(sub)["base_plan"]):
             logger.warning("Plan change to a coupon-only plan without a coupon for %s; left for /play/verify", uid)
             return
+        save(uid, token, sub)
+        return
+    # A new purchase the app never confirmed (closed mid-purchase, no network, payment still processing):
+    # the buyer's account id travels with the purchase, so link it here instead of waiting for the app.
+    uid = _uid_for_account(parse(sub)["account"])
     if not uid:
         logger.info("Play notification for an unknown purchase; the app will verify it")
         return
-    save(uid, token, sub)
+    try:
+        _link(uid, token, sub)
+    except PlayError as exc:
+        logger.warning("Linking a notified purchase to %s failed: %s", uid, exc.message)

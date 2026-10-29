@@ -63,6 +63,8 @@ def _delete_firestore(uid: str) -> None:
             doc.delete()
     for purchase in db.collection("play_purchases").where("uid", "==", uid).limit(50).stream():
         purchase.reference.delete()
+    db.collection("play_accounts").document(play.account_id(uid)).delete()
+    play._known_accounts.discard(uid)
 
 
 def delete_account_data(db: Session, uid: str) -> dict:

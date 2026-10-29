@@ -27,6 +27,8 @@ if errorlevel 1 goto :fail
 
 echo.
 echo [3/5] Syncing web assets and plugins to Android...
+call node scripts\patch-native-purchases.cjs
+if errorlevel 1 goto :fail
 call npx cap sync android
 if errorlevel 1 goto :fail
 

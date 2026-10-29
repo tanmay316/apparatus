@@ -54,6 +54,8 @@ interface WorkoutState {
   startWorkout: (plan: Plan, day: PlanDay) => void;
   startTimer: () => void;
   pauseTimer: () => void;
+  /** Pauses as of an earlier moment (the app was closed then), so that time isn't counted. */
+  pauseTimerAt: (at: number) => void;
   resumeTimer: () => void;
   updateSet: (exerciseName: string, mode: 'reps' | 'hold' | 'freeform', setIndex: number, data: SetData) => void;
   addSet: (exerciseName: string, mode: 'reps' | 'hold' | 'freeform') => void;
@@ -66,6 +68,19 @@ interface WorkoutState {
   editExercise: (section: 'warmup' | 'skillWork' | 'strength' | 'cooldown', idx: number, updated: Exercise) => void;
   deleteExercise: (section: 'warmup' | 'skillWork' | 'strength' | 'cooldown', idx: number) => void;
   addExercise: (section: 'warmup' | 'skillWork' | 'strength' | 'cooldown', exercise: Exercise) => void;
+}
+
+// Last moment a running workout was seen alive; read on cold start (hydration runs inside create(), so this sits above it).
+// Kept in its own key so the whole workout isn't re-serialised every few seconds.
+const LAST_ALIVE_KEY = 'apparatus.workout.lastAlive';
+
+function readLastAlive(): number | null {
+  try {
+    const v = Number(localStorage.getItem(LAST_ALIVE_KEY));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 export const useWorkoutStore = create<WorkoutState>()(
@@ -124,6 +139,11 @@ export const useWorkoutStore = create<WorkoutState>()(
 
       pauseTimer: () => {
         set({ isPaused: true, pausedAt: Date.now() });
+      },
+
+      pauseTimerAt: (at) => {
+        if (get().isPaused) return;
+        set({ isPaused: true, pausedAt: Math.min(at, Date.now()) });
       },
 
       resumeTimer: () => {
@@ -269,6 +289,27 @@ export const useWorkoutStore = create<WorkoutState>()(
     }),
     {
       name: 'apparatus-workout-storage',
+      // Rehydrating means the app was started fresh: it was swiped away from recents (or killed).
+      // A running workout timer is paused at the moment the app was last alive, so the time the
+      // app was closed isn't counted. Minimising alone doesn't reload the app, so the timer keeps running.
+      onRehydrateStorage: () => (state) => {
+        if (!state?.isActive || !state.startedAt || state.isPaused) return;
+        const lastAlive = readLastAlive();
+        state.pauseTimerAt(lastAlive && lastAlive >= state.startedAt ? lastAlive : Date.now());
+      },
     }
   )
 );
+
+function markAlive() {
+  const st = useWorkoutStore.getState();
+  if (!st.isActive || !st.startedAt || st.isPaused) return;
+  try { localStorage.setItem(LAST_ALIVE_KEY, String(Date.now())); } catch { /* storage full or blocked */ }
+}
+
+if (typeof window !== 'undefined') {
+  setInterval(markAlive, 5000);
+  document.addEventListener('visibilitychange', markAlive);
+  window.addEventListener('pagehide', markAlive);
+  useWorkoutStore.subscribe(markAlive);
+}

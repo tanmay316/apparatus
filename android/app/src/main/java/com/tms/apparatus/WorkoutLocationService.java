@@ -455,9 +455,17 @@ public final class WorkoutLocationService extends Service {
         boolean isSettling = sessionSettleUntil > 0L && location.getTime() < sessionSettleUntil;
 
         // ─── Kalman Filter: Smooth raw GPS coordinates ───
-        // Uses constant-velocity model. When stationary, process noise drops to near-zero
-        // so jitter is absorbed. When moving, filter tracks the real trajectory.
-        double[] kalmanCoords = gpsKalman.process(lat, lng, accuracy, location.getTime(), !isCurrentlyMoving);
+        // Constant-velocity model in metres, fused with the chip's Doppler speed + bearing.
+        float speedMps = location.hasSpeed() ? location.getSpeed() : -1f;
+        float bearingDeg = location.hasBearing() ? location.getBearing() : Float.NaN;
+        float speedAccMps = -1f;
+        float bearingAccDeg = -1f;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (location.hasSpeedAccuracy()) speedAccMps = location.getSpeedAccuracyMetersPerSecond();
+            if (location.hasBearingAccuracy()) bearingAccDeg = location.getBearingAccuracyDegrees();
+        }
+        double[] kalmanCoords = gpsKalman.process(lat, lng, accuracy, location.getTime(), !isCurrentlyMoving,
+                speedMps, bearingDeg, speedAccMps, bearingAccDeg);
         Location smoothedLoc = new Location("kalman");
         smoothedLoc.setLatitude(kalmanCoords[0]);
         smoothedLoc.setLongitude(kalmanCoords[1]);
@@ -618,9 +626,11 @@ public final class WorkoutLocationService extends Service {
             isMoving = isCurrentlyMoving;
 
             // Acceptance Gate:
-            // When moving: accept when displacement >= minimum gate AND >= accuracy-scaled floor
+            // When moving: accept once the smoothed track has moved clearly beyond its own uncertainty
+            // (2 sigma), so leftover jitter can't add zig-zags and phantom distance.
             // When stationary: accept only if physical displacement breaks past the noise threshold.
-            float minDistGate = isMoving ? Math.max(MIN_DISTANCE_GATE_M, accuracy * 0.25f) : dynamicNoiseThreshold;
+            float jitterGateM = (float) Math.min(15.0, 2.0 * gpsKalman.positionSigmaM());
+            float minDistGate = isMoving ? Math.max(MIN_DISTANCE_GATE_M, jitterGateM) : dynamicNoiseThreshold;
             boolean movementConfirmed = !isSettling && isMoving && (deltaDistanceM >= minDistGate);
 
             if (movementConfirmed) {
@@ -963,119 +973,139 @@ public final class WorkoutLocationService extends Service {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // GPS Kalman Filter: Constant-Velocity model on lat/lng axes
-    // Smooths raw GPS coordinates to eliminate jitter-derived phantom
-    // distances and speeds. Adaptive process noise: near-zero when
-    // stationary (absorbs jitter), higher when moving (tracks trajectory).
+    // GPS Kalman Filter: constant-velocity model on a local east/north plane (metres).
+    // Each fix is weighted by its reported accuracy; Doppler speed + bearing (far less noisy
+    // than positions) steer the velocity, which keeps curves round and straights straight.
+    // Process noise never drops to zero: the old filter froze while "still", lagged behind the
+    // runner, so the engine couldn't see movement and recorded straight chords between stops.
     // ─────────────────────────────────────────────────────────────
     private static final class GpsKalmanFilter {
+        private static final double M_PER_DEG_LAT = 111_320.0;
+        /** Acceleration noise (m/s²) while moving, scaled with speed: walkers turn gently, cyclists hard. */
+        private static final double ACCEL_NOISE_MIN = 0.8;
+        private static final double ACCEL_NOISE_MAX = 3.0;
+        /** Small while still so jitter is absorbed, but a start is still followed within seconds. */
+        private static final double ACCEL_NOISE_STILL = 0.6;
+        private static final double MIN_POSITION_SIGMA_M = 3.0;
+        private static final long MAX_GAP_MS = 30_000L;
+
+        private static final class Axis {
+            double p, v, p00, p01, p11;
+
+            void init(double pos, double vel, double posVar) {
+                p = pos; v = vel; p00 = posVar; p01 = 0; p11 = 4.0;
+            }
+
+            void predict(double dt, double accelNoise) {
+                double q = accelNoise * accelNoise;
+                double dt2 = dt * dt;
+                p += v * dt;
+                double n00 = p00 + 2 * dt * p01 + dt2 * p11 + q * dt2 * dt2 / 4;
+                double n01 = p01 + dt * p11 + q * dt2 * dt / 2;
+                double n11 = p11 + q * dt2;
+                p00 = n00; p01 = n01; p11 = n11;
+            }
+
+            void updatePosition(double z, double r) {
+                double s = p00 + r;
+                double k0 = p00 / s, k1 = p01 / s;
+                double innov = z - p;
+                p += k0 * innov;
+                v += k1 * innov;
+                double n11 = p11 - k1 * p01;
+                p01 = (1 - k0) * p01;
+                p00 = (1 - k0) * p00;
+                p11 = n11;
+            }
+
+            void updateVelocity(double z, double r) {
+                double s = p11 + r;
+                double k0 = p01 / s, k1 = p11 / s;
+                double innov = z - v;
+                p += k0 * innov;
+                v += k1 * innov;
+                double n00 = p00 - k0 * p01;
+                p01 = (1 - k1) * p01;
+                p11 = (1 - k1) * p11;
+                p00 = n00;
+            }
+        }
+
+        private final Axis east = new Axis();
+        private final Axis north = new Axis();
         private boolean initialized = false;
-
-        // Latitude axis state
-        private double posLat, velLat;               // position, velocity (deg/s)
-        private double ppLat, pvLat, vpLat, vvLat;   // 2×2 covariance
-
-        // Longitude axis state
-        private double posLng, velLng;
-        private double ppLng, pvLng, vpLng, vvLng;
-
+        private double originLat, originLng, mPerDegLng;
         private long lastTimeMs;
 
         void reset() {
             initialized = false;
         }
 
-        /**
-         * Process a raw GPS measurement and return Kalman-smoothed [lat, lng].
-         *
-         * @param measLat      Raw GPS latitude
-         * @param measLng      Raw GPS longitude
-         * @param accuracyM    Horizontal accuracy in meters
-         * @param timeMs       Fix timestamp (ms)
-         * @param isStationary true when the hysteresis engine considers user still
-         */
-        double[] process(double measLat, double measLng, float accuracyM, long timeMs, boolean isStationary) {
-            // Convert horizontal accuracy (meters) → approximate variance (degrees²)
-            // 1° latitude ≈ 111 320 m
-            double accDeg = accuracyM / 111_320.0;
-            double R = accDeg * accDeg;
+        /** 1-sigma uncertainty (m) of the current smoothed position. */
+        double positionSigmaM() {
+            return initialized ? Math.sqrt(Math.max(east.p00, north.p00)) : MIN_POSITION_SIGMA_M;
+        }
 
-            if (!initialized) {
-                posLat = measLat;  velLat = 0;
-                posLng = measLng;  velLng = 0;
-                ppLat = ppLng = R;
-                pvLat = pvLng = vpLat = vpLng = 0;
-                vvLat = vvLng = R * 0.01;
+        /**
+         * @param speedMps      Doppler speed, or negative when unknown
+         * @param bearingDeg    Course over ground, NaN when unknown
+         * @param speedAccMps   1-sigma speed accuracy, or negative when unknown
+         * @param bearingAccDeg 1-sigma bearing accuracy, or negative when unknown
+         * @return Kalman-smoothed [lat, lng]
+         */
+        double[] process(double lat, double lng, float accuracyM, long timeMs, boolean isStationary,
+                         float speedMps, float bearingDeg, float speedAccMps, float bearingAccDeg) {
+            double sigma = Math.max(MIN_POSITION_SIGMA_M, accuracyM);
+            double r = sigma * sigma;
+
+            if (!initialized || timeMs - lastTimeMs > MAX_GAP_MS || timeMs < lastTimeMs) {
+                // First fix or a long gap (background wake): start over instead of predicting wildly.
+                originLat = lat;
+                originLng = lng;
+                mPerDegLng = M_PER_DEG_LAT * Math.max(0.01, Math.cos(Math.toRadians(lat)));
+                east.init(0, 0, r);
+                north.init(0, 0, r);
                 lastTimeMs = timeMs;
                 initialized = true;
-                return new double[]{posLat, posLng};
+                return new double[]{lat, lng};
             }
 
             double dt = Math.max(0.1, (timeMs - lastTimeMs) / 1000.0);
-            if (dt > 30.0) {
-                // Large gap (background wake) — reinitialize to avoid wild prediction
-                posLat = measLat;  velLat = 0;
-                posLng = measLng;  velLng = 0;
-                ppLat = ppLng = R;
-                pvLat = pvLng = vpLat = vpLng = 0;
-                vvLat = vvLng = R * 0.01;
-                lastTimeMs = timeMs;
-                return new double[]{posLat, posLng};
-            }
             lastTimeMs = timeMs;
+            // Faster movement means harder turns and pace changes, so let the model bend more.
+            double estSpeed = Math.hypot(east.v, north.v);
+            double accel = isStationary ? ACCEL_NOISE_STILL
+                    : Math.min(ACCEL_NOISE_MAX, Math.max(ACCEL_NOISE_MIN, 0.5 + 0.3 * estSpeed));
+            east.predict(dt, accel);
+            north.predict(dt, accel);
 
-            // Adaptive process noise
-            // Stationary: near-zero → filter becomes very confident, absorbs jitter
-            // Moving:     moderate  → filter follows real trajectory
-            double qPos = isStationary ? 1e-14 : 5e-10;
-            double qVel = isStationary ? 1e-14 : 5e-9;
+            double x = (lng - originLng) * mPerDegLng;
+            double y = (lat - originLat) * M_PER_DEG_LAT;
 
-            // ── Latitude axis ────────────────────────────────
-            double predLat = posLat + velLat * dt;
-            double predPPLat = ppLat + dt * (pvLat + vpLat) + dt * dt * vvLat + qPos;
-            double predPVLat = pvLat + dt * vvLat;
-            double predVPLat = vpLat + dt * vvLat;
-            double predVVLat = vvLat + qVel;
+            // Multipath jumps: fixes far outside the prediction count for less instead of yanking the track.
+            double ex = x - east.p, ey = y - north.p;
+            double d2 = ex * ex / (east.p00 + r) + ey * ey / (north.p00 + r);
+            if (d2 > 16.0) r *= d2 / 16.0;
 
-            double innovLat = measLat - predLat;
-            double sLat = predPPLat + R;
-            double k0Lat = predPPLat / sLat;
-            double k1Lat = predVPLat / sLat;
+            east.updatePosition(x, r);
+            north.updatePosition(y, r);
 
-            posLat = predLat + k0Lat * innovLat;
-            velLat = velLat + k1Lat * innovLat;
-            ppLat = (1 - k0Lat) * predPPLat;
-            pvLat = (1 - k0Lat) * predPVLat;
-            vpLat = predVPLat - k1Lat * predPPLat;
-            vvLat = predVVLat - k1Lat * predPVLat;
-
-            // ── Longitude axis ───────────────────────────────
-            double predLng = posLng + velLng * dt;
-            double predPPLng = ppLng + dt * (pvLng + vpLng) + dt * dt * vvLng + qPos;
-            double predPVLng = pvLng + dt * vvLng;
-            double predVPLng = vpLng + dt * vvLng;
-            double predVVLng = vvLng + qVel;
-
-            double innovLng = measLng - predLng;
-            double sLng = predPPLng + R;
-            double k0Lng = predPPLng / sLng;
-            double k1Lng = predVPLng / sLng;
-
-            posLng = predLng + k0Lng * innovLng;
-            velLng = velLng + k1Lng * innovLng;
-            ppLng = (1 - k0Lng) * predPPLng;
-            pvLng = (1 - k0Lng) * predPVLng;
-            vpLng = predVPLng - k1Lng * predPPLng;
-            vvLng = predVVLng - k1Lng * predPVLng;
-
-            // When stationary, actively decay velocity toward zero
-            // This prevents the filter from "drifting" with accumulated jitter momentum
-            if (isStationary) {
-                velLat *= 0.3;
-                velLng *= 0.3;
+            boolean bearingOk = !Float.isNaN(bearingDeg) && (bearingAccDeg < 0f || bearingAccDeg <= 45f);
+            if (speedMps >= 1.0f && bearingOk) {
+                double sAcc = speedAccMps > 0f ? Math.max(0.3, speedAccMps) : (accuracyM <= 20f ? 1.0 : 2.0);
+                // Bearing uncertainty becomes cross-track velocity uncertainty.
+                double bAccRad = Math.toRadians(bearingAccDeg > 0f ? bearingAccDeg : 15.0);
+                double rv = sAcc * sAcc + Math.pow(speedMps * bAccRad, 2);
+                double rad = Math.toRadians(bearingDeg);
+                east.updateVelocity(speedMps * Math.sin(rad), rv);
+                north.updateVelocity(speedMps * Math.cos(rad), rv);
+            } else if (isStationary && speedMps >= 0f && speedMps < 0.5f) {
+                // The chip says we're standing: bleed off velocity so jitter can't build momentum.
+                east.v *= 0.5;
+                north.v *= 0.5;
             }
 
-            return new double[]{posLat, posLng};
+            return new double[]{originLat + north.p / M_PER_DEG_LAT, originLng + east.p / mPerDegLng};
         }
     }
 }

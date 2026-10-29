@@ -191,27 +191,33 @@ export function WorkoutSession() {
   const [elapsedSec, setElapsedSec] = useState(0);
   useEffect(() => {
     if (store.isActive && store.startedAt && !sessionFinished) {
+      // Active time = wall clock minus finished pauses minus the pause in progress, so a paused
+      // session (also one restored after the app was closed) shows its frozen time, not 0:00.
+      const activeSec = () => {
+        const now = Date.now();
+        const pausing = store.isPaused && store.pausedAt ? now - store.pausedAt : 0;
+        return Math.max(0, Math.floor((now - store.startedAt! - store.totalPausedMs - pausing) / 1000));
+      };
+      setElapsedSec(activeSec());
+      if (store.isPaused) return;
       const interval = setInterval(() => {
-        if (!store.isPaused) {
-          const raw = Date.now() - store.startedAt! - store.totalPausedMs;
-          const currentSec = Math.floor(raw / 1000);
-          setElapsedSec(Math.max(0, currentSec));
+        const currentSec = activeSec();
+        setElapsedSec(currentSec);
 
-          if (currentSec % 5 === 0) {
-            updateWorkoutForegroundService(
-              'gym', 
-              store.isPaused ? 'Workout Paused' : `${store.dayTitle || 'Workout'} Live`, 
-              `${formatStopwatch(currentSec)} • ${lastExerciseRef.current} • ${Math.round(displayCaloriesRef.current)} kcal`, 
-              store.isPaused
-            );
-          }
+        if (currentSec % 5 === 0) {
+          updateWorkoutForegroundService(
+            'gym',
+            `${store.dayTitle || 'Workout'} Live`,
+            `${formatStopwatch(currentSec)} • ${lastExerciseRef.current} • ${Math.round(displayCaloriesRef.current)} kcal`,
+            false
+          );
         }
       }, 1000);
       return () => clearInterval(interval);
     } else if (store.isActive && !store.startedAt) {
       setElapsedSec(0);
     }
-  }, [store.isActive, store.startedAt, store.isPaused, store.totalPausedMs, sessionFinished, store.dayTitle]);
+  }, [store.isActive, store.startedAt, store.isPaused, store.pausedAt, store.totalPausedMs, sessionFinished, store.dayTitle]);
 
   // Instantly update foreground notification when paused state changes
   useEffect(() => {

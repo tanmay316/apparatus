@@ -593,6 +593,19 @@ export function CardioTracker() {
   // Assign the stop handler ref
   handleStopRef.current = handleStop;
 
+  const requestStop = async () => {
+    if (processingRef.current) return;
+    const ok = await confirm({
+      title: 'Finish session?',
+      message: 'Tracking stops and this session is saved to your history.',
+      confirmText: 'Finish',
+      cancelText: 'Keep going',
+      type: 'primary',
+      icon: 'check',
+    });
+    if (ok) await handleStop();
+  };
+
   const handleVisibilityChange = async (next: CardioVisibility) => {
     const previous = visibility;
     setVisibility(next);
@@ -1095,52 +1108,58 @@ export function CardioTracker() {
             </AnimatePresence>
             </div>
 
-            {/* Controls: Discard · Finish (centre) · Pause/Resume */}
-            <div className="px-5 pt-3 pb-1 grid grid-cols-[1fr_auto_1fr] items-center gap-3 shrink-0">
-              <div className="flex justify-start">
-                <button
-                  onClick={handleDiscard}
-                  className="group flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-                  title="Discard session"
-                  aria-label="Discard session"
-                >
-                  <span className="w-12 h-12 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] group-hover:text-red-500 transition-colors">
-                    <Trash2 size={19} />
+            {/* Controls: Discard · Finish (centre) · Pause/Resume. Same slot height so every icon and label lines up. */}
+            <div className="px-6 pt-3 pb-1 grid grid-cols-3 items-start shrink-0">
+              <button
+                onClick={handleDiscard}
+                className="group flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
+                title="Discard session"
+                aria-label="Discard session"
+              >
+                <span className="h-[68px] flex items-center justify-center">
+                  <span className="w-14 h-14 rounded-full flex items-center justify-center bg-[var(--bg)] border border-[var(--border)] text-[var(--muted)] group-hover:text-red-500 group-active:text-red-500 transition-colors">
+                    <Trash2 size={21} />
                   </span>
-                  <span className="text-[10.5px] font-semibold tracking-wide uppercase text-[var(--muted)]">Discard</span>
-                </button>
-              </div>
+                </span>
+                <span className="text-[11px] font-semibold tracking-wide uppercase text-[var(--muted)]">Discard</span>
+              </button>
 
               <button
-                onClick={handleStop}
-                className="h-[60px] min-w-[150px] px-7 rounded-full flex items-center justify-center gap-2.5 font-bold text-[15px] tracking-[0.06em] uppercase active:scale-[0.97] transition-transform"
-                style={{ background: 'var(--text)', color: 'var(--bg)', boxShadow: '0 10px 24px -8px rgba(0, 0, 0, 0.45)' }}
+                onClick={requestStop}
+                className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
                 title="Finish & save"
                 aria-label="Finish and save"
               >
-                <Square size={15} fill="currentColor" className="rounded-[2px]" />
-                Finish
+                <span className="h-[68px] flex items-center justify-center">
+                  <span
+                    className="w-[68px] h-[68px] rounded-full flex items-center justify-center"
+                    style={{ background: 'var(--text)', color: 'var(--bg)', boxShadow: '0 10px 24px -8px rgba(0, 0, 0, 0.45)' }}
+                  >
+                    <Square size={22} fill="currentColor" className="rounded-[3px]" />
+                  </span>
+                </span>
+                <span className="text-[11px] font-bold tracking-wide uppercase text-[var(--text)]">Finish</span>
               </button>
 
-              <div className="flex justify-end">
-                <button
-                  onClick={store.isPaused ? handleResume : handlePause}
-                  className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
-                  title={store.isPaused ? 'Resume' : 'Pause'}
-                  aria-label={store.isPaused ? 'Resume' : 'Pause'}
-                >
+              <button
+                onClick={store.isPaused ? handleResume : handlePause}
+                className="flex flex-col items-center gap-1.5 active:scale-95 transition-transform"
+                title={store.isPaused ? 'Resume' : 'Pause'}
+                aria-label={store.isPaused ? 'Resume' : 'Pause'}
+              >
+                <span className="h-[68px] flex items-center justify-center">
                   <span
-                    className={`relative w-[60px] h-[60px] rounded-full flex items-center justify-center text-white transition-colors ${store.isPaused ? 'bg-emerald-600' : ''}`}
+                    className={`relative w-14 h-14 rounded-full flex items-center justify-center text-white transition-colors ${store.isPaused ? 'bg-emerald-600' : ''}`}
                     style={store.isPaused
                       ? { boxShadow: '0 10px 24px -8px rgba(5, 150, 105, 0.6)' }
                       : { background: 'var(--sienna)', boxShadow: '0 10px 24px -8px rgba(217, 83, 47, 0.6)' }}
                   >
                     {store.isPaused && <span className="absolute inset-0 rounded-full bg-emerald-500/40 animate-ping" aria-hidden />}
-                    {store.isPaused ? <Play size={24} fill="currentColor" className="relative ml-0.5" /> : <Pause size={24} fill="currentColor" />}
+                    {store.isPaused ? <Play size={22} fill="currentColor" className="relative ml-0.5" /> : <Pause size={22} fill="currentColor" />}
                   </span>
-                  <span className="text-[10.5px] font-semibold tracking-wide uppercase text-[var(--muted)]">{store.isPaused ? 'Resume' : 'Pause'}</span>
-                </button>
-              </div>
+                </span>
+                <span className="text-[11px] font-semibold tracking-wide uppercase text-[var(--muted)]">{store.isPaused ? 'Resume' : 'Pause'}</span>
+              </button>
             </div>
           </div>
         </div>

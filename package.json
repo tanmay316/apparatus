@@ -2,7 +2,7 @@
   "name": "apparatus",
   "private": true,
   "version": "2.0.91",
-  "nativeVersion": "2.1.28",
+  "nativeVersion": "2.1.30",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,8 @@
     "ios:open": "npx cap open ios",
     "brand:sync": "node scripts/sync-brand.cjs",
     "icons": "node scripts/generate-icons.cjs",
-    "prebuild": "node scripts/sync-brand.cjs"
+    "prebuild": "node scripts/sync-brand.cjs",
+    "postinstall": "node scripts/patch-native-purchases.cjs"
   },
   "dependencies": {
     "@capacitor-community/native-audio": "^8.0.0",
